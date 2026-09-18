@@ -7,6 +7,8 @@
 - Never include API keys, personal data, licensed market-data payloads, or private prompts in a report.
 - EdgeAgent is pre-release; only the current default branch is supported.
 - Treat user input, providers, retrieved content, plugins, and model output as untrusted.
+- Treat event payloads, replay requests, cloud control planes, and projection state as untrusted boundaries.
+- The execution simulator is dry-run only and must have no broker credentials, endpoints, or live adapter.
 - Do not test systems, accounts, datasets, or services without explicit authorization.
 
 ## Supported versions
@@ -55,7 +57,13 @@ review covers conventional application risk and these project-specific threats:
 - **Credential and entitlement abuse:** provider keys may be stolen or used to
   retrieve, retain, or redistribute data outside contractual rights.
 - **Unsafe capability expansion:** a research component may be connected to an
-  execution path without the authorization and controls required by the product boundary.
+  execution path without the authorization and controls required by the product
+  boundary, or a dry-run component may gain live broker egress.
+- **Event injection and replay abuse:** an attacker may forge commands, replay
+  valid messages, exploit schema confusion, reorder transitions, or flood
+  dead-letter replay to create duplicate or unauthorized state.
+- **Cross-cloud identity drift:** inconsistent IAM, workload identity, network,
+  key, retention, or audit policy may make one deployment profile weaker than another.
 - **Evaluation leakage:** future information or holdout data may enter strategy
   development and produce misleading performance evidence.
 - **Supply-chain compromise:** models, packages, actions, containers, datasets,
@@ -73,6 +81,14 @@ review covers conventional application risk and these project-specific threats:
 - Preserve source, version, timestamps, transformation lineage, and integrity
   metadata for published research facts.
 - Fail closed when critical evidence, entitlement, authorization, or policy is invalid.
+- Authenticate producer identity, authorize subjects and actions, validate every
+  event envelope and payload, and deduplicate stateful consumption durably.
+- Restrict dead-letter inspection and replay; record operator identity, reason,
+  selected messages, target consumer, and outcome in immutable audit history.
+- Use workload identity and short-lived credentials. Static cloud credentials
+  and broker credentials are prohibited from source, images, and deployment configuration.
+- Enforce execution-simulator egress allowlists and automated checks for live
+  modes, broker SDKs, credentials, and endpoints.
 - Redact credentials, authorization headers, personal data, private prompts,
   and licensed payloads from logs and test fixtures.
 - Pin dependencies and CI actions to reviewed release lines; use read-only CI
@@ -81,8 +97,9 @@ review covers conventional application risk and these project-specific threats:
 ## Security expectations for contributions
 
 A change affecting authentication, authorization, sensitive data, prompt or
-retrieval processing, model/tool execution, provider credentials, public input,
-artifact integrity, or execution boundaries MUST document:
+retrieval processing, model/tool execution, provider credentials, event schemas
+or replay, public input, artifact integrity, cloud identity, or execution
+boundaries MUST document:
 
 - assets and trust boundaries;
 - abuse and failure cases;

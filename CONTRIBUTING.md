@@ -5,6 +5,7 @@
 - Deliver one coherent, verified capability per issue and pull request.
 - Proceed on documented, reversible assumptions; request a decision when ambiguity changes behavior, safety, compatibility, data meaning, or external state.
 - Keep deterministic market analysis and policy independent from adapters, infrastructure, and generative models.
+- Preserve service ownership, at-least-once delivery semantics, and the dry-run-only execution boundary.
 - Use an existing issue when supplied. Otherwise implement the smallest coherent scope and include a proposed issue in the completion report.
 - Run the exact repository checks. Report blocked or unavailable checks as **not run**, never as passed.
 - Name milestones `MNN - Outcome`, starting with M01, and identify one milestone in every issue.
@@ -24,6 +25,7 @@ Lowercase wording is explanatory and does not create hidden policy.
 |---|---|
 | Product purpose, scope, and invariants | [Product vision](docs/product/vision.md) |
 | Architecture, ownership, and control flow | [System architecture](docs/architecture/system-overview.md) |
+| Deployment profiles and provider capability mapping | [Deployment portability](docs/architecture/deployment-portability.md) |
 | Contributor workflow and completion | This document |
 | Concise contributor and agent entry point | [AGENTS.md](AGENTS.md) |
 | Engineering and testing practice | [Engineering standards](docs/development/engineering-standards.md) |
@@ -207,10 +209,18 @@ Changes affecting research output require focused review of these invariants:
   market fact, or certify its own output.
 - Live-provider tests are opt-in and isolated. Default CI requires no secrets,
   paid services, or mutable external data.
+- Cross-service handlers assume at-least-once delivery and preserve one domain
+  transition under duplicate, delayed, reordered, or redelivered messages.
+- Dry-run orders, fills, positions, cash, and P&L are deterministic,
+  point-in-time, versioned, append-only, and replayable.
+- The execution simulator accepts only `dry_run` and contains no broker
+  credential, broker endpoint, or live broker adapter.
 
-Any change that can execute, route, stage, or transmit an order is outside the
-current product boundary and requires explicit maintainer approval plus an
-accepted ADR and security review before implementation.
+Any change that can transmit an order to a live venue, connect to a brokerage
+account, or introduce a live execution mode is outside the current product
+boundary. It requires explicit maintainer approval, a separate deployable,
+accepted architecture decisions, and a dedicated security review before
+implementation.
 
 ## Documentation
 
@@ -245,6 +255,8 @@ A pull request MUST state:
 - [ ] Public contracts and persisted meaning are compatible or have an approved evolution plan.
 - [ ] Tests cover observable success and important rejection/failure paths.
 - [ ] Time, units, evidence lineage, lifecycle, idempotency, cancellation, and retries are explicit where relevant.
+- [ ] Event consumers tolerate duplicate, delayed, reordered, and poison messages where relevant.
+- [ ] Execution changes preserve dry-run-only capability and prove no live broker path exists.
 - [ ] Untrusted input, secrets, privacy, licensing, and model boundaries were reviewed.
 - [ ] Backtests and simulations protect point-in-time integrity.
 - [ ] Public contracts and non-obvious invariants are documented.

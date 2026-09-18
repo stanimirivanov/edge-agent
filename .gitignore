@@ -30,6 +30,8 @@ build/
 # Runtime and test output
 artifacts/
 coverage/
+target/
+*.profraw
 *.log
 *.tmp
 

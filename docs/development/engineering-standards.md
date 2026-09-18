@@ -6,6 +6,8 @@
 - Represent evidence, market time, units, risk, uncertainty, versions, and lifecycle explicitly.
 - Keep deterministic analytics and policy outside generative models.
 - Bound external work and define timeout, cancellation, retry, idempotency, and degradation behavior.
+- Assume at-least-once message delivery and make durable state transitions replay-safe.
+- Keep live execution structurally absent while testing dry-run orders and ledgers as first-class domain behavior.
 - Test observable behavior and important failures deterministically without paid or mutable services in default CI.
 - Treat contracts, prompts, schemas, persisted records, and evaluation fixtures as versioned compatibility boundaries.
 - Pin tools and dependencies in repository configuration and run the same checks locally and in CI.
@@ -18,8 +20,8 @@ MUST and MUST NOT are requirements; SHOULD and SHOULD NOT are strong defaults
 whose deviations require a recorded reason; MAY identifies an option.
 
 These standards apply to production code, tests, scripts, generated bindings,
-data transformations, evaluation, and operational tooling. Language-specific
-tooling will be pinned when the initial runtime ADR is accepted.
+data transformations, evaluation, and operational tooling. Rust-specific
+tooling becomes normative when the workspace ADR is accepted.
 
 ## Architecture
 
@@ -41,6 +43,25 @@ Keep transport DTOs, provider payloads, model output, persisted records, event
 envelopes, and domain values distinct when their invariants or evolution differ.
 A capability owns its writes. Other capabilities use its public application
 surface or versioned events, not its tables or private types.
+
+### Rust workspace and deployables
+
+- The workspace pins a stable toolchain, uses Rust 2024, and commits `Cargo.lock`.
+- Reusable crates own domain, application, contracts, infrastructure adapters,
+  and test support. Deployable crates contain composition roots and runtime wiring.
+- Workspace dependency declarations centralize versions; crate features remain
+  additive and do not silently change domain behavior.
+- Production code MUST NOT use `unsafe` without an accepted ADR, a documented
+  invariant, focused tests, and reviewer approval.
+- `unwrap`, `expect`, and `panic!` are prohibited on recoverable production
+  paths. Process termination is reserved for invalid startup configuration or
+  violated invariants that cannot be isolated safely.
+- Public types use domain-specific newtypes rather than interchangeable strings
+  or primitives for identifiers, money, quantity, timestamps, and versions.
+- Binaries handle termination signals, stop intake, settle or release messages,
+  close resources, and flush telemetry within the declared grace period.
+- Each deployable builds into a minimal non-root OCI image from the same pinned
+  workspace and exposes documented health behavior.
 
 ### Abstraction discipline
 
@@ -82,13 +103,34 @@ surface or versioned events, not its tables or private types.
 
 ### Concurrency and background work
 
-- Prefer synchronous execution until concurrency supplies measured value.
+- Keep domain logic synchronous and deterministic where practical; introduce
+  asynchronous I/O and concurrency only at application and adapter boundaries.
 - Child work belongs to a request, job, or service lifecycle and cancels with it.
 - Never create unbounded tasks, threads, workers, queues, or retries.
 - Document ordering, ownership transfer, cancellation priority, retry safety,
   delivery guarantees, deduplication, terminal failure, and operator recovery.
 - Do not coordinate tests with sleeps; use controlled clocks, barriers, events,
   channels, or observable state.
+
+### Event processing
+
+- Commands name requested intent and have one owning consumer. Events use past
+  tense and describe facts that have already committed.
+- Messages use a CloudEvents-compatible envelope and a separately versioned
+  payload with message, correlation, causation, aggregate, schema, producer,
+  event-time, idempotency, and trace fields.
+- Delivery is at least once. Never describe broker delivery or business state
+  as exactly once.
+- A producer uses a transactional outbox when a database transition and
+  publication must agree. A stateful consumer records inbox identity and domain
+  transition atomically.
+- Ordering is guaranteed only for a declared partition key. Consumers reject,
+  defer, rebuild, or quarantine unexpected aggregate versions explicitly.
+- Retries are bounded, classified, and observable. Permanent, authorization,
+  schema, and invariant failures enter a quarantined stream with operator-safe
+  inspection and replay.
+- Contract tests run against the portable broker adapter and every claimed
+  managed-cloud adapter.
 
 ## Market-data and evidence boundary
 
@@ -137,9 +179,26 @@ surface or versioned events, not its tables or private types.
 - Live outcome tracking appends to the artifact ledger and does not rewrite the
   original request, thesis, levels, timestamp, or expiry.
 
+## Dry-run execution integrity
+
+- The simulator accepts only the literal mode `dry_run`; unknown or missing
+  modes fail before a command reaches execution state.
+- No execution-simulator crate, image, manifest, or runtime identity may contain
+  a broker credential, live endpoint, live mode, or broker-adapter dependency.
+- Order state transitions are explicit and append-only. Cancellation, expiry,
+  rejection, partial fill, and fill races have deterministic resolution rules.
+- Market and limit fills pin evidence plus versions for spread, slippage, fees,
+  latency, liquidity participation, sessions, halts, gaps, and corporate actions.
+- Order acceptance, fill, cash, position, and P&L changes preserve transactional
+  invariants and are idempotent under command and observation redelivery.
+- Monetary ledgers balance exactly. Statistical mark-to-market calculations
+  declare precision, rounding, price source, and observation time.
+- Simulation output is clearly labeled and cannot be presented as a live fill
+  or broker confirmation.
+
 ## Contracts and compatibility
 
-Treat HTTP schemas, events, CLI behavior, configuration, database migrations,
+Treat HTTP schemas, event envelopes and payloads, CLI behavior, configuration, database migrations,
 provider-normalization contracts, research artifacts, strategy definitions,
 prompts, model/tool schemas, and evaluation fixtures as compatibility boundaries.
 
@@ -164,6 +223,10 @@ prompts, model/tool schemas, and evaluation fixtures as compatibility boundaries
 - Use controlled clocks and synthetic fixtures. Default CI must not require a
   network, paid provider, credentials, or externally mutable market data.
 - Gate live-provider tests explicitly and prevent them from publishing or trading.
+- Inject duplicate, delayed, reordered, acknowledgement-loss, broker-restart,
+  consumer-restart, and poison messages into event integration tests.
+- Test dry-run execution with property-based ledger invariants and deterministic
+  replay; assert that every non-dry-run mode is rejected.
 - Never weaken assertions, add blind retries, or extend timeouts without diagnosing the cause.
 - Coverage reveals unexamined code but does not prove correctness.
 

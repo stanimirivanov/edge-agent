@@ -51,6 +51,7 @@ REQUIRED_PATHS = {
     "README.md",
     "SECURITY.md",
     "docs/architecture/system-overview.md",
+    "docs/architecture/deployment-portability.md",
     "docs/decisions/README.md",
     "docs/development/engineering-standards.md",
     "docs/product/vision.md",

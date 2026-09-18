@@ -6,7 +6,7 @@
 - Number ADRs sequentially and never reuse a published number.
 - Accepted ADRs are historical records; supersede rather than rewrite them.
 - Record alternatives, consequences, migration, security, operations, and validation.
-- The initial runtime/topology ADR is proposed for maintainer review; no ADR has been accepted yet.
+- The initial runtime, event architecture, and dry-run execution ADRs are proposed for maintainer review; no ADR has been accepted yet.
 
 ## When an ADR is required
 
@@ -89,4 +89,6 @@ How will the assumptions and consequences be verified?
 
 | ADR | Status | Decision |
 |---|---|---|
-| [ADR-0001](0001-use-python-modular-monolith-for-the-initial-core.md) | Proposed | Use a Python 3.13 modular monolith and `src` layout for the initial deterministic core. |
+| [ADR-0001](0001-use-a-rust-workspace-with-multiple-deployables.md) | Proposed | Use a Rust workspace monorepo with independently deployable components. |
+| [ADR-0002](0002-use-portable-at-least-once-event-messaging.md) | Proposed | Use versioned CloudEvents contracts and portable at-least-once messaging. |
+| [ADR-0003](0003-add-dry-run-trade-execution.md) | Proposed | Add dry-run order execution without broker connectivity or live trading. |
