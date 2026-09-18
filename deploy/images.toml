@@ -1,0 +1,38 @@
+schema_version = 1
+repository = "ghcr.io/stanimirivanov/edge-agent"
+
+[build]
+builder_image = "rust:1.98.1-alpine3.22"
+runtime_image = "scratch"
+runtime_user = "65532:65532"
+entrypoint = "/edgeagent-service"
+
+[images.audit-projector]
+package = "edgeagent-audit-projector"
+binary = "edgeagent-audit-projector"
+component = "edgeagent.audit-projector"
+capabilities = ["audit-projection", "query-projection"]
+
+[images.execution-simulator]
+package = "edgeagent-execution-simulator"
+binary = "edgeagent-execution-simulator"
+component = "edgeagent.execution-simulator"
+capabilities = ["dry-run-order-lifecycle", "simulated-ledger"]
+
+[images.gateway]
+package = "edgeagent-gateway"
+binary = "edgeagent-gateway"
+component = "edgeagent.gateway"
+capabilities = ["command-intake", "query-composition"]
+
+[images.market-data]
+package = "edgeagent-market-data"
+binary = "edgeagent-market-data"
+component = "edgeagent.market-data"
+capabilities = ["evidence-snapshot", "instrument-resolution"]
+
+[images.research]
+package = "edgeagent-research"
+binary = "edgeagent-research"
+component = "edgeagent.research"
+capabilities = ["artifact-publication", "deterministic-research"]
