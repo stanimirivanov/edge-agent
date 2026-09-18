@@ -1,6 +1,6 @@
 # ADR-0001: Use a Rust workspace with multiple deployables
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-18
 - Milestone: M01 - Rust engineering foundation
 - Deciders: EdgeAgent maintainers

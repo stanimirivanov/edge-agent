@@ -164,7 +164,12 @@ The current foundation requires:
 ```text
 python scripts/verify_repository.py --format-check
 python scripts/verify_repository.py
+python scripts/verify_architecture.py
 python -m unittest discover -s tests -p "test_*.py"
+cargo fmt --all --check
+cargo check --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
 ```
 
 `make verify` runs the same commands where `make` is available. Application

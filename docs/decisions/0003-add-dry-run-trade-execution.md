@@ -1,6 +1,6 @@
 # ADR-0003: Add dry-run trade execution
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-18
 - Milestone: M07 - Dry-run execution
 - Deciders: EdgeAgent maintainers

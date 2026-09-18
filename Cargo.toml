@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/contracts",
+    "crates/service-runtime",
+    "services/audit-projector",
+    "services/execution-simulator",
+    "services/gateway",
+    "services/market-data",
+    "services/research",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "Apache-2.0"
+repository = "https://github.com/stanimirivanov/edge-agent"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "deny"
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"
