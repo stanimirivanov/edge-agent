@@ -7,6 +7,8 @@
 - Keep domain policy independent of frameworks, transports, storage, market-data vendors, and model providers.
 - Treat market data, retrieved content, user input, and model output as untrusted.
 - Compute facts deterministically, preserve point-in-time evidence, and abstain when required evidence is invalid.
+- Assume at-least-once event delivery and make every stateful consumer idempotent.
+- Keep simulated execution strictly dry-run; no component may contain a live broker path.
 - Run the repository checks and report passed, failed, and not-run verification honestly.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) is the canonical workflow policy. Normative
@@ -36,13 +38,17 @@ not silently choose the convenient source.
   generated churn, or broad formatting.
 - State scope, exclusions, assumptions, compatibility effects, risks, and
   verification evidence explicitly.
-- Do not add an abstraction, queue, cache, database, service, or dependency
-  until current behavior requires it.
+- Do not add an abstraction, cache, service, or dependency beyond the accepted
+  architecture and current milestone's observable behavior.
 
 ## Architecture and domain integrity
 
 - Dependencies point inward. Domain code MUST NOT import HTTP, SQL, UI,
   workflow-engine, cloud, market-data, or model-provider types.
+- The Cargo workspace MUST keep deployable binaries separate from reusable
+  domain, application, contract, infrastructure, and testing crates.
+- A service owns its writes. Peers MUST use a published API, command, or event
+  rather than another service's private tables or implementation types.
 - Transport DTOs, provider payloads, persisted records, model output, and
   domain values remain distinct where their invariants differ.
 - Interfaces belong to the consumer that needs substitution; do not mirror
@@ -58,11 +64,16 @@ not silently choose the convenient source.
 - Backtests and simulations MUST use point-in-time inputs, frozen strategy
   versions, explicit fills/costs, and controls for look-ahead and survivorship
   bias. A published artifact is immutable; later lifecycle events append state.
+- Cross-service delivery is at least once. Stateful producers MUST use a
+  transactional outbox where state and publication must agree; consumers MUST
+  deduplicate durably and tolerate delay, reordering, restart, and redelivery.
 - External calls stay outside database transactions. Define timeouts,
   cancellation, retries, idempotency, concurrency, and partial-failure policy.
-- Broker connectivity, order routing, order staging, custody, or autonomous
-  execution is outside the current product boundary and requires an accepted
-  ADR plus explicit project approval.
+- The execution simulator accepts only `dry_run`; it MUST NOT contain broker
+  credentials, broker endpoints, a broker adapter, or a live execution mode.
+  Live routing, custody, and brokerage integration remain outside the product
+  boundary and require explicit project approval plus new architecture and
+  security decisions.
 
 ## Security and data handling
 
@@ -82,6 +93,10 @@ not silently choose the convenient source.
   SHOULD begin with a failing regression test.
 - Tests MUST be deterministic, isolated, parallel-safe, and independent of
   wall clock, network, locale, and execution order unless testing those traits.
+- Event tests MUST cover duplicates, delayed or reordered delivery,
+  acknowledgement loss, poison messages, restart, and replay where relevant.
+- Dry-run execution tests MUST prove balanced ledgers, deterministic fills,
+  idempotent commands, and rejection of every unsupported execution mode.
 - Public contracts, configuration, operational behavior, and documentation
   change in the same pull request as implementation.
 - Run `make verify` or the equivalent commands in the README. Review the full

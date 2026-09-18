@@ -2,228 +2,223 @@
 
 ## TL;DR
 
-- Milestones are outcome-oriented and numbered M01 through M10 without renumbering after publication.
-- The deterministic offline research spine comes before live providers, language models, web UI, or persistence.
-- Each listed work item should fit one independently reviewable pull request.
-- Market-data adapters must pass the same conformance contract and default CI remains offline.
-- Generated explanation is introduced only after evidence, strategy, policy, and artifact validation are authoritative.
-- Execution, custody, and broker integration are outside this roadmap.
+- Build one Cargo workspace that produces independently deployable Rust services, workers, migrations, and contract-test tooling.
+- Establish versioned contracts and durable at-least-once event handling before adding live data or complex workflows.
+- Prove research, policy, and dry-run execution with synthetic evidence before integrating paid services.
+- Treat the portable Kubernetes profile as the reference and qualify managed GCP, Azure, and AWS profiles through the same conformance suite.
+- Keep default CI offline, deterministic, credential-free, and runnable by an open-source contributor.
+- Live order transmission, custody, and broker integration remain outside this roadmap.
 
 ## Milestone index
 
-| Milestone title | Outcome |
-|---|---|
-| M01 - Engineering foundation | Make every change repeatable, reviewable, and safe. |
-| M02 - Deterministic research spine | Produce the first reproducible artifact or abstention from synthetic evidence. |
-| M03 - Market data fabric | Acquire and normalize point-in-time evidence without coupling domain policy to a provider. |
-| M04 - Strategy registry | Run and evaluate approved strategy versions under stable contracts. |
-| M05 - Policy-bound publication | Publish only artifacts that pass explicit evidence, product, and risk policy. |
-| M06 - Evidence-grounded explanation | Explain approved research without allowing a model to create facts or decisions. |
-| M07 - Durable artifact lifecycle | Persist, replay, invalidate, expire, withdraw, and correct research artifacts. |
-| M08 - Evaluation and simulation | Measure strategy and artifact outcomes without hindsight or unrealistic fills. |
-| M09 - Surveillance and delivery | Reevaluate named conditions and deliver bounded, deduplicated lifecycle updates. |
-| M10 - Operational readiness | Run EdgeAgent securely, observably, recoverably, and at controlled scale. |
+| Milestone | Outcome |
+| --- | --- |
+| M01 - Rust engineering foundation | Build, test, package, and govern the workspace reproducibly. |
+| M02 - Contracts and event spine | Prove recoverable cross-service delivery under duplicates and failure. |
+| M03 - Market data fabric | Publish trustworthy point-in-time evidence through provider-neutral contracts. |
+| M04 - Deterministic research | Publish the first reproducible artifact or abstention. |
+| M05 - Strategy and policy | Evolve approved strategies without weakening independent controls. |
+| M06 - Evidence-grounded explanation | Explain approved research without allowing generated content to create facts. |
+| M07 - Dry-run execution | Process simulated orders, fills, positions, cash, and P&L without a live path. |
+| M08 - Durable projections and evaluation | Rebuild lifecycle views and measure outcomes without hindsight. |
+| M09 - Multi-cloud deployment profiles | Promote identical signed artifacts through portable and managed profiles. |
+| M10 - Operational readiness | Operate, recover, limit, and stop the distributed system safely. |
 
-## M01 - Engineering foundation
+## M01 - Rust engineering foundation
 
-**Message:** Make every change repeatable, reviewable, and safe.
-
-Work items:
-
-- Establish the EdgeAgent contributor and engineering harness.
-- Add open-source governance, security reporting, issue forms, and pull-request guidance.
-- Define the product vision, system architecture, domain integrity rules, and roadmap.
-- Add a dependency-free repository verifier with tests.
-- Run foundation verification on Linux and Windows in GitHub Actions.
-- Record the initial runtime and packaging decision in an ADR.
-- Scaffold the selected runtime with pinned formatting, linting, type checking,
-  tests, packaging validation, and vulnerability checks.
-- Add a one-command developer quickstart that matches CI.
-- Establish dependency update and license-review policy in checked-in tooling.
-
-Completion means a new contributor can understand the intended system, make a
-reviewable change, and run authoritative repository and runtime checks without
-private credentials.
-
-## M02 - Deterministic research spine
-
-**Message:** Produce the first reproducible artifact or abstention from synthetic evidence.
+**Outcome:** Build, test, package, and govern the workspace reproducibly.
 
 Work items:
 
-- Define stable request, instrument, evidence, strategy, policy, and artifact identifiers.
-- Define explicit market time, observation time, decision time, currency, price, return, risk, and freshness values.
-- Define the versioned Research Request, Evidence Snapshot, Research Artifact, and Abstention contracts.
-- Add redistribution-safe synthetic daily-bar fixtures covering normal sessions,
-  missing bars, a holiday, a split, stale data, and conflicting evidence.
-- Implement canonical bar validation and typed quality outcomes.
-- Implement one versioned momentum calculation with declared lookback and adjustment basis.
-- Implement deterministic candidate eligibility, ranking, and tie-breaking.
-- Implement minimum evidence policy and abstention reason codes.
-- Render a deterministic artifact without a language model.
-- Add replay tests proving identical deterministic fields for identical versions and evidence.
-- Expose the slice through a small local CLI after the domain flow is complete.
+- Accept the Rust workspace, event backbone, and dry-run execution ADRs.
+- Pin the stable Rust toolchain and Rust 2024 edition.
+- Scaffold shared domain, application, contracts, infrastructure, testing, service, and worker crates.
+- Enforce `rustfmt`, strict Clippy, documentation, tests, dependency policy, license policy, and vulnerability scanning.
+- Produce minimal multi-stage, non-root OCI images for every deployable.
+- Add a local dependency profile for PostgreSQL, NATS JetStream, S3-compatible storage, and OpenTelemetry collection.
+- Generate an SBOM and provenance metadata and sign release images.
+- Retain the repository verifier until Rust tooling covers each equivalent check.
+- Run authoritative checks on Linux and Windows with one documented command.
 
-Completion means an offline request produces a reproducible ranked artifact or
-a correctly classified abstention with no network, model, database, or UI.
+Completion means a new contributor can build, test, inspect, and package every
+deployable without private credentials, paid services, or undocumented setup.
+
+## M02 - Contracts and event spine
+
+**Outcome:** Prove recoverable cross-service delivery under duplicates and failure.
+
+Work items:
+
+- Define CloudEvents-compatible command and event envelopes with semantic schema versions.
+- Define stable request, message, correlation, causation, aggregate, and idempotency identifiers.
+- Establish subject naming, command ownership, partition keys, retention, and compatibility policy.
+- Implement a NATS JetStream messaging adapter behind an application port.
+- Implement transactional outbox relay and inbox deduplication with PostgreSQL.
+- Add bounded retry, acknowledgement, backpressure, quarantine, and operator replay mechanics.
+- Generate schemas and compatibility fixtures from contract crates.
+- Test duplicate, delayed, reordered, malformed, poison, and acknowledgement-loss cases.
+- Add traces and metrics across publish, delivery, handling, persistence, and acknowledgement.
+
+Completion means a durable command can survive process and broker restarts and
+produce one domain transition despite duplicate or delayed delivery.
 
 ## M03 - Market data fabric
 
-**Message:** Acquire and normalize point-in-time evidence without coupling domain policy to a provider.
+**Outcome:** Publish trustworthy point-in-time evidence through provider-neutral contracts.
 
 Work items:
 
-- Define the market-data adapter contract and conformance fixture suite.
-- Define stable instrument resolution independent of ticker strings.
-- Implement one production-candidate historical daily-bar adapter behind the contract.
-- Capture provider event time, observation time, adjustment basis, revision, entitlement, and provenance.
-- Add bounded timeouts, cancellation, retries, rate-limit handling, and error classification.
-- Implement freshness, gap, OHLC, volume, calendar, duplicate, and outlier validation.
-- Add corporate-action and symbol-change reconciliation for the supported universe.
-- Add a content-addressed local development cache whose keys include semantic versions.
-- Define cross-source disagreement semantics before adding a second provider adapter.
-- Gate live-provider tests outside default CI and document credential-safe setup.
+- Define stable instrument identity, market time, observations, corporate actions, entitlements, and evidence snapshots.
+- Add redistribution-safe synthetic fixtures covering holidays, splits, stale data, gaps, duplicates, and disagreement.
+- Implement canonical calendar, OHLC, volume, freshness, and outlier validation.
+- Publish content-addressed snapshots or typed quality failures through the event spine.
+- Define the provider adapter contract and conformance suite.
+- Implement one production-candidate daily-bar adapter behind the contract.
+- Add timeouts, cancellation, rate-limit handling, provider revision, and error classification.
+- Store licensed evidence in object storage under explicit retention and checksum policy.
+- Keep live-provider tests opt-in and credential-safe.
 
-Completion means the same domain request can use synthetic evidence or one live
-provider through identical canonical contracts and failure semantics.
+Completion means synthetic and one live provider produce identical canonical
+contracts and failure semantics without provider logic entering domain crates.
 
-## M04 - Strategy registry
+## M04 - Deterministic research
 
-**Message:** Run and evaluate approved strategy versions under stable contracts.
+**Outcome:** Publish the first reproducible artifact or abstention.
 
 Work items:
 
-- Define strategy metadata, lifecycle, compatibility, and validation status.
-- Replace the first hard-coded strategy with a registered version without changing results.
-- Define feature requirements, eligibility, score, tie-break, horizon, expiry,
-  benchmark, regime assumptions, and invalidation rules.
-- Add a second strategy only after the registry demonstrates a real variation point.
+- Define versioned Research Request, Research Artifact, Abstention, and lifecycle contracts.
+- Implement one momentum calculation with declared lookback, units, adjustment basis, and numeric tolerance.
+- Implement deterministic candidate eligibility, ranking, and tie-breaking.
+- Add minimum-evidence policy with stable abstention reason codes.
+- Render a deterministic artifact without a language model.
+- Commit artifact state and its publication event atomically.
+- Add replay tests for identical evidence and implementation revisions.
+- Expose asynchronous submission and query through the gateway and audit projector.
+- Demonstrate that duplicate requests create no duplicate artifact.
+
+Completion means separate gateway, market-data, research, and projector processes
+produce a reproducible artifact or correct abstention from offline evidence.
+
+## M05 - Strategy and policy
+
+**Outcome:** Evolve approved strategies without weakening independent controls.
+
+Work items:
+
+- Define strategy metadata, lifecycle, compatibility, approval, and validation evidence.
+- Move momentum behind a strategy registry without changing its output.
+- Define required features, eligibility, score, tie-break, horizon, expiry, benchmark, regime, and invalidation rules.
 - Separate experimental and approved strategy execution.
-- Add deterministic configuration loading with strict unknown-field rejection.
-- Record multiple-testing and promotion evidence for candidate strategy versions.
-- Expose selection and omission reasons in the artifact.
+- Implement strict versioned configuration with unknown-field rejection.
+- Define policy inputs, decisions, immutable versions, and reason codes.
+- Enforce instrument, direction, horizon, liquidity, volatility, gap, data-quality, and event constraints.
+- Add artifact validation, numeric reconciliation, and audited kill switches.
+- Record multiple-testing and promotion evidence before adding a second strategy.
 
-Completion means strategies evolve independently under explicit versions while
-the request, evidence, policy, and artifact contracts remain stable.
-
-## M05 - Policy-bound publication
-
-**Message:** Publish only artifacts that pass explicit evidence, product, and risk policy.
-
-Work items:
-
-- Define versioned policy input, decision, and reason-code contracts.
-- Enforce supported instruments, directions, horizons, and strategy statuses.
-- Add liquidity, volatility, price-gap, data-quality, and scheduled-event policy.
-- Add hypothetical per-position and aggregate-heat constraints without inferring personal suitability.
-- Define `approved`, `narrowed`, `abstained`, `rejected`, and `withdrawn` semantics.
-- Add adversarial cases showing that no adapter or model can override policy.
-- Implement artifact schema validation and exact numeric reconciliation.
-- Add global and strategy-specific publication kill switches with audit events.
-
-Completion means no artifact can be published without a reproducible policy
-decision and complete numeric/evidence validation.
+Completion means strategy implementations can evolve independently while policy
+and artifact validation remain deterministic and impossible to bypass.
 
 ## M06 - Evidence-grounded explanation
 
-**Message:** Explain approved research without allowing a model to create facts or decisions.
+**Outcome:** Explain approved research without allowing generated content to create facts.
 
 Work items:
 
 - Define the explanation proposal schema and evidence-citation contract.
-- Build an evidence allowlist containing only policy-approved facts.
-- Add prompt and tool contracts that treat retrieved content as untrusted data.
+- Build a policy-approved evidence allowlist for each artifact.
+- Treat retrieved documents as untrusted content, never executable instructions.
 - Implement one optional model adapter behind a model-neutral port.
-- Parse unknown output strictly and reject uncited, altered, or invented values.
+- Reject uncited claims, altered values, unsupported identifiers, and invalid disclosures.
 - Add prompt-injection, fabricated citation, conflicting instruction, and numeric mutation tests.
-- Implement deterministic rendering as fallback for outage, timeout, budget, or validation failure.
-- Pin model, settings, prompt, tools, and validator versions for replay.
-- Evaluate groundedness and explanation usefulness on a frozen suite.
+- Fall back to deterministic rendering for outage, timeout, budget, or validation failure.
+- Pin model, settings, prompt, tools, and validator versions for audit.
+- Evaluate groundedness and usefulness on a frozen suite.
 
-Completion means a model can improve presentation but cannot change the artifact's facts, ranking, policy, or lifecycle.
+Completion means a model can improve presentation but cannot change facts,
+ranking, policy, publication, or order eligibility.
 
-## M07 - Durable artifact lifecycle
+## M07 - Dry-run execution
 
-**Message:** Persist, replay, invalidate, expire, withdraw, and correct research artifacts.
-
-Work items:
-
-- Record the database, migration runner, and evidence-storage decisions in ADRs.
-- Add a disposable local persistence environment and complete migration-chain verification.
-- Persist requests, immutable artifact publications, lifecycle events, and version references.
-- Store evidence snapshots according to source rights and integrity requirements.
-- Enforce append-only lifecycle and cross-scope integrity at application and database boundaries.
-- Implement idempotent publication using identity plus immutable-content comparison.
-- Rebuild an artifact's deterministic fields from retained evidence and pinned versions.
-- Add retention, export, deletion, backup, and restore behavior for the supported deployment mode.
-- Expose deterministic artifact retrieval and lifecycle history.
-
-Completion means an artifact survives process restarts and remains replayable,
-auditable, and historically honest.
-
-## M08 - Evaluation and simulation
-
-**Message:** Measure strategy and artifact outcomes without hindsight or unrealistic fills.
+**Outcome:** Process simulated orders, fills, positions, cash, and P&L without a live path.
 
 Work items:
 
-- Define point-in-time dataset and evaluation-run manifests.
-- Add chronological train/development/holdout partitions and leakage tests.
-- Include delistings, corporate actions, market calendars, and universe history.
-- Define fill timing, spread, slippage, fee, liquidity, gap, and halt behavior.
-- Add simple declared baselines and comparison semantics.
-- Report sample size, uncertainty, calibration, drawdown, turnover, and regime breakdown.
-- Record experiment identity and multiple-testing history.
-- Append paper outcomes without modifying original artifacts.
-- Add sensitivity analysis for costs and fill assumptions.
-- Prevent evaluation output from becoming a public claim without separate review.
+- Define `SubmitDryRunOrder` and append-only order, fill, ledger, and position events.
+- Implement an execution simulator with only the literal `dry_run` mode.
+- Reject missing, unsupported, unauthorized, stale, or policy-ineligible requests before acceptance.
+- Support long-only market and limit orders with explicit time-in-force and cancellation.
+- Version spread, slippage, fees, latency, participation, gap, halt, and corporate-action behavior.
+- Atomically persist order transitions, fills, balanced ledger entries, and outbox events.
+- Add duplicate-command, duplicate-observation, partial-fill, restart, and replay tests.
+- Enforce egress policy and scan source, images, and configuration for broker credentials and live endpoints.
+- Expose order and portfolio-simulation views through rebuildable projections.
 
-Completion means approved strategy evidence and live artifact outcomes are
-reproducible, comparable, and explicit about uncertainty.
+Completion means an approved scenario yields reproducible simulated execution
+state while architecture tests prove no live broker path exists.
 
-## M09 - Surveillance and delivery
+## M08 - Durable projections and evaluation
 
-**Message:** Reevaluate named conditions and deliver bounded, deduplicated lifecycle updates.
+**Outcome:** Rebuild lifecycle views and measure outcomes without hindsight.
 
 Work items:
 
-- Define surveillance subscriptions and lifecycle-trigger contracts.
-- Evaluate expiry, invalidation, scheduled event, data-quality, and withdrawal conditions.
-- Make reevaluation idempotent under duplicate and out-of-order evidence.
-- Add bounded scheduling, concurrency, retry, dead-letter, and operator recovery semantics.
-- Deduplicate notifications by artifact, lifecycle transition, and destination.
-- Add one delivery adapter after lifecycle behavior is complete.
-- Expose health and lag for evidence acquisition, reevaluation, and delivery.
-- Demonstrate that surveillance cannot create an order or mutate an artifact.
+- Persist immutable artifact, order, fill, position, policy, and lifecycle histories.
+- Build projections that tolerate duplicates and resume from checkpoints.
+- Rebuild every projection from authoritative state and retained events.
+- Define point-in-time evaluation manifests and chronological holdouts.
+- Include delistings, corporate actions, calendars, universe history, and declared fill timing.
+- Report sample size, uncertainty, calibration, drawdown, turnover, cost sensitivity, and regime breakdown.
+- Link evaluation and dry-run outcomes without mutating original artifacts.
+- Verify expand-migrate-contract database evolution and restore procedures.
+- Prevent evaluation output from becoming a performance claim without explicit review.
 
-Completion means published artifacts receive reliable, auditable state updates
-without noisy duplicates or execution capability.
+Completion means state survives restarts, read models are disposable, and research
+and dry-run outcomes remain reproducible and explicit about uncertainty.
+
+## M09 - Multi-cloud deployment profiles
+
+**Outcome:** Promote identical signed artifacts through portable and managed profiles.
+
+Work items:
+
+- Package the reference Kubernetes profile with Knative or Deployments, KEDA, NATS JetStream, CloudNativePG, object storage, and OpenTelemetry.
+- Implement OpenTofu modules with thin provider compositions and stable logical outputs.
+- Qualify one managed-cloud profile first, then add GCP, Azure, and AWS profiles incrementally.
+- Use workload identity and external secret references; prohibit static cloud credentials.
+- Run identity, messaging, storage, telemetry, migration, restart, rollback, and restore conformance tests per profile.
+- Promote the same signed image digests; never rebuild per provider.
+- Document availability zones, region, residency, quotas, egress, retention, cost ceilings, and recovery objectives.
+- Run scheduled drift tests against real provider infrastructure outside default CI.
+- Demonstrate a portable Kubernetes deployment and one managed deployment from a tagged release.
+
+Completion means every claimed profile satisfies the published portability
+contract with evidence from the same automated suite.
 
 ## M10 - Operational readiness
 
-**Message:** Run EdgeAgent securely, observably, recoverably, and at controlled scale.
+**Outcome:** Operate, recover, limit, and stop the distributed system safely.
 
 Work items:
 
-- Define deployment identity, authentication, authorization, and tenant/scope boundaries.
-- Add structured logs, traces, bounded-cardinality metrics, and decision audit views.
-- Enforce request, symbol, lookback, provider, model, concurrency, queue, and storage budgets.
-- Add health probes and explicit normal, degraded, and fail-closed state reporting.
-- Package immutable deployment configuration and migrations.
-- Add staged rollout, compatibility checks, rollback, and artifact-withdrawal runbooks.
-- Verify backup, restore, retention, deletion, and disaster recovery.
-- Define and alert on availability, latency, freshness, replay, validation, and abstention SLOs.
-- Complete threat modeling, dependency/license review, and a production-readiness assessment.
+- Enforce service identity, least privilege, broker ACLs, database ownership, and operator roles.
+- Add bounded-cardinality metrics, correlated traces, structured logs, and immutable decision audit views.
+- Enforce request, symbol, lookback, provider, model, concurrency, queue, storage, and execution budgets.
+- Add readiness, liveness, graceful drain, backpressure, and explicit normal/degraded/fail-closed reporting.
+- Define SLOs for availability, command acceptance, event age, evidence freshness, publication, dry-run fills, and projection lag.
+- Add staged rollout, compatibility, rollback, quarantine replay, artifact withdrawal, and kill-switch runbooks.
+- Verify backup, point-in-time restore, retention, deletion, and cross-profile recovery drills.
+- Complete threat modeling, dependency/license review, failure injection, load tests, and production-readiness assessment.
+- Publish an operator demo that diagnoses and recovers from a poisoned message, service crash, and projection rebuild.
 
-Completion means operators can deploy, observe, limit, recover, and stop the
-system without depending on a model or editing historical research.
+Completion means operators can observe, constrain, recover, and stop the system
+without a language model, broker account, or manual database repair.
 
 ## Planning rules
 
 - GitHub owns live issue state, assignee, labels, and milestone assignment.
 - This document owns intended sequencing until an issue is created.
 - Every issue names one exact milestone and one observable outcome.
-- Move an issue only when its outcome dependency changes; update this roadmap in the same planning change.
-- Split an item when discovery reveals multiple independently valuable or risky capabilities.
-- A milestone may defer work only when its outcome statement remains true and the deferral is explicit.
+- Each work item should fit one independently reviewable pull request.
 - Later milestones may begin discovery early, but implementation cannot bypass an unmet integrity dependency.
+- A profile or capability is supported only after its acceptance tests pass in automation.
