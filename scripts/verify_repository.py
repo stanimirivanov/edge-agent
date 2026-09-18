@@ -23,6 +23,7 @@ IGNORED_PARTS = {
     "build",
     "dist",
     "node_modules",
+    "target",
 }
 TEXT_SUFFIXES = {
     ".css",
@@ -39,17 +40,21 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-TEXT_FILENAMES = {".editorconfig", ".gitignore", "Makefile"}
+TEXT_FILENAMES = {".editorconfig", ".gitignore", "Cargo.lock", "Makefile"}
 REQUIRED_PATHS = {
     ".editorconfig",
     ".gitignore",
     "AGENTS.md",
+    "Cargo.lock",
+    "Cargo.toml",
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "LICENSE",
     "Makefile",
     "README.md",
     "SECURITY.md",
+    "rust-toolchain.toml",
+    "scripts/verify_architecture.py",
     "docs/architecture/system-overview.md",
     "docs/architecture/deployment-portability.md",
     "docs/decisions/README.md",

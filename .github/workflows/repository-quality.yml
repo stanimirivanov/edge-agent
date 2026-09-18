@@ -27,9 +27,21 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy --component rustfmt
       - name: Check text formatting
         run: python scripts/verify_repository.py --format-check
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
       - name: Check repository contracts
         run: python scripts/verify_repository.py
+      - name: Check architecture boundaries
+        run: python scripts/verify_architecture.py
+      - name: Check Rust workspace
+        run: cargo check --workspace --all-targets
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run harness tests
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Run Rust tests
+        run: cargo test --workspace --all-targets

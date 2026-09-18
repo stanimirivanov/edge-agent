@@ -1,0 +1,15 @@
+[package]
+name = "edgeagent-market-data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-contracts = { path = "../../crates/contracts" }
+edgeagent-service-runtime = { path = "../../crates/service-runtime" }
+
+[lints]
+workspace = true

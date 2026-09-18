@@ -8,7 +8,7 @@
 - Versioned commands and events use at-least-once delivery, transactional outbox/inbox records, and idempotent state transitions.
 - The same signed OCI images target portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
-- The project is in **M01 - Rust engineering foundation**; the Rust workspace is the next executable increment.
+- The project is in **M01 - Rust engineering foundation**; the buildable workspace and service composition roots are established, while network and domain workflows remain intentionally absent.
 
 ## What EdgeAgent is
 
@@ -77,21 +77,42 @@ for the GCP, Azure, AWS, and Kubernetes capability matrix.
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
+## Workspace
+
+The initial workspace contains:
+
+- `edgeagent-contracts`, which owns stable component identities and descriptor validation;
+- `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
+- five independently buildable service binaries under `services/`.
+
+Each binary currently supports `describe`, `self-check`, `version`, and `help`.
+These commands prove packaging and ownership without implying that HTTP,
+messaging, persistence, or trading workflows already exist. For example:
+
+```text
+cargo run -p edgeagent-gateway -- describe
+cargo run -p edgeagent-execution-simulator -- self-check
+```
+
 ## Verify the current foundation
 
-The repository harness currently uses only the Python standard library while
-the Rust workspace is being established. With Python 3.11 or newer:
+Install Python 3.11 or newer and the toolchain pinned by
+`rust-toolchain.toml`, then run:
 
 ```text
 python scripts/verify_repository.py --format-check
+python scripts/verify_architecture.py
 python scripts/verify_repository.py
 python -m unittest discover -s tests -p "test_*.py"
+cargo fmt --all --check
+cargo check --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
 ```
 
 Use `python3` on POSIX or `py -3` on Windows when appropriate. On systems with
-`make`, `make verify PYTHON=python3` runs the same checks. Rust formatting,
-Clippy, tests, dependency policy, and image validation will join this one-command
-entry point in M01.
+`make`, `make verify PYTHON=python3` runs the same checks. Default verification
+uses no external service, credential, paid data, or network request.
 
 ## Contributing
 

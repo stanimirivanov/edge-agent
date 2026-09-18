@@ -1,6 +1,6 @@
 # ADR-0002: Use portable at-least-once event messaging
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-18
 - Milestone: M02 - Contracts and event spine
 - Deciders: EdgeAgent maintainers
