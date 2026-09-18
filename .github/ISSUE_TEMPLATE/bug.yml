@@ -1,0 +1,50 @@
+name: Bug report
+description: Report reproducible incorrect behavior without disclosing a vulnerability.
+title: ""
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For suspected vulnerabilities, follow SECURITY.md instead of opening a public issue.
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      description: Use the exact MNN - Outcome title when known.
+    validations:
+      required: false
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include inputs, versions, timestamps, and redacted evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Revision, operating system, runtime, and relevant adapter versions.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and licensed market-data payloads.
+          required: true
+        - label: This report does not contain vulnerability details.
+          required: true
