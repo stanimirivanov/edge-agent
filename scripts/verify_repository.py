@@ -40,8 +40,16 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-TEXT_FILENAMES = {".editorconfig", ".gitignore", "Cargo.lock", "Makefile"}
+TEXT_FILENAMES = {
+    ".dockerignore",
+    ".editorconfig",
+    ".gitignore",
+    "Cargo.lock",
+    "Dockerfile",
+    "Makefile",
+}
 REQUIRED_PATHS = {
+    ".dockerignore",
     ".editorconfig",
     ".gitignore",
     "AGENTS.md",
@@ -49,18 +57,21 @@ REQUIRED_PATHS = {
     "Cargo.toml",
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
+    "Dockerfile",
     "LICENSE",
     "Makefile",
     "README.md",
     "SECURITY.md",
     "rust-toolchain.toml",
     "scripts/verify_architecture.py",
+    "scripts/verify_images.py",
     "docs/architecture/system-overview.md",
     "docs/architecture/deployment-portability.md",
     "docs/decisions/README.md",
     "docs/development/engineering-standards.md",
     "docs/product/vision.md",
     "docs/roadmap/milestones.md",
+    "deploy/images.toml",
 }
 SELECTIVE_GUIDES = {
     "CONTRIBUTING.md",

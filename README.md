@@ -94,6 +94,28 @@ cargo run -p edgeagent-gateway -- describe
 cargo run -p edgeagent-execution-simulator -- self-check
 ```
 
+## OCI images
+
+One parameterized [Dockerfile](Dockerfile) builds every service declared in
+[deploy/images.toml](deploy/images.toml). It compiles the locked workspace in
+a Rust Alpine builder and copies one statically linked binary into a `scratch`
+runtime image. The runtime uses numeric user and group `65532`, contains no
+shell or package manager, and carries standard source, revision, and license
+labels.
+
+Build and inspect one service:
+
+```text
+docker build --build-arg SERVICE=gateway --build-arg SOURCE_REVISION=local -t edgeagent/gateway:local .
+docker run --rm --network=none --read-only --cap-drop=ALL edgeagent/gateway:local describe
+```
+
+`make image-smoke` builds all five images, validates their configured non-root
+identity and entrypoint, executes each descriptor under a read-only and
+networkless runtime, rejects an unknown service, and removes its test tags.
+Docker is optional for normal local verification; the Ubuntu CI image job is
+authoritative for container smoke tests.
+
 ## Verify the current foundation
 
 Install Python 3.11 or newer and the toolchain pinned by
@@ -101,8 +123,9 @@ Install Python 3.11 or newer and the toolchain pinned by
 
 ```text
 python scripts/verify_repository.py --format-check
-python scripts/verify_architecture.py
 python scripts/verify_repository.py
+python scripts/verify_architecture.py
+python scripts/verify_images.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
 cargo check --workspace --all-targets

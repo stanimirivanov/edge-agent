@@ -66,9 +66,11 @@ process.
 
 ## 3. Artifact and Configuration Contract
 
-CI produces one multi-architecture OCI image per deployable, a software bill of
-materials, provenance, signatures, database migrations, and versioned event
-schemas. Environments promote immutable digests; they never rebuild source.
+CI produces one OCI image per deployable from the shared build contract in
+`Dockerfile` and `deploy/images.toml`. Release automation will extend this with
+multi-architecture manifests, a software bill of materials, provenance,
+signatures, database migrations, and versioned event schemas. Environments
+promote immutable digests; they never rebuild source.
 
 Runtime configuration enters through validated environment variables and
 mounted configuration. Secrets enter through workload identity and external

@@ -1,0 +1,10 @@
+*
+!.dockerignore
+!Dockerfile
+!Cargo.lock
+!Cargo.toml
+!rust-toolchain.toml
+!crates/
+!crates/**
+!services/
+!services/**
