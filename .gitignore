@@ -1,0 +1,39 @@
+# Operating system and editor state
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.local/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node.js and TypeScript
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime and test output
+artifacts/
+coverage/
+*.log
+*.tmp
+
+# Local market-data and model caches
+.cache/
+data/local/
+models/local/
