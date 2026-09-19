@@ -60,3 +60,26 @@ jobs:
           python-version: "3.13"
       - name: Build and smoke-test service images
         run: python scripts/verify_images.py --build
+
+  local-platform-smoke:
+    name: Local platform smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Validate Compose configuration
+        run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml config --quiet
+      - name: Start local platform
+        run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml up --detach
+      - name: Verify local platform readiness
+        run: python scripts/verify_local_stack.py --running
+      - name: Print diagnostics after failure
+        if: failure()
+        run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200
+      - name: Stop local platform
+        if: always()
+        run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml down --volumes

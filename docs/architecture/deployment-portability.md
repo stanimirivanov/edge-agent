@@ -38,7 +38,7 @@ CI integration tests, and Kubernetes deployments. It uses:
 - Kubernetes CronJobs or KEDA ScaledJobs for finite and event-driven workers;
 - NATS JetStream for durable commands, events, replay, and consumer state;
 - CloudNativePG for PostgreSQL lifecycle management;
-- MinIO or another S3-compatible object store for evidence and audit objects;
+- SeaweedFS or another maintained S3-compatible object store for evidence and audit objects;
 - Valkey for optional ephemeral caching, never as the system of record;
 - an OpenTelemetry Collector with Prometheus and Grafana plus a compatible
   trace backend; and
@@ -151,7 +151,7 @@ receive the same treatment: domain crates never depend directly on a cloud SDK.
 | Optional document/key-value state | Firestore | Cosmos DB | DynamoDB | Prefer PostgreSQL JSONB initially; CockroachDB only after a dedicated decision |
 | Immutable audit analytics | Cloud Storage retention policy/Bucket Lock plus BigQuery | Immutable Blob Storage plus Synapse serverless SQL | S3 Object Lock plus Athena | S3-compatible object store through `object_store`, queried with DataFusion; checksum and retention contract |
 | Ephemeral cache | Memorystore | Azure Managed Redis | ElastiCache | Valkey cluster; disposable and never authoritative |
-| General object storage | Cloud Storage | Blob Storage | S3 | MinIO or Ceph through the `object_store` crate |
+| General object storage | Cloud Storage | Blob Storage | S3 | SeaweedFS, RustFS, or Ceph through the `object_store` crate |
 | Scheduler | Cloud Scheduler invoking a job or service | Container Apps scheduled jobs | EventBridge Scheduler invoking an ECS task | Kubernetes CronJobs or KEDA; schedules carry idempotency windows |
 | Metrics, logs, and traces | Cloud Monitoring and Cloud Trace | Azure Monitor and Application Insights | CloudWatch and X-Ray | OpenTelemetry Collector, Prometheus, Grafana, and Tempo or Jaeger |
 | Secrets and encryption | Secret Manager and Cloud KMS | Key Vault | Secrets Manager and KMS | Vault plus external-secrets integration; envelope-encryption contract |

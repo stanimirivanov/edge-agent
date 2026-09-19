@@ -6,7 +6,7 @@
 - One Cargo workspace produces independently deployable gateway, market-data, research, execution-simulator, and audit-projector components.
 - Deterministic services own evidence, analytics, policy, simulated fills, positions, and P&L; models may explain validated facts but cannot create them.
 - Versioned commands and events use at-least-once delivery, transactional outbox/inbox records, and idempotent state transitions.
-- The same signed OCI images target portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
+- The same OCI image contract targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles; signing remains release work.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
 - The project is in **M01 - Rust engineering foundation**; the buildable workspace and service composition roots are established, while network and domain workflows remain intentionally absent.
 
@@ -74,6 +74,7 @@ for the GCP, Azure, AWS, and Kubernetes capability matrix.
 - [Architecture decisions](docs/decisions/README.md)
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
+- [Local platform profile](docs/development/local-platform.md)
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
@@ -116,6 +117,22 @@ networkless runtime, rejects an unknown service, and removes its test tags.
 Docker is optional for normal local verification; the Ubuntu CI image job is
 authoritative for container smoke tests.
 
+## Local dependencies
+
+The checked-in Compose profile provides PostgreSQL, NATS JetStream, SeaweedFS
+S3-compatible storage, and an OpenTelemetry Collector. All published ports bind
+to `127.0.0.1`, and the credentials are visibly local test values.
+
+```text
+make local-up
+make local-status
+make local-down
+```
+
+`local-down` preserves named volumes. See the
+[local platform guide](docs/development/local-platform.md) for endpoints,
+readiness behavior, security limits, troubleshooting, and explicit state reset.
+
 ## Verify the current foundation
 
 Install Python 3.11 or newer and the toolchain pinned by
@@ -126,6 +143,7 @@ python scripts/verify_repository.py --format-check
 python scripts/verify_repository.py
 python scripts/verify_architecture.py
 python scripts/verify_images.py
+python scripts/verify_local_stack.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
 cargo check --workspace --all-targets
