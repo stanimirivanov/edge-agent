@@ -43,6 +43,7 @@ TEXT_SUFFIXES = {
 TEXT_FILENAMES = {
     ".dockerignore",
     ".editorconfig",
+    ".env.example",
     ".gitignore",
     "Cargo.lock",
     "Dockerfile",
@@ -65,13 +66,19 @@ REQUIRED_PATHS = {
     "rust-toolchain.toml",
     "scripts/verify_architecture.py",
     "scripts/verify_images.py",
+    "scripts/verify_local_stack.py",
     "docs/architecture/system-overview.md",
     "docs/architecture/deployment-portability.md",
     "docs/decisions/README.md",
     "docs/development/engineering-standards.md",
+    "docs/development/local-platform.md",
     "docs/product/vision.md",
     "docs/roadmap/milestones.md",
     "deploy/images.toml",
+    "deploy/local/.env.example",
+    "deploy/local/compose.yaml",
+    "deploy/local/otel-collector.yaml",
+    "deploy/local/stack.toml",
 }
 SELECTIVE_GUIDES = {
     "CONTRIBUTING.md",

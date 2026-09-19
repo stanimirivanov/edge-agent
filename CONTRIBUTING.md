@@ -166,6 +166,7 @@ python scripts/verify_repository.py --format-check
 python scripts/verify_repository.py
 python scripts/verify_architecture.py
 python scripts/verify_images.py
+python scripts/verify_local_stack.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
 cargo check --workspace --all-targets
@@ -181,6 +182,11 @@ Changes to `Dockerfile`, `.dockerignore`, `deploy/images.toml`, service package
 names, component descriptors, or runtime packaging MUST also run
 `make image-smoke` where Docker is available. If Docker is unavailable, report
 the image smoke test as **not run**; the Ubuntu CI job remains required before merge.
+
+Changes to `deploy/local/`, its image versions, ports, credentials, readiness
+rules, or dependency configuration MUST run `make local-up` and
+`make local-down` where Docker is available. Never substitute production
+credentials or licensed data into the checked-in local profile.
 
 The examples use `python`; contributors MAY substitute the platform's Python
 3.11+ launcher, such as `python3` on POSIX or `py -3` on Windows. This changes

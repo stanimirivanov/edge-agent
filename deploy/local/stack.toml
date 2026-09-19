@@ -1,0 +1,32 @@
+schema_version = 1
+
+[services.postgres]
+image = "postgres:18.6-alpine3.23"
+license = "PostgreSQL"
+ports = [5432]
+readiness = "tcp"
+readiness_port = 5432
+
+[services.nats]
+image = "nats:2.14.7-alpine"
+license = "Apache-2.0"
+ports = [4222, 8222]
+readiness = "http"
+readiness_port = 8222
+readiness_path = "/healthz?js-enabled-only=true"
+
+[services.object-store]
+image = "ghcr.io/chrislusf/seaweedfs:4.47"
+license = "Apache-2.0"
+ports = [8333]
+readiness = "http-client-response"
+readiness_port = 8333
+readiness_path = "/"
+
+[services.otel-collector]
+image = "otel/opentelemetry-collector-contrib:0.161.0"
+license = "Apache-2.0"
+ports = [4317, 4318, 13133]
+readiness = "http"
+readiness_port = 13133
+readiness_path = "/"
