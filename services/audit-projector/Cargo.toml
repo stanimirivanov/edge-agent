@@ -8,8 +8,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-edgeagent-contracts = { path = "../../crates/contracts" }
-edgeagent-service-runtime = { path = "../../crates/service-runtime" }
+edgeagent-contracts.workspace = true
+edgeagent-service-runtime.workspace = true
 
 [lints]
 workspace = true

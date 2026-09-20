@@ -39,14 +39,18 @@ jobs:
         run: python scripts/verify_architecture.py
       - name: Check OCI image contracts
         run: python scripts/verify_images.py
+      - name: Check supply-chain contracts
+        run: python scripts/verify_supply_chain.py
+      - name: Check locked dependency graph
+        run: cargo metadata --locked --offline --format-version 1 --no-deps
       - name: Check Rust workspace
-        run: cargo check --workspace --all-targets
+        run: cargo check --locked --workspace --all-targets
       - name: Lint Rust workspace
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run harness tests
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Run Rust tests
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
 
   container-smoke:
     name: Container smoke tests
@@ -83,3 +87,47 @@ jobs:
       - name: Stop local platform
         if: always()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml down --volumes
+
+  supply-chain:
+    name: Dependency policy and SBOMs
+    runs-on: ubuntu-latest
+    env:
+      CARGO_CYCLONEDX_VERSION: "0.5.9"
+      SYFT_VERSION: "1.52.0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Install pinned Cargo SBOM tool
+        run: cargo install --locked cargo-cyclonedx --version "$CARGO_CYCLONEDX_VERSION"
+      - name: Enforce dependency, advisory, source, and license policy
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          rust-version: "1.98.1"
+          arguments: --locked
+          command: check
+      - name: Generate Rust binary SBOMs
+        run: python scripts/generate_sboms.py rust --output artifacts/sbom
+      - name: Install pinned Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          syft-version: v${{ env.SYFT_VERSION }}
+      - name: Generate OCI image SBOMs
+        run: python scripts/generate_sboms.py images --output artifacts/sbom --syft "${{ steps.syft.outputs.cmd }}"
+      - name: Validate complete CycloneDX artifact set
+        run: python scripts/verify_supply_chain.py --artifacts artifacts/sbom
+      - name: Upload SBOM evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: edgeagent-sboms-${{ github.sha }}
+          path: artifacts/sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 14

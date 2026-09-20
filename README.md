@@ -75,6 +75,7 @@ for the GCP, Azure, AWS, and Kubernetes capability matrix.
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Local platform profile](docs/development/local-platform.md)
+- [Dependency and artifact supply chain](docs/development/supply-chain.md)
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
@@ -133,6 +134,22 @@ make local-down
 [local platform guide](docs/development/local-platform.md) for endpoints,
 readiness behavior, security limits, troubleshooting, and explicit state reset.
 
+## Dependency and artifact governance
+
+The committed Cargo lockfile is mandatory, and `deny.toml` defines the accepted
+advisory, maintenance, source, version, and license policy. The supply-chain CI
+job refreshes RustSec data and produces two CycloneDX documents for every
+deployable declared in `deploy/images.toml`: a Cargo dependency SBOM and an OCI
+runtime-filesystem SBOM. It validates the complete ten-artifact set before
+uploading it as short-lived workflow evidence.
+
+Run the static, offline policy check with normal verification. With the pinned
+`cargo-deny`, `cargo-cyclonedx`, Syft, and Docker available, run the full local
+pipeline with `make supply-chain`. See the
+[supply-chain guide](docs/development/supply-chain.md) for policy, exception,
+artifact, failure, and tool-installation details. Image signing and provenance
+attestation remain a separate release-identity increment.
+
 ## Verify the current foundation
 
 Install Python 3.11 or newer and the toolchain pinned by
@@ -144,11 +161,13 @@ python scripts/verify_repository.py
 python scripts/verify_architecture.py
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
+python scripts/verify_supply_chain.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
-cargo check --workspace --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
+cargo metadata --locked --offline --format-version 1 --no-deps
+cargo check --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 ```
 
 Use `python3` on POSIX or `py -3` on Windows when appropriate. On systems with
