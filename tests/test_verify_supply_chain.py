@@ -44,6 +44,7 @@ class VerifySupplyChainTests(unittest.TestCase):
             cargo_cyclonedx="0.5.9",
             syft="1.52.0",
             rust_spec="1.5",
+            image_spec="1.6",
             accepted_specs=("1.5", "1.6"),
             retention_days=14,
             cargo_deny_action="v2.1.1",
@@ -87,6 +88,53 @@ class VerifySupplyChainTests(unittest.TestCase):
             problems = verify_supply_chain.check_sbom(path, ("1.5", "1.6"))
 
         self.assertGreaterEqual(len(problems), 3)
+
+    def test_artifact_set_rejects_unpinned_image_spec_with_observed_version(self) -> None:
+        tools = verify_supply_chain.ToolPolicy(
+            cargo_deny="0.20.2",
+            cargo_cyclonedx="0.5.9",
+            syft="1.52.0",
+            rust_spec="1.5",
+            image_spec="1.6",
+            accepted_specs=("1.5", "1.6"),
+            retention_days=14,
+            cargo_deny_action="v2.1.1",
+            cargo_deny_action_sha="3c6349835b2b7b196a839186cb8b78e02f7b5f25",
+            download_syft_action="v0.24.2",
+            download_syft_action_sha="3ad7283483fc7af8ff2b4ea19663c2d5ca935e26",
+            upload_artifact_action="v7.0.1",
+            upload_artifact_action_sha="043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        )
+        deployable = verify_supply_chain.ArtifactSpec(
+            service="gateway",
+            binary="edgeagent-gateway",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = Path(directory)
+            for filename, spec_version in (
+                (deployable.source_filename, "1.5"),
+                (deployable.image_filename, "1.7"),
+            ):
+                document = {
+                    "bomFormat": "CycloneDX",
+                    "specVersion": spec_version,
+                    "version": 1,
+                    "metadata": {"component": {"name": "edgeagent-gateway"}},
+                }
+                (artifacts / filename).write_text(
+                    json.dumps(document),
+                    encoding="utf-8",
+                )
+
+            problems = verify_supply_chain.check_artifacts(
+                artifacts,
+                [deployable],
+                tools,
+            )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("specVersion '1.7'", problems[0].message)
+        self.assertIn("['1.6']", problems[0].message)
 
 
 if __name__ == "__main__":

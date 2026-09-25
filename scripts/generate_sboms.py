@@ -87,7 +87,13 @@ def rust_sbom_command(
     ]
 
 
-def image_sbom_command(spec: ArtifactSpec, *, syft: str, output: Path) -> list[str]:
+def image_sbom_command(
+    spec: ArtifactSpec,
+    *,
+    syft: str,
+    output: Path,
+    spec_version: str,
+) -> list[str]:
     """Build the stable Syft command for one local OCI image."""
 
     tag = f"edgeagent-ci/{spec.service}:sbom"
@@ -99,7 +105,7 @@ def image_sbom_command(spec: ArtifactSpec, *, syft: str, output: Path) -> list[s
         "--source-name",
         spec.binary,
         "--output",
-        f"cyclonedx-json={output}",
+        f"cyclonedx-json@{spec_version}={output}",
     ]
 
 
@@ -154,6 +160,7 @@ def generate_image_sboms(
     *,
     docker: str,
     syft: str,
+    spec_version: str,
 ) -> None:
     """Build every declared image and generate its runtime-filesystem SBOM."""
 
@@ -189,7 +196,12 @@ def generate_image_sboms(
                 root=root,
             )
             _run(
-                image_sbom_command(spec, syft=syft, output=destination),
+                image_sbom_command(
+                    spec,
+                    syft=syft,
+                    output=destination,
+                    spec_version=spec_version,
+                ),
                 root=root,
                 environment=environment,
             )
@@ -257,16 +269,18 @@ def main(argv: list[str] | None = None) -> int:
                 specs,
                 docker=arguments.docker,
                 syft=arguments.syft,
+                spec_version=tools.image_spec,
             )
         filenames = (
             [spec.source_filename for spec in specs]
             if arguments.mode == "rust"
             else [spec.image_filename for spec in specs]
         )
+        expected_spec = tools.rust_spec if arguments.mode == "rust" else tools.image_spec
         artifact_problems = [
             problem
             for filename in filenames
-            for problem in check_sbom(output / filename, tools.accepted_specs)
+            for problem in check_sbom(output / filename, (expected_spec,))
         ]
         if artifact_problems:
             for problem in artifact_problems:

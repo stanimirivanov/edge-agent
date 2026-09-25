@@ -46,6 +46,7 @@ class ToolPolicy:
     cargo_cyclonedx: str
     syft: str
     rust_spec: str
+    image_spec: str
     accepted_specs: tuple[str, ...]
     retention_days: int
     cargo_deny_action: str
@@ -97,6 +98,7 @@ def load_tool_policy(path: Path) -> tuple[ToolPolicy | None, list[Problem]]:
         "cargo_cyclonedx": manifest.get("cargo_cyclonedx"),
         "syft": manifest.get("syft"),
         "cyclonedx_rust_spec": manifest.get("cyclonedx_rust_spec"),
+        "cyclonedx_image_spec": manifest.get("cyclonedx_image_spec"),
     }
     for name, value in string_fields.items():
         if not isinstance(value, str) or not value:
@@ -109,6 +111,13 @@ def load_tool_policy(path: Path) -> tuple[ToolPolicy | None, list[Problem]]:
         problems.append(
             Problem(relative, "accepted_cyclonedx_specs must be a non-empty string list")
         )
+    else:
+        for name in ("cyclonedx_rust_spec", "cyclonedx_image_spec"):
+            value = string_fields[name]
+            if isinstance(value, str) and value not in accepted:
+                problems.append(
+                    Problem(relative, f"{name} must be included in accepted_cyclonedx_specs")
+                )
     retention = manifest.get("artifact_retention_days")
     if not isinstance(retention, int) or not 1 <= retention <= 90:
         problems.append(Problem(relative, "artifact_retention_days must be between 1 and 90"))
@@ -146,6 +155,7 @@ def load_tool_policy(path: Path) -> tuple[ToolPolicy | None, list[Problem]]:
             cargo_cyclonedx=string_fields["cargo_cyclonedx"],  # type: ignore[arg-type]
             syft=string_fields["syft"],  # type: ignore[arg-type]
             rust_spec=string_fields["cyclonedx_rust_spec"],  # type: ignore[arg-type]
+            image_spec=string_fields["cyclonedx_image_spec"],  # type: ignore[arg-type]
             accepted_specs=tuple(accepted),  # type: ignore[arg-type]
             retention_days=retention,  # type: ignore[arg-type]
             cargo_deny_action=cargo_deny_action,  # type: ignore[arg-type]
@@ -291,9 +301,13 @@ def check_sbom(path: Path, accepted_specs: tuple[str, ...]) -> list[Problem]:
         return [Problem(relative, "SBOM root must be a JSON object")]
     if document.get("bomFormat") != "CycloneDX":
         problems.append(Problem(relative, "bomFormat must be 'CycloneDX'"))
-    if document.get("specVersion") not in accepted_specs:
+    actual_spec = document.get("specVersion")
+    if actual_spec not in accepted_specs:
         problems.append(
-            Problem(relative, f"specVersion must be one of {list(accepted_specs)!r}")
+            Problem(
+                relative,
+                f"specVersion {actual_spec!r} must be one of {list(accepted_specs)!r}",
+            )
         )
     if document.get("version") != 1:
         problems.append(Problem(relative, "CycloneDX document version must be 1"))
@@ -328,8 +342,15 @@ def check_artifacts(
         Problem(relative, f"unexpected SBOM artifact: {name}")
         for name in sorted(actual - expected)
     )
+    required_specs = {
+        spec.source_filename: (tools.rust_spec,)
+        for spec in specs
+    } | {
+        spec.image_filename: (tools.image_spec,)
+        for spec in specs
+    }
     for name in sorted(expected & actual):
-        problems.extend(check_sbom(directory / name, tools.accepted_specs))
+        problems.extend(check_sbom(directory / name, required_specs[name]))
     return problems
 
 
