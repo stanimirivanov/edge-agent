@@ -28,6 +28,7 @@ check:
 	$(PYTHON) scripts/verify_images.py
 	$(PYTHON) scripts/verify_local_stack.py
 	$(PYTHON) scripts/verify_supply_chain.py
+	$(PYTHON) scripts/verify_release.py
 	cargo metadata --locked --offline --format-version 1 --no-deps
 	cargo check --locked --workspace --all-targets
 	cargo clippy --locked --workspace --all-targets -- -D warnings

@@ -1,0 +1,21 @@
+schema_version = 1
+registry = "ghcr.io"
+platform = "linux/amd64"
+cosign = "v3.1.3"
+oidc_issuer = "https://token.actions.githubusercontent.com"
+
+[actions]
+checkout = "v7.0.1"
+checkout_sha = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+setup_python = "v7.0.0"
+setup_python_sha = "5fda3b95a4ea91299a34e894583c3862153e4b97"
+login = "v4.6.0"
+login_sha = "dbcb813823bdd20940b903addbd779551569679f"
+setup_buildx = "v4.4.1"
+setup_buildx_sha = "f87e5991a6d7451dcb8d9637bfbc97413f497069"
+build_push = "v7.4.0"
+build_push_sha = "c3c9e263c25d99ce0380d002d59b67737d91b0dc"
+attest = "v4.2.2"
+attest_sha = "1e69f48acb82d1966a394da916b4c1698aa569d6"
+cosign_installer = "v4.1.2"
+cosign_installer_sha = "6f9f17788090df1f26f669e9d70d6ae9567deba6"

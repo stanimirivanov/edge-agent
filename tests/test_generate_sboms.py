@@ -56,6 +56,39 @@ class GenerateSbomsTests(unittest.TestCase):
         self.assertIn(f"cyclonedx-json@1.6={output}", command)
         self.assertNotIn(f"cyclonedx-json={output}", command)
 
+    def test_published_image_command_scans_an_immutable_registry_digest(self) -> None:
+        output = Path("artifacts/sbom/edgeagent-gateway.image.cdx.json")
+        digest = "sha256:" + ("a" * 64)
+
+        command = generate_sboms.published_image_sbom_command(
+            self.deployable,
+            image="ghcr.io/example/edge-agent-gateway",
+            digest=digest,
+            syft="syft",
+            output=output,
+            spec_version="1.6",
+        )
+
+        self.assertIn(
+            f"registry:ghcr.io/example/edge-agent-gateway@{digest}",
+            command,
+        )
+        self.assertIn(f"cyclonedx-json@1.6={output}", command)
+
+    def test_published_image_command_rejects_a_mutable_tag(self) -> None:
+        with self.assertRaisesRegex(
+            generate_sboms.GenerationError,
+            "untagged lowercase GHCR",
+        ):
+            generate_sboms.published_image_sbom_command(
+                self.deployable,
+                image="ghcr.io/example/edge-agent-gateway:latest",
+                digest="sha256:" + ("a" * 64),
+                syft="syft",
+                output=Path("gateway.cdx.json"),
+                spec_version="1.6",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

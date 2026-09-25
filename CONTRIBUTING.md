@@ -168,6 +168,7 @@ python scripts/verify_architecture.py
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
+python scripts/verify_release.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
 cargo metadata --locked --offline --format-version 1 --no-deps
@@ -191,7 +192,8 @@ rules, or dependency configuration MUST run `make local-up` and
 credentials or licensed data into the checked-in local profile.
 
 Changes to Cargo dependencies, `Cargo.lock`, `deny.toml`, `Dockerfile`,
-`deploy/images.toml`, `supply-chain/tools.toml`, or SBOM generation MUST run
+`deploy/images.toml`, `supply-chain/tools.toml`, `supply-chain/release.toml`,
+release automation, or SBOM generation MUST run
 `make supply-chain` where the pinned tools and Docker are available. If a tool,
 network, or daemon is unavailable, report the affected policy or artifact stage
 as **not run**; the Ubuntu supply-chain CI job remains required before merge.

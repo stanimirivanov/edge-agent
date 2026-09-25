@@ -6,7 +6,7 @@
 - One Cargo workspace produces independently deployable gateway, market-data, research, execution-simulator, and audit-projector components.
 - Deterministic services own evidence, analytics, policy, simulated fills, positions, and P&L; models may explain validated facts but cannot create them.
 - Versioned commands and events use at-least-once delivery, transactional outbox/inbox records, and idempotent state transitions.
-- The same OCI image contract targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles; signing remains release work.
+- The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
 - The project is in **M01 - Rust engineering foundation**; the buildable workspace and service composition roots are established, while network and domain workflows remain intentionally absent.
 
@@ -76,6 +76,7 @@ for the GCP, Azure, AWS, and Kubernetes capability matrix.
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Local platform profile](docs/development/local-platform.md)
 - [Dependency and artifact supply chain](docs/development/supply-chain.md)
+- [Signed OCI releases](docs/development/releases.md)
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
@@ -147,8 +148,10 @@ Run the static, offline policy check with normal verification. With the pinned
 `cargo-deny`, `cargo-cyclonedx`, Syft, and Docker available, run the full local
 pipeline with `make supply-chain`. See the
 [supply-chain guide](docs/development/supply-chain.md) for policy, exception,
-artifact, failure, and tool-installation details. Image signing and provenance
-attestation remain a separate release-identity increment.
+artifact, failure, and tool-installation details. A SemVer tag builds each
+declared image once, publishes it to GHCR, attaches provenance and CycloneDX
+SBOM attestations to the immutable digest, and signs that digest through GitHub
+OIDC. See [signed OCI releases](docs/development/releases.md).
 
 ## Verify the current foundation
 
@@ -162,6 +165,7 @@ python scripts/verify_architecture.py
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
+python scripts/verify_release.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
 cargo metadata --locked --offline --format-version 1 --no-deps
