@@ -3,6 +3,7 @@ cargo_deny = "0.20.2"
 cargo_cyclonedx = "0.5.9"
 syft = "1.52.0"
 cyclonedx_rust_spec = "1.5"
+cyclonedx_image_spec = "1.6"
 accepted_cyclonedx_specs = ["1.5", "1.6"]
 artifact_retention_days = 14
 

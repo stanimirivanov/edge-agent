@@ -46,8 +46,10 @@ The Rust generator uses CycloneDX 1.5, strict SPDX parsing, all features, all
 target-specific dependencies, and one document per binary. It derives the
 timestamp from `SOURCE_DATE_EPOCH`, defaulting to the current Git commit time,
 so repeated generation for one commit does not introduce a random serial or
-wall-clock drift. Syft may emit CycloneDX 1.6; the verifier accepts only the
-declared 1.5 and 1.6 envelopes.
+wall-clock drift. Syft emits CycloneDX 1.6 for image evidence; the verifier
+accepts only the declared 1.5 source and 1.6 image envelopes. The Syft command
+pins `cyclonedx-json@1.6` explicitly so a newer default cannot silently change
+the image evidence contract.
 
 Generated SBOMs are evidence artifacts, not source files. They remain ignored
 under `artifacts/`, are validated before upload, and are retained by CI for 14
@@ -96,6 +98,9 @@ inspection.
   not a pass. Record it as not run and rely on the required CI job before merge.
 - A partial artifact directory fails validation. Delete the disposable output
   directory and regenerate both artifact classes from a clean checkout.
+- A generated document with an unexpected CycloneDX version fails with both
+  the observed and required versions. Update the declared contract deliberately
+  or correct the generator; do not widen validation only to make CI pass.
 - The generator removes its temporary local image tags even after a failed
   scan. It never pushes images or contacts a deployment environment.
 

@@ -49,10 +49,12 @@ class GenerateSbomsTests(unittest.TestCase):
             self.deployable,
             syft="syft",
             output=output,
+            spec_version="1.6",
         )
 
         self.assertIn("docker:edgeagent-ci/gateway:sbom", command)
-        self.assertIn(f"cyclonedx-json={output}", command)
+        self.assertIn(f"cyclonedx-json@1.6={output}", command)
+        self.assertNotIn(f"cyclonedx-json={output}", command)
 
 
 if __name__ == "__main__":
