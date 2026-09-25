@@ -238,7 +238,8 @@ prompts, model/tool schemas, and evaluation fixtures as compatibility boundaries
 - Expose structured logs, traces, and bounded-cardinality metrics sufficient to replay and diagnose decisions.
 - Correlation identifiers are not authorization grants.
 - Dependencies need a current use, compatible license, maintained release,
-  pinned resolution, proportionate review, and replacement path.
+  pinned resolution, proportionate review, and replacement path. The
+  [supply-chain policy](supply-chain.md) defines enforcement and evidence.
 - New operational behavior documents healthy signals, failure classes,
   degradation, recovery, rollout, and rollback.
 

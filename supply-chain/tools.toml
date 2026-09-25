@@ -1,0 +1,15 @@
+schema_version = 1
+cargo_deny = "0.20.2"
+cargo_cyclonedx = "0.5.9"
+syft = "1.52.0"
+cyclonedx_rust_spec = "1.5"
+accepted_cyclonedx_specs = ["1.5", "1.6"]
+artifact_retention_days = 14
+
+[actions]
+cargo_deny = "v2.1.1"
+cargo_deny_sha = "3c6349835b2b7b196a839186cb8b78e02f7b5f25"
+download_syft = "v0.24.2"
+download_syft_sha = "3ad7283483fc7af8ff2b4ea19663c2d5ca935e26"
+upload_artifact = "v7.0.1"
+upload_artifact_sha = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"

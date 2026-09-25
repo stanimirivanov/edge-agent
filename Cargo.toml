@@ -17,6 +17,10 @@ rust-version = "1.98.1"
 license = "Apache-2.0"
 repository = "https://github.com/stanimirivanov/edge-agent"
 
+[workspace.dependencies]
+edgeagent-contracts = { path = "crates/contracts" }
+edgeagent-service-runtime = { path = "crates/service-runtime" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

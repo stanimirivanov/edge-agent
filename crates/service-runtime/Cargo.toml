@@ -8,7 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-edgeagent-contracts = { path = "../contracts" }
+edgeagent-contracts.workspace = true
 
 [lints]
 workspace = true

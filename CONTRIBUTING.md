@@ -167,11 +167,13 @@ python scripts/verify_repository.py
 python scripts/verify_architecture.py
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
+python scripts/verify_supply_chain.py
 python -m unittest discover -s tests -p "test_*.py"
 cargo fmt --all --check
-cargo check --workspace --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
+cargo metadata --locked --offline --format-version 1 --no-deps
+cargo check --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 ```
 
 `make verify` runs the same commands where `make` is available. Application
@@ -187,6 +189,12 @@ Changes to `deploy/local/`, its image versions, ports, credentials, readiness
 rules, or dependency configuration MUST run `make local-up` and
 `make local-down` where Docker is available. Never substitute production
 credentials or licensed data into the checked-in local profile.
+
+Changes to Cargo dependencies, `Cargo.lock`, `deny.toml`, `Dockerfile`,
+`deploy/images.toml`, `supply-chain/tools.toml`, or SBOM generation MUST run
+`make supply-chain` where the pinned tools and Docker are available. If a tool,
+network, or daemon is unavailable, report the affected policy or artifact stage
+as **not run**; the Ubuntu supply-chain CI job remains required before merge.
 
 The examples use `python`; contributors MAY substitute the platform's Python
 3.11+ launcher, such as `python3` on POSIX or `py -3` on Windows. This changes
