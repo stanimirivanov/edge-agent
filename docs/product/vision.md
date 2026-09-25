@@ -57,9 +57,11 @@ The first complete vertical slice targets:
 - source-linked explanations and immutable artifact lifecycle events; and
 - position, cash, realized P&L, and unrealized P&L projections.
 
-The initial user surface may be a CLI or API. A web or conversational adapter
-must use the same request, policy, event, evidence, order, and artifact contracts
-rather than reimplementing domain logic.
+The initial user surface may be a CLI or API. The separately owned web UI and
+any conversational adapter must use the same request, policy, event, evidence,
+order, and artifact contracts rather than reimplementing domain logic. They
+communicate through the gateway and never directly access internal services or
+data stores.
 
 ## Research artifact contract
 
@@ -147,6 +149,7 @@ uncertainty, baseline comparison, regime breakdown, turnover, and drawdown.
 10. **Audit and projection runtime** — records material transitions and builds disposable read models.
 11. **Surveillance workers** — append expiry, invalidation, withdrawal, and reevaluation events.
 12. **Deployment profiles** — promote identical signed images across portable and managed environments.
+13. **Trusted interaction adapter** — presents evidence, abstentions, explanations, and dry-run state without becoming a source of domain truth.
 
 Each capability exposes a small contract. A provider, model, storage engine,
 message broker, UI, or cloud service is an adapter and cannot redefine domain

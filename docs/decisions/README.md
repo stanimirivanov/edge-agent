@@ -92,3 +92,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0001](0001-use-a-rust-workspace-with-multiple-deployables.md) | Accepted | Use a Rust workspace monorepo with independently deployable components. |
 | [ADR-0002](0002-use-portable-at-least-once-event-messaging.md) | Accepted | Use versioned CloudEvents contracts and portable at-least-once messaging. |
 | [ADR-0003](0003-add-dry-run-trade-execution.md) | Accepted | Add dry-run order execution without broker connectivity or live trading. |
+| [ADR-0004](0004-separate-application-ui-gitops-and-substrate-ownership.md) | Accepted | Separate application source, UI, GitOps desired state, and substrate ownership. |

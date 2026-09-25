@@ -79,28 +79,20 @@ event time, producer identity, schema version, and trace context.
 
 ## Repository and deployment structure
 
-The Cargo workspace keeps deployment boundaries visible:
+The product spans four repositories with explicit handoffs. The Cargo
+workspace keeps runtime boundaries visible while separate repositories own the
+browser experience, environment desired state, and reusable substrate:
 
 ```text
-crates/
-  domain/                 # pure domain types and invariants
-  application/            # use cases and ports
-  contracts/              # versioned commands, events, and API DTOs
-  market-data-contracts/  # provider-neutral observation contracts
-  infrastructure/         # shared messaging, storage, telemetry adapters
-  testing/                # fixtures, fakes, and conformance suites
-services/
-  gateway/
-  market-data/
-  research/
-  execution-simulator/
-  audit-projector/
-workers/
-  surveillance/
-deploy/
-  local/
-  kubernetes/
-  opentofu/
+edge-agent/
+  crates/                 # domain, application, contracts, adapters, testing
+  services/               # independently deployable Rust composition roots
+  workers/                # asynchronous Rust workers
+  deploy/local/           # credential-free local dependency profile
+  deploy/images.toml      # OCI build inventory
+edge-agent-ui/            # untrusted browser adapter to the gateway API
+edge-agent-gitops/        # environment desired state and digest promotion
+k8s-infrastructure/       # project-neutral substrate and Argo CD lifecycle
 ```
 
 Domain crates do not depend on cloud SDKs, network transports, database drivers,
@@ -110,6 +102,8 @@ Cross-service behavior uses public APIs or messages.
 
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
+Cross-repository authority and handoffs are fixed by
+[ADR-0004](../decisions/0004-separate-application-ui-gitops-and-substrate-ownership.md).
 Deployment profiles and provider mappings are defined in
 [Deployment Portability](deployment-portability.md).
 
