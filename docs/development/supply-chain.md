@@ -53,8 +53,8 @@ the image evidence contract.
 
 Generated SBOMs are evidence artifacts, not source files. They remain ignored
 under `artifacts/`, are validated before upload, and are retained by CI for 14
-days. Release automation can later attach the same verified documents to signed
-image digests without changing their generation boundary.
+days. Tagged releases scan each published digest without rebuilding it and
+attach the resulting image SBOM as a signed GitHub attestation.
 
 ## Commands
 
@@ -105,7 +105,7 @@ inspection.
   scan. It never pushes images or contacts a deployment environment.
 
 Runtime image SBOMs do not replace source dependency SBOMs: statically linked
-Rust binaries may expose less package detail to filesystem scanners. Neither
-artifact proves build provenance or publisher identity. SLSA provenance,
-keyless signing, registry attachment, and signature verification policy remain
-explicit follow-up work.
+Rust binaries may expose less package detail to filesystem scanners. The
+tagged-release workflow separately establishes build provenance and publisher
+identity for the published digest. Its operational contract is documented in
+[Signed OCI releases](releases.md).

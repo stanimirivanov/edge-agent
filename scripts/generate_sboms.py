@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,12 @@ from verify_supply_chain import (
 
 class GenerationError(RuntimeError):
     """A caller-actionable SBOM generation failure."""
+
+
+PUBLISHED_IMAGE = re.compile(
+    r"^ghcr\.io/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+$"
+)
+SHA256_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _run(
@@ -101,6 +108,33 @@ def image_sbom_command(
         syft,
         "scan",
         f"docker:{tag}",
+        "--quiet",
+        "--source-name",
+        spec.binary,
+        "--output",
+        f"cyclonedx-json@{spec_version}={output}",
+    ]
+
+
+def published_image_sbom_command(
+    spec: ArtifactSpec,
+    *,
+    image: str,
+    digest: str,
+    syft: str,
+    output: Path,
+    spec_version: str,
+) -> list[str]:
+    """Build the Syft command for one immutable image already in GHCR."""
+
+    if PUBLISHED_IMAGE.fullmatch(image) is None:
+        raise GenerationError("published image must be an untagged lowercase GHCR name")
+    if SHA256_DIGEST.fullmatch(digest) is None:
+        raise GenerationError("published image digest must be a lowercase SHA-256 digest")
+    return [
+        syft,
+        "scan",
+        f"registry:{image}@{digest}",
         "--quiet",
         "--source-name",
         spec.binary,
@@ -219,15 +253,53 @@ def generate_image_sboms(
             )
 
 
+def generate_published_image_sbom(
+    root: Path,
+    output: Path,
+    spec: ArtifactSpec,
+    *,
+    image: str,
+    digest: str,
+    syft: str,
+    spec_version: str,
+) -> Path:
+    """Scan one immutable registry digest without rebuilding the release image."""
+
+    output.mkdir(parents=True, exist_ok=True)
+    destination = (output / spec.image_filename).resolve()
+    destination.unlink(missing_ok=True)
+    environment = os.environ.copy()
+    environment["SYFT_CHECK_FOR_APP_UPDATE"] = "false"
+    _run(
+        published_image_sbom_command(
+            spec,
+            image=image,
+            digest=digest,
+            syft=syft,
+            output=destination,
+            spec_version=spec_version,
+        ),
+        root=root,
+        environment=environment,
+    )
+    if not destination.is_file():
+        raise GenerationError(f"Syft did not produce {destination}")
+    print(f"generated {destination} for {image}@{digest}")
+    return destination
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one explicit SBOM generation mode."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("rust", "images"))
+    parser.add_argument("mode", choices=("rust", "images", "release"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/sbom"))
     parser.add_argument("--cargo-cyclonedx", default="cargo-cyclonedx")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--syft", default="syft")
+    parser.add_argument("--service")
+    parser.add_argument("--image")
+    parser.add_argument("--digest")
     parser.add_argument(
         "--root",
         type=Path,
@@ -261,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                 cargo_cyclonedx=arguments.cargo_cyclonedx,
                 spec_version=tools.rust_spec,
             )
-        else:
+        elif arguments.mode == "images":
             _require_tool_version(root, [arguments.syft, "version"], tools.syft)
             generate_image_sboms(
                 root,
@@ -271,10 +343,34 @@ def main(argv: list[str] | None = None) -> int:
                 syft=arguments.syft,
                 spec_version=tools.image_spec,
             )
+        else:
+            _require_tool_version(root, [arguments.syft, "version"], tools.syft)
+            if arguments.service is None or arguments.image is None or arguments.digest is None:
+                raise GenerationError(
+                    "release mode requires --service, --image, and --digest"
+                )
+            selected = [spec for spec in specs if spec.service == arguments.service]
+            if len(selected) != 1:
+                raise GenerationError(
+                    f"release service is not declared exactly once: {arguments.service!r}"
+                )
+            generate_published_image_sbom(
+                root,
+                output,
+                selected[0],
+                image=arguments.image,
+                digest=arguments.digest,
+                syft=arguments.syft,
+                spec_version=tools.image_spec,
+            )
         filenames = (
             [spec.source_filename for spec in specs]
             if arguments.mode == "rust"
-            else [spec.image_filename for spec in specs]
+            else (
+                [spec.image_filename for spec in specs]
+                if arguments.mode == "images"
+                else [selected[0].image_filename]
+            )
         )
         expected_spec = tools.rust_spec if arguments.mode == "rust" else tools.image_spec
         artifact_problems = [

@@ -47,6 +47,16 @@ class VerifyImagesTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("component", problems[0].message)
 
+    def test_build_inputs_are_digest_pinned(self) -> None:
+        root = Path(__file__).parents[1]
+
+        contract, _, problems = verify_images.verify(root)
+
+        self.assertEqual([], problems)
+        self.assertIsNotNone(contract)
+        self.assertRegex(contract.dockerfile_frontend, r"@sha256:[0-9a-f]{64}$")
+        self.assertRegex(contract.builder_image, r"@sha256:[0-9a-f]{64}$")
+
     def test_descriptor_with_unknown_field_is_rejected(self) -> None:
         spec = verify_images.ImageSpec(
             service="research",

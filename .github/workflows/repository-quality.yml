@@ -41,6 +41,8 @@ jobs:
         run: python scripts/verify_images.py
       - name: Check supply-chain contracts
         run: python scripts/verify_supply_chain.py
+      - name: Check release contracts
+        run: python scripts/verify_release.py
       - name: Check locked dependency graph
         run: cargo metadata --locked --offline --format-version 1 --no-deps
       - name: Check Rust workspace

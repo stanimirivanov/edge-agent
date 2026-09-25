@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-ARG RUST_IMAGE=rust:1.98.1-alpine3.22
+ARG RUST_IMAGE=rust:1.98.1-alpine3.22@sha256:a1796ca6fa216d6727b5f61c69e4c665b120b1a4dcb969639e2f25f1ed309456
 FROM ${RUST_IMAGE} AS builder
 
 WORKDIR /workspace

@@ -52,6 +52,7 @@ class BuildContract:
     """Shared OCI build and runtime properties."""
 
     repository: str
+    dockerfile_frontend: str
     builder_image: str
     runtime_image: str
     runtime_user: str
@@ -85,7 +86,13 @@ def load_manifest(path: Path) -> tuple[BuildContract | None, list[ImageSpec], li
 
     build_fields = {
         field: build.get(field)
-        for field in ("builder_image", "runtime_image", "runtime_user", "entrypoint")
+        for field in (
+            "dockerfile_frontend",
+            "builder_image",
+            "runtime_image",
+            "runtime_user",
+            "entrypoint",
+        )
     }
     for field, value in build_fields.items():
         if not isinstance(value, str) or not value:
@@ -197,6 +204,7 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
     if contract is not None:
         required_fragments = {
+            f"# syntax={contract.dockerfile_frontend}": "pinned Dockerfile frontend",
             f"ARG RUST_IMAGE={contract.builder_image}": "pinned builder default",
             f"FROM {contract.runtime_image} AS runtime": "minimal runtime stage",
             f"USER {contract.runtime_user}": "non-root runtime user",
@@ -209,6 +217,15 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
         for fragment, purpose in required_fragments.items():
             if fragment not in dockerfile:
                 problems.append(Problem("Dockerfile", f"missing {purpose}: {fragment}"))
+
+        for field, image in {
+            "build.dockerfile_frontend": contract.dockerfile_frontend,
+            "build.builder_image": contract.builder_image,
+        }.items():
+            if re.fullmatch(r".+@sha256:[0-9a-f]{64}", image) is None:
+                problems.append(
+                    Problem("deploy/images.toml", f"{field} must use an immutable SHA-256 digest")
+                )
 
         toolchain = _load_toml(root / "rust-toolchain.toml").get("toolchain")
         channel = toolchain.get("channel") if isinstance(toolchain, dict) else None

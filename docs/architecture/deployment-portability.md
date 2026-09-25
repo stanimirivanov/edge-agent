@@ -67,10 +67,11 @@ process.
 ## 3. Artifact and Configuration Contract
 
 CI produces one OCI image per deployable from the shared build contract in
-`Dockerfile` and `deploy/images.toml`. Release automation will extend this with
-multi-architecture manifests, a software bill of materials, provenance,
-signatures, database migrations, and versioned event schemas. Environments
-promote immutable digests; they never rebuild source.
+`Dockerfile` and `deploy/images.toml`. Release automation publishes the
+current Linux AMD64 image, attaches a CycloneDX SBOM and GitHub build provenance,
+and signs the immutable digest through OIDC. Multi-architecture manifests,
+database migrations, and versioned event-schema bundles remain later release
+increments. Environments promote immutable digests; they never rebuild source.
 
 Runtime configuration enters through validated environment variables and
 mounted configuration. Secrets enter through workload identity and external
