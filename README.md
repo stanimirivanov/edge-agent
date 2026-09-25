@@ -7,6 +7,7 @@
 - Deterministic services own evidence, analytics, policy, simulated fills, positions, and P&L; models may explain validated facts but cannot create them.
 - Versioned commands and events use at-least-once delivery, transactional outbox/inbox records, and idempotent state transitions.
 - The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
+- Separate UI and GitOps repositories consume versioned gateway contracts and immutable release digests without owning domain behavior.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
 - The project is in **M01 - Rust engineering foundation**; the buildable workspace and service composition roots are established, while network and domain workflows remain intentionally absent.
 
@@ -54,6 +55,15 @@ object storage, and OpenTelemetry. Cloud-managed adapters must preserve the
 same contracts for delivery, idempotency, ordering, retention, security, and
 recovery. See [Deployment portability](docs/architecture/deployment-portability.md)
 for the GCP, Azure, AWS, and Kubernetes capability matrix.
+
+The broader project uses explicit repository boundaries:
+
+- [`edge-agent-ui`](https://github.com/stanimirivanov/edge-agent-ui) owns the untrusted browser experience and calls only the gateway API;
+- [`edge-agent-gitops`](https://github.com/stanimirivanov/edge-agent-gitops) owns environment desired state and immutable release selection; and
+- [`k8s-infrastructure`](https://github.com/stanimirivanov/k8s-infrastructure) owns project-neutral substrates and Argo CD installation.
+
+See [ADR-0004](docs/decisions/0004-separate-application-ui-gitops-and-substrate-ownership.md)
+for the complete ownership, security, and handoff contract.
 
 ## Engineering principles
 

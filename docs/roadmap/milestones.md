@@ -6,6 +6,7 @@
 - Establish versioned contracts and durable at-least-once event handling before adding live data or complex workflows.
 - Prove research, policy, and dry-run execution with synthetic evidence before integrating paid services.
 - Treat the portable Kubernetes profile as the reference and qualify managed GCP, Azure, and AWS profiles through the same conformance suite.
+- Deliver the user experience as a separately governed gateway client after its backend contracts are proven.
 - Keep default CI offline, deterministic, credential-free, and runnable by an open-source contributor.
 - Live order transmission, custody, and broker integration remain outside this roadmap.
 
@@ -23,6 +24,7 @@
 | M08 - Durable projections and evaluation | Rebuild lifecycle views and measure outcomes without hindsight. |
 | M09 - Multi-cloud deployment profiles | Promote identical signed artifacts through portable and managed profiles. |
 | M10 - Operational readiness | Operate, recover, limit, and stop the distributed system safely. |
+| M11 - Trusted user experience | Expose research and dry-run workflows without moving domain authority into the browser. |
 
 ## M01 - Rust engineering foundation
 
@@ -183,6 +185,7 @@ and dry-run outcomes remain reproducible and explicit about uncertainty.
 Work items:
 
 - Package the reference Kubernetes profile with Knative or Deployments, KEDA, NATS JetStream, CloudNativePG, object storage, and OpenTelemetry.
+- Keep Argo CD Applications, environment overlays, dependency instances, and immutable release selection in `edge-agent-gitops`.
 - Implement OpenTofu modules with thin provider compositions and stable logical outputs.
 - Qualify one managed-cloud profile first, then add GCP, Azure, and AWS profiles incrementally.
 - Use workload identity and external secret references; prohibit static cloud credentials.
@@ -213,6 +216,44 @@ Work items:
 
 Completion means operators can observe, constrain, recover, and stop the system
 without a language model, broker account, or manual database repair.
+
+## M11 - Trusted user experience
+
+**Outcome:** Expose research and dry-run workflows without moving domain authority into the browser.
+
+Work items:
+
+- Accept an `edge-agent-ui` architecture decision covering the language,
+  framework, rendering model, package policy, authentication, and artifact
+  format.
+- Generate and pin a typed client from gateway-owned API schemas; prohibit
+  handwritten copies of domain or transport contracts.
+- Submit research requests and expose durable acceptance, progress, terminal
+  failure, and retry-safe status.
+- Render research artifacts, abstentions, evidence provenance, timestamps,
+  units, versions, uncertainty, and lifecycle state.
+- Present generated explanations only with validated citations and safe content
+  rendering.
+- Submit market and limit scenarios using only the literal `dry_run` mode and
+  keep authorization and validation authoritative in backend services.
+- Display order transitions, fills, positions, cash, fees, and simulated P&L
+  from projector-owned views without browser-side financial calculations.
+- Distinguish loading, delayed, degraded, rejected, stale, withdrawn, and
+  unavailable states instead of inventing continuity.
+- Implement OIDC login, authorization-aware navigation, content security,
+  dependency policy, accessibility, and responsive behavior.
+- Add deterministic component, contract, browser, and end-to-end tests using
+  synthetic fixtures and failure cases.
+- Package the UI as an independently versioned, signed artifact and promote its
+  immutable digest through `edge-agent-gitops`.
+- Keep Argo CD, infrastructure mutation, credential administration,
+  dead-letter replay, and emergency operations outside the initial user UI.
+
+Completion means a user can submit an offline synthetic research request,
+inspect a reproducible artifact or explicit abstention, submit an authorized
+dry-run order, and follow its simulated lifecycle through accessible views.
+Tests must prove the UI cannot create facts, bypass policy, reach internal
+services, or request a live execution mode.
 
 ## Planning rules
 
