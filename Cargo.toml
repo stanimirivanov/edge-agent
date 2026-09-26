@@ -18,8 +18,12 @@ license = "Apache-2.0"
 repository = "https://github.com/stanimirivanov/edge-agent"
 
 [workspace.dependencies]
+cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-features = false }
 edgeagent-contracts = { path = "crates/contracts" }
 edgeagent-service-runtime = { path = "crates/service-runtime" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+url = "=2.5.8"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

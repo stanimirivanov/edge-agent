@@ -5,6 +5,10 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+mod messaging;
+
+pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};
+
 /// Version of the machine-readable component description contract.
 pub const COMPONENT_CONTRACT_VERSION: &str = "edgeagent.component.v1";
 

@@ -79,6 +79,7 @@ REQUIRED_PATHS = {
     "docs/decisions/README.md",
     "docs/development/engineering-standards.md",
     "docs/development/local-platform.md",
+    "docs/development/message-contracts.md",
     "docs/development/releases.md",
     "docs/development/supply-chain.md",
     "docs/product/vision.md",
