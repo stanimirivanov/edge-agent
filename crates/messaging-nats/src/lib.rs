@@ -77,7 +77,7 @@ fn prepare_publish(
     definition.validate_envelope(envelope)?;
     Ok(PreparedPublish {
         subject: definition.subject()?,
-        message_id: envelope.id().to_owned(),
+        message_id: envelope.deduplication_key(),
         payload: envelope.to_json()?,
     })
 }
@@ -165,7 +165,10 @@ mod tests {
             prepared.subject,
             "edgeagent.command.execution.submit-dry-run-order.v1"
         );
-        assert_eq!(prepared.message_id, "message-01");
+        assert_eq!(
+            prepared.message_id,
+            "31:urn:edgeagent:component:gateway:message-01"
+        );
         assert_eq!(prepared.payload, envelope.to_json()?);
         Ok(())
     }

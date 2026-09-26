@@ -4,6 +4,7 @@ members = [
     "crates/contracts",
     "crates/messaging",
     "crates/messaging-nats",
+    "crates/outbox-postgres",
     "crates/service-runtime",
     "services/audit-projector",
     "services/execution-simulator",
@@ -27,6 +28,7 @@ edgeagent-messaging = { path = "crates/messaging" }
 edgeagent-service-runtime = { path = "crates/service-runtime" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
+tokio-postgres = "=0.7.18"
 url = "=2.5.8"
 
 [workspace.dependencies.tokio]
