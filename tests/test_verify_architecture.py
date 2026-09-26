@@ -45,6 +45,26 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("async-nats", problems[0].message)
 
+    def test_application_messaging_port_cannot_import_broker_client(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/messaging",
+            {*verify_architecture.MESSAGING_DEPENDENCIES, "async-nats"},
+            verify_architecture.MESSAGING_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("async-nats", problems[0].message)
+
+    def test_adapter_test_dependencies_are_explicitly_bounded(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/messaging-nats [dev-dependencies]",
+            {*verify_architecture.MESSAGING_NATS_DEV_DEPENDENCIES, "testcontainers"},
+            verify_architecture.MESSAGING_NATS_DEV_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("testcontainers", problems[0].message)
+
     def test_missing_workspace_member_is_rejected(self) -> None:
         members = set(verify_architecture.PACKAGE_RULES)
         members.remove("services/research")

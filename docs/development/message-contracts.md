@@ -12,8 +12,8 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, NATS adapters, outbox/inbox persistence, retries,
-  and quarantine remain separate M02 capabilities.
+- Generated payload schemas, message consumption, outbox/inbox persistence,
+  retries, and quarantine remain separate M02 capabilities.
 
 ## Purpose and boundary
 
@@ -28,8 +28,8 @@ JSON, decodes untrusted bytes, revalidates every required invariant, and
 deserializes the data field into a caller-selected payload type.
 
 The implementation uses the official CloudEvents Rust SDK with all transport
-features disabled. Protocol adapters will consume the validated structured
-bytes rather than redefine the envelope.
+features disabled. Protocol adapters consume the validated structured bytes
+rather than redefine the envelope.
 
 `MessageDefinition` binds one exact major-version type to its schema, semantic
 kind, owner, partition namespace, and retention class. `MessageRegistry`
@@ -123,8 +123,9 @@ of retained events to destructive work queues is not portable behavior.
    transport adapter.
 5. The message definition verifies schema, partition namespace, producer
    authority for events, and encoded size.
-6. A future outbox implementation persists those exact bytes atomically with
-   the local state transition.
+6. `MessagePublisher` passes those exact bytes to a transport adapter and waits
+   for durable acknowledgement. A future outbox implementation will persist
+   them atomically with the local state transition before publication.
 
 The compact JSON encoder normalizes object-key order so the same validated
 envelope has stable bytes. JSON object order remains semantically irrelevant;
@@ -175,13 +176,14 @@ analysis and, when semantics change, a superseding architecture decision.
 
 ## Current limitations
 
-This increment deliberately does not register domain messages before their
+The current contract deliberately does not register domain messages before their
 payloads exist. Each future payload change adds its `MessageDefinition` beside
 the typed contract and fixture, then composes the definitions needed by each
-process. It also does not define generated JSON Schemas, a schema registry,
-NATS bindings, outbox/inbox tables, retry scheduling, acknowledgement,
-quarantine operations, replay tooling, or telemetry export. Those are
-independently reviewable M02 increments built on this contract.
+process. The NATS publisher binding is implemented separately and documented in
+the [messaging adapter guide](messaging-adapters.md). Generated JSON Schemas, a
+schema registry, stream provisioning, outbox/inbox tables, message consumption,
+retry scheduling, quarantine operations, replay tooling, and telemetry export
+remain independently reviewable M02 increments built on this contract.
 
 The contract verifies that `dataschema` is an absolute URI but does not yet
 validate `data` against the referenced schema. Typed Serde decoding and golden
