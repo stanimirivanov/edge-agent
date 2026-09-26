@@ -9,7 +9,9 @@
 - The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - Separate UI and GitOps repositories consume versioned gateway contracts and immutable release digests without owning domain behavior.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
-- The project is in **M01 - Rust engineering foundation**; the buildable workspace and service composition roots are established, while network and domain workflows remain intentionally absent.
+- The project is in **M02 - Contracts and event spine**; the first validated
+  CloudEvents message primitive is implemented, while transport, persistence,
+  and domain workflows remain intentionally absent.
 
 ## What EdgeAgent is
 
@@ -84,6 +86,7 @@ for the complete ownership, security, and handoff contract.
 - [Architecture decisions](docs/decisions/README.md)
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
+- [Message envelope contract](docs/development/message-contracts.md)
 - [Local platform profile](docs/development/local-platform.md)
 - [Dependency and artifact supply chain](docs/development/supply-chain.md)
 - [Signed OCI releases](docs/development/releases.md)
@@ -94,7 +97,8 @@ for the complete ownership, security, and handoff contract.
 
 The initial workspace contains:
 
-- `edgeagent-contracts`, which owns stable component identities and descriptor validation;
+- `edgeagent-contracts`, which owns stable component identities, descriptor
+  validation, and the validated CloudEvents message envelope;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
 - five independently buildable service binaries under `services/`.
 
@@ -106,6 +110,20 @@ messaging, persistence, or trading workflows already exist. For example:
 cargo run -p edgeagent-gateway -- describe
 cargo run -p edgeagent-execution-simulator -- self-check
 ```
+
+## Message contracts
+
+`edgeagent-contracts` now provides a transport-neutral CloudEvents 1.0
+structured JSON envelope. Callers supply deterministic message, correlation,
+causation, idempotency, partition, timestamp, schema, and trace metadata. The
+contract validates those values before serialization and again after decoding,
+then exposes typed payload decoding.
+
+A committed golden fixture fixes the initial wire representation. The contract
+does not generate identifiers, read the wall clock, connect to NATS, persist an
+outbox or inbox, or validate a domain payload against a generated schema. Those
+capabilities remain separate M02 increments. See the
+[message contract guide](docs/development/message-contracts.md).
 
 ## OCI images
 

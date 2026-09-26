@@ -34,10 +34,11 @@ class Problem:
 
 CONTRACTS = "edgeagent-contracts"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
+CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 
 PACKAGE_RULES = {
-    "crates/contracts": PackageRule(CONTRACTS, "lib", frozenset()),
+    "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),
     "crates/service-runtime": PackageRule(
         SERVICE_RUNTIME,
         "lib",

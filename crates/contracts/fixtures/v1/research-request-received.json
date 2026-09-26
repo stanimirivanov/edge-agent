@@ -1,0 +1,19 @@
+{
+  "specversion": "1.0",
+  "id": "message-01",
+  "source": "urn:edgeagent:component:gateway",
+  "type": "com.edgeagent.research.request-received.v1",
+  "subject": "research-request/request-01",
+  "time": "2026-09-26T00:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:edgeagent:schema:research-request-received:v1",
+  "correlationid": "correlation-01",
+  "causationid": "command-01",
+  "idempotencykey": "research-request-01",
+  "partitionkey": "research-request/request-01",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "tracestate": "vendor=value",
+  "data": {
+    "request_id": "request-01"
+  }
+}
