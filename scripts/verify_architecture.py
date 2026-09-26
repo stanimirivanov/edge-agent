@@ -17,6 +17,7 @@ class PackageRule:
     name: str
     target: str
     dependencies: frozenset[str]
+    dev_dependencies: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, order=True)
@@ -33,12 +34,28 @@ class Problem:
 
 
 CONTRACTS = "edgeagent-contracts"
+MESSAGING = "edgeagent-messaging"
+MESSAGING_NATS = "edgeagent-messaging-nats"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
+MESSAGING_DEPENDENCIES = frozenset({CONTRACTS})
+MESSAGING_NATS_DEPENDENCIES = frozenset({"async-nats", CONTRACTS, MESSAGING})
+MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 
 PACKAGE_RULES = {
     "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),
+    "crates/messaging": PackageRule(
+        MESSAGING,
+        "lib",
+        MESSAGING_DEPENDENCIES,
+    ),
+    "crates/messaging-nats": PackageRule(
+        MESSAGING_NATS,
+        "lib",
+        MESSAGING_NATS_DEPENDENCIES,
+        MESSAGING_NATS_DEV_DEPENDENCIES,
+    ),
     "crates/service-runtime": PackageRule(
         SERVICE_RUNTIME,
         "lib",
@@ -170,6 +187,20 @@ def verify(root: Path) -> list[Problem]:
         else:
             dependencies = set(raw_dependencies)
         problems.extend(check_dependencies(relative, dependencies, rule.dependencies))
+
+        raw_dev_dependencies = manifest.get("dev-dependencies", {})
+        if not isinstance(raw_dev_dependencies, dict):
+            problems.append(Problem(relative, "dev-dependencies must be a table"))
+            dev_dependencies: set[str] = set()
+        else:
+            dev_dependencies = set(raw_dev_dependencies)
+        problems.extend(
+            check_dependencies(
+                f"{relative} [dev-dependencies]",
+                dev_dependencies,
+                rule.dev_dependencies,
+            )
+        )
 
         source_name = "lib.rs" if rule.target == "lib" else "main.rs"
         source = root / relative / "src" / source_name

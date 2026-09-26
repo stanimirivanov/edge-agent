@@ -100,6 +100,13 @@ or model providers. A deployable may depend on shared contracts and
 infrastructure adapters, but it may not read another service's private tables.
 Cross-service behavior uses public APIs or messages.
 
+The application-owned `edgeagent-messaging` port defines durable publication
+outcomes without broker types. `edgeagent-messaging-nats` derives subjects from
+validated message definitions, serializes the portable envelope, uses stable
+message identity for bounded JetStream deduplication, and waits for persistence
+acknowledgement. Deployment configuration—not application code—owns streams,
+retention, replicas, limits, credentials, and subject ACLs.
+
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by

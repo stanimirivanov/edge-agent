@@ -9,9 +9,9 @@
 - The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - Separate UI and GitOps repositories consume versioned gateway contracts and immutable release digests without owning domain behavior.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
-- The project is in **M02 - Contracts and event spine**; the first validated
-  CloudEvents message primitive is implemented, while transport, persistence,
-  and domain workflows remain intentionally absent.
+- The project is in **M02 - Contracts and event spine**; validated CloudEvents
+  contracts and durable JetStream publication are implemented, while message
+  consumption, persistence, and domain workflows remain intentionally absent.
 
 ## What EdgeAgent is
 
@@ -87,6 +87,7 @@ for the complete ownership, security, and handoff contract.
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Message envelope contract](docs/development/message-contracts.md)
+- [Messaging publisher adapters](docs/development/messaging-adapters.md)
 - [Local platform profile](docs/development/local-platform.md)
 - [Dependency and artifact supply chain](docs/development/supply-chain.md)
 - [Signed OCI releases](docs/development/releases.md)
@@ -99,6 +100,10 @@ The initial workspace contains:
 
 - `edgeagent-contracts`, which owns stable component identities, descriptor
   validation, and the validated CloudEvents message envelope;
+- `edgeagent-messaging`, which owns the application publication port and
+  portable acknowledgement/failure semantics;
+- `edgeagent-messaging-nats`, which publishes validated envelopes through NATS
+  JetStream without leaking broker APIs into application code;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
 - five independently buildable service binaries under `services/`.
 
@@ -125,10 +130,13 @@ event producer, enforces partition namespaces and a 256 KiB portable envelope
 limit, and declares work-queue or replay retention semantics. A committed
 golden fixture fixes the initial wire representation.
 
-The contract does not generate identifiers, read the wall clock, connect to
-NATS, persist an outbox or inbox, or validate a domain payload against a
-generated schema. Those capabilities remain separate M02 increments. See the
-[message contract guide](docs/development/message-contracts.md).
+The contract does not generate identifiers or read the wall clock. The
+application-owned publisher port and NATS adapter validate every attempt,
+derive its subject, attach the stable message ID for broker deduplication, and
+await a JetStream persistence acknowledgement. Outbox/inbox persistence,
+consumption, retries, quarantine, and generated schema validation remain
+separate M02 increments. See the [message contract guide](docs/development/message-contracts.md)
+and [publisher adapter guide](docs/development/messaging-adapters.md).
 
 ## OCI images
 
