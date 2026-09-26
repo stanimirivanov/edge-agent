@@ -1,0 +1,19 @@
+[package]
+name = "edgeagent-outbox-postgres"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-contracts.workspace = true
+tokio-postgres.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
