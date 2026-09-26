@@ -10,7 +10,9 @@
   `idempotencykey`, `partitionkey`, and `traceparent`; `tracestate` is optional.
 - Invalid versions, names, identifiers, trace context, attributes, or non-JSON
   payloads fail before a message reaches a transport or handler.
-- NATS subjects, generated payload schemas, outbox/inbox persistence, retries,
+- A validated registry owns subjects, command handlers, event producers,
+  partition namespaces, portable size limits, delivery mode, and retention.
+- Generated payload schemas, NATS adapters, outbox/inbox persistence, retries,
   and quarantine remain separate M02 capabilities.
 
 ## Purpose and boundary
@@ -28,6 +30,12 @@ deserializes the data field into a caller-selected payload type.
 The implementation uses the official CloudEvents Rust SDK with all transport
 features disabled. Protocol adapters will consume the validated structured
 bytes rather than redefine the envelope.
+
+`MessageDefinition` binds one exact major-version type to its schema, semantic
+kind, owner, partition namespace, and retention class. `MessageRegistry`
+rejects invalid or duplicate definitions and resolves untrusted envelopes only
+by their exact type. This makes broker configuration and service authorization
+derivable from code-reviewed contracts rather than duplicated strings.
 
 ## Wire contract
 
@@ -61,6 +69,48 @@ The committed
 fixture is the golden structured representation. It is synthetic and contains
 no market data, credential, or private identifier.
 
+## Routing and ownership
+
+Subjects are derived, never hand-written:
+
+```text
+edgeagent.command.<domain>.<name>.v<major>
+edgeagent.event.<domain>.<name>.v<major>
+```
+
+Commands use work-queue delivery. Their `owner` is the sole component allowed
+to handle the command; multiple replicas may join that component's durable
+consumer group, but only one member handles a delivery attempt. Command
+publishers are authorized separately because more than one trusted component
+may request the same capability.
+
+Events use retained-stream delivery. Their `owner` is the sole authoritative
+producer, and the envelope `source` must equal that component's stable source
+URI. Multiple independently checkpointed consumers may subscribe and replay.
+No event consumer becomes authoritative for the fact by projecting it.
+
+Subjects do not contain aggregate identifiers. `partitionkey` carries ordering
+scope as `<declared-prefix>/<identifier>`, preventing unbounded subject and ACL
+cardinality. Ordering outside one partition key is explicitly undefined.
+
+The initial portable envelope maximum is 256 KiB, including metadata and data.
+Larger evidence belongs in object storage; the message carries an immutable
+reference, digest, size, media type, and entitlement metadata. Broker profiles
+may support larger messages but cannot increase this application contract.
+
+## Retention contract
+
+| Class | Delivery | Duration | Meaning |
+| --- | --- | --- | --- |
+| `Command` | Work queue | 7 days | Retain until acknowledged or the maximum age expires |
+| `WorkflowEvent` | Retained stream | 30 days | Minimum replay window for ordinary workflow facts |
+| `AuditEvent` | Retained stream | 365 days | Minimum replay window for material audit facts |
+
+A command cannot select an event retention class, and an event cannot select
+command retention. A managed broker profile must express equivalent semantics
+or fail conformance explicitly; silent truncation, early expiry, or conversion
+of retained events to destructive work queues is not portable behavior.
+
 ## Producer flow
 
 1. Domain/application code selects a versioned payload type and immutable
@@ -71,7 +121,9 @@ no market data, credential, or private identifier.
    payload as JSON.
 4. `MessageEnvelope::to_json` produces the structured bytes for an outbox or
    transport adapter.
-5. A future outbox implementation persists those exact bytes atomically with
+5. The message definition verifies schema, partition namespace, producer
+   authority for events, and encoded size.
+6. A future outbox implementation persists those exact bytes atomically with
    the local state transition.
 
 The compact JSON encoder normalizes object-key order so the same validated
@@ -91,9 +143,11 @@ clock, random source, locale, or network.
 3. EdgeAgent rejects CloudEvents 0.3, missing required attributes, unsupported
    message-type syntax, invalid identifiers, non-string extensions, malformed
    trace context, missing schema identity, and non-JSON data.
-4. The consumer requests its expected payload type through
+4. The registry rejects unknown major versions and mismatched schema,
+   partition, event producer, or size policy.
+5. The consumer requests its expected payload type through
    `MessageEnvelope::payload`; type mismatch is a payload-decoding failure.
-5. Only a validated envelope proceeds to schema compatibility,
+6. Only a validated envelope proceeds to schema compatibility,
    authorization, inbox deduplication, and domain handling.
 
 Envelope and payload validation failures are permanent failures. A future
@@ -121,11 +175,13 @@ analysis and, when semantics change, a superseding architecture decision.
 
 ## Current limitations
 
-This increment deliberately does not define broker subject names, command
-ownership, retention, payload-size limits, generated JSON Schemas, a schema
-registry, NATS bindings, outbox/inbox tables, retry policy, acknowledgement,
-quarantine, replay, or telemetry export. Those are independently reviewable
-M02 increments built on this envelope.
+This increment deliberately does not register domain messages before their
+payloads exist. Each future payload change adds its `MessageDefinition` beside
+the typed contract and fixture, then composes the definitions needed by each
+process. It also does not define generated JSON Schemas, a schema registry,
+NATS bindings, outbox/inbox tables, retry scheduling, acknowledgement,
+quarantine operations, replay tooling, or telemetry export. Those are
+independently reviewable M02 increments built on this contract.
 
 The contract verifies that `dataschema` is an absolute URI but does not yet
 validate `data` against the referenced schema. Typed Serde decoding and golden

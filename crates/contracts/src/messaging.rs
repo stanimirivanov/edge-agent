@@ -1,5 +1,6 @@
 //! Validated, transport-neutral EdgeAgent message envelopes.
 
+use crate::message_type::parse_message_type;
 use cloudevents::Event;
 use cloudevents::event::{
     AttributesReader, Data, EventBuilder, EventBuilderV10, ExtensionValue, SpecVersion,
@@ -165,10 +166,28 @@ impl MessageEnvelope {
         self.event.ty()
     }
 
+    /// Return the absolute producer URI.
+    #[must_use]
+    pub fn source(&self) -> &str {
+        self.event.source()
+    }
+
     /// Return the message subject.
     #[must_use]
     pub fn subject(&self) -> Option<&str> {
         self.event.subject()
+    }
+
+    /// Return the immutable payload schema URI.
+    #[must_use]
+    pub fn data_schema(&self) -> Option<&str> {
+        self.event.dataschema().map(url::Url::as_str)
+    }
+
+    /// Return the declared aggregate ordering key.
+    #[must_use]
+    pub fn partition_key(&self) -> Option<&str> {
+        self.extension(PARTITION_KEY)
     }
 
     /// Return an extension value when it is present and string-valued.
@@ -328,39 +347,13 @@ fn validate_visible(
 }
 
 fn validate_message_type(value: &str) -> Result<(), MessageContractError> {
-    let segments = value.split('.').collect::<Vec<_>>();
-    if segments.len() != 5 || segments[0] != "com" || segments[1] != "edgeagent" {
+    if parse_message_type(value).is_none() {
         return Err(invalid(
             "type",
-            "must match com.edgeagent.<domain>.<name>.v<major>",
+            "must match com.edgeagent.<domain>.<name>.v<positive-major>",
         ));
-    }
-    if !segments[2..4]
-        .iter()
-        .all(|segment| is_lowercase_token(segment))
-    {
-        return Err(invalid(
-            "type",
-            "domain and name must be lowercase ASCII tokens",
-        ));
-    }
-    let Some(major) = segments[4].strip_prefix('v') else {
-        return Err(invalid("type", "must end with a v<major> version"));
-    };
-    if major.is_empty()
-        || major.starts_with('0')
-        || !major.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return Err(invalid("type", "major version must be a positive integer"));
     }
     Ok(())
-}
-
-fn is_lowercase_token(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
 fn validate_trace_parent(value: &str) -> Result<(), MessageContractError> {

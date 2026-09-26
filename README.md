@@ -119,10 +119,15 @@ causation, idempotency, partition, timestamp, schema, and trace metadata. The
 contract validates those values before serialization and again after decoding,
 then exposes typed payload decoding.
 
-A committed golden fixture fixes the initial wire representation. The contract
-does not generate identifiers, read the wall clock, connect to NATS, persist an
-outbox or inbox, or validate a domain payload against a generated schema. Those
-capabilities remain separate M02 increments. See the
+A validated message registry derives stable `edgeagent.command.*` and
+`edgeagent.event.*` subjects, assigns one command handler or authoritative
+event producer, enforces partition namespaces and a 256 KiB portable envelope
+limit, and declares work-queue or replay retention semantics. A committed
+golden fixture fixes the initial wire representation.
+
+The contract does not generate identifiers, read the wall clock, connect to
+NATS, persist an outbox or inbox, or validate a domain payload against a
+generated schema. Those capabilities remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md).
 
 ## OCI images

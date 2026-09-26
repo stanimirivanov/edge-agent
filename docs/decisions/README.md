@@ -93,3 +93,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0002](0002-use-portable-at-least-once-event-messaging.md) | Accepted | Use versioned CloudEvents contracts and portable at-least-once messaging. |
 | [ADR-0003](0003-add-dry-run-trade-execution.md) | Accepted | Add dry-run order execution without broker connectivity or live trading. |
 | [ADR-0004](0004-separate-application-ui-gitops-and-substrate-ownership.md) | Accepted | Separate application source, UI, GitOps desired state, and substrate ownership. |
+| [ADR-0005](0005-standardize-message-routing-and-retention.md) | Accepted | Standardize message subjects, ownership, partitions, size, and retention. |
