@@ -5,9 +5,15 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+mod message_type;
 mod messaging;
+mod routing;
 
 pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};
+pub use routing::{
+    DeliveryMode, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageKind, MessageRegistry,
+    MessageRoutingError, RetentionClass, RetentionMode,
+};
 
 /// Version of the machine-readable component description contract.
 pub const COMPONENT_CONTRACT_VERSION: &str = "edgeagent.component.v1";
@@ -37,6 +43,18 @@ impl Component {
             Self::Research => "edgeagent.research",
             Self::ExecutionSimulator => "edgeagent.execution-simulator",
             Self::AuditProjector => "edgeagent.audit-projector",
+        }
+    }
+
+    /// Return the stable CloudEvents source URI for this component.
+    #[must_use]
+    pub const fn source_uri(self) -> &'static str {
+        match self {
+            Self::Gateway => "urn:edgeagent:component:gateway",
+            Self::MarketData => "urn:edgeagent:component:market-data",
+            Self::Research => "urn:edgeagent:component:research",
+            Self::ExecutionSimulator => "urn:edgeagent:component:execution-simulator",
+            Self::AuditProjector => "urn:edgeagent:component:audit-projector",
         }
     }
 }
