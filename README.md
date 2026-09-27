@@ -11,7 +11,8 @@
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
 - The project is in **M02 - Contracts and event spine**; validated CloudEvents,
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
-  storage are implemented, while message consumption and domain workflows remain absent.
+  storage are implemented. Bounded outbox relay retries and quarantine are also
+  implemented, while message consumption and domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -89,6 +90,7 @@ for the complete ownership, security, and handoff contract.
 - [Message envelope contract](docs/development/message-contracts.md)
 - [Messaging publisher adapters](docs/development/messaging-adapters.md)
 - [Transactional PostgreSQL outbox](docs/development/postgres-outbox.md)
+- [Bounded outbox relay](docs/development/outbox-relay.md)
 - [Transactional PostgreSQL inbox](docs/development/postgres-inbox.md)
 - [Local platform profile](docs/development/local-platform.md)
 - [Dependency and artifact supply chain](docs/development/supply-chain.md)
@@ -108,6 +110,8 @@ The initial workspace contains:
   JetStream without leaking broker APIs into application code;
 - `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes and
   leases unpublished records to concurrent relay workers;
+- `edgeagent-outbox-relay`, which maps durable publisher outcomes to bounded
+  retry, confirmed publication, or retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
   consumer's domain transition;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
@@ -143,11 +147,14 @@ deduplication, and await a JetStream persistence acknowledgement. The
 PostgreSQL outbox stores the same envelope bytes inside a caller-owned domain
 transaction and safely leases them to relays. The PostgreSQL inbox records a
 consumer-scoped identity in the same transaction as its domain effect, so a
-redelivery cannot repeat a committed transition. Transport consumption, bounded
-retry policy, quarantine, and generated schema validation remain separate M02
-increments. See the [message contract guide](docs/development/message-contracts.md),
+redelivery cannot repeat a committed transition. A bounded relay maps publisher
+acknowledgements and failures to published, delayed-retry, or terminal-quarantine
+state. Transport consumption, inbound retry/quarantine, operator replay, and
+generated schema validation remain separate M02 increments. See the
+[message contract guide](docs/development/message-contracts.md),
 [publisher adapter guide](docs/development/messaging-adapters.md),
-[outbox guide](docs/development/postgres-outbox.md), and
+[outbox guide](docs/development/postgres-outbox.md),
+[relay guide](docs/development/outbox-relay.md), and
 [inbox guide](docs/development/postgres-inbox.md).
 
 ## OCI images

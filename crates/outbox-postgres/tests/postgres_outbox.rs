@@ -54,7 +54,9 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             "CREATE SCHEMA {schema}; SET search_path TO {schema};"
         ))
         .await?;
-    client.batch_execute(PostgresOutbox::MIGRATION_SQL).await?;
+    for migration in PostgresOutbox::MIGRATIONS {
+        client.batch_execute(migration).await?;
+    }
 
     let outbox = PostgresOutbox;
     let gateway_envelope = COMMAND.build(metadata(Component::Gateway), &json!({"quantity": 1}))?;
