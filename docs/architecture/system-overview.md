@@ -107,6 +107,13 @@ message identity for bounded JetStream deduplication, and waits for persistence
 acknowledgement. Deployment configuration—not application code—owns streams,
 retention, replicas, limits, credentials, and subject ACLs.
 
+`edgeagent-outbox-postgres` writes exact structured envelope bytes in the same
+caller-owned transaction as authoritative state. Each service applies the
+outbox migration inside its own schema. Concurrent relays claim disjoint work
+with expiring leases and `SKIP LOCKED`; successful publication marks retained
+evidence rather than deleting it. The CloudEvents `(source, id)` pair scopes
+identity across storage and transport.
+
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by

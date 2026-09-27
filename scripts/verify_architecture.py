@@ -36,11 +36,14 @@ class Problem:
 CONTRACTS = "edgeagent-contracts"
 MESSAGING = "edgeagent-messaging"
 MESSAGING_NATS = "edgeagent-messaging-nats"
+OUTBOX_POSTGRES = "edgeagent-outbox-postgres"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 MESSAGING_DEPENDENCIES = frozenset({CONTRACTS})
 MESSAGING_NATS_DEPENDENCIES = frozenset({"async-nats", CONTRACTS, MESSAGING})
 MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
+OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
+OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 
 PACKAGE_RULES = {
@@ -55,6 +58,12 @@ PACKAGE_RULES = {
         "lib",
         MESSAGING_NATS_DEPENDENCIES,
         MESSAGING_NATS_DEV_DEPENDENCIES,
+    ),
+    "crates/outbox-postgres": PackageRule(
+        OUTBOX_POSTGRES,
+        "lib",
+        OUTBOX_POSTGRES_DEPENDENCIES,
+        OUTBOX_POSTGRES_DEV_DEPENDENCIES,
     ),
     "crates/service-runtime": PackageRule(
         SERVICE_RUNTIME,

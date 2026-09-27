@@ -123,9 +123,9 @@ of retained events to destructive work queues is not portable behavior.
    transport adapter.
 5. The message definition verifies schema, partition namespace, producer
    authority for events, and encoded size.
-6. `MessagePublisher` passes those exact bytes to a transport adapter and waits
-   for durable acknowledgement. A future outbox implementation will persist
-   them atomically with the local state transition before publication.
+6. The PostgreSQL outbox persists those exact bytes atomically with the local
+   state transition. A relay later revalidates them and uses `MessagePublisher`
+   to wait for durable transport acknowledgement.
 
 The compact JSON encoder normalizes object-key order so the same validated
 envelope has stable bytes. JSON object order remains semantically irrelevant;
@@ -179,9 +179,10 @@ analysis and, when semantics change, a superseding architecture decision.
 The current contract deliberately does not register domain messages before their
 payloads exist. Each future payload change adds its `MessageDefinition` beside
 the typed contract and fixture, then composes the definitions needed by each
-process. The NATS publisher binding is implemented separately and documented in
-the [messaging adapter guide](messaging-adapters.md). Generated JSON Schemas, a
-schema registry, stream provisioning, outbox/inbox tables, message consumption,
+process. The NATS publisher binding and PostgreSQL outbox are documented in the
+[messaging adapter guide](messaging-adapters.md) and
+[outbox guide](postgres-outbox.md). Generated JSON Schemas, a schema registry,
+stream provisioning, relay composition, inbox tables, message consumption,
 retry scheduling, quarantine operations, replay tooling, and telemetry export
 remain independently reviewable M02 increments built on this contract.
 

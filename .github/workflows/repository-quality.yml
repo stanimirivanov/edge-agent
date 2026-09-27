@@ -89,6 +89,10 @@ jobs:
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
         run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_publish -- --ignored --exact persisted_message_identity_deduplicates_on_retry
+      - name: Verify PostgreSQL outbox conformance
+        env:
+          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+        run: cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact transaction_identity_and_lease_invariants_hold
       - name: Print diagnostics after failure
         if: failure()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200

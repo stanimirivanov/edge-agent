@@ -9,9 +9,9 @@
 - The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - Separate UI and GitOps repositories consume versioned gateway contracts and immutable release digests without owning domain behavior.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
-- The project is in **M02 - Contracts and event spine**; validated CloudEvents
-  contracts and durable JetStream publication are implemented, while message
-  consumption, persistence, and domain workflows remain intentionally absent.
+- The project is in **M02 - Contracts and event spine**; validated CloudEvents,
+  durable JetStream publication, and transactional PostgreSQL outbox storage
+  are implemented, while message consumption and domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -88,6 +88,7 @@ for the complete ownership, security, and handoff contract.
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Message envelope contract](docs/development/message-contracts.md)
 - [Messaging publisher adapters](docs/development/messaging-adapters.md)
+- [Transactional PostgreSQL outbox](docs/development/postgres-outbox.md)
 - [Local platform profile](docs/development/local-platform.md)
 - [Dependency and artifact supply chain](docs/development/supply-chain.md)
 - [Signed OCI releases](docs/development/releases.md)
@@ -104,6 +105,8 @@ The initial workspace contains:
   portable acknowledgement/failure semantics;
 - `edgeagent-messaging-nats`, which publishes validated envelopes through NATS
   JetStream without leaking broker APIs into application code;
+- `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes and
+  leases unpublished records to concurrent relay workers;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
 - five independently buildable service binaries under `services/`.
 
@@ -132,11 +135,14 @@ golden fixture fixes the initial wire representation.
 
 The contract does not generate identifiers or read the wall clock. The
 application-owned publisher port and NATS adapter validate every attempt,
-derive its subject, attach the stable message ID for broker deduplication, and
-await a JetStream persistence acknowledgement. Outbox/inbox persistence,
-consumption, retries, quarantine, and generated schema validation remain
-separate M02 increments. See the [message contract guide](docs/development/message-contracts.md)
-and [publisher adapter guide](docs/development/messaging-adapters.md).
+derive its subject, attach the stable `(source, id)` identity for broker
+deduplication, and await a JetStream persistence acknowledgement. The
+PostgreSQL outbox stores the same envelope bytes inside a caller-owned domain
+transaction and safely leases them to relays. Inbox persistence, consumption,
+bounded retry policy, quarantine, and generated schema validation remain
+separate M02 increments. See the [message contract guide](docs/development/message-contracts.md),
+[publisher adapter guide](docs/development/messaging-adapters.md), and
+[outbox guide](docs/development/postgres-outbox.md).
 
 ## OCI images
 

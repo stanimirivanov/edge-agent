@@ -160,6 +160,15 @@ impl MessageEnvelope {
         self.event.id()
     }
 
+    /// Return the stable transport deduplication key for this CloudEvent.
+    ///
+    /// CloudEvents identity is the pair of `source` and `id`. The length prefix
+    /// keeps the representation unambiguous without hashing away diagnostics.
+    #[must_use]
+    pub fn deduplication_key(&self) -> String {
+        format!("{}:{}:{}", self.source().len(), self.source(), self.id())
+    }
+
     /// Return the versioned command or event type.
     #[must_use]
     pub fn message_type(&self) -> &str {
@@ -428,6 +437,10 @@ mod tests {
         assert_eq!(payload.request_id, "request-01");
         assert_eq!(actual, expected);
         assert_eq!(envelope.id(), "message-01");
+        assert_eq!(
+            envelope.deduplication_key(),
+            "31:urn:edgeagent:component:gateway:message-01"
+        );
         assert_eq!(envelope.extension("correlationid"), Some("correlation-01"));
         Ok(())
     }

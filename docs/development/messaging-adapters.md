@@ -8,8 +8,8 @@
   accepts a caller-provided subject.
 - Every attempt revalidates the envelope, derives its subject from the message
   definition, sends CloudEvents structured JSON, and awaits a persistence acknowledgement.
-- The CloudEvents message ID becomes `Nats-Msg-Id`, so retrying identical bytes
-  can use JetStream's bounded duplicate window.
+- The length-prefixed CloudEvents `(source, id)` pair becomes `Nats-Msg-Id`, so
+  different producers cannot suppress each other when local IDs collide.
 - Default tests are offline; the local-platform CI job runs the ignored broker
   conformance test against the checked-in NATS profile.
 
@@ -27,7 +27,7 @@ One publish attempt performs these steps:
    schema, producer authority, partition namespace, and the 256 KiB limit.
 2. Derive the exact `edgeagent.command.*` or `edgeagent.event.*` subject.
 3. Encode the envelope as CloudEvents structured JSON.
-4. Set `Nats-Msg-Id` to the stable CloudEvents message ID.
+4. Set `Nats-Msg-Id` to the stable, unambiguous CloudEvents `(source, id)` pair.
 5. Send through JetStream and wait for its persistence acknowledgement.
 6. Return `Persisted` or `Duplicate` without leaking stream names or sequence
    numbers into application policy.
@@ -51,10 +51,10 @@ available through Rust's error chain for redacted structured diagnostics. A
 receipt proves transport persistence only; consumer inbox handling still owns
 exactly-once domain effects.
 
-JetStream deduplication is bounded by the provisioned stream window. A later
-transactional outbox relay must retain the same message identity and immutable
-bytes across every retry and cannot rely on broker deduplication as a substitute
-for consumer inbox deduplication.
+JetStream deduplication is bounded by the provisioned stream window. The
+transactional PostgreSQL outbox retains the same message identity and immutable
+bytes across every retry. Neither mechanism substitutes for consumer inbox
+deduplication.
 
 ## Verification
 
@@ -75,7 +75,8 @@ stream. Run it only against an isolated development or CI broker.
 ## Current limitations
 
 This increment publishes one message at a time and relies on the JetStream
-context's bounded acknowledgement and in-flight limits. It does not yet define
-stream provisioning from the registry, transactional outbox leasing, batch
-publication, consumption, inbox deduplication, retries, quarantine, replay, or
-messaging telemetry. Those remain separate M02 capabilities.
+context's bounded acknowledgement and in-flight limits. PostgreSQL outbox
+storage and leasing are documented in the [outbox guide](postgres-outbox.md).
+Stream provisioning from the registry, a relay process, batch publication,
+consumption, inbox deduplication, retry policy, quarantine, replay, and
+messaging telemetry remain separate M02 capabilities.
