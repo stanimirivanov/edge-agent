@@ -352,6 +352,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-outbox-relay"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "edgeagent-messaging",
+ "edgeagent-outbox-postgres",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "edgeagent-research"
 version = "0.1.0"
 dependencies = [

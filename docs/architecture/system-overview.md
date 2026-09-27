@@ -114,6 +114,14 @@ with expiring leases and `SKIP LOCKED`; successful publication marks retained
 evidence rather than deleting it. The CloudEvents `(source, id)` pair scopes
 identity across storage and transport.
 
+`edgeagent-outbox-relay` processes one leased record per worker iteration so
+external I/O never occurs inside a database transaction and in-flight work is
+explicitly bounded. Durable publisher acknowledgement marks the retained record
+published. Transient or ambiguous failures use capped identity-jittered backoff;
+permanent failures and exhausted attempts enter retained terminal quarantine.
+Lease loss prevents a stale worker from recording an outcome after ownership
+has transferred.
+
 `edgeagent-inbox-postgres` records `(consumer_name, source, id)` before a
 consumer applies its local transition, using the same caller-owned transaction.
 The stable logical consumer name allows independent handlers to process one

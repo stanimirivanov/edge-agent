@@ -20,6 +20,7 @@ WITH candidates AS (
     SELECT message_source, message_id
     FROM edgeagent_message_outbox
     WHERE published_at IS NULL
+      AND quarantined_at IS NULL
       AND available_at <= clock_timestamp()
       AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
     ORDER BY available_at, created_at, message_source, message_id
@@ -49,6 +50,7 @@ SET available_at = clock_timestamp() + ($4::BIGINT * INTERVAL '1 millisecond'),
 WHERE message_source = $1
   AND message_id = $2
   AND published_at IS NULL
+  AND quarantined_at IS NULL
   AND lease_owner = $3
   AND lease_expires_at > clock_timestamp()
 "#;
@@ -139,8 +141,15 @@ impl ClaimedMessage {
 pub struct PostgresOutbox;
 
 impl PostgresOutbox {
-    /// SQL migration applied within each service-owned PostgreSQL schema.
+    /// Initial SQL migration applied within each service-owned PostgreSQL schema.
     pub const MIGRATION_SQL: &'static str = include_str!("../migrations/0001_message_outbox.sql");
+
+    /// Migration that adds terminal quarantine state to the outbox.
+    pub const QUARANTINE_MIGRATION_SQL: &'static str =
+        include_str!("../migrations/0002_message_outbox_quarantine.sql");
+
+    /// Ordered migrations required by this adapter.
+    pub const MIGRATIONS: [&'static str; 2] = [Self::MIGRATION_SQL, Self::QUARANTINE_MIGRATION_SQL];
 
     /// Insert an exact validated envelope in the caller's transaction.
     ///
@@ -243,7 +252,7 @@ impl PostgresOutbox {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
         let updated = transaction
             .execute(
-                "UPDATE edgeagent_message_outbox SET published_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL, last_failure_code = NULL WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
+                "UPDATE edgeagent_message_outbox SET published_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL, last_failure_code = NULL WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
                 &[&message_source, &message_id, &lease_owner],
             )
             .await
@@ -279,6 +288,34 @@ impl PostgresOutbox {
                     &retry_milliseconds,
                     &failure_code,
                 ],
+            )
+            .await
+            .map_err(OutboxError::storage)?;
+        require_updated(updated)
+    }
+
+    /// Move a leased message into retained terminal quarantine.
+    ///
+    /// Quarantined records are excluded from relay claims until a separately
+    /// authorized operator-replay workflow changes their state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-argument, storage, or lost-lease error.
+    pub async fn quarantine(
+        &self,
+        transaction: &Transaction<'_>,
+        message_source: &str,
+        message_id: &str,
+        lease_owner: &str,
+        reason: &str,
+    ) -> Result<(), OutboxError> {
+        validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
+        validate_token("quarantine_reason", reason, MAX_FAILURE_CODE_BYTES)?;
+        let updated = transaction
+            .execute(
+                "UPDATE edgeagent_message_outbox SET quarantined_at = clock_timestamp(), quarantine_reason = $4, lease_owner = NULL, lease_expires_at = NULL, last_failure_code = $4 WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
+                &[&message_source, &message_id, &lease_owner, &reason],
             )
             .await
             .map_err(OutboxError::storage)?;
@@ -422,7 +459,7 @@ fn validate_token(
     if value.is_empty() || value.len() > maximum_bytes {
         return Err(OutboxError::invalid_argument(match field {
             "lease_owner" => "lease_owner must contain 1 to 128 bytes",
-            _ => "failure_code must contain 1 to 64 bytes",
+            _ => "failure_code or quarantine_reason must contain 1 to 64 bytes",
         }));
     }
     if !value.bytes().all(|byte| {
@@ -430,7 +467,7 @@ fn validate_token(
     }) {
         return Err(OutboxError::invalid_argument(match field {
             "lease_owner" => "lease_owner must be a lowercase ASCII token",
-            _ => "failure_code must be a lowercase ASCII token",
+            _ => "failure_code or quarantine_reason must be a lowercase ASCII token",
         }));
     }
     Ok(())
@@ -511,6 +548,9 @@ mod tests {
     fn migration_uses_exact_bytes_and_source_scoped_identity() {
         assert!(PostgresOutbox::MIGRATION_SQL.contains("envelope BYTEA NOT NULL"));
         assert!(PostgresOutbox::MIGRATION_SQL.contains("PRIMARY KEY (message_source, message_id)"));
+        assert_eq!(PostgresOutbox::MIGRATIONS.len(), 2);
+        assert!(PostgresOutbox::QUARANTINE_MIGRATION_SQL.contains("quarantined_at TIMESTAMPTZ"));
+        assert!(CLAIM_BATCH_SQL.contains("quarantined_at IS NULL"));
     }
 
     #[test]

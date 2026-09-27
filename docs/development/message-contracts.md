@@ -12,9 +12,10 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, message consumption, retries, and quarantine
-  remain separate M02 capabilities. PostgreSQL outbox and inbox persistence
-  implement the transaction boundaries around those future consumers.
+- Generated payload schemas, message consumption, inbound retry/quarantine,
+  and operator replay remain separate M02 capabilities. PostgreSQL outbox and
+  inbox persistence implement the transaction boundaries, while the bounded
+  relay classifies outbound publication retry and quarantine.
 
 ## Purpose and boundary
 
@@ -188,9 +189,11 @@ process. The NATS publisher binding and PostgreSQL outbox are documented in the
 [messaging adapter guide](messaging-adapters.md) and
 [outbox guide](postgres-outbox.md). The transactional consumer boundary is
 documented in the [inbox guide](postgres-inbox.md). Generated JSON Schemas, a
-schema registry, stream provisioning, relay and consumer composition, retry
-scheduling, quarantine operations, replay tooling, and telemetry export remain
-independently reviewable M02 increments built on this contract.
+schema registry, stream provisioning, long-running relay and consumer
+composition, inbound retry scheduling, quarantine operations, replay tooling,
+and telemetry export remain independently reviewable M02 increments built on
+this contract. Outbound relay mechanics are documented in the
+[relay guide](outbox-relay.md).
 
 The contract verifies that `dataschema` is an absolute URI but does not yet
 validate `data` against the referenced schema. Typed Serde decoding and golden

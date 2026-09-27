@@ -85,6 +85,16 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("async-nats", problems[0].message)
 
+    def test_outbox_relay_depends_on_port_not_transport_adapter(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/outbox-relay",
+            {*verify_architecture.OUTBOX_RELAY_DEPENDENCIES, "async-nats"},
+            verify_architecture.OUTBOX_RELAY_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("async-nats", problems[0].message)
+
     def test_missing_workspace_member_is_rejected(self) -> None:
         members = set(verify_architecture.PACKAGE_RULES)
         members.remove("services/research")

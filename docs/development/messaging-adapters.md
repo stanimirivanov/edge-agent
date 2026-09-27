@@ -77,6 +77,8 @@ stream. Run it only against an isolated development or CI broker.
 This increment publishes one message at a time and relies on the JetStream
 context's bounded acknowledgement and in-flight limits. PostgreSQL outbox
 storage and leasing are documented in the [outbox guide](postgres-outbox.md).
-Stream provisioning from the registry, a relay process, batch publication,
-consumption, inbox deduplication, retry policy, quarantine, replay, and
-messaging telemetry remain separate M02 capabilities.
+Stream provisioning from the registry, a continuously running relay process,
+batch publication, consumption, inbound retry/quarantine, operator replay, and
+messaging telemetry remain separate M02 capabilities. The
+[bounded outbox relay](outbox-relay.md) implements one backpressured publication
+iteration with outbound retry and terminal quarantine.

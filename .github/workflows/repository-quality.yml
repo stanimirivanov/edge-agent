@@ -97,6 +97,10 @@ jobs:
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
         run: cargo test --locked -p edgeagent-inbox-postgres --test postgres_inbox -- --ignored --exact duplicate_delivery_commits_one_domain_transition
+      - name: Verify bounded outbox relay conformance
+        env:
+          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+        run: cargo test --locked -p edgeagent-outbox-relay --test postgres_relay -- --ignored --exact relay_bounds_retry_and_quarantines_terminal_failures
       - name: Print diagnostics after failure
         if: failure()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200

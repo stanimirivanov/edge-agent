@@ -9,14 +9,15 @@
 - Relay workers claim bounded batches with `FOR UPDATE SKIP LOCKED` and expiring
   leases, so concurrent workers receive disjoint records and crashed work recovers.
 - Publication and retry release require the current, unexpired lease owner.
-- Published records remain as operational evidence; this increment does not
-  delete, archive, or silently rewrite them.
+- Published and quarantined records remain as operational evidence; this
+  increment does not delete, archive, or silently rewrite them.
 
 ## Transaction boundary
 
-Every service applies `PostgresOutbox::MIGRATION_SQL` inside its service-owned
-database schema. The migration creates `edgeagent_message_outbox` in the
-connection's current schema; it does not create a shared cross-service table.
+Every service applies `PostgresOutbox::MIGRATIONS` in order inside its
+service-owned database schema. The migrations create and evolve
+`edgeagent_message_outbox` in the connection's current schema; they do not
+create a shared cross-service table.
 
 Application persistence opens a PostgreSQL transaction, commits its domain
 state, and calls `PostgresOutbox::enqueue` with the same transaction before
@@ -31,6 +32,7 @@ The outbox stores:
 - creation and next-availability timestamps from the database clock;
 - attempt count, current lease owner, and lease expiry;
 - publication time and the last bounded failure code.
+- terminal quarantine time and bounded operator reason.
 
 Reusing an identity with identical type, subject, and bytes returns
 `AlreadyPresent`. Reusing it with different immutable content returns
@@ -62,6 +64,12 @@ The adapter rejects completion by another owner or after lease expiry. This
 prevents a slow worker from marking a record after ownership has transferred.
 Lease duration must exceed the configured publication timeout while remaining
 short enough for the recovery objective; the adapter bounds it to 15 minutes.
+
+`quarantine` retains a leased record while removing it from future claims. It
+requires the current unexpired lease, pairs timestamp with a bounded reason,
+and cannot coexist with published state. The
+[bounded relay](outbox-relay.md) owns publication failure classification and
+attempt policy; storage does not infer those application decisions.
 
 ## Failure and security behavior
 
@@ -102,9 +110,8 @@ then removes the schema. Run it only against an isolated development or CI datab
 
 ## Current limitations
 
-This increment provides storage and leasing, not a continuously running relay.
-It does not select retry delays, cap total attempts, quarantine poison messages,
-archive published records, emit telemetry, or extend active leases. Consumer
-inbox deduplication is implemented separately; relay composition and the
-remaining policies require separate review because they determine recovery
-time, data retention, and operator control.
+This increment provides storage and leasing, not a continuously running worker.
+Bounded retry and outbound quarantine policy are implemented by the relay
+crate. Archival, telemetry export, active lease extension, operator replay, and
+quarantine retention remain separate work. Consumer inbox deduplication is
+implemented separately.

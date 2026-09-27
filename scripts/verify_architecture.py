@@ -38,6 +38,7 @@ INBOX_POSTGRES = "edgeagent-inbox-postgres"
 MESSAGING = "edgeagent-messaging"
 MESSAGING_NATS = "edgeagent-messaging-nats"
 OUTBOX_POSTGRES = "edgeagent-outbox-postgres"
+OUTBOX_RELAY = "edgeagent-outbox-relay"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
@@ -47,6 +48,10 @@ MESSAGING_NATS_DEPENDENCIES = frozenset({"async-nats", CONTRACTS, MESSAGING})
 MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
 OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
+OUTBOX_RELAY_DEPENDENCIES = frozenset(
+    {CONTRACTS, MESSAGING, OUTBOX_POSTGRES, "tokio-postgres"}
+)
+OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 
 PACKAGE_RULES = {
@@ -73,6 +78,12 @@ PACKAGE_RULES = {
         "lib",
         OUTBOX_POSTGRES_DEPENDENCIES,
         OUTBOX_POSTGRES_DEV_DEPENDENCIES,
+    ),
+    "crates/outbox-relay": PackageRule(
+        OUTBOX_RELAY,
+        "lib",
+        OUTBOX_RELAY_DEPENDENCIES,
+        OUTBOX_RELAY_DEV_DEPENDENCIES,
     ),
     "crates/service-runtime": PackageRule(
         SERVICE_RUNTIME,
