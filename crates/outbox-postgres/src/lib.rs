@@ -15,6 +15,43 @@ const MAX_LEASE_DURATION: Duration = Duration::from_secs(15 * 60);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 const MAX_LEASE_OWNER_BYTES: usize = 128;
 const MAX_FAILURE_CODE_BYTES: usize = 64;
+const CLAIM_BATCH_SQL: &str = r#"
+WITH candidates AS (
+    SELECT message_source, message_id
+    FROM edgeagent_message_outbox
+    WHERE published_at IS NULL
+      AND available_at <= clock_timestamp()
+      AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
+    ORDER BY available_at, created_at, message_source, message_id
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1
+)
+UPDATE edgeagent_message_outbox AS outbox
+SET lease_owner = $2,
+    lease_expires_at = clock_timestamp() + ($3::BIGINT * INTERVAL '1 millisecond'),
+    attempt_count = outbox.attempt_count + 1
+FROM candidates
+WHERE outbox.message_source = candidates.message_source
+  AND outbox.message_id = candidates.message_id
+RETURNING outbox.message_source,
+          outbox.message_id,
+          outbox.message_type,
+          outbox.transport_subject,
+          outbox.envelope,
+          outbox.attempt_count
+"#;
+const RELEASE_FOR_RETRY_SQL: &str = r#"
+UPDATE edgeagent_message_outbox
+SET available_at = clock_timestamp() + ($4::BIGINT * INTERVAL '1 millisecond'),
+    lease_owner = NULL,
+    lease_expires_at = NULL,
+    last_failure_code = $5
+WHERE message_source = $1
+  AND message_id = $2
+  AND published_at IS NULL
+  AND lease_owner = $3
+  AND lease_expires_at > clock_timestamp()
+"#;
 
 /// Idempotent enqueue result inside the caller's database transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -183,7 +220,7 @@ impl PostgresOutbox {
         )?;
         let rows = transaction
             .query(
-                "WITH candidates AS (SELECT message_source, message_id FROM edgeagent_message_outbox WHERE published_at IS NULL AND available_at <= clock_timestamp() AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp()) ORDER BY available_at, created_at, message_source, message_id FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE edgeagent_message_outbox AS outbox SET lease_owner = $2, lease_expires_at = clock_timestamp() + ($3 * INTERVAL '1 millisecond'), attempt_count = outbox.attempt_count + 1 FROM candidates WHERE outbox.message_source = candidates.message_source AND outbox.message_id = candidates.message_id RETURNING outbox.message_source, outbox.message_id, outbox.message_type, outbox.transport_subject, outbox.envelope, outbox.attempt_count",
+                CLAIM_BATCH_SQL,
                 &[&i64::from(batch_size), &lease_owner, &lease_milliseconds],
             )
             .await
@@ -234,8 +271,14 @@ impl PostgresOutbox {
             duration_milliseconds("retry_after", retry_after, Duration::ZERO, MAX_RETRY_DELAY)?;
         let updated = transaction
             .execute(
-                "UPDATE edgeagent_message_outbox SET available_at = clock_timestamp() + ($4 * INTERVAL '1 millisecond'), lease_owner = NULL, lease_expires_at = NULL, last_failure_code = $5 WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
-                &[&message_source, &message_id, &lease_owner, &retry_milliseconds, &failure_code],
+                RELEASE_FOR_RETRY_SQL,
+                &[
+                    &message_source,
+                    &message_id,
+                    &lease_owner,
+                    &retry_milliseconds,
+                    &failure_code,
+                ],
             )
             .await
             .map_err(OutboxError::storage)?;
@@ -436,8 +479,8 @@ fn require_equal(
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_BATCH_SIZE, MAX_LEASE_DURATION, OutboxErrorKind, PostgresOutbox, duration_milliseconds,
-        validate_token,
+        CLAIM_BATCH_SQL, MAX_BATCH_SIZE, MAX_LEASE_DURATION, OutboxErrorKind, PostgresOutbox,
+        RELEASE_FOR_RETRY_SQL, duration_milliseconds, validate_token,
     };
     use std::time::Duration;
 
@@ -468,5 +511,11 @@ mod tests {
     fn migration_uses_exact_bytes_and_source_scoped_identity() {
         assert!(PostgresOutbox::MIGRATION_SQL.contains("envelope BYTEA NOT NULL"));
         assert!(PostgresOutbox::MIGRATION_SQL.contains("PRIMARY KEY (message_source, message_id)"));
+    }
+
+    #[test]
+    fn interval_parameters_are_prepared_as_integer_milliseconds() {
+        assert!(CLAIM_BATCH_SQL.contains("$3::BIGINT * INTERVAL '1 millisecond'"));
+        assert!(RELEASE_FOR_RETRY_SQL.contains("$4::BIGINT * INTERVAL '1 millisecond'"));
     }
 }
