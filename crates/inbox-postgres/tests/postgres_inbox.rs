@@ -3,7 +3,9 @@
 use edgeagent_contracts::{
     Component, MessageDefinition, MessageEnvelope, MessageMetadata, MessageRegistry,
 };
-use edgeagent_inbox_postgres::{DeliveryDisposition, InboxErrorKind, PostgresInbox};
+use edgeagent_inbox_postgres::{
+    DeliveryDisposition, InboxErrorKind, PostgresInbox, QuarantineDisposition, QuarantineEvidence,
+};
 use serde_json::json;
 use std::env;
 use std::error::Error;
@@ -50,7 +52,7 @@ async fn apply_effect(
 
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
-async fn duplicate_delivery_commits_one_domain_transition() -> Result<(), Box<dyn Error>> {
+async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<dyn Error>> {
     let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
     let (mut client, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
     let connection_task = tokio::spawn(connection);
@@ -60,7 +62,9 @@ async fn duplicate_delivery_commits_one_domain_transition() -> Result<(), Box<dy
             "CREATE SCHEMA {schema}; SET search_path TO {schema};"
         ))
         .await?;
-    client.batch_execute(PostgresInbox::MIGRATION_SQL).await?;
+    for migration in PostgresInbox::MIGRATIONS {
+        client.batch_execute(migration).await?;
+    }
     client
         .batch_execute(
             "CREATE TABLE inbox_effects (consumer_name VARCHAR(128) NOT NULL, message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (consumer_name, message_source, message_id))",
@@ -151,6 +155,73 @@ async fn duplicate_delivery_commits_one_domain_transition() -> Result<(), Box<dy
     assert_eq!(
         unsupported_result.err().map(|error| error.kind()),
         Some(InboxErrorKind::Contract)
+    );
+    transaction.rollback().await?;
+
+    let poison_payload = b"{not-json";
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(
+                    "18:EDGEAGENT_COMMANDS:7",
+                    "edgeagent.command.execution.submit-dry-run-order.v1",
+                    1,
+                    poison_payload,
+                    "envelope_invalid",
+                )?,
+            )
+            .await?,
+        QuarantineDisposition::Inserted
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(
+                    "18:EDGEAGENT_COMMANDS:7",
+                    "edgeagent.command.execution.submit-dry-run-order.v1",
+                    2,
+                    poison_payload,
+                    "envelope_invalid",
+                )?,
+            )
+            .await?,
+        QuarantineDisposition::AlreadyPresent
+    );
+    transaction.commit().await?;
+    let quarantine = client
+        .query_one(
+            "SELECT count(*), max(last_delivery_attempt) FROM edgeagent_message_quarantine",
+            &[],
+        )
+        .await?;
+    assert_eq!(quarantine.try_get::<_, i64>(0)?, 1);
+    assert_eq!(quarantine.try_get::<_, Option<i32>>(1)?, Some(2));
+
+    let transaction = client.transaction().await?;
+    let quarantine_conflict = inbox
+        .quarantine_delivery(
+            &transaction,
+            "execution_simulator_v1",
+            QuarantineEvidence::new(
+                "18:EDGEAGENT_COMMANDS:7",
+                "edgeagent.command.execution.submit-dry-run-order.v1",
+                3,
+                b"different-invalid-bytes",
+                "envelope_invalid",
+            )?,
+        )
+        .await;
+    assert_eq!(
+        quarantine_conflict.err().map(|error| error.kind()),
+        Some(InboxErrorKind::QuarantineIdentityConflict)
     );
     transaction.rollback().await?;
 

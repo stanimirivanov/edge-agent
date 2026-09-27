@@ -13,7 +13,8 @@
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
   storage are implemented. Bounded outbox relay retries and quarantine are also
   implemented, along with one-at-a-time JetStream delivery and confirmed
-  settlement. Handler composition and domain workflows remain absent.
+  settlement. Inbound poison-message evidence can be retained transactionally
+  before terminal settlement. Handler composition and domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -114,7 +115,7 @@ The initial workspace contains:
 - `edgeagent-outbox-relay`, which maps durable publisher outcomes to bounded
   retry, confirmed publication, or retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
-  consumer's domain transition;
+  consumer's domain transition and retains terminal inbound quarantine evidence;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
 - five independently buildable service binaries under `services/`.
 
@@ -151,9 +152,10 @@ consumer-scoped identity in the same transaction as its domain effect, so a
 redelivery cannot repeat a committed transition. A bounded relay maps publisher
 acknowledgements and failures to published, delayed-retry, or terminal-quarantine
 state. The consumer adapter exposes bounded pull delivery, redelivery metadata,
-and confirmed acknowledge/retry/terminal settlement. Handler composition,
-durable inbound quarantine, operator replay, and generated schema validation
-remain separate M02 increments. See the
+an opaque redelivery-stable message key, and confirmed acknowledge/retry/terminal
+settlement. The inbox adapter durably retains exact poison-message bytes and a
+bounded reason before terminal settlement. Handler composition, operator replay,
+and generated schema validation remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md),
 [messaging adapter guide](docs/development/messaging-adapters.md),
 [outbox guide](docs/development/postgres-outbox.md),

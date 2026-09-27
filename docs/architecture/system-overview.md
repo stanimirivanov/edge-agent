@@ -130,6 +130,10 @@ event while replicas of each handler share deduplication state. Identical
 redelivery skips domain work; changed content under a committed identity fails
 closed. Consumers acknowledge transport delivery only after commit, so a crash
 cannot leave a durable inbox marker without its corresponding domain effect.
+The same adapter retains exact untrusted poison-message bytes under a logical
+consumer and opaque transport message key. Identical redelivery updates bounded
+attempt evidence; changed content under the same key fails closed. A consumer
+may request terminal broker settlement only after that quarantine transaction commits.
 
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).

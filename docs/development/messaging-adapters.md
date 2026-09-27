@@ -51,8 +51,9 @@ acknowledgement wait, maximum deliveries, pending limits, replicas, and ACLs.
 One delivery follows this control flow:
 
 1. Pull one message without acknowledging it.
-2. Parse broker metadata and expose subject, one-based delivery attempt,
-   pending count, stream sequence, and consumer sequence through portable types.
+2. Parse broker metadata and expose an opaque redelivery-stable message key,
+   subject, one-based delivery attempt, pending count, stream sequence, and
+   consumer sequence through portable types.
 3. Pass the raw structured envelope bytes to the handler as untrusted input.
 4. Validate the envelope and perform inbox/domain/outbox work in one local
    transaction.
@@ -60,8 +61,9 @@ One delivery follows this control flow:
    confirmation.
 6. On a classified transient failure, use `RetryAfter` with a delay from one
    millisecond through 24 hours.
-7. Use `Quarantined` only after durable quarantine evidence commits elsewhere;
-   it stops JetStream redelivery and is not itself a quarantine store.
+7. Use `Quarantined` only after durable quarantine evidence commits through the
+   consumer-owned persistence adapter; it stops JetStream redelivery and is not
+   itself a quarantine store.
 
 Settlement consumes `MessageDelivery`, preventing two terminal actions through
 the safe API. Dropping the delivery or cancelling before settlement sends no
@@ -131,4 +133,5 @@ configured to discard work before the future application policy records a
 terminal decision. Stream/consumer provisioning, handler composition, inbound
 failure policy, operator replay, and messaging telemetry remain separate M02
 capabilities. PostgreSQL outbox storage and the bounded relay are documented in
-the [outbox](postgres-outbox.md) and [relay](outbox-relay.md) guides.
+the [outbox](postgres-outbox.md) and [relay](outbox-relay.md) guides. Durable
+inbound quarantine storage is documented in the [inbox guide](postgres-inbox.md).
