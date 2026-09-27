@@ -88,6 +88,7 @@ async fn delivery_settlement_controls_redelivery_and_acknowledgement() -> Result
     assert_eq!(first.payload(), retried_envelope.to_json()?);
     assert_eq!(first.metadata().delivery_attempt(), 1);
     assert_eq!(first.metadata().subject(), COMMAND.subject()?);
+    let retried_message_key = first.metadata().message_key().to_owned();
     first
         .settle(DeliveryDisposition::RetryAfter(Duration::from_millis(1)))
         .await?;
@@ -95,6 +96,7 @@ async fn delivery_settlement_controls_redelivery_and_acknowledgement() -> Result
     let retry = tokio::time::timeout(Duration::from_secs(5), consumer.receive()).await??;
     assert_eq!(retry.payload(), retried_envelope.to_json()?);
     assert!(retry.metadata().delivery_attempt() >= 2);
+    assert_eq!(retry.metadata().message_key(), retried_message_key);
     let retry_info = inspector.info().await?;
     assert_eq!(retry_info.num_ack_pending, 1);
     assert!(retry_info.num_redelivered >= 1);

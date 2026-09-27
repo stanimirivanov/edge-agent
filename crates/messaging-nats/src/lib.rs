@@ -130,7 +130,9 @@ impl MessageConsumer for JetStreamConsumer {
             })?;
             let delivery_attempt = u32::try_from(info.delivered)
                 .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Protocol, error))?;
+            let message_key = delivery_message_key(info.stream, info.stream_sequence)?;
             let metadata = DeliveryMetadata::new(
+                message_key,
                 message.subject.to_string(),
                 delivery_attempt,
                 info.pending,
@@ -146,6 +148,15 @@ impl MessageConsumer for JetStreamConsumer {
             ))
         })
     }
+}
+
+fn delivery_message_key(stream: &str, stream_sequence: u64) -> Result<String, ConsumeError> {
+    if stream.is_empty() || stream_sequence == 0 {
+        return Err(ConsumeError::protocol(
+            "stream identity must contain a name and positive sequence",
+        ));
+    }
+    Ok(format!("{}:{stream}:{stream_sequence}", stream.len()))
 }
 
 struct JetStreamSettlement {
@@ -236,8 +247,8 @@ fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
 #[cfg(test)]
 mod tests {
     use super::{
-        acknowledgement_kind, map_acknowledgement_error, map_send_error, prepare_publish, receipt,
-        validate_consumer_configuration,
+        acknowledgement_kind, delivery_message_key, map_acknowledgement_error, map_send_error,
+        prepare_publish, receipt, validate_consumer_configuration,
     };
     use async_nats::jetstream::AckKind;
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
@@ -392,5 +403,17 @@ mod tests {
             ..ConsumerConfig::default()
         };
         assert!(validate_consumer_configuration(&valid).is_ok());
+    }
+
+    #[test]
+    fn delivery_message_keys_are_stable_and_unambiguous() {
+        assert_eq!(
+            delivery_message_key("ORDERS", 41).ok().as_deref(),
+            Some("6:ORDERS:41")
+        );
+        assert_eq!(
+            delivery_message_key("", 41).err().map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
     }
 }

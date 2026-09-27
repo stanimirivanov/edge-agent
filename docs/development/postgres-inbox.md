@@ -10,14 +10,16 @@
   bytes under the same identity fail closed as `MessageIdentityConflict`.
 - A rollback removes the inbox record and domain writes together, allowing a
   later delivery to retry safely.
+- Malformed or permanently rejected deliveries retain exact bytes, an opaque
+  transport key, bounded reason code, and observed attempts before termination.
 - The transport acknowledges only after the transaction commits. This provides
   one committed local transition under redelivery, not exactly-once delivery.
 
 ## Transaction boundary
 
-Every consuming service applies `PostgresInbox::MIGRATION_SQL` inside its own
-PostgreSQL schema. The migration creates `edgeagent_message_inbox` in the
-connection's current schema; it does not create a shared cross-service inbox.
+Every consuming service applies `PostgresInbox::MIGRATIONS` in order inside its
+own PostgreSQL schema. The migrations create inbox and quarantine tables in the
+connection's current schema; they do not create shared cross-service storage.
 
 A handler opens a transaction and calls `PostgresInbox::record_delivery` before
 performing domain work. The required control flow is:
@@ -30,8 +32,10 @@ performing domain work. The required control flow is:
    message in the same transaction, then commit.
 5. On `Duplicate`, skip domain work and commit the no-op transaction.
 6. Acknowledge the transport delivery only after a successful commit.
-7. On any validation, storage, or domain failure, roll back and apply the
-   classified retry or quarantine policy without acknowledging success.
+7. On a transient storage or domain failure, roll back and request bounded redelivery.
+8. On a permanent validation or policy failure, open a short transaction,
+   call `quarantine_delivery` with exact bytes and bounded reason, commit it,
+   and only then request terminal transport settlement.
 
 This ordering closes both crash windows. A failure before commit leaves no
 deduplication marker and can be retried. A failure after commit but before
@@ -55,6 +59,33 @@ inserts after rollback or reads the committed record. Identical content returns
 `MessageIdentityConflict`. The conflict prevents an ID from silently acquiring
 new meaning.
 
+## Inbound quarantine boundary
+
+Malformed bytes may not contain a valid CloudEvents `(source, id)` pair, so the
+quarantine ledger uses `(consumer_name, delivery_key)`. `delivery_key` is an
+opaque transport-adapter value that remains stable across redelivery. For the
+JetStream adapter it identifies one persisted stream sequence; other cloud
+adapters must provide an equivalent stable value. One logical consumer must not
+reuse its name across unrelated transport resources whose delivery-key spaces overlap.
+
+`QuarantineEvidence` validates the boundary before database work:
+
+- delivery key and transport subject contain 1–512 visible ASCII bytes;
+- delivery attempt is between 1 and PostgreSQL's signed 32-bit maximum;
+- failure code is a lowercase ASCII token of 1–64 bytes; and
+- exact untrusted payload bytes do not exceed the portable 256 KiB limit.
+
+The first committed observation returns `Inserted`. An identical redelivery
+returns `AlreadyPresent`, preserves the original quarantine time, and advances
+the last observed attempt. Different subject, payload bytes, or reason under the
+same identity returns `QuarantineIdentityConflict`. This protects against key
+collision or mutation and makes redelivery after lost terminal-settlement
+confirmation safe.
+
+The table is retained evidence and a future replay source, not an automatic
+retry queue. Runtime identities may insert and inspect only their service-owned
+schema; replay requires a separately authorized workflow that is not yet implemented.
+
 ## Failure and security behavior
 
 | Category | Meaning | Required response |
@@ -62,6 +93,8 @@ new meaning.
 | `Contract` | Envelope is invalid or unsupported by this consumer registry | Do not handle; quarantine as a permanent contract failure |
 | `MessageIdentityConflict` | This consumer previously committed different immutable content under the same identity | Fail closed and investigate producer identity reuse or storage mutation |
 | `InvalidConsumerName` | Consumer name is empty, oversized, or not a lowercase ASCII token | Correct deployment or application configuration |
+| `InvalidQuarantineEvidence` | Transport identity, subject, attempt, payload size, or reason is outside portable bounds | Leave unsettled and correct the adapter or policy defect |
+| `QuarantineIdentityConflict` | One delivery key refers to different immutable evidence | Fail closed; do not terminate the new delivery until operators investigate |
 | `Storage` | PostgreSQL rejected or could not complete an operation | Roll back and apply bounded transient-failure policy |
 | `StorageInvariant` | A conflicting key disappeared or stored columns violate adapter assumptions | Roll back, quarantine, and investigate corruption or unsupported mutation |
 
@@ -75,37 +108,40 @@ peer services, and message publishers receive no inbox table access.
 
 ## Retention and operations
 
-Inbox records must remain available for at least the longest interval in which
-a transport delivery or operator replay can reappear. Deleting a record sooner
-re-enables its domain effect. A cleanup policy must therefore derive its cutoff
-from broker retention, quarantine retention, replay policy, and the recovery
-objective; it must never use an arbitrary table-size threshold.
+Inbox and quarantine records must remain available for at least the longest
+interval in which a transport delivery or operator replay can reappear. Deleting
+an inbox record sooner re-enables its domain effect; deleting quarantine evidence
+sooner can make a terminal delivery unrecoverable. A cleanup policy must derive
+its cutoff from broker retention, quarantine retention, replay policy, legal
+hold, and the recovery objective; it must never use an arbitrary table-size threshold.
 
-This increment records `processed_at` and indexes it with `consumer_name` so a
-future retention worker can select bounded cleanup batches. It deliberately
-does not delete records. Operators should monitor table growth until retention,
-archive, legal-hold, and replay policies are implemented together.
+Inbox records expose `processed_at`; quarantine records expose `quarantined_at`
+and `last_observed_at`. Both are indexed with `consumer_name` for future bounded
+retention work. This increment deliberately does not delete or replay records.
+Operators should monitor table growth until retention, archive, legal-hold, and
+replay policies are implemented together.
 
 ## Verification
 
-Default workspace tests validate consumer-name bounds, migration identity,
-exact-byte storage, and dependency direction without requiring PostgreSQL.
+Default workspace tests validate consumer-name and quarantine bounds, migration
+identity, exact-byte storage, and dependency direction without requiring PostgreSQL.
 
 The isolated local-platform conformance test can be run with:
 
 ```text
-EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-postgres --test postgres_inbox -- --ignored --exact duplicate_delivery_commits_one_domain_transition
+EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-postgres --test postgres_inbox -- --ignored --exact inbox_and_quarantine_preserve_consumer_invariants
 ```
 
 It creates a process-scoped schema and proves rollback recovery, one committed
 domain transition under duplicate delivery, changed-content rejection,
-independent consumer scope, and unsupported-version rejection. It then removes
+independent consumer scope, unsupported-version rejection, idempotent quarantine,
+attempt observation, and quarantine identity-conflict rejection. It then removes
 the schema. Run it only against an isolated development or CI database.
 
 ## Current limitations
 
 This crate provides transactional storage semantics, not a running transport
-consumer. It does not choose acknowledgement deadlines, retry delays, attempt
-limits, quarantine destinations, retention cutoffs, replay authorization, or
-telemetry labels. Those policies remain separate M02 increments because they
-affect message loss, recovery time, evidence retention, and operator control.
+consumer. It does not classify handler failures, choose acknowledgement deadlines,
+retry delays or attempt limits, compose terminal settlement, delete evidence,
+authorize replay, or emit telemetry. Those policies remain separate M02 increments
+because they affect message loss, recovery time, evidence retention, and operator control.

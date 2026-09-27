@@ -12,10 +12,10 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, handler composition, durable inbound quarantine,
-  and operator replay remain separate M02 capabilities. PostgreSQL outbox and
-  inbox persistence implement the transaction boundaries, while messaging
-  adapters provide durable publication, delivery, and confirmed settlement.
+- Generated payload schemas, handler composition, and operator replay remain
+  separate M02 capabilities. PostgreSQL outbox, inbox, and inbound quarantine
+  persistence implement transaction boundaries, while messaging adapters
+  provide durable publication, delivery, and confirmed settlement.
 
 ## Purpose and boundary
 
@@ -159,10 +159,10 @@ clock, random source, locale, or network.
    resolves to an inbox duplicate. Transient failures request bounded delayed
    redelivery; terminal settlement follows durable quarantine persistence.
 
-Envelope and payload validation failures are permanent failures. A future
-consumer will quarantine them with bounded, redacted diagnostics rather than
-retry them blindly. Transport outage and acknowledgement loss are separate
-transient failures and do not change message identity.
+Envelope and payload validation failures are permanent failures. Consumers can
+retain their exact untrusted bytes with bounded reason codes before requesting
+terminal settlement instead of retrying them blindly. Transport outage and
+acknowledgement loss are separate transient failures and do not change message identity.
 
 Unknown CloudEvents extension attributes survive SDK decoding and encoding.
 Consumers ignore extensions they do not understand unless a payload or routing
@@ -192,9 +192,8 @@ process. The NATS publisher binding and PostgreSQL outbox are documented in the
 [outbox guide](postgres-outbox.md). The transactional consumer boundary is
 documented in the [inbox guide](postgres-inbox.md). Generated JSON Schemas, a
 schema registry, stream provisioning, long-running relay and handler
-composition, durable inbound quarantine operations, replay tooling,
-and telemetry export remain independently reviewable M02 increments built on
-this contract. Outbound relay mechanics are documented in the
+composition, quarantine replay tooling, and telemetry export remain independently
+reviewable M02 increments built on this contract. Outbound relay mechanics are documented in the
 [relay guide](outbox-relay.md).
 
 The contract verifies that `dataschema` is an absolute URI but does not yet
