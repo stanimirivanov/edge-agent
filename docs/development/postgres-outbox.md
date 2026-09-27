@@ -55,8 +55,8 @@ A relay performs each state change in a short transaction:
 If a relay stops after claiming, the record becomes eligible when its lease
 expires. If it stops after broker persistence but before `mark_published`, the
 next worker republishes the same identity and relies on bounded broker
-deduplication. Consumer inbox deduplication remains mandatory because the
-broker window can expire.
+deduplication. The [transactional PostgreSQL inbox](postgres-inbox.md) provides
+consumer-side deduplication after the broker window expires.
 
 The adapter rejects completion by another owner or after lease expiry. This
 prevents a slow worker from marking a record after ownership has transferred.
@@ -104,6 +104,7 @@ then removes the schema. Run it only against an isolated development or CI datab
 
 This increment provides storage and leasing, not a continuously running relay.
 It does not select retry delays, cap total attempts, quarantine poison messages,
-archive published records, emit telemetry, extend active leases, or implement
-consumer inbox deduplication. Those policies require separate review because
-they determine recovery time, data retention, and operator control.
+archive published records, emit telemetry, or extend active leases. Consumer
+inbox deduplication is implemented separately; relay composition and the
+remaining policies require separate review because they determine recovery
+time, data retention, and operator control.
