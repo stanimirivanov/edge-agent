@@ -100,12 +100,13 @@ or model providers. A deployable may depend on shared contracts and
 infrastructure adapters, but it may not read another service's private tables.
 Cross-service behavior uses public APIs or messages.
 
-The application-owned `edgeagent-messaging` port defines durable publication
-outcomes without broker types. `edgeagent-messaging-nats` derives subjects from
-validated message definitions, serializes the portable envelope, uses stable
-message identity for bounded JetStream deduplication, and waits for persistence
-acknowledgement. Deployment configuration—not application code—owns streams,
-retention, replicas, limits, credentials, and subject ACLs.
+The application-owned `edgeagent-messaging` port defines durable publication,
+one-at-a-time delivery, broker metadata, and confirmed settlement without broker
+types. `edgeagent-messaging-nats` derives publication subjects, uses stable
+message identity for bounded JetStream deduplication, and exposes bounded pull
+delivery with confirmed acknowledge, delayed retry, or terminal settlement.
+Deployment configuration—not application code—owns streams, durable consumers,
+retention, replicas, acknowledgement limits, credentials, and subject ACLs.
 
 `edgeagent-outbox-postgres` writes exact structured envelope bytes in the same
 caller-owned transaction as authoritative state. Each service applies the

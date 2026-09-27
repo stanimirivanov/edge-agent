@@ -337,6 +337,7 @@ dependencies = [
  "async-nats",
  "edgeagent-contracts",
  "edgeagent-messaging",
+ "futures-util",
  "serde_json",
  "tokio",
 ]
