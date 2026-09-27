@@ -114,6 +114,14 @@ with expiring leases and `SKIP LOCKED`; successful publication marks retained
 evidence rather than deleting it. The CloudEvents `(source, id)` pair scopes
 identity across storage and transport.
 
+`edgeagent-inbox-postgres` records `(consumer_name, source, id)` before a
+consumer applies its local transition, using the same caller-owned transaction.
+The stable logical consumer name allows independent handlers to process one
+event while replicas of each handler share deduplication state. Identical
+redelivery skips domain work; changed content under a committed identity fails
+closed. Consumers acknowledge transport delivery only after commit, so a crash
+cannot leave a durable inbox marker without its corresponding domain effect.
+
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by

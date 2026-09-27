@@ -75,6 +75,16 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("async-nats", problems[0].message)
 
+    def test_postgres_inbox_does_not_import_transport_adapter(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/inbox-postgres",
+            {*verify_architecture.INBOX_POSTGRES_DEPENDENCIES, "async-nats"},
+            verify_architecture.INBOX_POSTGRES_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("async-nats", problems[0].message)
+
     def test_missing_workspace_member_is_rejected(self) -> None:
         members = set(verify_architecture.PACKAGE_RULES)
         members.remove("services/research")
