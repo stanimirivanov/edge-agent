@@ -12,10 +12,10 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, message consumption, inbound retry/quarantine,
+- Generated payload schemas, handler composition, durable inbound quarantine,
   and operator replay remain separate M02 capabilities. PostgreSQL outbox and
-  inbox persistence implement the transaction boundaries, while the bounded
-  relay classifies outbound publication retry and quarantine.
+  inbox persistence implement the transaction boundaries, while messaging
+  adapters provide durable publication, delivery, and confirmed settlement.
 
 ## Purpose and boundary
 
@@ -154,8 +154,10 @@ clock, random source, locale, or network.
 7. The PostgreSQL inbox records `(consumer_name, source, id)` before domain
    handling. The consumer applies a first delivery and any resulting outbox
    message in the same transaction; an identical duplicate skips domain work.
-8. The transport acknowledges only after commit. A rollback permits redelivery,
-   while acknowledgement loss after commit resolves to an inbox duplicate.
+8. The one-shot delivery is acknowledged only after commit. A rollback or
+   dropped delivery permits redelivery, while acknowledgement loss after commit
+   resolves to an inbox duplicate. Transient failures request bounded delayed
+   redelivery; terminal settlement follows durable quarantine persistence.
 
 Envelope and payload validation failures are permanent failures. A future
 consumer will quarantine them with bounded, redacted diagnostics rather than
@@ -189,8 +191,8 @@ process. The NATS publisher binding and PostgreSQL outbox are documented in the
 [messaging adapter guide](messaging-adapters.md) and
 [outbox guide](postgres-outbox.md). The transactional consumer boundary is
 documented in the [inbox guide](postgres-inbox.md). Generated JSON Schemas, a
-schema registry, stream provisioning, long-running relay and consumer
-composition, inbound retry scheduling, quarantine operations, replay tooling,
+schema registry, stream provisioning, long-running relay and handler
+composition, durable inbound quarantine operations, replay tooling,
 and telemetry export remain independently reviewable M02 increments built on
 this contract. Outbound relay mechanics are documented in the
 [relay guide](outbox-relay.md).

@@ -12,7 +12,8 @@
 - The project is in **M02 - Contracts and event spine**; validated CloudEvents,
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
   storage are implemented. Bounded outbox relay retries and quarantine are also
-  implemented, while message consumption and domain workflows remain absent.
+  implemented, along with one-at-a-time JetStream delivery and confirmed
+  settlement. Handler composition and domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -88,7 +89,7 @@ for the complete ownership, security, and handoff contract.
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
 - [Message envelope contract](docs/development/message-contracts.md)
-- [Messaging publisher adapters](docs/development/messaging-adapters.md)
+- [Messaging adapters](docs/development/messaging-adapters.md)
 - [Transactional PostgreSQL outbox](docs/development/postgres-outbox.md)
 - [Bounded outbox relay](docs/development/outbox-relay.md)
 - [Transactional PostgreSQL inbox](docs/development/postgres-inbox.md)
@@ -104,9 +105,9 @@ The initial workspace contains:
 
 - `edgeagent-contracts`, which owns stable component identities, descriptor
   validation, and the validated CloudEvents message envelope;
-- `edgeagent-messaging`, which owns the application publication port and
-  portable acknowledgement/failure semantics;
-- `edgeagent-messaging-nats`, which publishes validated envelopes through NATS
+- `edgeagent-messaging`, which owns application publication and consumption
+  ports plus portable acknowledgement/failure semantics;
+- `edgeagent-messaging-nats`, which publishes and pulls messages through NATS
   JetStream without leaking broker APIs into application code;
 - `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes and
   leases unpublished records to concurrent relay workers;
@@ -149,10 +150,12 @@ transaction and safely leases them to relays. The PostgreSQL inbox records a
 consumer-scoped identity in the same transaction as its domain effect, so a
 redelivery cannot repeat a committed transition. A bounded relay maps publisher
 acknowledgements and failures to published, delayed-retry, or terminal-quarantine
-state. Transport consumption, inbound retry/quarantine, operator replay, and
-generated schema validation remain separate M02 increments. See the
+state. The consumer adapter exposes bounded pull delivery, redelivery metadata,
+and confirmed acknowledge/retry/terminal settlement. Handler composition,
+durable inbound quarantine, operator replay, and generated schema validation
+remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md),
-[publisher adapter guide](docs/development/messaging-adapters.md),
+[messaging adapter guide](docs/development/messaging-adapters.md),
 [outbox guide](docs/development/postgres-outbox.md),
 [relay guide](docs/development/outbox-relay.md), and
 [inbox guide](docs/development/postgres-inbox.md).

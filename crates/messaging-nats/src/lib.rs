@@ -3,16 +3,25 @@
 #![forbid(unsafe_code)]
 
 use async_nats::jetstream;
+use async_nats::jetstream::AckKind;
+use async_nats::jetstream::consumer::pull;
+use async_nats::jetstream::consumer::{AckPolicy, PullConsumer};
 use async_nats::jetstream::context::{
     PublishError as NatsPublishError, PublishErrorKind as NatsPublishErrorKind,
 };
+use async_nats::jetstream::message::Acker;
 use async_nats::jetstream::message::PublishMessage;
 use async_nats::jetstream::publish::PublishAck;
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
 use edgeagent_messaging::{
-    MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
-    PublishReceipt,
+    ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
+    MessageConsumer, MessageDelivery, MessagePublisher, PublishDisposition, PublishError,
+    PublishErrorKind, PublishFuture, PublishReceipt, ReceiveFuture, SettlementFuture,
 };
+use futures_util::StreamExt;
+use std::time::Duration;
+
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Durable publisher backed by a configured NATS JetStream context.
 ///
@@ -60,6 +69,112 @@ impl MessagePublisher for JetStreamPublisher {
                 .map_err(map_acknowledgement_error)?;
             Ok(receipt(acknowledgement))
         })
+    }
+}
+
+/// Pull-based JetStream consumer behind the portable one-delivery port.
+///
+/// The supplied consumer must be durable, use explicit acknowledgements, and
+/// be provisioned with application-compatible subject, retention, maximum
+/// delivery, acknowledgement wait, and pending limits. Provisioning remains a
+/// deployment concern. This adapter bounds client-side prefetch to one message.
+pub struct JetStreamConsumer {
+    messages: pull::Stream,
+}
+
+impl JetStreamConsumer {
+    /// Start a bounded pull stream from an existing configured consumer.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Unavailable` when the initial pull stream cannot be established.
+    pub async fn new(consumer: PullConsumer) -> Result<Self, ConsumeError> {
+        validate_consumer_configuration(&consumer.cached_info().config)?;
+        let messages = consumer
+            .stream()
+            .max_messages_per_batch(1)
+            .messages()
+            .await
+            .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
+        Ok(Self { messages })
+    }
+}
+
+fn validate_consumer_configuration(
+    config: &jetstream::consumer::Config,
+) -> Result<(), ConsumeError> {
+    if config.durable_name.is_none() {
+        return Err(ConsumeError::protocol(
+            "consumer must have a durable name for restart recovery",
+        ));
+    }
+    if config.ack_policy != AckPolicy::Explicit {
+        return Err(ConsumeError::protocol(
+            "consumer must use explicit acknowledgement policy",
+        ));
+    }
+    Ok(())
+}
+
+impl MessageConsumer for JetStreamConsumer {
+    fn receive(&mut self) -> ReceiveFuture<'_> {
+        Box::pin(async move {
+            let message = self
+                .messages
+                .next()
+                .await
+                .ok_or_else(|| ConsumeError::unavailable("consumer stream ended"))?
+                .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
+            let info = message.info().map_err(|error| {
+                ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
+            })?;
+            let delivery_attempt = u32::try_from(info.delivered)
+                .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Protocol, error))?;
+            let metadata = DeliveryMetadata::new(
+                message.subject.to_string(),
+                delivery_attempt,
+                info.pending,
+                info.stream_sequence,
+                info.consumer_sequence,
+            )?;
+            let payload = message.payload.to_vec();
+            let (_, acker) = message.split();
+            Ok(MessageDelivery::new(
+                payload,
+                metadata,
+                Box::new(JetStreamSettlement { acker }),
+            ))
+        })
+    }
+}
+
+struct JetStreamSettlement {
+    acker: Acker,
+}
+
+impl DeliverySettlement for JetStreamSettlement {
+    fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture {
+        Box::pin(async move {
+            let kind = acknowledgement_kind(disposition)?;
+            self.acker.double_ack_with(kind).await.map_err(|error| {
+                ConsumeError::with_boxed_source(ConsumeErrorKind::ConfirmationUnknown, error)
+            })
+        })
+    }
+}
+
+fn acknowledgement_kind(disposition: DeliveryDisposition) -> Result<AckKind, ConsumeError> {
+    match disposition {
+        DeliveryDisposition::Acknowledge => Ok(AckKind::Ack),
+        DeliveryDisposition::Quarantined => Ok(AckKind::Term),
+        DeliveryDisposition::RetryAfter(delay)
+            if delay >= Duration::from_millis(1) && delay <= MAX_RETRY_DELAY =>
+        {
+            Ok(AckKind::Nak(Some(delay)))
+        }
+        DeliveryDisposition::RetryAfter(_) => Err(ConsumeError::invalid_disposition(
+            "retry delay must be between 1 millisecond and 24 hours",
+        )),
     }
 }
 
@@ -120,13 +235,21 @@ fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_acknowledgement_error, map_send_error, prepare_publish, receipt};
+    use super::{
+        acknowledgement_kind, map_acknowledgement_error, map_send_error, prepare_publish, receipt,
+        validate_consumer_configuration,
+    };
+    use async_nats::jetstream::AckKind;
+    use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
     use async_nats::jetstream::context::{PublishError, PublishErrorKind as NatsPublishErrorKind};
     use async_nats::jetstream::publish::PublishAck;
     use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRoutingError};
-    use edgeagent_messaging::{PublishDisposition, PublishErrorKind};
+    use edgeagent_messaging::{
+        ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind,
+    };
     use serde_json::json;
     use std::error::Error;
+    use std::time::Duration;
 
     const COMMAND: MessageDefinition = MessageDefinition::command(
         "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -220,5 +343,54 @@ mod tests {
             receipt(acknowledgement).disposition(),
             PublishDisposition::Duplicate
         );
+    }
+
+    #[test]
+    fn settlement_maps_to_confirmed_acknowledgement_kinds() {
+        assert!(matches!(
+            acknowledgement_kind(DeliveryDisposition::Acknowledge),
+            Ok(AckKind::Ack)
+        ));
+        assert!(matches!(
+            acknowledgement_kind(DeliveryDisposition::Quarantined),
+            Ok(AckKind::Term)
+        ));
+        assert!(matches!(
+            acknowledgement_kind(DeliveryDisposition::RetryAfter(Duration::from_secs(2))),
+            Ok(AckKind::Nak(Some(delay))) if delay == Duration::from_secs(2)
+        ));
+        assert_eq!(
+            acknowledgement_kind(DeliveryDisposition::RetryAfter(Duration::ZERO))
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::InvalidDisposition)
+        );
+    }
+
+    #[test]
+    fn consumer_requires_durable_explicit_acknowledgement() {
+        assert_eq!(
+            validate_consumer_configuration(&ConsumerConfig::default())
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        let durable_without_ack = ConsumerConfig {
+            durable_name: Some("execution_simulator_v1".to_owned()),
+            ack_policy: AckPolicy::None,
+            ..ConsumerConfig::default()
+        };
+        assert_eq!(
+            validate_consumer_configuration(&durable_without_ack)
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        let valid = ConsumerConfig {
+            durable_name: Some("execution_simulator_v1".to_owned()),
+            ack_policy: AckPolicy::Explicit,
+            ..ConsumerConfig::default()
+        };
+        assert!(validate_consumer_configuration(&valid).is_ok());
     }
 }

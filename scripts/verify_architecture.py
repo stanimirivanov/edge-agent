@@ -44,7 +44,9 @@ CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 MESSAGING_DEPENDENCIES = frozenset({CONTRACTS})
-MESSAGING_NATS_DEPENDENCIES = frozenset({"async-nats", CONTRACTS, MESSAGING})
+MESSAGING_NATS_DEPENDENCIES = frozenset(
+    {"async-nats", CONTRACTS, "futures-util", MESSAGING}
+)
 MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
 OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})

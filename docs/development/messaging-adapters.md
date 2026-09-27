@@ -1,19 +1,21 @@
-# Messaging publisher adapters
+# Messaging adapters
 
 ## TL;DR
 
-- `edgeagent-messaging` owns the cloud-neutral durable publication port and
-  retry-relevant outcomes.
-- `edgeagent-messaging-nats` implements that port with NATS JetStream and never
-  accepts a caller-provided subject.
+- `edgeagent-messaging` owns cloud-neutral durable publication, one-at-a-time
+  consumption, delivery metadata, and confirmed settlement semantics.
+- `edgeagent-messaging-nats` implements those ports with NATS JetStream and
+  never leaks broker types into application handlers.
 - Every attempt revalidates the envelope, derives its subject from the message
   definition, sends CloudEvents structured JSON, and awaits a persistence acknowledgement.
 - The length-prefixed CloudEvents `(source, id)` pair becomes `Nats-Msg-Id`, so
   different producers cannot suppress each other when local IDs collide.
-- Default tests are offline; the local-platform CI job runs the ignored broker
-  conformance test against the checked-in NATS profile.
+- Pull consumption prefetches one message. Dropping an unsettled delivery allows
+  redelivery; settlement is consumed once and waits for broker confirmation.
+- Default tests are offline; the local-platform CI job runs publisher and
+  consumer conformance tests against the checked-in NATS profile.
 
-## Boundary and control flow
+## Publication boundary and control flow
 
 Application code depends on `MessagePublisher`, `PublishReceipt`, and
 `PublishErrorKind`. It does not import `async-nats`, name streams, construct
@@ -37,6 +39,36 @@ subjects, retention, storage, replicas, limits, and ACLs from the validated
 message registry. This separation prevents an application process from
 silently changing durability or authorization policy.
 
+## Consumption and settlement boundary
+
+Application handlers depend on `MessageConsumer`, `MessageDelivery`, and
+`DeliveryDisposition`. `JetStreamConsumer` accepts an already configured durable
+pull consumer, rejects ephemeral or non-explicit-ack configuration, and limits
+each broker request to one message. Deployment owns
+stream and consumer creation, subject filters, explicit-ack policy, retention,
+acknowledgement wait, maximum deliveries, pending limits, replicas, and ACLs.
+
+One delivery follows this control flow:
+
+1. Pull one message without acknowledging it.
+2. Parse broker metadata and expose subject, one-based delivery attempt,
+   pending count, stream sequence, and consumer sequence through portable types.
+3. Pass the raw structured envelope bytes to the handler as untrusted input.
+4. Validate the envelope and perform inbox/domain/outbox work in one local
+   transaction.
+5. After commit, consume the delivery with `Acknowledge` and wait for broker
+   confirmation.
+6. On a classified transient failure, use `RetryAfter` with a delay from one
+   millisecond through 24 hours.
+7. Use `Quarantined` only after durable quarantine evidence commits elsewhere;
+   it stops JetStream redelivery and is not itself a quarantine store.
+
+Settlement consumes `MessageDelivery`, preventing two terminal actions through
+the safe API. Dropping the delivery or cancelling before settlement sends no
+acknowledgement, so the broker can redeliver it. `Acknowledge`, delayed negative
+acknowledgement, and terminal settlement all use JetStream acknowledgement-sync
+and complete only after the server confirms receipt.
+
 ## Failure and retry contract
 
 | Category | Meaning | Caller action |
@@ -56,6 +88,20 @@ transactional PostgreSQL outbox retains the same message identity and immutable
 bytes across every retry. Neither mechanism substitutes for consumer inbox
 deduplication.
 
+Consumer failures use a separate portable classification:
+
+| Category | Meaning | Caller action |
+| --- | --- | --- |
+| `Unavailable` | Pull stream could not start, ended, or failed | Reconnect/recreate under bounded service policy; no delivery was acknowledged |
+| `Protocol` | Broker delivery metadata was missing, invalid, or outside portable bounds | Leave unsettled, fail readiness if systemic, and investigate provisioning/server compatibility |
+| `InvalidDisposition` | Retry delay was zero or exceeded 24 hours | Correct handler policy; no settlement was sent |
+| `ConfirmationUnknown` | Settlement was sent or attempted but confirmation failed | Do not assume success; permit redelivery and rely on inbox idempotency |
+
+Public errors remain bounded while adapter causes stay in the error chain for
+redacted diagnostics. A confirmed acknowledgement advances broker state only;
+the committed inbox/domain transaction remains the source of business-effect
+idempotency.
+
 ## Verification
 
 Normal `cargo test --locked --workspace --all-targets` compiles the adapter and
@@ -66,19 +112,23 @@ After starting the isolated local profile, run the broker conformance test:
 
 ```text
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_publish -- --ignored --exact persisted_message_identity_deduplicates_on_retry
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
 ```
 
-The test provisions an in-memory stream, publishes the same validated envelope
-twice, verifies the second acknowledgement is a duplicate, and removes the
-stream. Run it only against an isolated development or CI broker.
+The publisher test verifies broker deduplication. The consumer test provisions
+an explicit-ack durable consumer with one pending delivery, verifies delayed
+redelivery and incremented attempt metadata, confirms successful acknowledgement,
+terminates a simulated durably quarantined message, and confirms no pending
+work remains. Run them only against an isolated development or CI broker.
 
 ## Current limitations
 
-This increment publishes one message at a time and relies on the JetStream
-context's bounded acknowledgement and in-flight limits. PostgreSQL outbox
-storage and leasing are documented in the [outbox guide](postgres-outbox.md).
-Stream provisioning from the registry, a continuously running relay process,
-batch publication, consumption, inbound retry/quarantine, operator replay, and
-messaging telemetry remain separate M02 capabilities. The
-[bounded outbox relay](outbox-relay.md) implements one backpressured publication
-iteration with outbound retry and terminal quarantine.
+The adapters publish and consume one message at a time. They do not run a
+service loop, validate payload schemas, invoke domain handlers, persist inbound
+quarantine evidence, extend acknowledgement deadlines, or authorize replay.
+Consumer `max_deliver` exhaustion is not a quarantine mechanism and must not be
+configured to discard work before the future application policy records a
+terminal decision. Stream/consumer provisioning, handler composition, inbound
+failure policy, operator replay, and messaging telemetry remain separate M02
+capabilities. PostgreSQL outbox storage and the bounded relay are documented in
+the [outbox](postgres-outbox.md) and [relay](outbox-relay.md) guides.
