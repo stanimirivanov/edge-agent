@@ -1,0 +1,228 @@
+//! Opt-in end-to-end event-spine recovery conformance.
+
+use async_nats::jetstream;
+use async_nats::jetstream::consumer::{AckPolicy, PullConsumer, pull};
+use async_nats::jetstream::stream::{Config as StreamConfig, RetentionPolicy, StorageType};
+use edgeagent_contracts::{
+    Component, MessageDefinition, MessageEnvelope, MessageMetadata, MessageRegistry,
+};
+use edgeagent_inbox_handler::{
+    HandlerFailure, HandlerFuture, HandlerPolicy, HandlingOutcome, TransactionalMessageHandler,
+    handle_once,
+};
+use edgeagent_inbox_postgres::PostgresInbox;
+use edgeagent_messaging::{MessageConsumer, PublishDisposition};
+use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
+use edgeagent_outbox_postgres::PostgresOutbox;
+use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
+use serde_json::json;
+use std::env;
+use std::error::Error;
+use std::process;
+use std::time::Duration;
+use tokio_postgres::{NoTls, Transaction};
+
+const COMMAND: MessageDefinition = MessageDefinition::command(
+    "com.edgeagent.execution.submit-dry-run-order.v1",
+    "urn:edgeagent:schema:submit-dry-run-order:v1",
+    Component::ExecutionSimulator,
+    "order",
+);
+
+fn envelope(message_id: &str) -> Result<MessageEnvelope, Box<dyn Error + Send + Sync>> {
+    Ok(COMMAND.build(
+        MessageMetadata {
+            id: message_id.to_owned(),
+            source: Component::Gateway.source_uri().to_owned(),
+            message_type: COMMAND.message_type.to_owned(),
+            subject: format!("order/{message_id}"),
+            time: "2026-09-28T00:00:00Z".to_owned(),
+            data_schema: COMMAND.data_schema.to_owned(),
+            correlation_id: "event-spine-correlation-01".to_owned(),
+            causation_id: "event-spine-request-01".to_owned(),
+            idempotency_key: message_id.to_owned(),
+            partition_key: format!("order/{message_id}"),
+            trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
+            trace_state: None,
+        },
+        &json!({"mode": "dry_run", "quantity": 1}),
+    )?)
+}
+
+struct EffectHandler;
+
+impl TransactionalMessageHandler for EffectHandler {
+    fn handle<'handler>(
+        &'handler self,
+        transaction: &'handler Transaction<'_>,
+        envelope: &'handler MessageEnvelope,
+    ) -> HandlerFuture<'handler> {
+        Box::pin(async move {
+            transaction
+                .execute(
+                    "INSERT INTO event_spine_effects (message_source, message_id) VALUES ($1, $2)",
+                    &[&envelope.source(), &envelope.id()],
+                )
+                .await
+                .map_err(|error| {
+                    HandlerFailure::with_source(
+                        edgeagent_inbox_handler::HandlerFailureKind::Transient,
+                        "storage_unavailable",
+                        error,
+                    )
+                })?;
+            Ok(())
+        })
+    }
+}
+
+fn consumer_config(name: &str, subject: String) -> pull::Config {
+    pull::Config {
+        durable_name: Some(name.to_owned()),
+        ack_policy: AckPolicy::Explicit,
+        ack_wait: Duration::from_millis(500),
+        max_deliver: 5,
+        max_ack_pending: 1,
+        max_batch: 1,
+        filter_subject: subject,
+        ..pull::Config::default()
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires EDGEAGENT_NATS_URL, EDGEAGENT_POSTGRES_URL, and isolated services"]
+async fn durable_command_survives_client_restart_with_one_domain_transition()
+-> Result<(), Box<dyn Error + Send + Sync>> {
+    let nats_url = env::var("EDGEAGENT_NATS_URL")?;
+    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
+    let process_id = process::id();
+    let stream_name = format!("EDGEAGENT_SPINE_{process_id}");
+    let consumer_name = format!("event_spine_v1_{process_id}");
+    let schema = format!("edgeagent_spine_test_{process_id}");
+
+    let (mut database, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
+    let connection_task = tokio::spawn(connection);
+    database
+        .batch_execute(&format!(
+            "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+        ))
+        .await?;
+    for migration in PostgresOutbox::MIGRATIONS {
+        database.batch_execute(migration).await?;
+    }
+    for migration in PostgresInbox::MIGRATIONS {
+        database.batch_execute(migration).await?;
+    }
+    database
+        .batch_execute(
+            "CREATE TABLE event_spine_effects (message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (message_source, message_id))",
+        )
+        .await?;
+
+    let command = envelope("event-spine-restart-01")?;
+    let transaction = database.transaction().await?;
+    PostgresOutbox
+        .enqueue(&transaction, COMMAND, &command)
+        .await?;
+    transaction.commit().await?;
+
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let relay_policy = RelayPolicy::new(
+        format!("event_spine_relay_{process_id}"),
+        Duration::from_secs(10),
+        3,
+        Duration::from_millis(10),
+        Duration::from_secs(1),
+    )?;
+
+    let first_client = async_nats::connect(&nats_url).await?;
+    let first_context = jetstream::new(first_client);
+    let first_stream = first_context
+        .create_stream(StreamConfig {
+            name: stream_name.clone(),
+            subjects: vec![COMMAND.subject()?],
+            storage: StorageType::Memory,
+            retention: RetentionPolicy::WorkQueue,
+            ..StreamConfig::default()
+        })
+        .await?;
+    let first_consumer = first_stream
+        .get_or_create_consumer(
+            &consumer_name,
+            consumer_config(&consumer_name, COMMAND.subject()?),
+        )
+        .await?;
+    let publisher = JetStreamPublisher::from_context(first_context.clone());
+    assert!(matches!(
+        relay_once(&mut database, &registry, &publisher, &relay_policy).await?,
+        RelayOutcome::Published {
+            disposition: PublishDisposition::Persisted,
+            attempt: 1,
+        }
+    ));
+
+    let mut first_adapter = JetStreamConsumer::new(first_consumer).await?;
+    let abandoned = tokio::time::timeout(Duration::from_secs(5), first_adapter.receive()).await??;
+    assert_eq!(abandoned.metadata().delivery_attempt(), 1);
+    let delivery_key = abandoned.metadata().message_key().to_owned();
+    drop(abandoned);
+    drop(first_adapter);
+    drop(first_stream);
+    drop(publisher);
+    drop(first_context);
+
+    tokio::time::sleep(Duration::from_millis(750)).await;
+
+    let restarted_client = async_nats::connect(&nats_url).await?;
+    let restarted_context = jetstream::new(restarted_client);
+    let restarted_stream = restarted_context.get_stream(&stream_name).await?;
+    let restarted_consumer: PullConsumer = restarted_stream.get_consumer(&consumer_name).await?;
+    let mut inspector = restarted_consumer.clone();
+    let mut restarted_adapter = JetStreamConsumer::new(restarted_consumer).await?;
+    let redelivery =
+        tokio::time::timeout(Duration::from_secs(5), restarted_adapter.receive()).await??;
+    assert!(redelivery.metadata().delivery_attempt() >= 2);
+    assert_eq!(redelivery.metadata().message_key(), delivery_key);
+    assert_eq!(redelivery.payload(), command.to_json()?);
+
+    let handler_policy = HandlerPolicy::new(
+        &consumer_name,
+        5,
+        Duration::from_millis(10),
+        Duration::from_secs(1),
+    )?;
+    let outcome = handle_once(
+        &mut database,
+        &registry,
+        &EffectHandler,
+        &handler_policy,
+        redelivery,
+    )
+    .await?;
+    assert!(matches!(outcome, HandlingOutcome::Applied { attempt } if attempt >= 2));
+
+    let counts = database
+        .query_one(
+            "SELECT (SELECT count(*) FROM event_spine_effects), (SELECT count(*) FROM edgeagent_message_inbox), (SELECT count(*) FROM edgeagent_message_outbox WHERE published_at IS NOT NULL)",
+            &[],
+        )
+        .await?;
+    assert_eq!(counts.try_get::<_, i64>(0)?, 1);
+    assert_eq!(counts.try_get::<_, i64>(1)?, 1);
+    assert_eq!(counts.try_get::<_, i64>(2)?, 1);
+
+    let consumer_info = inspector.info().await?;
+    assert_eq!(consumer_info.num_ack_pending, 0);
+    assert_eq!(consumer_info.num_pending, 0);
+    assert!(consumer_info.num_redelivered >= 1);
+
+    assert!(restarted_context.delete_stream(&stream_name).await?.success);
+    database
+        .batch_execute(&format!(
+            "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+        ))
+        .await?;
+    connection_task.abort();
+    Ok(())
+}

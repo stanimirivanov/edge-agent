@@ -17,7 +17,9 @@
   evidence before releasing immutable messages. Inbound poison-message evidence
   can be retained transactionally before terminal settlement, and a bounded
   coordinator now composes inbox, domain transaction, retry, quarantine, and
-  acknowledgement. Domain workflows remain absent.
+  acknowledgement. Local conformance now proves one durable command survives
+  an abandoned delivery and client restart with one domain transition. Domain
+  workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -95,6 +97,7 @@ for the complete ownership, security, and handoff contract.
 - [Message envelope contract](docs/development/message-contracts.md)
 - [Messaging adapters](docs/development/messaging-adapters.md)
 - [Transactional inbox handler](docs/development/inbox-handler.md)
+- [Event-spine recovery conformance](docs/development/event-spine-conformance.md)
 - [Transactional PostgreSQL outbox](docs/development/postgres-outbox.md)
 - [Bounded outbox relay](docs/development/outbox-relay.md)
 - [Transactional PostgreSQL inbox](docs/development/postgres-inbox.md)

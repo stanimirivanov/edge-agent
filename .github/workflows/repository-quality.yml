@@ -109,6 +109,11 @@ jobs:
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
         run: cargo test --locked -p edgeagent-outbox-relay --test postgres_relay -- --ignored --exact relay_bounds_retry_and_quarantines_terminal_failures
+      - name: Verify end-to-end event spine recovery
+        env:
+          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
+          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+        run: cargo test --locked -p edgeagent-inbox-handler --test event_spine -- --ignored --exact durable_command_survives_client_restart_with_one_domain_transition
       - name: Print diagnostics after failure
         if: failure()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200

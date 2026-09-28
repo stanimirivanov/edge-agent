@@ -149,6 +149,13 @@ bounded deterministic retry to transient handler failures, and commits quarantin
 evidence before terminal settlement. It deliberately does not own intake loops,
 connection lifecycle, parallelism, or service-specific domain policy.
 
+The local event-spine conformance test composes the production adapters across
+both PostgreSQL transaction boundaries and JetStream. It abandons a first
+delivery, reconnects through a new client, and requires the durable consumer to
+redeliver the same transport identity before exactly one inbox/domain commit.
+This proves application-client restart recovery; broker and database server
+restart remain deployment-profile conformance responsibilities.
+
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by

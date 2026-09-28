@@ -91,6 +91,10 @@ retry, poison-message quarantine, permanent handler quarantine, lost terminal
 confirmation recovery, and acknowledgement-loss recovery. Run it only against
 an isolated development or CI database.
 
+The [event-spine recovery conformance](event-spine-conformance.md) additionally
+composes this coordinator with the real outbox relay and JetStream adapters,
+then abandons a delivery and reconnects before handling its redelivery.
+
 ## Current limitations
 
 This increment does not provide a long-running consumer loop, connection pool,
