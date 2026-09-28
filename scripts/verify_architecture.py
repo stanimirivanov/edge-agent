@@ -47,7 +47,16 @@ INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 INBOX_HANDLER_DEPENDENCIES = frozenset(
     {CONTRACTS, INBOX_POSTGRES, MESSAGING, "tokio-postgres"}
 )
-INBOX_HANDLER_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
+INBOX_HANDLER_DEV_DEPENDENCIES = frozenset(
+    {
+        "async-nats",
+        MESSAGING_NATS,
+        OUTBOX_POSTGRES,
+        OUTBOX_RELAY,
+        "serde_json",
+        "tokio",
+    }
+)
 MESSAGING_DEPENDENCIES = frozenset({CONTRACTS})
 MESSAGING_NATS_DEPENDENCIES = frozenset(
     {"async-nats", CONTRACTS, "futures-util", MESSAGING}

@@ -309,9 +309,13 @@ dependencies = [
 name = "edgeagent-inbox-handler"
 version = "0.1.0"
 dependencies = [
+ "async-nats",
  "edgeagent-contracts",
  "edgeagent-inbox-postgres",
  "edgeagent-messaging",
+ "edgeagent-messaging-nats",
+ "edgeagent-outbox-postgres",
+ "edgeagent-outbox-relay",
  "serde_json",
  "tokio",
  "tokio-postgres",

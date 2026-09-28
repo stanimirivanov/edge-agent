@@ -29,7 +29,9 @@ cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-feature
 edgeagent-contracts = { path = "crates/contracts" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }
 edgeagent-messaging = { path = "crates/messaging" }
+edgeagent-messaging-nats = { path = "crates/messaging-nats" }
 edgeagent-outbox-postgres = { path = "crates/outbox-postgres" }
+edgeagent-outbox-relay = { path = "crates/outbox-relay" }
 edgeagent-service-runtime = { path = "crates/service-runtime" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 serde = { version = "=1.0.229", features = ["derive"] }

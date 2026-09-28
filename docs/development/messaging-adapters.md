@@ -123,6 +123,11 @@ redelivery and incremented attempt metadata, confirms successful acknowledgement
 terminates a simulated durably quarantined message, and confirms no pending
 work remains. Run them only against an isolated development or CI broker.
 
+The [event-spine recovery conformance](event-spine-conformance.md) connects these
+adapters to the PostgreSQL outbox, relay, inbox, and handler. It proves that an
+unacknowledged delivery survives client teardown and reaches one committed
+domain transition after reconnection.
+
 ## Current limitations
 
 The adapters publish and consume one message at a time. They do not run a
