@@ -18,8 +18,10 @@ use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
 use std::env;
 use std::error::Error;
-use std::process;
-use std::time::Duration;
+use std::io;
+use std::path::Path;
+use std::process::{self, Command};
+use std::time::{Duration, Instant};
 use tokio_postgres::{NoTls, Transaction};
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
@@ -28,6 +30,30 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     Component::ExecutionSimulator,
     "order",
 );
+
+const BROKER_RESTART_OPT_IN: &str = "EDGEAGENT_NATS_COMPOSE_RESTART";
+
+#[derive(Clone, Copy)]
+enum RecoveryMode {
+    Client,
+    Broker,
+}
+
+impl RecoveryMode {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Client => "client",
+            Self::Broker => "broker",
+        }
+    }
+
+    const fn storage(self) -> StorageType {
+        match self {
+            Self::Client => StorageType::Memory,
+            Self::Broker => StorageType::File,
+        }
+    }
+}
 
 fn envelope(message_id: &str) -> Result<MessageEnvelope, Box<dyn Error + Send + Sync>> {
     Ok(COMMAND.build(
@@ -89,16 +115,81 @@ fn consumer_config(name: &str, subject: String) -> pull::Config {
     }
 }
 
+async fn reconnect_nats(
+    nats_url: &str,
+) -> Result<async_nats::Client, Box<dyn Error + Send + Sync>> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    loop {
+        match tokio::time::timeout(Duration::from_secs(2), async_nats::connect(nats_url)).await {
+            Ok(Ok(client)) => return Ok(client),
+            Ok(Err(_)) | Err(_) if Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            Ok(Err(error)) => return Err(error.into()),
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+async fn restart_nats_with_compose() -> Result<(), Box<dyn Error + Send + Sync>> {
+    if env::var(BROKER_RESTART_OPT_IN).as_deref() != Ok("1") {
+        return Err(io::Error::other(format!(
+            "set {BROKER_RESTART_OPT_IN}=1 to authorize the isolated Compose broker restart"
+        ))
+        .into());
+    }
+
+    let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let command_root = repository_root.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        Command::new("docker")
+            .arg("compose")
+            .arg("--env-file")
+            .arg(command_root.join("deploy/local/.env.example"))
+            .arg("-f")
+            .arg(command_root.join("deploy/local/compose.yaml"))
+            .arg("restart")
+            .arg("nats")
+            .current_dir(command_root)
+            .status()
+    })
+    .await??;
+
+    if !status.success() {
+        return Err(io::Error::other(format!(
+            "Compose failed to restart NATS with status {status}"
+        ))
+        .into());
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_NATS_URL, EDGEAGENT_POSTGRES_URL, and isolated services"]
 async fn durable_command_survives_client_restart_with_one_domain_transition()
 -> Result<(), Box<dyn Error + Send + Sync>> {
+    verify_restart_recovery(RecoveryMode::Client).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated Compose services and EDGEAGENT_NATS_COMPOSE_RESTART=1"]
+async fn durable_command_survives_broker_restart_with_one_domain_transition()
+-> Result<(), Box<dyn Error + Send + Sync>> {
+    verify_restart_recovery(RecoveryMode::Broker).await
+}
+
+async fn verify_restart_recovery(
+    recovery_mode: RecoveryMode,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let nats_url = env::var("EDGEAGENT_NATS_URL")?;
     let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
     let process_id = process::id();
-    let stream_name = format!("EDGEAGENT_SPINE_{process_id}");
-    let consumer_name = format!("event_spine_v1_{process_id}");
-    let schema = format!("edgeagent_spine_test_{process_id}");
+    let mode_name = recovery_mode.name();
+    let stream_name = format!("EDGEAGENT_SPINE_{}_{process_id}", mode_name.to_uppercase());
+    let consumer_name = format!("event_spine_{mode_name}_v1_{process_id}");
+    let schema = format!("edgeagent_spine_{mode_name}_test_{process_id}");
 
     let (mut database, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
     let connection_task = tokio::spawn(connection);
@@ -119,7 +210,7 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
         )
         .await?;
 
-    let command = envelope("event-spine-restart-01")?;
+    let command = envelope(&format!("event-spine-{mode_name}-restart-01"))?;
     let transaction = database.transaction().await?;
     PostgresOutbox
         .enqueue(&transaction, COMMAND, &command)
@@ -142,7 +233,7 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
         .create_stream(StreamConfig {
             name: stream_name.clone(),
             subjects: vec![COMMAND.subject()?],
-            storage: StorageType::Memory,
+            storage: recovery_mode.storage(),
             retention: RetentionPolicy::WorkQueue,
             ..StreamConfig::default()
         })
@@ -172,9 +263,12 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
     drop(publisher);
     drop(first_context);
 
-    tokio::time::sleep(Duration::from_millis(750)).await;
+    match recovery_mode {
+        RecoveryMode::Client => tokio::time::sleep(Duration::from_millis(750)).await,
+        RecoveryMode::Broker => restart_nats_with_compose().await?,
+    }
 
-    let restarted_client = async_nats::connect(&nats_url).await?;
+    let restarted_client = reconnect_nats(&nats_url).await?;
     let restarted_context = jetstream::new(restarted_client);
     let restarted_stream = restarted_context.get_stream(&stream_name).await?;
     let restarted_consumer: PullConsumer = restarted_stream.get_consumer(&consumer_name).await?;
