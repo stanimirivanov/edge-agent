@@ -7,8 +7,8 @@ use edgeagent_messaging::{
     MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
     PublishReceipt,
 };
-use edgeagent_outbox_postgres::PostgresOutbox;
-use edgeagent_outbox_relay::{QuarantineReason, RelayOutcome, RelayPolicy, relay_once};
+use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
+use edgeagent_outbox_relay::{QuarantineReason, RelayError, RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
 use std::collections::VecDeque;
 use std::env;
@@ -107,6 +107,16 @@ async fn enqueue(
     Ok(())
 }
 
+async fn relay_once_with_postgres(
+    client: &mut tokio_postgres::Client,
+    registry: &MessageRegistry<'_>,
+    publisher: &dyn MessagePublisher,
+    policy: &RelayPolicy,
+) -> Result<RelayOutcome, RelayError> {
+    let mut store = PostgresOutboxRelay::new(client);
+    relay_once(&mut store, registry, publisher, policy).await
+}
+
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
 async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Box<dyn Error>> {
@@ -142,7 +152,7 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
     ]);
 
     assert!(matches!(
-        relay_once(&mut client, &registry, &publisher, &policy).await?,
+        relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?,
         RelayOutcome::Published {
             disposition: PublishDisposition::Persisted,
             attempt: 1,
@@ -150,7 +160,8 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
     ));
 
     enqueue(&mut client, "relay-exhaust-01").await?;
-    let first_failure = relay_once(&mut client, &registry, &publisher, &policy).await?;
+    let first_failure =
+        relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?;
     assert!(matches!(
         first_failure,
         RelayOutcome::RetryScheduled {
@@ -166,7 +177,7 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
         )
         .await?;
     assert!(matches!(
-        relay_once(&mut client, &registry, &publisher, &policy).await?,
+        relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?,
         RelayOutcome::Quarantined {
             reason: QuarantineReason::AttemptsExhaustedConfirmationUnknown,
             attempt: 2,
@@ -176,7 +187,7 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
 
     enqueue(&mut client, "relay-rejected-01").await?;
     assert!(matches!(
-        relay_once(&mut client, &registry, &publisher, &policy).await?,
+        relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?,
         RelayOutcome::Quarantined {
             reason: QuarantineReason::TransportRejected,
             attempt: 1,
@@ -184,7 +195,7 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
         }
     ));
     assert!(matches!(
-        relay_once(&mut client, &registry, &publisher, &policy).await?,
+        relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?,
         RelayOutcome::Idle
     ));
 

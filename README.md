@@ -114,16 +114,18 @@ The initial workspace contains:
 
 - `edgeagent-contracts`, which owns stable component identities, descriptor
   validation, and the validated CloudEvents message envelope;
-- `edgeagent-messaging`, which owns application publication and consumption
-  ports plus portable acknowledgement/failure semantics;
+- `edgeagent-messaging`, which owns application publication, consumption, and
+  outbox relay-storage ports plus portable acknowledgement/failure semantics;
 - `edgeagent-messaging-nats`, which publishes and pulls messages through NATS
   JetStream without leaking broker APIs into application code;
 - `edgeagent-inbox-handler`, which coordinates one transactional delivery from
   validation through inbox/domain work and confirmed settlement;
 - `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes,
-  leases unpublished records, and audits authorized outbound replay requests;
-- `edgeagent-outbox-relay`, which maps durable publisher outcomes to bounded
-  retry, confirmed publication, or retained quarantine;
+  implements the relay-storage port with short transactions, leases unpublished
+  records, and audits authorized outbound replay requests;
+- `edgeagent-outbox-relay`, which applies persistence-neutral policy to map
+  durable publisher outcomes to bounded retry, confirmed publication, or
+  retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
   consumer's domain transition, retains terminal inbound quarantine evidence,
   and audits authorized access to exact replay bytes;
@@ -156,11 +158,13 @@ limit, and declares work-queue or replay retention semantics. A committed
 golden fixture fixes the initial wire representation.
 
 The contract does not generate identifiers or read the wall clock. The
-application-owned publisher port and NATS adapter validate every attempt,
-derive its subject, attach the stable `(source, id)` identity for broker
-deduplication, and await a JetStream persistence acknowledgement. The
-PostgreSQL outbox stores the same envelope bytes inside a caller-owned domain
-transaction and safely leases them to relays. The PostgreSQL inbox records a
+application-owned publisher and relay-storage ports keep orchestration
+independent of transport and database implementations. The NATS adapter
+validates every attempt, derives its subject, attaches the stable `(source, id)`
+identity for broker deduplication, and awaits a JetStream persistence
+acknowledgement. The PostgreSQL outbox stores the same envelope bytes inside a
+caller-owned domain transaction and implements short, lease-guarded relay
+transactions. The PostgreSQL inbox records a
 consumer-scoped identity in the same transaction as its domain effect, so a
 redelivery cannot repeat a committed transition. A bounded relay maps publisher
 acknowledgements and failures to published, delayed-retry, or terminal-quarantine

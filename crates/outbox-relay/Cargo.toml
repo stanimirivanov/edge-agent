@@ -10,13 +10,13 @@ publish = false
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-messaging.workspace = true
-edgeagent-outbox-postgres.workspace = true
 edgeagent-telemetry.workspace = true
-tokio-postgres.workspace = true
 
 [dev-dependencies]
+edgeagent-outbox-postgres.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tokio-postgres.workspace = true
 
 [lints]
 workspace = true

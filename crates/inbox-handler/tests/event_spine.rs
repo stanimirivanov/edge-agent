@@ -13,7 +13,7 @@ use edgeagent_inbox_handler::{
 use edgeagent_inbox_postgres::PostgresInbox;
 use edgeagent_messaging::{MessageConsumer, PublishDisposition};
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
-use edgeagent_outbox_postgres::PostgresOutbox;
+use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
 use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
 use std::env;
@@ -245,8 +245,12 @@ async fn verify_restart_recovery(
         )
         .await?;
     let publisher = JetStreamPublisher::from_context(first_context.clone());
+    let relay_outcome = {
+        let mut relay_store = PostgresOutboxRelay::new(&mut database);
+        relay_once(&mut relay_store, &registry, &publisher, &relay_policy).await?
+    };
     assert!(matches!(
-        relay_once(&mut database, &registry, &publisher, &relay_policy).await?,
+        relay_outcome,
         RelayOutcome::Published {
             disposition: PublishDisposition::Persisted,
             attempt: 1,

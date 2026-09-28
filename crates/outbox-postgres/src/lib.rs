@@ -2,13 +2,16 @@
 
 #![forbid(unsafe_code)]
 
-use edgeagent_contracts::{
-    MessageDefinition, MessageEnvelope, MessageRegistry, MessageRoutingError,
-};
+use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
+pub use edgeagent_messaging::ClaimedMessage;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 use tokio_postgres::{Row, Transaction};
+
+mod relay;
+
+pub use relay::PostgresOutboxRelay;
 
 const MAX_BATCH_SIZE: u16 = 1_000;
 const MAX_LEASE_DURATION: Duration = Duration::from_secs(15 * 60);
@@ -164,78 +167,6 @@ impl<'request> ReplayRequest<'request> {
             requested_by,
             reason,
         })
-    }
-}
-
-/// One unpublished outbox message leased to a relay instance.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ClaimedMessage {
-    message_source: String,
-    message_id: String,
-    message_type: String,
-    transport_subject: String,
-    envelope: Vec<u8>,
-    attempt: u32,
-}
-
-impl ClaimedMessage {
-    /// Return the CloudEvents producer source.
-    #[must_use]
-    pub fn message_source(&self) -> &str {
-        &self.message_source
-    }
-
-    /// Return the CloudEvents message ID, unique within its source.
-    #[must_use]
-    pub fn message_id(&self) -> &str {
-        &self.message_id
-    }
-
-    /// Return the versioned CloudEvents type.
-    #[must_use]
-    pub fn message_type(&self) -> &str {
-        &self.message_type
-    }
-
-    /// Return the definition-derived transport subject.
-    #[must_use]
-    pub fn transport_subject(&self) -> &str {
-        &self.transport_subject
-    }
-
-    /// Return the exact structured CloudEvents bytes stored by the producer.
-    #[must_use]
-    pub fn envelope_bytes(&self) -> &[u8] {
-        &self.envelope
-    }
-
-    /// Return the one-based number of times this record has been leased.
-    #[must_use]
-    pub const fn attempt(&self) -> u32 {
-        self.attempt
-    }
-
-    /// Decode and revalidate the stored bytes and denormalized routing metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns a contract error when storage is corrupt or the process registry
-    /// no longer supports the exact message major version.
-    pub fn validated_envelope(
-        &self,
-        registry: &MessageRegistry<'_>,
-    ) -> Result<MessageEnvelope, MessageRoutingError> {
-        let envelope = MessageEnvelope::from_json(&self.envelope)?;
-        let definition = registry.validate(&envelope)?;
-        require_equal("id", &self.message_id, envelope.id())?;
-        require_equal("source", &self.message_source, envelope.source())?;
-        require_equal("type", &self.message_type, envelope.message_type())?;
-        require_equal(
-            "transport_subject",
-            &self.transport_subject,
-            &definition.subject()?,
-        )?;
-        Ok(envelope)
     }
 }
 
@@ -649,14 +580,15 @@ impl From<MessageRoutingError> for OutboxError {
 
 fn claimed_message(row: Row) -> Result<ClaimedMessage, OutboxError> {
     let attempt: i32 = row.try_get(5).map_err(OutboxError::storage)?;
-    Ok(ClaimedMessage {
-        message_source: row.try_get(0).map_err(OutboxError::storage)?,
-        message_id: row.try_get(1).map_err(OutboxError::storage)?,
-        message_type: row.try_get(2).map_err(OutboxError::storage)?,
-        transport_subject: row.try_get(3).map_err(OutboxError::storage)?,
-        envelope: row.try_get(4).map_err(OutboxError::storage)?,
-        attempt: u32::try_from(attempt).map_err(|_| OutboxError::storage_invariant())?,
-    })
+    ClaimedMessage::new(
+        row.try_get(0).map_err(OutboxError::storage)?,
+        row.try_get(1).map_err(OutboxError::storage)?,
+        row.try_get(2).map_err(OutboxError::storage)?,
+        row.try_get(3).map_err(OutboxError::storage)?,
+        row.try_get(4).map_err(OutboxError::storage)?,
+        u32::try_from(attempt).map_err(|_| OutboxError::storage_invariant())?,
+    )
+    .map_err(|_| OutboxError::storage_invariant())
 }
 
 fn validate_token(
@@ -736,22 +668,6 @@ fn require_updated(updated: u64) -> Result<(), OutboxError> {
         Ok(())
     } else {
         Err(OutboxError::lease_lost())
-    }
-}
-
-fn require_equal(
-    field: &'static str,
-    expected: &str,
-    actual: &str,
-) -> Result<(), MessageRoutingError> {
-    if expected == actual {
-        Ok(())
-    } else {
-        Err(MessageRoutingError::ContractMismatch {
-            field,
-            expected: expected.to_owned(),
-            actual: actual.to_owned(),
-        })
     }
 }
 
