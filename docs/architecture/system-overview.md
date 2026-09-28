@@ -123,6 +123,13 @@ permanent failures and exhausted attempts enter retained terminal quarantine.
 Lease loss prevents a stale worker from recording an outcome after ownership
 has transferred.
 
+Outbound replay appends bounded operator identity and reason evidence before it
+releases an immutable quarantined outbox record. Replay preserves the original
+CloudEvents identity and bytes, resets only the relay attempt budget, and remains
+idempotent by replay-request identity. Authentication, authorization, and any
+dual-control requirement belong to the future operator control plane; direct
+table updates are not a supported replay path.
+
 `edgeagent-inbox-postgres` records `(consumer_name, source, id)` before a
 consumer applies its local transition, using the same caller-owned transaction.
 The stable logical consumer name allows independent handlers to process one

@@ -13,9 +13,11 @@
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
   storage are implemented. Bounded outbox relay retries and quarantine are also
   implemented, along with one-at-a-time JetStream delivery and confirmed
-  settlement. Inbound poison-message evidence can be retained transactionally
-  before terminal settlement, and a bounded coordinator now composes inbox,
-  domain transaction, retry, quarantine, and acknowledgement. Domain workflows remain absent.
+  settlement. Outbound quarantine replay now records bounded operator audit
+  evidence before releasing immutable messages. Inbound poison-message evidence
+  can be retained transactionally before terminal settlement, and a bounded
+  coordinator now composes inbox, domain transaction, retry, quarantine, and
+  acknowledgement. Domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -114,8 +116,8 @@ The initial workspace contains:
   JetStream without leaking broker APIs into application code;
 - `edgeagent-inbox-handler`, which coordinates one transactional delivery from
   validation through inbox/domain work and confirmed settlement;
-- `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes and
-  leases unpublished records to concurrent relay workers;
+- `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes,
+  leases unpublished records, and audits authorized outbound replay requests;
 - `edgeagent-outbox-relay`, which maps durable publisher outcomes to bounded
   retry, confirmed publication, or retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
@@ -160,8 +162,8 @@ an opaque redelivery-stable message key, and confirmed acknowledge/retry/termina
 settlement. The inbox adapter durably retains exact poison-message bytes and a
 bounded reason before terminal settlement. The handler coordinator composes
 these primitives into commit-and-ack, delayed retry, or quarantine-and-terminate.
-Service-specific domain handlers, operator replay, and generated schema validation
-remain separate M02 increments. See the
+Service-specific domain handlers, inbound quarantine replay, control-plane replay
+authorization, and generated schema validation remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md),
 [messaging adapter guide](docs/development/messaging-adapters.md),
 [handler guide](docs/development/inbox-handler.md),

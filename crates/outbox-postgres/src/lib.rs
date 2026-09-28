@@ -15,6 +15,9 @@ const MAX_LEASE_DURATION: Duration = Duration::from_secs(15 * 60);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 const MAX_LEASE_OWNER_BYTES: usize = 128;
 const MAX_FAILURE_CODE_BYTES: usize = 64;
+const MAX_MESSAGE_SOURCE_BYTES: usize = 512;
+const MAX_IDENTIFIER_BYTES: usize = 128;
+const MAX_OPERATOR_ID_BYTES: usize = 256;
 const CLAIM_BATCH_SQL: &str = r#"
 WITH candidates AS (
     SELECT message_source, message_id
@@ -54,6 +57,56 @@ WHERE message_source = $1
   AND lease_owner = $3
   AND lease_expires_at > clock_timestamp()
 "#;
+const REPLAY_QUARANTINED_SQL: &str = r#"
+WITH candidate AS (
+    SELECT message_source,
+           message_id,
+           quarantine_reason,
+           attempt_count,
+           quarantined_at
+    FROM edgeagent_message_outbox
+    WHERE message_source = $1
+      AND message_id = $2
+      AND published_at IS NULL
+      AND quarantined_at IS NOT NULL
+    FOR UPDATE
+),
+audit AS (
+    INSERT INTO edgeagent_message_outbox_replay_audit (
+        replay_request_id,
+        message_source,
+        message_id,
+        requested_by,
+        reason,
+        prior_quarantine_reason,
+        prior_attempt_count,
+        prior_quarantined_at
+    )
+    SELECT $3,
+           candidate.message_source,
+           candidate.message_id,
+           $4,
+           $5,
+           candidate.quarantine_reason,
+           candidate.attempt_count,
+           candidate.quarantined_at
+    FROM candidate
+    ON CONFLICT (replay_request_id) DO NOTHING
+    RETURNING message_source, message_id
+)
+UPDATE edgeagent_message_outbox AS outbox
+SET available_at = clock_timestamp(),
+    attempt_count = 0,
+    lease_owner = NULL,
+    lease_expires_at = NULL,
+    last_failure_code = NULL,
+    quarantined_at = NULL,
+    quarantine_reason = NULL
+FROM audit
+WHERE outbox.message_source = audit.message_source
+  AND outbox.message_id = audit.message_id
+RETURNING outbox.message_source
+"#;
 
 /// Idempotent enqueue result inside the caller's database transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,6 +115,56 @@ pub enum EnqueueDisposition {
     Inserted,
     /// The same source, ID, routing metadata, and envelope bytes already exist.
     AlreadyPresent,
+}
+
+/// Idempotent result of an authorized outbound replay request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplayDisposition {
+    /// Audit evidence was appended and the quarantined record became claimable.
+    Released,
+    /// This exact replay request was already applied.
+    AlreadyRequested,
+}
+
+/// Bounded authorization evidence supplied by the operator control plane.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayRequest<'request> {
+    request_id: &'request str,
+    requested_by: &'request str,
+    reason: &'request str,
+}
+
+impl<'request> ReplayRequest<'request> {
+    /// Construct validated audit evidence for one replay authorization.
+    ///
+    /// The caller remains responsible for authenticating and authorizing the
+    /// operator before constructing this value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidArgument` when an identifier or reason violates its bound.
+    pub fn new(
+        request_id: &'request str,
+        requested_by: &'request str,
+        reason: &'request str,
+    ) -> Result<Self, OutboxError> {
+        validate_identifier(
+            request_id,
+            MAX_IDENTIFIER_BYTES,
+            "replay_request_id must contain 1 to 128 portable identifier bytes",
+        )?;
+        validate_visible_ascii(
+            requested_by,
+            MAX_OPERATOR_ID_BYTES,
+            "requested_by must contain 1 to 256 visible ASCII bytes",
+        )?;
+        validate_token("replay_reason", reason, MAX_FAILURE_CODE_BYTES)?;
+        Ok(Self {
+            request_id,
+            requested_by,
+            reason,
+        })
+    }
 }
 
 /// One unpublished outbox message leased to a relay instance.
@@ -148,8 +251,16 @@ impl PostgresOutbox {
     pub const QUARANTINE_MIGRATION_SQL: &'static str =
         include_str!("../migrations/0002_message_outbox_quarantine.sql");
 
+    /// Migration that adds append-only operator replay audit evidence.
+    pub const REPLAY_MIGRATION_SQL: &'static str =
+        include_str!("../migrations/0003_message_outbox_replay.sql");
+
     /// Ordered migrations required by this adapter.
-    pub const MIGRATIONS: [&'static str; 2] = [Self::MIGRATION_SQL, Self::QUARANTINE_MIGRATION_SQL];
+    pub const MIGRATIONS: [&'static str; 3] = [
+        Self::MIGRATION_SQL,
+        Self::QUARANTINE_MIGRATION_SQL,
+        Self::REPLAY_MIGRATION_SQL,
+    ];
 
     /// Insert an exact validated envelope in the caller's transaction.
     ///
@@ -321,6 +432,77 @@ impl PostgresOutbox {
             .map_err(OutboxError::storage)?;
         require_updated(updated)
     }
+
+    /// Append an authorized replay decision and release a quarantined record.
+    ///
+    /// The immutable envelope and identity are preserved. A successful release
+    /// resets the publication-attempt budget, while the audit row retains the
+    /// prior attempt count, quarantine reason, actor, and database timestamps.
+    /// Repeating the same request is idempotent, even after later state changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid argument, conflicting request identity, non-quarantined
+    /// target, storage, or storage-invariant failure.
+    pub async fn replay_quarantined(
+        &self,
+        transaction: &Transaction<'_>,
+        message_source: &str,
+        message_id: &str,
+        request: ReplayRequest<'_>,
+    ) -> Result<ReplayDisposition, OutboxError> {
+        validate_visible_ascii(
+            message_source,
+            MAX_MESSAGE_SOURCE_BYTES,
+            "message_source must contain 1 to 512 visible ASCII bytes",
+        )?;
+        validate_identifier(
+            message_id,
+            MAX_IDENTIFIER_BYTES,
+            "message_id must contain 1 to 128 portable identifier bytes",
+        )?;
+        let rows = transaction
+            .query(
+                REPLAY_QUARANTINED_SQL,
+                &[
+                    &message_source,
+                    &message_id,
+                    &request.request_id,
+                    &request.requested_by,
+                    &request.reason,
+                ],
+            )
+            .await
+            .map_err(OutboxError::storage)?;
+        if rows.len() == 1 {
+            return Ok(ReplayDisposition::Released);
+        }
+        if !rows.is_empty() {
+            return Err(OutboxError::storage_invariant());
+        }
+
+        let existing = transaction
+            .query_opt(
+                "SELECT message_source, message_id, requested_by, reason FROM edgeagent_message_outbox_replay_audit WHERE replay_request_id = $1",
+                &[&request.request_id],
+            )
+            .await
+            .map_err(OutboxError::storage)?;
+        match existing {
+            Some(row)
+                if row.try_get::<_, String>(0).map_err(OutboxError::storage)? == message_source
+                    && row.try_get::<_, String>(1).map_err(OutboxError::storage)? == message_id
+                    && row.try_get::<_, String>(2).map_err(OutboxError::storage)?
+                        == request.requested_by
+                    && row.try_get::<_, String>(3).map_err(OutboxError::storage)?
+                        == request.reason =>
+            {
+                Ok(ReplayDisposition::AlreadyRequested)
+            }
+            Some(_) => Err(OutboxError::replay_request_conflict()),
+            None => Err(OutboxError::not_quarantined()),
+        }
+    }
 }
 
 /// Stable failure categories for outbox callers and relay policy.
@@ -338,6 +520,10 @@ pub enum OutboxErrorKind {
     StorageInvariant,
     /// A completion attempted to use an absent, expired, or foreign lease.
     LeaseLost,
+    /// One replay request identity was reused with different authorization evidence.
+    ReplayRequestConflict,
+    /// The requested record does not exist in outbound quarantine.
+    NotQuarantined,
 }
 
 impl Display for OutboxErrorKind {
@@ -351,6 +537,12 @@ impl Display for OutboxErrorKind {
             Self::Storage => formatter.write_str("outbox storage operation failed"),
             Self::StorageInvariant => formatter.write_str("outbox storage invariant failed"),
             Self::LeaseLost => formatter.write_str("outbox relay lease was lost"),
+            Self::ReplayRequestConflict => {
+                formatter.write_str("outbox replay request conflicts with stored audit evidence")
+            }
+            Self::NotQuarantined => {
+                formatter.write_str("outbox message is not available for quarantine replay")
+            }
         }
     }
 }
@@ -409,6 +601,22 @@ impl OutboxError {
             source: None,
         }
     }
+
+    const fn replay_request_conflict() -> Self {
+        Self {
+            kind: OutboxErrorKind::ReplayRequestConflict,
+            reason: None,
+            source: None,
+        }
+    }
+
+    const fn not_quarantined() -> Self {
+        Self {
+            kind: OutboxErrorKind::NotQuarantined,
+            reason: None,
+            source: None,
+        }
+    }
 }
 
 impl Display for OutboxError {
@@ -459,6 +667,7 @@ fn validate_token(
     if value.is_empty() || value.len() > maximum_bytes {
         return Err(OutboxError::invalid_argument(match field {
             "lease_owner" => "lease_owner must contain 1 to 128 bytes",
+            "replay_reason" => "replay reason must contain 1 to 64 bytes",
             _ => "failure_code or quarantine_reason must contain 1 to 64 bytes",
         }));
     }
@@ -467,10 +676,43 @@ fn validate_token(
     }) {
         return Err(OutboxError::invalid_argument(match field {
             "lease_owner" => "lease_owner must be a lowercase ASCII token",
+            "replay_reason" => "replay reason must be a lowercase ASCII token",
             _ => "failure_code or quarantine_reason must be a lowercase ASCII token",
         }));
     }
     Ok(())
+}
+
+fn validate_identifier(
+    value: &str,
+    maximum_bytes: usize,
+    reason: &'static str,
+) -> Result<(), OutboxError> {
+    if value.is_empty()
+        || value.len() > maximum_bytes
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+    {
+        Err(OutboxError::invalid_argument(reason))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_visible_ascii(
+    value: &str,
+    maximum_bytes: usize,
+    reason: &'static str,
+) -> Result<(), OutboxError> {
+    if value.is_empty()
+        || value.len() > maximum_bytes
+        || !value.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        Err(OutboxError::invalid_argument(reason))
+    } else {
+        Ok(())
+    }
 }
 
 fn duration_milliseconds(
@@ -517,7 +759,8 @@ fn require_equal(
 mod tests {
     use super::{
         CLAIM_BATCH_SQL, MAX_BATCH_SIZE, MAX_LEASE_DURATION, OutboxErrorKind, PostgresOutbox,
-        RELEASE_FOR_RETRY_SQL, duration_milliseconds, validate_token,
+        RELEASE_FOR_RETRY_SQL, REPLAY_QUARANTINED_SQL, ReplayRequest, duration_milliseconds,
+        validate_token,
     };
     use std::time::Duration;
 
@@ -548,9 +791,45 @@ mod tests {
     fn migration_uses_exact_bytes_and_source_scoped_identity() {
         assert!(PostgresOutbox::MIGRATION_SQL.contains("envelope BYTEA NOT NULL"));
         assert!(PostgresOutbox::MIGRATION_SQL.contains("PRIMARY KEY (message_source, message_id)"));
-        assert_eq!(PostgresOutbox::MIGRATIONS.len(), 2);
+        assert_eq!(PostgresOutbox::MIGRATIONS.len(), 3);
         assert!(PostgresOutbox::QUARANTINE_MIGRATION_SQL.contains("quarantined_at TIMESTAMPTZ"));
+        assert!(
+            PostgresOutbox::REPLAY_MIGRATION_SQL.contains("edgeagent_message_outbox_replay_audit")
+        );
         assert!(CLAIM_BATCH_SQL.contains("quarantined_at IS NULL"));
+        assert!(REPLAY_QUARANTINED_SQL.contains("attempt_count = 0"));
+    }
+
+    #[test]
+    fn replay_authorization_evidence_is_bounded_before_database_work() {
+        assert!(
+            ReplayRequest::new(
+                "replay-request-01",
+                "urn:edgeagent:operator:alice",
+                "configuration_remediated",
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ReplayRequest::new(
+                "replay request 01",
+                "urn:edgeagent:operator:alice",
+                "configuration_remediated",
+            )
+            .err()
+            .map(|error| error.kind()),
+            Some(OutboxErrorKind::InvalidArgument)
+        );
+        assert_eq!(
+            ReplayRequest::new(
+                "replay-request-01",
+                "urn:edgeagent:operator:alice",
+                "Configuration remediated",
+            )
+            .err()
+            .map(|error| error.kind()),
+            Some(OutboxErrorKind::InvalidArgument)
+        );
     }
 
     #[test]

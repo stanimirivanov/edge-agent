@@ -62,14 +62,18 @@ envelope, and attempt history never change.
 
 Services apply every entry in `PostgresOutbox::MIGRATIONS` in order. Migration
 0002 adds `quarantined_at` and `quarantine_reason`, enforces paired terminal
-state, and excludes quarantined rows from the relay claim index.
+state, and excludes quarantined rows from the relay claim index. Migration 0003
+adds append-only audit evidence for outbound replay authorization.
 
 Quarantine is retained evidence, not deletion. It clears the active lease and
 records a bounded lowercase reason code without exception text or payload data.
 The relay cannot claim the record again. Direct manual table updates are not an
 operator replay mechanism because they bypass authorization and audit history.
-A future control-plane increment must append an authorized replay decision and
-define whether replay preserves or creates message identity.
+`PostgresOutbox::replay_quarantined` records the authorization evidence and
+releases the original immutable identity and bytes with a reset attempt budget.
+Preserved identity makes uncertain earlier publication safe through broker and
+consumer deduplication. A future control-plane increment must authenticate and
+authorize the operator before invoking that storage boundary.
 
 ## Failure and recovery behavior
 
@@ -108,6 +112,6 @@ Run it only against an isolated development or CI database.
 This crate provides one bounded relay iteration, not a continuously running
 service. Lifecycle management, readiness, graceful shutdown, worker-count
 configuration, metrics export, active lease extension, operator inspection and
-replay, and quarantine retention remain separate capabilities. The relay is
+replay APIs, and quarantine retention remain separate capabilities. The relay is
 sequential per worker by design; higher per-worker concurrency requires an
 explicit lease-duration and backpressure design rather than unbounded tasks.
