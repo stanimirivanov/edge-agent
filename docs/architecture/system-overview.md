@@ -160,10 +160,10 @@ recorder and subscriber rather than coupling event processing to an exporter.
 
 The local event-spine conformance test composes the production adapters across
 both PostgreSQL transaction boundaries and JetStream. It abandons a first
-delivery, reconnects through a new client, and requires the durable consumer to
-redeliver the same transport identity before exactly one inbox/domain commit.
-This proves application-client restart recovery; broker and database server
-restart remain deployment-profile conformance responsibilities.
+delivery and requires the durable consumer to redeliver the same transport
+identity before exactly one inbox/domain commit. Separate cases reconnect through
+a new client and restart NATS while preserving its file-backed JetStream volume.
+PostgreSQL server restart remains a deployment-profile conformance responsibility.
 
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).

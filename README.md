@@ -18,8 +18,8 @@
   can be retained transactionally before terminal settlement, and a bounded
   coordinator now composes inbox, domain transaction, retry, quarantine, and
   acknowledgement. Local conformance now proves one durable command survives
-  an abandoned delivery and client restart with one domain transition. Domain
-  workflows remain absent.
+  an abandoned delivery across both client and NATS broker restarts with one
+  domain transition. Domain workflows remain absent.
 
 ## What EdgeAgent is
 
