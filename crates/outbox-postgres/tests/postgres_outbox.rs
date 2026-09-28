@@ -3,7 +3,9 @@
 use edgeagent_contracts::{
     Component, MessageDefinition, MessageMetadata, MessageRegistry, RetentionClass,
 };
-use edgeagent_outbox_postgres::{EnqueueDisposition, OutboxErrorKind, PostgresOutbox};
+use edgeagent_outbox_postgres::{
+    EnqueueDisposition, OutboxErrorKind, PostgresOutbox, ReplayDisposition, ReplayRequest,
+};
 use serde_json::json;
 use std::env;
 use std::error::Error;
@@ -167,11 +169,12 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     assert_eq!(retried.len(), 1);
     assert_eq!(retried[0].attempt(), 2);
     outbox
-        .mark_published(
+        .quarantine(
             &transaction,
             retried[0].message_source(),
             retried[0].message_id(),
             "relay_02",
+            "transport_rejected",
         )
         .await?;
     transaction.commit().await?;
@@ -184,6 +187,172 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             .is_empty()
     );
     transaction.commit().await?;
+
+    let replay_request = ReplayRequest::new(
+        "replay-request-01",
+        "urn:edgeagent:operator:alice",
+        "configuration_remediated",
+    )?;
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox
+            .replay_quarantined(
+                &transaction,
+                retried[0].message_source(),
+                retried[0].message_id(),
+                replay_request,
+            )
+            .await?,
+        ReplayDisposition::Released
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox
+            .replay_quarantined(
+                &transaction,
+                retried[0].message_source(),
+                retried[0].message_id(),
+                replay_request,
+            )
+            .await?,
+        ReplayDisposition::AlreadyRequested
+    );
+    let conflicting_request = ReplayRequest::new(
+        "replay-request-01",
+        "urn:edgeagent:operator:bob",
+        "configuration_remediated",
+    )?;
+    let conflict = outbox
+        .replay_quarantined(
+            &transaction,
+            retried[0].message_source(),
+            retried[0].message_id(),
+            conflicting_request,
+        )
+        .await;
+    assert_eq!(
+        conflict.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::ReplayRequestConflict)
+    );
+    let not_quarantined = outbox
+        .replay_quarantined(
+            &transaction,
+            second.message_source(),
+            second.message_id(),
+            ReplayRequest::new(
+                "replay-request-02",
+                "urn:edgeagent:operator:alice",
+                "configuration_remediated",
+            )?,
+        )
+        .await;
+    assert_eq!(
+        not_quarantined.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::NotQuarantined)
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    let replayed = outbox
+        .claim_batch(&transaction, "relay_03", 10, Duration::from_secs(30))
+        .await?;
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].attempt(), 1);
+    assert_eq!(replayed[0].envelope_bytes(), retried[0].envelope_bytes());
+    outbox
+        .quarantine(
+            &transaction,
+            replayed[0].message_source(),
+            replayed[0].message_id(),
+            "relay_03",
+            "transport_rejected",
+        )
+        .await?;
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox
+            .replay_quarantined(
+                &transaction,
+                replayed[0].message_source(),
+                replayed[0].message_id(),
+                replay_request,
+            )
+            .await?,
+        ReplayDisposition::AlreadyRequested
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    assert!(
+        outbox
+            .claim_batch(&transaction, "relay_04", 10, Duration::from_secs(30))
+            .await?
+            .is_empty()
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox
+            .replay_quarantined(
+                &transaction,
+                replayed[0].message_source(),
+                replayed[0].message_id(),
+                ReplayRequest::new(
+                    "replay-request-03",
+                    "urn:edgeagent:operator:alice",
+                    "configuration_remediated",
+                )?,
+            )
+            .await?,
+        ReplayDisposition::Released
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    let replayed_again = outbox
+        .claim_batch(&transaction, "relay_04", 10, Duration::from_secs(30))
+        .await?;
+    assert_eq!(replayed_again.len(), 1);
+    assert_eq!(replayed_again[0].attempt(), 1);
+    assert_eq!(
+        replayed_again[0].envelope_bytes(),
+        retried[0].envelope_bytes()
+    );
+    outbox
+        .mark_published(
+            &transaction,
+            replayed_again[0].message_source(),
+            replayed_again[0].message_id(),
+            "relay_04",
+        )
+        .await?;
+    transaction.commit().await?;
+
+    let audit = client
+        .query_one(
+            "SELECT requested_by, reason, prior_quarantine_reason, prior_attempt_count FROM edgeagent_message_outbox_replay_audit WHERE replay_request_id = $1",
+            &[&"replay-request-01"],
+        )
+        .await?;
+    assert_eq!(
+        audit.try_get::<_, String>(0)?,
+        "urn:edgeagent:operator:alice"
+    );
+    assert_eq!(audit.try_get::<_, String>(1)?, "configuration_remediated");
+    assert_eq!(audit.try_get::<_, String>(2)?, "transport_rejected");
+    assert_eq!(audit.try_get::<_, i32>(3)?, 2);
+    let audit_count = client
+        .query_one(
+            "SELECT count(*) FROM edgeagent_message_outbox_replay_audit",
+            &[],
+        )
+        .await?;
+    assert_eq!(audit_count.try_get::<_, i64>(0)?, 2);
 
     client
         .batch_execute(&format!(
