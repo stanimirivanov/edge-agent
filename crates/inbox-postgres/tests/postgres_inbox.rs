@@ -5,6 +5,7 @@ use edgeagent_contracts::{
 };
 use edgeagent_inbox_postgres::{
     DeliveryDisposition, InboxErrorKind, PostgresInbox, QuarantineDisposition, QuarantineEvidence,
+    ReplayDisposition, ReplayRequest,
 };
 use serde_json::json;
 use std::env;
@@ -224,6 +225,116 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
         Some(InboxErrorKind::QuarantineIdentityConflict)
     );
     transaction.rollback().await?;
+
+    let replay_request = ReplayRequest::new(
+        "inbound-replay-request-01",
+        "urn:edgeagent:operator:alice",
+        "consumer_remediated",
+    )?;
+    let transaction = client.transaction().await?;
+    let authorization = inbox
+        .authorize_quarantine_replay(
+            &transaction,
+            "execution_simulator_v1",
+            "18:EDGEAGENT_COMMANDS:7",
+            replay_request,
+        )
+        .await?;
+    assert_eq!(authorization.disposition(), ReplayDisposition::Authorized);
+    assert_eq!(
+        authorization.transport_subject(),
+        "edgeagent.command.execution.submit-dry-run-order.v1"
+    );
+    assert_eq!(authorization.payload(), poison_payload);
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    let repeated = inbox
+        .authorize_quarantine_replay(
+            &transaction,
+            "execution_simulator_v1",
+            "18:EDGEAGENT_COMMANDS:7",
+            replay_request,
+        )
+        .await?;
+    assert_eq!(repeated.disposition(), ReplayDisposition::AlreadyAuthorized);
+    assert_eq!(repeated.payload(), poison_payload);
+
+    let conflict = inbox
+        .authorize_quarantine_replay(
+            &transaction,
+            "execution_simulator_v1",
+            "18:EDGEAGENT_COMMANDS:7",
+            ReplayRequest::new(
+                "inbound-replay-request-01",
+                "urn:edgeagent:operator:bob",
+                "consumer_remediated",
+            )?,
+        )
+        .await;
+    assert_eq!(
+        conflict.err().map(|error| error.kind()),
+        Some(InboxErrorKind::ReplayRequestConflict)
+    );
+
+    let missing = inbox
+        .authorize_quarantine_replay(
+            &transaction,
+            "execution_simulator_v1",
+            "18:EDGEAGENT_COMMANDS:404",
+            ReplayRequest::new(
+                "inbound-replay-request-02",
+                "urn:edgeagent:operator:alice",
+                "consumer_remediated",
+            )?,
+        )
+        .await;
+    assert_eq!(
+        missing.err().map(|error| error.kind()),
+        Some(InboxErrorKind::NotQuarantined)
+    );
+    transaction.commit().await?;
+
+    let transaction = client.transaction().await?;
+    let second_authorization = inbox
+        .authorize_quarantine_replay(
+            &transaction,
+            "execution_simulator_v1",
+            "18:EDGEAGENT_COMMANDS:7",
+            ReplayRequest::new(
+                "inbound-replay-request-03",
+                "urn:edgeagent:operator:alice",
+                "consumer_remediated",
+            )?,
+        )
+        .await?;
+    assert_eq!(
+        second_authorization.disposition(),
+        ReplayDisposition::Authorized
+    );
+    transaction.commit().await?;
+
+    let audit = client
+        .query_one(
+            "SELECT requested_by, reason, prior_failure_code, prior_first_delivery_attempt, prior_last_delivery_attempt FROM edgeagent_message_quarantine_replay_audit WHERE replay_request_id = $1",
+            &[&"inbound-replay-request-01"],
+        )
+        .await?;
+    assert_eq!(
+        audit.try_get::<_, String>(0)?,
+        "urn:edgeagent:operator:alice"
+    );
+    assert_eq!(audit.try_get::<_, String>(1)?, "consumer_remediated");
+    assert_eq!(audit.try_get::<_, String>(2)?, "envelope_invalid");
+    assert_eq!(audit.try_get::<_, i32>(3)?, 1);
+    assert_eq!(audit.try_get::<_, i32>(4)?, 2);
+    let audit_count = client
+        .query_one(
+            "SELECT count(*) FROM edgeagent_message_quarantine_replay_audit",
+            &[],
+        )
+        .await?;
+    assert_eq!(audit_count.try_get::<_, i64>(0)?, 2);
 
     client
         .batch_execute(&format!(

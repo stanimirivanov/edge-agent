@@ -12,6 +12,8 @@
   later delivery to retry safely.
 - Malformed or permanently rejected deliveries retain exact bytes, an opaque
   transport key, bounded reason code, and observed attempts before termination.
+- An authorized replay request appends immutable operator and prior-failure
+  evidence before returning the original subject and bytes to a publisher.
 - The transport acknowledges only after the transaction commits. This provides
   one committed local transition under redelivery, not exactly-once delivery.
 
@@ -82,9 +84,37 @@ same identity returns `QuarantineIdentityConflict`. This protects against key
 collision or mutation and makes redelivery after lost terminal-settlement
 confirmation safe.
 
-The table is retained evidence and a future replay source, not an automatic
-retry queue. Runtime identities may insert and inspect only their service-owned
-schema; replay requires a separately authorized workflow that is not yet implemented.
+The table is retained evidence and a replay source, not an automatic retry
+queue. Runtime identities may insert and inspect only their service-owned
+schema. Replay requires a separately authenticated and authorized control-plane
+workflow; direct table updates are not supported.
+
+## Inbound replay authorization
+
+`authorize_quarantine_replay` is the persistence boundary used after a control
+plane authenticates an operator, authorizes the target and reason, and applies
+any required approval policy. `ReplayRequest` bounds the request identity,
+operator identity, and reason before database work.
+
+Migration 0003 adds `edgeagent_message_quarantine_replay_audit`. One transaction:
+
+1. Locks the selected quarantine record.
+2. Appends the request identity, operator, reason, target, prior failure code,
+   attempt range, and original observation timestamps.
+3. Returns the exact retained transport subject and payload bytes.
+
+The caller must commit this transaction before publishing the returned bytes.
+The adapter never publishes, deletes, repairs, or interprets the untrusted
+payload. Repeating an identical request returns `AlreadyAuthorized` and the
+same bytes. Reusing a request identity with a different target, operator, or
+reason fails closed as `ReplayRequestConflict`. An intentional additional
+replay requires a new authorization identity and produces a new audit row.
+
+Authentication, authorization, dual control, rate limits, publication, and
+publication-outcome recording belong to a separate operator control plane.
+Runtime consumer roles should not receive replay-audit write privileges;
+control-plane roles should receive only the minimum target-read and audit-insert
+permissions needed for this operation.
 
 ## Failure and security behavior
 
@@ -95,6 +125,9 @@ schema; replay requires a separately authorized workflow that is not yet impleme
 | `InvalidConsumerName` | Consumer name is empty, oversized, or not a lowercase ASCII token | Correct deployment or application configuration |
 | `InvalidQuarantineEvidence` | Transport identity, subject, attempt, payload size, or reason is outside portable bounds | Leave unsettled and correct the adapter or policy defect |
 | `QuarantineIdentityConflict` | One delivery key refers to different immutable evidence | Fail closed; do not terminate the new delivery until operators investigate |
+| `InvalidReplayRequest` | Replay request identity, operator, reason, or target is outside portable bounds | Reject before database work and correct the control-plane request |
+| `ReplayRequestConflict` | A replay request identity already names different authorization evidence | Fail closed and investigate request-ID reuse |
+| `NotQuarantined` | The requested consumer and delivery key do not identify retained quarantine evidence | Reject without creating audit evidence |
 | `Storage` | PostgreSQL rejected or could not complete an operation | Roll back and apply bounded transient-failure policy |
 | `StorageInvariant` | A conflicting key disappeared or stored columns violate adapter assumptions | Roll back, quarantine, and investigate corruption or unsupported mutation |
 
@@ -116,10 +149,10 @@ its cutoff from broker retention, quarantine retention, replay policy, legal
 hold, and the recovery objective; it must never use an arbitrary table-size threshold.
 
 Inbox records expose `processed_at`; quarantine records expose `quarantined_at`
-and `last_observed_at`. Both are indexed with `consumer_name` for future bounded
-retention work. This increment deliberately does not delete or replay records.
-Operators should monitor table growth until retention, archive, legal-hold, and
-replay policies are implemented together.
+and `last_observed_at`; replay audit records expose `authorized_at`. Target and
+time indexes support bounded inspection. This increment deliberately does not
+delete records or publish replay bytes. Operators should monitor table growth
+until retention, archive, legal-hold, and replay policies are implemented together.
 
 ## Verification
 
@@ -135,14 +168,16 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 It creates a process-scoped schema and proves rollback recovery, one committed
 domain transition under duplicate delivery, changed-content rejection,
 independent consumer scope, unsupported-version rejection, idempotent quarantine,
-attempt observation, and quarantine identity-conflict rejection. It then removes
-the schema. Run it only against an isolated development or CI database.
+attempt observation, quarantine identity-conflict rejection, exact replay bytes,
+idempotent authorization, conflicting request rejection, and audit snapshots. It
+then removes the schema. Run it only against an isolated development or CI database.
 
 ## Current limitations
 
 This crate provides transactional storage semantics, not a running transport
 consumer. Transactional failure classification, retry, and settlement composition
 are implemented separately in the [handler guide](inbox-handler.md). Neither crate
-chooses acknowledgement-progress deadlines, deletes evidence, authorizes replay,
-or emits telemetry; those capabilities remain separate M02 increments because
-they affect message loss, recovery time, evidence retention, and operator control.
+chooses acknowledgement-progress deadlines, deletes evidence, authenticates or
+authorizes operators, publishes replay bytes, records publication outcomes, or
+emits telemetry. Those capabilities remain separate increments because they affect
+message loss, recovery time, evidence retention, and operator control.

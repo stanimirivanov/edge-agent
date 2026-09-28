@@ -141,6 +141,10 @@ The same adapter retains exact untrusted poison-message bytes under a logical
 consumer and opaque transport message key. Identical redelivery updates bounded
 attempt evidence; changed content under the same key fails closed. A consumer
 may request terminal broker settlement only after that quarantine transaction commits.
+Inbound replay appends bounded operator identity, reason, target, and prior
+failure evidence before returning the original subject and bytes to a separate
+control-plane publisher. The authorization is idempotent by replay-request
+identity, never deletes quarantine evidence, and cannot publish on its own.
 
 `edgeagent-inbox-handler` composes those storage and transport primitives for one
 delivery. It validates before domain work, invokes service-owned database-only

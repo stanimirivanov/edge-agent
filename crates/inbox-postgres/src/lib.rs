@@ -5,13 +5,15 @@
 use edgeagent_contracts::{MessageEnvelope, MessageRegistry, MessageRoutingError};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use tokio_postgres::Transaction;
+use tokio_postgres::{Row, Transaction};
 
 const MAX_CONSUMER_NAME_BYTES: usize = 128;
 const MAX_DELIVERY_KEY_BYTES: usize = 512;
 const MAX_TRANSPORT_SUBJECT_BYTES: usize = 512;
 const MAX_FAILURE_CODE_BYTES: usize = 64;
 const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
+const MAX_REPLAY_REQUEST_ID_BYTES: usize = 128;
+const MAX_OPERATOR_ID_BYTES: usize = 256;
 
 const INSERT_QUARANTINE_SQL: &str = r#"
 INSERT INTO edgeagent_message_quarantine (
@@ -34,6 +36,53 @@ SET last_delivery_attempt = GREATEST(last_delivery_attempt, $3),
 WHERE consumer_name = $1 AND delivery_key = $2
 "#;
 
+const AUTHORIZE_QUARANTINE_REPLAY_SQL: &str = r#"
+WITH candidate AS (
+    SELECT consumer_name,
+           delivery_key,
+           transport_subject,
+           payload,
+           failure_code,
+           first_delivery_attempt,
+           last_delivery_attempt,
+           quarantined_at,
+           last_observed_at
+    FROM edgeagent_message_quarantine
+    WHERE consumer_name = $1 AND delivery_key = $2
+    FOR UPDATE
+),
+audit AS (
+    INSERT INTO edgeagent_message_quarantine_replay_audit (
+        replay_request_id,
+        consumer_name,
+        delivery_key,
+        requested_by,
+        reason,
+        prior_failure_code,
+        prior_first_delivery_attempt,
+        prior_last_delivery_attempt,
+        prior_quarantined_at,
+        prior_last_observed_at
+    )
+    SELECT $3,
+           candidate.consumer_name,
+           candidate.delivery_key,
+           $4,
+           $5,
+           candidate.failure_code,
+           candidate.first_delivery_attempt,
+           candidate.last_delivery_attempt,
+           candidate.quarantined_at,
+           candidate.last_observed_at
+    FROM candidate
+    ON CONFLICT (replay_request_id) DO NOTHING
+    RETURNING consumer_name, delivery_key
+)
+SELECT candidate.transport_subject, candidate.payload
+FROM candidate
+JOIN audit USING (consumer_name, delivery_key)
+"#;
+
 /// Result of recording a delivery inside the handler's transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeliveryDisposition {
@@ -50,6 +99,77 @@ pub enum QuarantineDisposition {
     Inserted,
     /// Identical evidence was already retained, typically after lost settlement confirmation.
     AlreadyPresent,
+}
+
+/// Idempotent result of recording an inbound replay authorization.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplayDisposition {
+    /// A new authorization was appended for this quarantined delivery.
+    Authorized,
+    /// This exact authorization request was already recorded.
+    AlreadyAuthorized,
+}
+
+/// Bounded authorization evidence supplied by an operator control plane.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayRequest<'request> {
+    request_id: &'request str,
+    requested_by: &'request str,
+    reason: &'request str,
+}
+
+impl<'request> ReplayRequest<'request> {
+    /// Construct validated audit evidence for one inbound replay authorization.
+    ///
+    /// The caller remains responsible for authenticating and authorizing the
+    /// operator before constructing this value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidReplayRequest` when an identifier or reason is outside
+    /// its portable bound.
+    pub fn new(
+        request_id: &'request str,
+        requested_by: &'request str,
+        reason: &'request str,
+    ) -> Result<Self, InboxError> {
+        validate_replay_identifier(request_id)?;
+        validate_replay_actor(requested_by)?;
+        validate_replay_reason(reason)?;
+        Ok(Self {
+            request_id,
+            requested_by,
+            reason,
+        })
+    }
+}
+
+/// Authorized exact bytes for a control-plane replay publisher.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReplayAuthorization {
+    disposition: ReplayDisposition,
+    transport_subject: String,
+    payload: Vec<u8>,
+}
+
+impl ReplayAuthorization {
+    /// Return whether this request created or reused authorization evidence.
+    #[must_use]
+    pub const fn disposition(&self) -> ReplayDisposition {
+        self.disposition
+    }
+
+    /// Return the original transport subject selected for replay.
+    #[must_use]
+    pub fn transport_subject(&self) -> &str {
+        &self.transport_subject
+    }
+
+    /// Return the exact quarantined bytes selected for replay.
+    #[must_use]
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
 }
 
 /// Validated poison-message evidence retained before terminal broker settlement.
@@ -134,8 +254,16 @@ impl PostgresInbox {
     pub const QUARANTINE_MIGRATION_SQL: &'static str =
         include_str!("../migrations/0002_message_quarantine.sql");
 
+    /// Migration that adds append-only inbound replay authorization evidence.
+    pub const REPLAY_MIGRATION_SQL: &'static str =
+        include_str!("../migrations/0003_message_quarantine_replay.sql");
+
     /// Ordered migrations required by this adapter.
-    pub const MIGRATIONS: [&'static str; 2] = [Self::MIGRATION_SQL, Self::QUARANTINE_MIGRATION_SQL];
+    pub const MIGRATIONS: [&'static str; 3] = [
+        Self::MIGRATION_SQL,
+        Self::QUARANTINE_MIGRATION_SQL,
+        Self::REPLAY_MIGRATION_SQL,
+    ];
 
     /// Validate and record a delivery before applying its domain transition.
     ///
@@ -256,6 +384,70 @@ impl PostgresInbox {
         }
         Ok(QuarantineDisposition::AlreadyPresent)
     }
+
+    /// Append authorization evidence and return exact retained bytes for replay.
+    ///
+    /// This operation does not publish, delete, or mutate quarantine evidence.
+    /// A control-plane worker MUST commit this transaction before publishing the
+    /// returned subject and bytes. Retrying the same request is idempotent; an
+    /// intentional additional replay requires a new request identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid consumer or replay request, conflicting request
+    /// identity, missing quarantine target, storage, or storage-invariant error.
+    pub async fn authorize_quarantine_replay(
+        &self,
+        transaction: &Transaction<'_>,
+        consumer_name: &str,
+        delivery_key: &str,
+        request: ReplayRequest<'_>,
+    ) -> Result<ReplayAuthorization, InboxError> {
+        validate_consumer_name(consumer_name)?;
+        validate_replay_target(delivery_key)?;
+        let rows = transaction
+            .query(
+                AUTHORIZE_QUARANTINE_REPLAY_SQL,
+                &[
+                    &consumer_name,
+                    &delivery_key,
+                    &request.request_id,
+                    &request.requested_by,
+                    &request.reason,
+                ],
+            )
+            .await
+            .map_err(InboxError::storage)?;
+        if rows.len() == 1 {
+            return replay_authorization(rows[0].clone(), ReplayDisposition::Authorized);
+        }
+        if !rows.is_empty() {
+            return Err(InboxError::storage_invariant());
+        }
+
+        let existing = transaction
+            .query_opt(
+                "SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason, quarantine.transport_subject, quarantine.payload FROM edgeagent_message_quarantine_replay_audit AS audit JOIN edgeagent_message_quarantine AS quarantine USING (consumer_name, delivery_key) WHERE audit.replay_request_id = $1",
+                &[&request.request_id],
+            )
+            .await
+            .map_err(InboxError::storage)?;
+        match existing {
+            Some(row)
+                if row.try_get::<_, String>(0).map_err(InboxError::storage)? == consumer_name
+                    && row.try_get::<_, String>(1).map_err(InboxError::storage)?
+                        == delivery_key
+                    && row.try_get::<_, String>(2).map_err(InboxError::storage)?
+                        == request.requested_by
+                    && row.try_get::<_, String>(3).map_err(InboxError::storage)?
+                        == request.reason =>
+            {
+                replay_authorization_from_columns(row, 4, ReplayDisposition::AlreadyAuthorized)
+            }
+            Some(_) => Err(InboxError::replay_request_conflict()),
+            None => Err(InboxError::not_quarantined()),
+        }
+    }
 }
 
 /// Stable failure categories for inbox callers and acknowledgement policy.
@@ -271,6 +463,12 @@ pub enum InboxErrorKind {
     InvalidQuarantineEvidence,
     /// One transport delivery key was reused with different immutable evidence.
     QuarantineIdentityConflict,
+    /// Replay authorization identity, operator, reason, or target is invalid.
+    InvalidReplayRequest,
+    /// One replay request identity was reused with different authorization evidence.
+    ReplayRequestConflict,
+    /// The requested delivery does not exist in inbound quarantine.
+    NotQuarantined,
     /// PostgreSQL rejected or could not complete an operation.
     Storage,
     /// Stored columns violate invariants expected by this adapter.
@@ -291,6 +489,12 @@ impl Display for InboxErrorKind {
             Self::QuarantineIdentityConflict => {
                 formatter.write_str("inbox quarantine identity conflicts with stored evidence")
             }
+            Self::InvalidReplayRequest => {
+                formatter.write_str("inbox quarantine replay request is invalid")
+            }
+            Self::ReplayRequestConflict => formatter
+                .write_str("inbox quarantine replay request conflicts with stored evidence"),
+            Self::NotQuarantined => formatter.write_str("inbox delivery is not quarantined"),
             Self::Storage => formatter.write_str("inbox storage operation failed"),
             Self::StorageInvariant => formatter.write_str("inbox storage invariant failed"),
         }
@@ -328,6 +532,14 @@ impl InboxError {
         }
     }
 
+    const fn invalid_replay_request(reason: &'static str) -> Self {
+        Self {
+            kind: InboxErrorKind::InvalidReplayRequest,
+            reason: Some(reason),
+            source: None,
+        }
+    }
+
     fn storage(error: tokio_postgres::Error) -> Self {
         Self {
             kind: InboxErrorKind::Storage,
@@ -355,6 +567,22 @@ impl InboxError {
     const fn quarantine_identity_conflict() -> Self {
         Self {
             kind: InboxErrorKind::QuarantineIdentityConflict,
+            reason: None,
+            source: None,
+        }
+    }
+
+    const fn replay_request_conflict() -> Self {
+        Self {
+            kind: InboxErrorKind::ReplayRequestConflict,
+            reason: None,
+            source: None,
+        }
+    }
+
+    const fn not_quarantined() -> Self {
+        Self {
+            kind: InboxErrorKind::NotQuarantined,
             reason: None,
             source: None,
         }
@@ -437,11 +665,86 @@ fn validate_token(
     }
 }
 
+fn validate_replay_identifier(value: &str) -> Result<(), InboxError> {
+    if value.is_empty()
+        || value.len() > MAX_REPLAY_REQUEST_ID_BYTES
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+    {
+        Err(InboxError::invalid_replay_request(
+            "replay_request_id must contain 1 to 128 portable identifier bytes",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_replay_actor(value: &str) -> Result<(), InboxError> {
+    if value.is_empty()
+        || value.len() > MAX_OPERATOR_ID_BYTES
+        || !value.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        Err(InboxError::invalid_replay_request(
+            "requested_by must contain 1 to 256 visible ASCII bytes",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_replay_reason(value: &str) -> Result<(), InboxError> {
+    if value.is_empty()
+        || value.len() > MAX_FAILURE_CODE_BYTES
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
+    {
+        Err(InboxError::invalid_replay_request(
+            "replay reason must be a lowercase ASCII token of 1 to 64 bytes",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_replay_target(value: &str) -> Result<(), InboxError> {
+    if value.is_empty()
+        || value.len() > MAX_DELIVERY_KEY_BYTES
+        || !value.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        Err(InboxError::invalid_replay_request(
+            "delivery_key must contain 1 to 512 visible ASCII bytes",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn replay_authorization(
+    row: Row,
+    disposition: ReplayDisposition,
+) -> Result<ReplayAuthorization, InboxError> {
+    replay_authorization_from_columns(row, 0, disposition)
+}
+
+fn replay_authorization_from_columns(
+    row: Row,
+    offset: usize,
+    disposition: ReplayDisposition,
+) -> Result<ReplayAuthorization, InboxError> {
+    Ok(ReplayAuthorization {
+        disposition,
+        transport_subject: row.try_get(offset).map_err(InboxError::storage)?,
+        payload: row.try_get(offset + 1).map_err(InboxError::storage)?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        InboxErrorKind, MAX_PAYLOAD_BYTES, PostgresInbox, QuarantineEvidence,
-        validate_consumer_name,
+        AUTHORIZE_QUARANTINE_REPLAY_SQL, InboxErrorKind, MAX_PAYLOAD_BYTES, PostgresInbox,
+        QuarantineEvidence, ReplayRequest, validate_consumer_name,
     };
 
     #[test]
@@ -468,7 +771,7 @@ mod tests {
             PostgresInbox::MIGRATION_SQL
                 .contains("PRIMARY KEY (consumer_name, message_source, message_id)")
         );
-        assert_eq!(PostgresInbox::MIGRATIONS.len(), 2);
+        assert_eq!(PostgresInbox::MIGRATIONS.len(), 3);
         assert!(
             PostgresInbox::QUARANTINE_MIGRATION_SQL
                 .contains("PRIMARY KEY (consumer_name, delivery_key)")
@@ -476,6 +779,11 @@ mod tests {
         assert!(
             PostgresInbox::QUARANTINE_MIGRATION_SQL.contains("octet_length(payload) <= 262144")
         );
+        assert!(
+            PostgresInbox::REPLAY_MIGRATION_SQL
+                .contains("edgeagent_message_quarantine_replay_audit")
+        );
+        assert!(AUTHORIZE_QUARANTINE_REPLAY_SQL.contains("FOR UPDATE"));
     }
 
     #[test]
@@ -514,6 +822,38 @@ mod tests {
             .err()
             .map(|error| error.kind()),
             Some(InboxErrorKind::InvalidQuarantineEvidence)
+        );
+    }
+
+    #[test]
+    fn replay_authorization_evidence_is_bounded_before_database_work() {
+        assert!(
+            ReplayRequest::new(
+                "replay-request-01",
+                "urn:edgeagent:operator:alice",
+                "consumer_remediated",
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            ReplayRequest::new(
+                "replay request 01",
+                "urn:edgeagent:operator:alice",
+                "consumer_remediated",
+            )
+            .err()
+            .map(|error| error.kind()),
+            Some(InboxErrorKind::InvalidReplayRequest)
+        );
+        assert_eq!(
+            ReplayRequest::new(
+                "replay-request-01",
+                "urn:edgeagent:operator:alice",
+                "Consumer remediated",
+            )
+            .err()
+            .map(|error| error.kind()),
+            Some(InboxErrorKind::InvalidReplayRequest)
         );
     }
 }

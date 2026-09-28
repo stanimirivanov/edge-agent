@@ -410,6 +410,9 @@ async fn handle_decoded_once(
                 InboxErrorKind::InvalidConsumerName
                 | InboxErrorKind::InvalidQuarantineEvidence
                 | InboxErrorKind::QuarantineIdentityConflict
+                | InboxErrorKind::InvalidReplayRequest
+                | InboxErrorKind::ReplayRequestConflict
+                | InboxErrorKind::NotQuarantined
                 | InboxErrorKind::StorageInvariant => Err(HandlerError::inbox(error)),
             };
         }
