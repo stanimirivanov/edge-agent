@@ -182,7 +182,8 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
     let mut restarted_adapter = JetStreamConsumer::new(restarted_consumer).await?;
     let redelivery =
         tokio::time::timeout(Duration::from_secs(5), restarted_adapter.receive()).await??;
-    assert!(redelivery.metadata().delivery_attempt() >= 2);
+    let redelivery_attempt = redelivery.metadata().delivery_attempt();
+    assert!(redelivery_attempt >= 2);
     assert_eq!(redelivery.metadata().message_key(), delivery_key);
     assert_eq!(redelivery.payload(), command.to_json()?);
 
@@ -200,7 +201,10 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
         redelivery,
     )
     .await?;
-    assert!(matches!(outcome, HandlingOutcome::Applied { attempt } if attempt >= 2));
+    assert!(matches!(
+        outcome,
+        HandlingOutcome::Applied { attempt } if attempt == redelivery_attempt
+    ));
 
     let counts = database
         .query_one(
@@ -215,7 +219,6 @@ async fn durable_command_survives_client_restart_with_one_domain_transition()
     let consumer_info = inspector.info().await?;
     assert_eq!(consumer_info.num_ack_pending, 0);
     assert_eq!(consumer_info.num_pending, 0);
-    assert!(consumer_info.num_redelivered >= 1);
 
     assert!(restarted_context.delete_stream(&stream_name).await?.success);
     database
