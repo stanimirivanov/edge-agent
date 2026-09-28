@@ -1,17 +1,18 @@
-//! Bounded PostgreSQL outbox relay orchestration.
+//! Bounded, persistence-neutral outbox relay orchestration.
 
 #![forbid(unsafe_code)]
 
 use edgeagent_contracts::{MessageRegistry, MessageRoutingError};
-use edgeagent_messaging::{MessagePublisher, PublishDisposition, PublishError, PublishErrorKind};
-use edgeagent_outbox_postgres::{ClaimedMessage, OutboxError, PostgresOutbox};
+use edgeagent_messaging::{
+    ClaimedMessage, MessagePublisher, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
+    PublishDisposition, PublishError, PublishErrorKind,
+};
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::time::{Duration, Instant};
-use tokio_postgres::Client;
 
 const MAX_ATTEMPTS: u32 = 100;
 const MAX_LEASE_DURATION: Duration = Duration::from_secs(15 * 60);
@@ -174,7 +175,7 @@ impl QuarantineReason {
 
 /// Claim and resolve at most one outbox record.
 ///
-/// Publication occurs outside PostgreSQL transactions. Each worker has at most
+/// Publication occurs outside persistence transactions. Each worker has at most
 /// one in-flight publication, providing an explicit backpressure boundary.
 /// Broker confirmation, retry scheduling, or quarantine is then committed in a
 /// short transaction guarded by the original lease.
@@ -184,18 +185,15 @@ impl QuarantineReason {
 /// Returns a storage or outbox error when claiming or durably recording the
 /// outcome fails. A publish failure is a normal classified `RelayOutcome`.
 pub async fn relay_once(
-    client: &mut Client,
+    store: &mut dyn OutboxRelayStore,
     registry: &MessageRegistry<'_>,
     publisher: &dyn MessagePublisher,
     policy: &RelayPolicy,
 ) -> Result<RelayOutcome, RelayError> {
-    let outbox = PostgresOutbox;
-    let transaction = client.transaction().await.map_err(RelayError::storage)?;
-    let mut claimed = outbox
-        .claim_batch(&transaction, &policy.lease_owner, 1, policy.lease_duration)
-        .await?;
-    transaction.commit().await.map_err(RelayError::storage)?;
-    let Some(message) = claimed.pop() else {
+    let Some(message) = store
+        .claim_one(&policy.lease_owner, policy.lease_duration)
+        .await?
+    else {
         return Ok(RelayOutcome::Idle);
     };
 
@@ -211,8 +209,7 @@ pub async fn relay_once(
         }
         Err(error) => {
             return quarantine(
-                client,
-                &outbox,
+                store,
                 policy,
                 &message,
                 &telemetry_context,
@@ -226,8 +223,7 @@ pub async fn relay_once(
         Ok(definition) => *definition,
         Err(error) => {
             return quarantine(
-                client,
-                &outbox,
+                store,
                 policy,
                 &message,
                 &telemetry_context,
@@ -253,20 +249,14 @@ pub async fn relay_once(
                 publication_started.elapsed(),
             );
             let persistence_started = Instant::now();
-            let persistence_result = async {
-                let transaction = client.transaction().await.map_err(RelayError::storage)?;
-                outbox
-                    .mark_published(
-                        &transaction,
-                        message.message_source(),
-                        message.message_id(),
-                        &policy.lease_owner,
-                    )
-                    .await?;
-                transaction.commit().await.map_err(RelayError::storage)?;
-                Ok::<(), RelayError>(())
-            }
-            .await;
+            let persistence_result = store
+                .mark_published(
+                    message.message_source(),
+                    message.message_id(),
+                    &policy.lease_owner,
+                )
+                .await
+                .map_err(RelayError::from);
             record_event_spine_operation(
                 &telemetry_context,
                 EventSpineStage::Persistence,
@@ -292,14 +282,13 @@ pub async fn relay_once(
                 message.attempt(),
                 publication_started.elapsed(),
             );
-            resolve_failure(client, &outbox, policy, &message, &telemetry_context, error).await
+            resolve_failure(store, policy, &message, &telemetry_context, error).await
         }
     }
 }
 
 async fn resolve_failure(
-    client: &mut Client,
-    outbox: &PostgresOutbox,
+    store: &mut dyn OutboxRelayStore,
     policy: &RelayPolicy,
     message: &ClaimedMessage,
     telemetry_context: &EventSpineContext,
@@ -318,22 +307,16 @@ async fn resolve_failure(
             failure_code,
         } => {
             let persistence_started = Instant::now();
-            let persistence_result = async {
-                let transaction = client.transaction().await.map_err(RelayError::storage)?;
-                outbox
-                    .release_for_retry(
-                        &transaction,
-                        message.message_source(),
-                        message.message_id(),
-                        &policy.lease_owner,
-                        delay,
-                        failure_code,
-                    )
-                    .await?;
-                transaction.commit().await.map_err(RelayError::storage)?;
-                Ok::<(), RelayError>(())
-            }
-            .await;
+            let persistence_result = store
+                .release_for_retry(
+                    message.message_source(),
+                    message.message_id(),
+                    &policy.lease_owner,
+                    delay,
+                    failure_code,
+                )
+                .await
+                .map_err(RelayError::from);
             record_event_spine_operation(
                 telemetry_context,
                 EventSpineStage::Persistence,
@@ -354,8 +337,7 @@ async fn resolve_failure(
         }
         RetryDecision::Quarantine(reason) => {
             quarantine(
-                client,
-                outbox,
+                store,
                 policy,
                 message,
                 telemetry_context,
@@ -368,8 +350,7 @@ async fn resolve_failure(
 }
 
 async fn quarantine(
-    client: &mut Client,
-    outbox: &PostgresOutbox,
+    store: &mut dyn OutboxRelayStore,
     policy: &RelayPolicy,
     message: &ClaimedMessage,
     telemetry_context: &EventSpineContext,
@@ -377,21 +358,15 @@ async fn quarantine(
     failure: RelayMessageFailure,
 ) -> Result<RelayOutcome, RelayError> {
     let persistence_started = Instant::now();
-    let persistence_result = async {
-        let transaction = client.transaction().await.map_err(RelayError::storage)?;
-        outbox
-            .quarantine(
-                &transaction,
-                message.message_source(),
-                message.message_id(),
-                &policy.lease_owner,
-                reason.code(),
-            )
-            .await?;
-        transaction.commit().await.map_err(RelayError::storage)?;
-        Ok::<(), RelayError>(())
-    }
-    .await;
+    let persistence_result = store
+        .quarantine(
+            message.message_source(),
+            message.message_id(),
+            &policy.lease_owner,
+            reason.code(),
+        )
+        .await
+        .map_err(RelayError::from);
     record_event_spine_operation(
         telemetry_context,
         EventSpineStage::Persistence,
@@ -489,9 +464,9 @@ fn identity_hash(message_source: &str, message_id: &str, attempt: u32) -> u64 {
 pub enum RelayErrorKind {
     /// Retry or attempt configuration is outside supported bounds.
     InvalidPolicy,
-    /// PostgreSQL could not begin or commit a relay state transaction.
+    /// The outbox store was unavailable or could not commit an operation.
     Storage,
-    /// The outbox rejected a claim or leased state transition.
+    /// The outbox rejected a state transition or returned invalid state.
     Outbox,
 }
 
@@ -527,14 +502,6 @@ impl RelayError {
             source: None,
         }
     }
-
-    fn storage(error: tokio_postgres::Error) -> Self {
-        Self {
-            kind: RelayErrorKind::Storage,
-            reason: None,
-            source: Some(Box::new(error)),
-        }
-    }
 }
 
 impl Display for RelayError {
@@ -555,10 +522,15 @@ impl Error for RelayError {
     }
 }
 
-impl From<OutboxError> for RelayError {
-    fn from(error: OutboxError) -> Self {
+impl From<OutboxStoreError> for RelayError {
+    fn from(error: OutboxStoreError) -> Self {
         Self {
-            kind: RelayErrorKind::Outbox,
+            kind: match error.kind() {
+                OutboxStoreErrorKind::Unavailable => RelayErrorKind::Storage,
+                OutboxStoreErrorKind::StateTransition | OutboxStoreErrorKind::Invariant => {
+                    RelayErrorKind::Outbox
+                }
+            },
             reason: None,
             source: Some(Box::new(error)),
         }
@@ -568,10 +540,151 @@ impl From<OutboxError> for RelayError {
 #[cfg(test)]
 mod tests {
     use super::{
-        QuarantineReason, RelayErrorKind, RelayPolicy, RetryDecision, retry_decision, retry_delay,
+        QuarantineReason, RelayErrorKind, RelayOutcome, RelayPolicy, RetryDecision, relay_once,
+        retry_decision, retry_delay,
     };
-    use edgeagent_messaging::PublishErrorKind;
+    use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRegistry};
+    use edgeagent_messaging::{
+        ClaimedMessage, MessagePublisher, OutboxRelayStore, OutboxStoreFuture, PublishDisposition,
+        PublishErrorKind, PublishFuture, PublishReceipt,
+    };
+    use serde_json::json;
+    use std::error::Error;
     use std::time::Duration;
+
+    const COMMAND: MessageDefinition = MessageDefinition::command(
+        "com.edgeagent.execution.submit-dry-run-order.v1",
+        "urn:edgeagent:schema:submit-dry-run-order:v1",
+        Component::ExecutionSimulator,
+        "order",
+    );
+
+    #[derive(Default)]
+    struct InMemoryStore {
+        claimed: Option<ClaimedMessage>,
+        transitions: Vec<&'static str>,
+    }
+
+    impl OutboxRelayStore for InMemoryStore {
+        fn claim_one<'operation>(
+            &'operation mut self,
+            _lease_owner: &'operation str,
+            _lease_duration: Duration,
+        ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
+            Box::pin(async move {
+                self.transitions.push("claimed");
+                Ok(self.claimed.take())
+            })
+        }
+
+        fn mark_published<'operation>(
+            &'operation mut self,
+            _message_source: &'operation str,
+            _message_id: &'operation str,
+            _lease_owner: &'operation str,
+        ) -> OutboxStoreFuture<'operation, ()> {
+            Box::pin(async move {
+                self.transitions.push("published");
+                Ok(())
+            })
+        }
+
+        fn release_for_retry<'operation>(
+            &'operation mut self,
+            _message_source: &'operation str,
+            _message_id: &'operation str,
+            _lease_owner: &'operation str,
+            _retry_after: Duration,
+            _failure_code: &'operation str,
+        ) -> OutboxStoreFuture<'operation, ()> {
+            Box::pin(async move {
+                self.transitions.push("retry_scheduled");
+                Ok(())
+            })
+        }
+
+        fn quarantine<'operation>(
+            &'operation mut self,
+            _message_source: &'operation str,
+            _message_id: &'operation str,
+            _lease_owner: &'operation str,
+            _reason: &'operation str,
+        ) -> OutboxStoreFuture<'operation, ()> {
+            Box::pin(async move {
+                self.transitions.push("quarantined");
+                Ok(())
+            })
+        }
+    }
+
+    struct PersistingPublisher;
+
+    impl MessagePublisher for PersistingPublisher {
+        fn publish<'publisher>(
+            &'publisher self,
+            _definition: MessageDefinition,
+            _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
+        ) -> PublishFuture<'publisher> {
+            Box::pin(async { Ok(PublishReceipt::new(PublishDisposition::Persisted)) })
+        }
+    }
+
+    fn claimed_message() -> Result<ClaimedMessage, Box<dyn Error>> {
+        let envelope = COMMAND.build(
+            MessageMetadata {
+                id: "relay-port-message-01".to_owned(),
+                source: Component::Gateway.source_uri().to_owned(),
+                message_type: COMMAND.message_type.to_owned(),
+                subject: "order/relay-port-order-01".to_owned(),
+                time: "2026-09-28T00:00:00Z".to_owned(),
+                data_schema: COMMAND.data_schema.to_owned(),
+                correlation_id: "relay-port-correlation-01".to_owned(),
+                causation_id: "relay-port-request-01".to_owned(),
+                idempotency_key: "relay-port-order-01".to_owned(),
+                partition_key: "order/relay-port-order-01".to_owned(),
+                trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
+                trace_state: None,
+            },
+            &json!({"mode": "dry_run", "quantity": 1}),
+        )?;
+        Ok(ClaimedMessage::new(
+            envelope.source().to_owned(),
+            envelope.id().to_owned(),
+            envelope.message_type().to_owned(),
+            COMMAND.subject()?,
+            envelope.to_json()?,
+            1,
+        )?)
+    }
+
+    #[tokio::test]
+    async fn relay_orchestration_depends_only_on_application_ports() -> Result<(), Box<dyn Error>> {
+        let definitions = [COMMAND];
+        let registry = MessageRegistry::new(&definitions)?;
+        let policy = RelayPolicy::new(
+            "relay_port_test",
+            Duration::from_secs(30),
+            3,
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+        )?;
+        let mut store = InMemoryStore {
+            claimed: Some(claimed_message()?),
+            ..InMemoryStore::default()
+        };
+
+        let outcome = relay_once(&mut store, &registry, &PersistingPublisher, &policy).await?;
+
+        assert!(matches!(
+            outcome,
+            RelayOutcome::Published {
+                disposition: PublishDisposition::Persisted,
+                attempt: 1,
+            }
+        ));
+        assert_eq!(store.transitions, ["claimed", "published"]);
+        Ok(())
+    }
 
     #[test]
     fn policy_bounds_attempts_and_delays() {

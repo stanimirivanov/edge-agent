@@ -9,6 +9,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+mod outbox;
+
+pub use outbox::{
+    ClaimedMessage, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
+};
+
 const MAX_DELIVERY_TEXT_BYTES: usize = 512;
 
 /// Owned future returned by a message publisher implementation.

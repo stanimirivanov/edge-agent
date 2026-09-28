@@ -100,28 +100,31 @@ or model providers. A deployable may depend on shared contracts and
 infrastructure adapters, but it may not read another service's private tables.
 Cross-service behavior uses public APIs or messages.
 
-The application-owned `edgeagent-messaging` port defines durable publication,
-one-at-a-time delivery, broker metadata, and confirmed settlement without broker
-types. `edgeagent-messaging-nats` derives publication subjects, uses stable
+The application-owned `edgeagent-messaging` ports define durable publication,
+outbox relay storage, one-at-a-time delivery, broker metadata, and confirmed
+settlement without broker or database types. `edgeagent-messaging-nats` derives
+publication subjects, uses stable
 message identity for bounded JetStream deduplication, and exposes bounded pull
 delivery with confirmed acknowledge, delayed retry, or terminal settlement.
 Deployment configuration—not application code—owns streams, durable consumers,
 retention, replicas, acknowledgement limits, credentials, and subject ACLs.
 
 `edgeagent-outbox-postgres` writes exact structured envelope bytes in the same
-caller-owned transaction as authoritative state. Each service applies the
-outbox migration inside its own schema. Concurrent relays claim disjoint work
-with expiring leases and `SKIP LOCKED`; successful publication marks retained
-evidence rather than deleting it. The CloudEvents `(source, id)` pair scopes
-identity across storage and transport.
+caller-owned transaction as authoritative state. It also implements the relay
+storage port and owns the short claim and outcome transaction mechanics. Each
+service applies the outbox migration inside its own schema. Concurrent relays
+claim disjoint work with expiring leases and `SKIP LOCKED`; successful
+publication marks retained evidence rather than deleting it. The CloudEvents
+`(source, id)` pair scopes identity across storage and transport.
 
-`edgeagent-outbox-relay` processes one leased record per worker iteration so
-external I/O never occurs inside a database transaction and in-flight work is
-explicitly bounded. Durable publisher acknowledgement marks the retained record
-published. Transient or ambiguous failures use capped identity-jittered backoff;
-permanent failures and exhausted attempts enter retained terminal quarantine.
-Lease loss prevents a stale worker from recording an outcome after ownership
-has transferred.
+`edgeagent-outbox-relay` contains persistence-neutral application policy. It
+processes one leased record through publisher and storage ports per worker
+iteration, so external I/O never occurs inside a database transaction and
+in-flight work is explicitly bounded. Durable publisher acknowledgement marks
+the retained record published. Transient or ambiguous failures use capped
+identity-jittered backoff; permanent failures and exhausted attempts enter
+retained terminal quarantine. Lease loss prevents a stale worker from recording
+an outcome after ownership has transferred.
 
 Outbound replay appends bounded operator identity and reason evidence before it
 releases an immutable quarantined outbox record. Replay preserves the original
