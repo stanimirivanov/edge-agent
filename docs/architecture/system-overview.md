@@ -149,6 +149,15 @@ bounded deterministic retry to transient handler failures, and commits quarantin
 evidence before terminal settlement. It deliberately does not own intake loops,
 connection lifecycle, parallelism, or service-specific domain policy.
 
+`edgeagent-telemetry` owns the event-spine signal taxonomy independently of any
+exporter. The outbox relay and inbox handler emit operation counts, duration
+observations, and correlated structured events at publication, persistence,
+handling, and acknowledgement boundaries. Metrics use only bounded stage and
+outcome dimensions; message, correlation, causation, transport, and W3C parent
+identifiers remain trace fields, and message payloads never enter this API.
+Deployable composition roots install the selected OpenTelemetry-compatible
+recorder and subscriber rather than coupling event processing to an exporter.
+
 The local event-spine conformance test composes the production adapters across
 both PostgreSQL transaction boundaries and JetStream. It abandons a first
 delivery, reconnects through a new client, and requires the durable consumer to

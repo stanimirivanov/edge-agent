@@ -87,9 +87,10 @@ authorize the operator before invoking that storage boundary.
 | Lease expires before outcome persistence | State update returns `LeaseLost`; the next owner decides the record |
 | Outcome transaction fails | Do not report success; lease expiry provides recovery |
 
-`RelayOutcome` exposes idle, published, retry-scheduled, and quarantined states
-for bounded-cardinality metrics and structured logs. Handled contract and
-publication failures retain their error chain for redacted diagnostics.
+`RelayOutcome` exposes idle, published, retry-scheduled, and quarantined states.
+The relay emits bounded publication and committed-persistence signals through
+the [event-spine telemetry contract](event-spine-telemetry.md). Handled contract
+and publication failures retain their error chain for redacted diagnostics.
 `RelayError` covers policy, PostgreSQL, and outbox state-transition failures
 while preserving internal causes without exposing them in public text.
 
@@ -111,7 +112,7 @@ Run it only against an isolated development or CI database.
 
 This crate provides one bounded relay iteration, not a continuously running
 service. Lifecycle management, readiness, graceful shutdown, worker-count
-configuration, metrics export, active lease extension, operator inspection and
+configuration, telemetry exporter installation, active lease extension, operator inspection and
 replay APIs, and quarantine retention remain separate capabilities. The relay is
 sequential per worker by design; higher per-worker concurrency requires an
 explicit lease-duration and backpressure design rather than unbounded tasks.

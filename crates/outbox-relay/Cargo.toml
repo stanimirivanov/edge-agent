@@ -11,6 +11,7 @@ publish = false
 edgeagent-contracts.workspace = true
 edgeagent-messaging.workspace = true
 edgeagent-outbox-postgres.workspace = true
+edgeagent-telemetry.workspace = true
 tokio-postgres.workspace = true
 
 [dev-dependencies]

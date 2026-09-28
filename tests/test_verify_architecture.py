@@ -95,6 +95,16 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("async-nats", problems[0].message)
 
+    def test_telemetry_cannot_import_transport_or_storage_adapters(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/telemetry",
+            {*verify_architecture.TELEMETRY_DEPENDENCIES, "async-nats"},
+            verify_architecture.TELEMETRY_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("async-nats", problems[0].message)
+
     def test_missing_workspace_member_is_rejected(self) -> None:
         members = set(verify_architecture.PACKAGE_RULES)
         members.remove("services/research")

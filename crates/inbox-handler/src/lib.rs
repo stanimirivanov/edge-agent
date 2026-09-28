@@ -12,11 +12,14 @@ use edgeagent_inbox_postgres::{
 use edgeagent_messaging::{
     ConsumeError, DeliveryDisposition as SettlementDisposition, MessageDelivery,
 };
+use edgeagent_telemetry::{
+    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
+};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio_postgres::{Client, Transaction};
 
 const MAX_ATTEMPTS: u32 = 100;
@@ -274,13 +277,57 @@ pub async fn handle_once(
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
 ) -> Result<HandlingOutcome, HandlerError> {
-    let envelope = match MessageEnvelope::from_json(delivery.payload()) {
+    let attempt = delivery.metadata().delivery_attempt();
+    let decoded_envelope = MessageEnvelope::from_json(delivery.payload());
+    let telemetry_context = match &decoded_envelope {
+        Ok(envelope) => EventSpineContext::from_envelope(envelope),
+        Err(_) => EventSpineContext::from_delivery(delivery.metadata()),
+    };
+    let handling_started = Instant::now();
+    let result = handle_decoded_once(
+        client,
+        registry,
+        handler,
+        policy,
+        delivery,
+        decoded_envelope,
+        &telemetry_context,
+    )
+    .await;
+    let outcome = match &result {
+        Ok(HandlingOutcome::Applied { .. }) => EventSpineOutcome::Succeeded,
+        Ok(HandlingOutcome::Duplicate { .. }) => EventSpineOutcome::Duplicate,
+        Ok(HandlingOutcome::RetryRequested { .. }) => EventSpineOutcome::RetryScheduled,
+        Ok(HandlingOutcome::Quarantined { .. }) => EventSpineOutcome::Quarantined,
+        Err(_) => EventSpineOutcome::Failed,
+    };
+    record_event_spine_operation(
+        &telemetry_context,
+        EventSpineStage::Handling,
+        outcome,
+        attempt,
+        handling_started.elapsed(),
+    );
+    result
+}
+
+async fn handle_decoded_once(
+    client: &mut Client,
+    registry: &MessageRegistry<'_>,
+    handler: &dyn TransactionalMessageHandler,
+    policy: &HandlerPolicy,
+    delivery: MessageDelivery,
+    decoded_envelope: Result<MessageEnvelope, MessageContractError>,
+    telemetry_context: &EventSpineContext,
+) -> Result<HandlingOutcome, HandlerError> {
+    let envelope = match decoded_envelope {
         Ok(envelope) => envelope,
         Err(error) => {
             return quarantine(
                 client,
                 policy,
                 delivery,
+                telemetry_context,
                 "envelope_invalid",
                 MessageFailure::Envelope(error),
             )
@@ -292,6 +339,7 @@ pub async fn handle_once(
             client,
             policy,
             delivery,
+            telemetry_context,
             "routing_invalid",
             MessageFailure::Routing(error),
         )
@@ -302,7 +350,13 @@ pub async fn handle_once(
     let transaction = match client.transaction().await {
         Ok(transaction) => transaction,
         Err(error) => {
-            return retry(delivery, policy, MessageFailure::Storage(error)).await;
+            return retry(
+                delivery,
+                policy,
+                telemetry_context,
+                MessageFailure::Storage(error),
+            )
+            .await;
         }
     };
     let inbox_disposition = match inbox
@@ -313,7 +367,13 @@ pub async fn handle_once(
         Err(error) => {
             let kind = error.kind();
             if let Err(rollback_error) = transaction.rollback().await {
-                return retry(delivery, policy, MessageFailure::Storage(rollback_error)).await;
+                return retry(
+                    delivery,
+                    policy,
+                    telemetry_context,
+                    MessageFailure::Storage(rollback_error),
+                )
+                .await;
             }
             return match kind {
                 InboxErrorKind::Contract => {
@@ -321,6 +381,7 @@ pub async fn handle_once(
                         client,
                         policy,
                         delivery,
+                        telemetry_context,
                         "routing_invalid",
                         MessageFailure::Inbox(error),
                     )
@@ -331,13 +392,20 @@ pub async fn handle_once(
                         client,
                         policy,
                         delivery,
+                        telemetry_context,
                         "message_identity_conflict",
                         MessageFailure::Inbox(error),
                     )
                     .await
                 }
                 InboxErrorKind::Storage => {
-                    retry(delivery, policy, MessageFailure::Inbox(error)).await
+                    retry(
+                        delivery,
+                        policy,
+                        telemetry_context,
+                        MessageFailure::Inbox(error),
+                    )
+                    .await
                 }
                 InboxErrorKind::InvalidConsumerName
                 | InboxErrorKind::InvalidQuarantineEvidence
@@ -349,26 +417,85 @@ pub async fn handle_once(
 
     match inbox_disposition {
         InboxDisposition::Duplicate => {
+            let persistence_started = Instant::now();
             if let Err(error) = transaction.commit().await {
-                return retry(delivery, policy, MessageFailure::Storage(error)).await;
+                record_persistence(
+                    telemetry_context,
+                    delivery.metadata().delivery_attempt(),
+                    EventSpineOutcome::Failed,
+                    persistence_started,
+                );
+                return retry(
+                    delivery,
+                    policy,
+                    telemetry_context,
+                    MessageFailure::Storage(error),
+                )
+                .await;
             }
-            acknowledge(delivery, HandlingOutcomeKind::Duplicate).await
+            record_persistence(
+                telemetry_context,
+                delivery.metadata().delivery_attempt(),
+                EventSpineOutcome::Duplicate,
+                persistence_started,
+            );
+            acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Duplicate).await
         }
         InboxDisposition::FirstDelivery => match handler.handle(&transaction, &envelope).await {
             Ok(()) => {
+                let persistence_started = Instant::now();
                 if let Err(error) = transaction.commit().await {
-                    return retry(delivery, policy, MessageFailure::Storage(error)).await;
+                    record_persistence(
+                        telemetry_context,
+                        delivery.metadata().delivery_attempt(),
+                        EventSpineOutcome::Failed,
+                        persistence_started,
+                    );
+                    return retry(
+                        delivery,
+                        policy,
+                        telemetry_context,
+                        MessageFailure::Storage(error),
+                    )
+                    .await;
                 }
-                acknowledge(delivery, HandlingOutcomeKind::Applied).await
+                record_persistence(
+                    telemetry_context,
+                    delivery.metadata().delivery_attempt(),
+                    EventSpineOutcome::Succeeded,
+                    persistence_started,
+                );
+                acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Applied).await
             }
             Err(failure) => {
                 if let Err(rollback_error) = transaction.rollback().await {
-                    return retry(delivery, policy, MessageFailure::Storage(rollback_error)).await;
+                    return retry(
+                        delivery,
+                        policy,
+                        telemetry_context,
+                        MessageFailure::Storage(rollback_error),
+                    )
+                    .await;
                 }
-                resolve_handler_failure(client, policy, delivery, failure).await
+                resolve_handler_failure(client, policy, delivery, telemetry_context, failure).await
             }
         },
     }
+}
+
+fn record_persistence(
+    telemetry_context: &EventSpineContext,
+    attempt: u32,
+    outcome: EventSpineOutcome,
+    started: Instant,
+) {
+    record_event_spine_operation(
+        telemetry_context,
+        EventSpineStage::Persistence,
+        outcome,
+        attempt,
+        started.elapsed(),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -379,13 +506,23 @@ enum HandlingOutcomeKind {
 
 async fn acknowledge(
     delivery: MessageDelivery,
+    telemetry_context: &EventSpineContext,
     outcome: HandlingOutcomeKind,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
-    delivery
-        .settle(SettlementDisposition::Acknowledge)
-        .await
-        .map_err(HandlerError::settlement)?;
+    let started = Instant::now();
+    let settlement_result = delivery.settle(SettlementDisposition::Acknowledge).await;
+    record_acknowledgement(
+        telemetry_context,
+        attempt,
+        if settlement_result.is_ok() {
+            EventSpineOutcome::Succeeded
+        } else {
+            EventSpineOutcome::Failed
+        },
+        started,
+    );
+    settlement_result.map_err(HandlerError::settlement)?;
     Ok(match outcome {
         HandlingOutcomeKind::Applied => HandlingOutcome::Applied { attempt },
         HandlingOutcomeKind::Duplicate => HandlingOutcome::Duplicate { attempt },
@@ -396,6 +533,7 @@ async fn resolve_handler_failure(
     client: &mut Client,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
+    telemetry_context: &EventSpineContext,
     failure: HandlerFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     validate_failure_code(failure.code())?;
@@ -404,13 +542,20 @@ async fn resolve_handler_failure(
         delivery.metadata().delivery_attempt(),
         failure.kind(),
     ) {
-        retry(delivery, policy, MessageFailure::Handler(failure)).await
+        retry(
+            delivery,
+            policy,
+            telemetry_context,
+            MessageFailure::Handler(failure),
+        )
+        .await
     } else {
         let code = failure.code();
         quarantine(
             client,
             policy,
             delivery,
+            telemetry_context,
             code,
             MessageFailure::Handler(failure),
         )
@@ -425,14 +570,26 @@ fn should_retry_handler(policy: &HandlerPolicy, attempt: u32, kind: HandlerFailu
 async fn retry(
     delivery: MessageDelivery,
     policy: &HandlerPolicy,
+    telemetry_context: &EventSpineContext,
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
     let delay = retry_delay(policy, delivery.metadata().message_key(), attempt);
-    delivery
+    let started = Instant::now();
+    let settlement_result = delivery
         .settle(SettlementDisposition::RetryAfter(delay))
-        .await
-        .map_err(HandlerError::settlement)?;
+        .await;
+    record_acknowledgement(
+        telemetry_context,
+        attempt,
+        if settlement_result.is_ok() {
+            EventSpineOutcome::RetryScheduled
+        } else {
+            EventSpineOutcome::Failed
+        },
+        started,
+    );
+    settlement_result.map_err(HandlerError::settlement)?;
     Ok(HandlingOutcome::RetryRequested {
         attempt,
         delay,
@@ -444,6 +601,7 @@ async fn quarantine(
     client: &mut Client,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
+    telemetry_context: &EventSpineContext,
     failure_code: &'static str,
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
@@ -460,7 +618,13 @@ async fn quarantine(
     let transaction = match client.transaction().await {
         Ok(transaction) => transaction,
         Err(error) => {
-            return retry(delivery, policy, MessageFailure::Storage(error)).await;
+            return retry(
+                delivery,
+                policy,
+                telemetry_context,
+                MessageFailure::Storage(error),
+            )
+            .await;
         }
     };
     let disposition = match inbox
@@ -470,26 +634,81 @@ async fn quarantine(
         Ok(disposition) => disposition,
         Err(error) if error.kind() == InboxErrorKind::Storage => {
             if let Err(rollback_error) = transaction.rollback().await {
-                return retry(delivery, policy, MessageFailure::Storage(rollback_error)).await;
+                return retry(
+                    delivery,
+                    policy,
+                    telemetry_context,
+                    MessageFailure::Storage(rollback_error),
+                )
+                .await;
             }
-            return retry(delivery, policy, MessageFailure::Inbox(error)).await;
+            return retry(
+                delivery,
+                policy,
+                telemetry_context,
+                MessageFailure::Inbox(error),
+            )
+            .await;
         }
         Err(error) => return Err(HandlerError::inbox(error)),
     };
+    let persistence_started = Instant::now();
     if let Err(error) = transaction.commit().await {
-        return retry(delivery, policy, MessageFailure::Storage(error)).await;
+        record_persistence(
+            telemetry_context,
+            delivery.metadata().delivery_attempt(),
+            EventSpineOutcome::Failed,
+            persistence_started,
+        );
+        return retry(
+            delivery,
+            policy,
+            telemetry_context,
+            MessageFailure::Storage(error),
+        )
+        .await;
     }
     let attempt = delivery.metadata().delivery_attempt();
-    delivery
-        .settle(SettlementDisposition::Quarantined)
-        .await
-        .map_err(HandlerError::settlement)?;
+    record_persistence(
+        telemetry_context,
+        attempt,
+        EventSpineOutcome::Quarantined,
+        persistence_started,
+    );
+    let acknowledgement_started = Instant::now();
+    let settlement_result = delivery.settle(SettlementDisposition::Quarantined).await;
+    record_acknowledgement(
+        telemetry_context,
+        attempt,
+        if settlement_result.is_ok() {
+            EventSpineOutcome::Quarantined
+        } else {
+            EventSpineOutcome::Failed
+        },
+        acknowledgement_started,
+    );
+    settlement_result.map_err(HandlerError::settlement)?;
     Ok(HandlingOutcome::Quarantined {
         attempt,
         disposition,
         failure_code,
         failure,
     })
+}
+
+fn record_acknowledgement(
+    telemetry_context: &EventSpineContext,
+    attempt: u32,
+    outcome: EventSpineOutcome,
+    started: Instant,
+) {
+    record_event_spine_operation(
+        telemetry_context,
+        EventSpineStage::Acknowledgement,
+        outcome,
+        attempt,
+        started.elapsed(),
+    );
 }
 
 fn validate_failure_code(code: &str) -> Result<(), HandlerError> {

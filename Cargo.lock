@@ -316,6 +316,7 @@ dependencies = [
  "edgeagent-messaging-nats",
  "edgeagent-outbox-postgres",
  "edgeagent-outbox-relay",
+ "edgeagent-telemetry",
  "serde_json",
  "tokio",
  "tokio-postgres",
@@ -375,6 +376,7 @@ dependencies = [
  "edgeagent-contracts",
  "edgeagent-messaging",
  "edgeagent-outbox-postgres",
+ "edgeagent-telemetry",
  "serde_json",
  "tokio",
  "tokio-postgres",
@@ -393,6 +395,17 @@ name = "edgeagent-service-runtime"
 version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
+]
+
+[[package]]
+name = "edgeagent-telemetry"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "edgeagent-messaging",
+ "metrics",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -729,6 +742,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "metrics"
+version = "0.24.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89550ee9f79e88fef3119de263694973a8adb26c21d75322164fb8c493039fe2"
+dependencies = [
+ "portable-atomic",
+ "rapidhash",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -987,6 +1010,15 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rapidhash"
+version = "4.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5da7e78a036ce858e8d55b7e7dc8ba3a88b78350fd2155d3591bbd966b58589e"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "redox_syscall"
