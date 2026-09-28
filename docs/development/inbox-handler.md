@@ -99,6 +99,8 @@ then abandons a delivery and reconnects before handling its redelivery.
 
 This increment does not provide a long-running consumer loop, connection pool,
 parallelism, acknowledgement-progress extension, graceful shutdown, payload
-schema generation, authorization policy, operator replay, or telemetry. Domain
+schema generation, authorization policy, operator replay, or telemetry exporter
+installation. It emits bounded durable-outcome signals through the
+[event-spine telemetry contract](event-spine-telemetry.md). Domain
 handlers and their tables remain service-specific. Those capabilities stay in
 separate M02 increments because they change lifecycle, recovery, or domain behavior.

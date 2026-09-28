@@ -9,6 +9,7 @@ members = [
     "crates/outbox-postgres",
     "crates/outbox-relay",
     "crates/service-runtime",
+    "crates/telemetry",
     "services/audit-projector",
     "services/execution-simulator",
     "services/gateway",
@@ -33,10 +34,13 @@ edgeagent-messaging-nats = { path = "crates/messaging-nats" }
 edgeagent-outbox-postgres = { path = "crates/outbox-postgres" }
 edgeagent-outbox-relay = { path = "crates/outbox-relay" }
 edgeagent-service-runtime = { path = "crates/service-runtime" }
+edgeagent-telemetry = { path = "crates/telemetry" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
+metrics = "=0.24.6"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 tokio-postgres = "=0.7.18"
+tracing = "=0.1.44"
 url = "=2.5.8"
 
 [workspace.dependencies.tokio]

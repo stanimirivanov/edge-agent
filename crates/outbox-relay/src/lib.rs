@@ -5,9 +5,12 @@
 use edgeagent_contracts::{MessageRegistry, MessageRoutingError};
 use edgeagent_messaging::{MessagePublisher, PublishDisposition, PublishError, PublishErrorKind};
 use edgeagent_outbox_postgres::{ClaimedMessage, OutboxError, PostgresOutbox};
+use edgeagent_telemetry::{
+    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
+};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio_postgres::Client;
 
 const MAX_ATTEMPTS: u32 = 100;
@@ -196,14 +199,23 @@ pub async fn relay_once(
         return Ok(RelayOutcome::Idle);
     };
 
+    let mut telemetry_context = EventSpineContext::from_stored_identity(
+        message.message_source(),
+        message.message_id(),
+        message.message_type(),
+    );
     let envelope = match message.validated_envelope(registry) {
-        Ok(envelope) => envelope,
+        Ok(envelope) => {
+            telemetry_context = EventSpineContext::from_envelope(&envelope);
+            envelope
+        }
         Err(error) => {
             return quarantine(
                 client,
                 &outbox,
                 policy,
                 &message,
+                &telemetry_context,
                 QuarantineReason::StoredContractInvalid,
                 RelayMessageFailure::StoredContract(error),
             )
@@ -218,6 +230,7 @@ pub async fn relay_once(
                 &outbox,
                 policy,
                 &message,
+                &telemetry_context,
                 QuarantineReason::StoredContractInvalid,
                 RelayMessageFailure::StoredContract(error),
             )
@@ -225,24 +238,62 @@ pub async fn relay_once(
         }
     };
 
+    let publication_started = Instant::now();
     match publisher.publish(definition, &envelope).await {
         Ok(receipt) => {
-            let transaction = client.transaction().await.map_err(RelayError::storage)?;
-            outbox
-                .mark_published(
-                    &transaction,
-                    message.message_source(),
-                    message.message_id(),
-                    &policy.lease_owner,
-                )
-                .await?;
-            transaction.commit().await.map_err(RelayError::storage)?;
+            let disposition = receipt.disposition();
+            record_event_spine_operation(
+                &telemetry_context,
+                EventSpineStage::Publication,
+                match disposition {
+                    PublishDisposition::Persisted => EventSpineOutcome::Succeeded,
+                    PublishDisposition::Duplicate => EventSpineOutcome::Duplicate,
+                },
+                message.attempt(),
+                publication_started.elapsed(),
+            );
+            let persistence_started = Instant::now();
+            let persistence_result = async {
+                let transaction = client.transaction().await.map_err(RelayError::storage)?;
+                outbox
+                    .mark_published(
+                        &transaction,
+                        message.message_source(),
+                        message.message_id(),
+                        &policy.lease_owner,
+                    )
+                    .await?;
+                transaction.commit().await.map_err(RelayError::storage)?;
+                Ok::<(), RelayError>(())
+            }
+            .await;
+            record_event_spine_operation(
+                &telemetry_context,
+                EventSpineStage::Persistence,
+                if persistence_result.is_ok() {
+                    EventSpineOutcome::Succeeded
+                } else {
+                    EventSpineOutcome::Failed
+                },
+                message.attempt(),
+                persistence_started.elapsed(),
+            );
+            persistence_result?;
             Ok(RelayOutcome::Published {
-                disposition: receipt.disposition(),
+                disposition,
                 attempt: message.attempt(),
             })
         }
-        Err(error) => resolve_failure(client, &outbox, policy, &message, error).await,
+        Err(error) => {
+            record_event_spine_operation(
+                &telemetry_context,
+                EventSpineStage::Publication,
+                EventSpineOutcome::Failed,
+                message.attempt(),
+                publication_started.elapsed(),
+            );
+            resolve_failure(client, &outbox, policy, &message, &telemetry_context, error).await
+        }
     }
 }
 
@@ -251,6 +302,7 @@ async fn resolve_failure(
     outbox: &PostgresOutbox,
     policy: &RelayPolicy,
     message: &ClaimedMessage,
+    telemetry_context: &EventSpineContext,
     failure: PublishError,
 ) -> Result<RelayOutcome, RelayError> {
     let failure_kind = failure.kind();
@@ -265,18 +317,35 @@ async fn resolve_failure(
             delay,
             failure_code,
         } => {
-            let transaction = client.transaction().await.map_err(RelayError::storage)?;
-            outbox
-                .release_for_retry(
-                    &transaction,
-                    message.message_source(),
-                    message.message_id(),
-                    &policy.lease_owner,
-                    delay,
-                    failure_code,
-                )
-                .await?;
-            transaction.commit().await.map_err(RelayError::storage)?;
+            let persistence_started = Instant::now();
+            let persistence_result = async {
+                let transaction = client.transaction().await.map_err(RelayError::storage)?;
+                outbox
+                    .release_for_retry(
+                        &transaction,
+                        message.message_source(),
+                        message.message_id(),
+                        &policy.lease_owner,
+                        delay,
+                        failure_code,
+                    )
+                    .await?;
+                transaction.commit().await.map_err(RelayError::storage)?;
+                Ok::<(), RelayError>(())
+            }
+            .await;
+            record_event_spine_operation(
+                telemetry_context,
+                EventSpineStage::Persistence,
+                if persistence_result.is_ok() {
+                    EventSpineOutcome::RetryScheduled
+                } else {
+                    EventSpineOutcome::Failed
+                },
+                message.attempt(),
+                persistence_started.elapsed(),
+            );
+            persistence_result?;
             Ok(RelayOutcome::RetryScheduled {
                 failure,
                 attempt: message.attempt(),
@@ -289,6 +358,7 @@ async fn resolve_failure(
                 outbox,
                 policy,
                 message,
+                telemetry_context,
                 reason,
                 RelayMessageFailure::Publication(failure),
             )
@@ -302,20 +372,38 @@ async fn quarantine(
     outbox: &PostgresOutbox,
     policy: &RelayPolicy,
     message: &ClaimedMessage,
+    telemetry_context: &EventSpineContext,
     reason: QuarantineReason,
     failure: RelayMessageFailure,
 ) -> Result<RelayOutcome, RelayError> {
-    let transaction = client.transaction().await.map_err(RelayError::storage)?;
-    outbox
-        .quarantine(
-            &transaction,
-            message.message_source(),
-            message.message_id(),
-            &policy.lease_owner,
-            reason.code(),
-        )
-        .await?;
-    transaction.commit().await.map_err(RelayError::storage)?;
+    let persistence_started = Instant::now();
+    let persistence_result = async {
+        let transaction = client.transaction().await.map_err(RelayError::storage)?;
+        outbox
+            .quarantine(
+                &transaction,
+                message.message_source(),
+                message.message_id(),
+                &policy.lease_owner,
+                reason.code(),
+            )
+            .await?;
+        transaction.commit().await.map_err(RelayError::storage)?;
+        Ok::<(), RelayError>(())
+    }
+    .await;
+    record_event_spine_operation(
+        telemetry_context,
+        EventSpineStage::Persistence,
+        if persistence_result.is_ok() {
+            EventSpineOutcome::Quarantined
+        } else {
+            EventSpineOutcome::Failed
+        },
+        message.attempt(),
+        persistence_started.elapsed(),
+    );
+    persistence_result?;
     Ok(RelayOutcome::Quarantined {
         reason,
         attempt: message.attempt(),

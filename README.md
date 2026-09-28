@@ -98,6 +98,7 @@ for the complete ownership, security, and handoff contract.
 - [Messaging adapters](docs/development/messaging-adapters.md)
 - [Transactional inbox handler](docs/development/inbox-handler.md)
 - [Event-spine recovery conformance](docs/development/event-spine-conformance.md)
+- [Event-spine telemetry](docs/development/event-spine-telemetry.md)
 - [Transactional PostgreSQL outbox](docs/development/postgres-outbox.md)
 - [Bounded outbox relay](docs/development/outbox-relay.md)
 - [Transactional PostgreSQL inbox](docs/development/postgres-inbox.md)
@@ -125,6 +126,8 @@ The initial workspace contains:
   retry, confirmed publication, or retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
   consumer's domain transition and retains terminal inbound quarantine evidence;
+- `edgeagent-telemetry`, which emits bounded event-spine metrics and correlated
+  structured diagnostics without exposing payloads as telemetry;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
 - five independently buildable service binaries under `services/`.
 
@@ -165,14 +168,20 @@ an opaque redelivery-stable message key, and confirmed acknowledge/retry/termina
 settlement. The inbox adapter durably retains exact poison-message bytes and a
 bounded reason before terminal settlement. The handler coordinator composes
 these primitives into commit-and-ack, delayed retry, or quarantine-and-terminate.
+The relay and handler emit exporter-neutral counters, duration histograms, and
+structured diagnostic events at their durable publication, persistence,
+handling, and acknowledgement boundaries. Metric dimensions are restricted to
+bounded stage and outcome values; message and trace identities remain diagnostic
+fields and payloads are never emitted.
 Service-specific domain handlers, inbound quarantine replay, control-plane replay
 authorization, and generated schema validation remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md),
 [messaging adapter guide](docs/development/messaging-adapters.md),
 [handler guide](docs/development/inbox-handler.md),
 [outbox guide](docs/development/postgres-outbox.md),
-[relay guide](docs/development/outbox-relay.md), and
-[inbox guide](docs/development/postgres-inbox.md).
+[relay guide](docs/development/outbox-relay.md),
+[inbox guide](docs/development/postgres-inbox.md), and
+[telemetry guide](docs/development/event-spine-telemetry.md).
 
 ## OCI images
 

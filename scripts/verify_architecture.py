@@ -41,11 +41,12 @@ MESSAGING_NATS = "edgeagent-messaging-nats"
 OUTBOX_POSTGRES = "edgeagent-outbox-postgres"
 OUTBOX_RELAY = "edgeagent-outbox-relay"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
+TELEMETRY = "edgeagent-telemetry"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 INBOX_HANDLER_DEPENDENCIES = frozenset(
-    {CONTRACTS, INBOX_POSTGRES, MESSAGING, "tokio-postgres"}
+    {CONTRACTS, INBOX_POSTGRES, MESSAGING, TELEMETRY, "tokio-postgres"}
 )
 INBOX_HANDLER_DEV_DEPENDENCIES = frozenset(
     {
@@ -65,9 +66,11 @@ MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, "tokio-postgres"})
 OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_RELAY_DEPENDENCIES = frozenset(
-    {CONTRACTS, MESSAGING, OUTBOX_POSTGRES, "tokio-postgres"}
+    {CONTRACTS, MESSAGING, OUTBOX_POSTGRES, TELEMETRY, "tokio-postgres"}
 )
 OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
+TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
+TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 
 PACKAGE_RULES = {
@@ -111,6 +114,12 @@ PACKAGE_RULES = {
         SERVICE_RUNTIME,
         "lib",
         frozenset({CONTRACTS}),
+    ),
+    "crates/telemetry": PackageRule(
+        TELEMETRY,
+        "lib",
+        TELEMETRY_DEPENDENCIES,
+        TELEMETRY_DEV_DEPENDENCIES,
     ),
     "services/audit-projector": PackageRule(
         "edgeagent-audit-projector",
