@@ -13,13 +13,13 @@
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
   storage are implemented. Bounded outbox relay retries and quarantine are also
   implemented, along with one-at-a-time JetStream delivery and confirmed
-  settlement. Outbound quarantine replay now records bounded operator audit
-  evidence before releasing immutable messages. Inbound poison-message evidence
-  can be retained transactionally before terminal settlement, and a bounded
-  coordinator now composes inbox, domain transaction, retry, quarantine, and
-  acknowledgement. Local conformance now proves one durable command survives
-  an abandoned delivery across both client and NATS broker restarts with one
-  domain transition. Domain workflows remain absent.
+  settlement. Outbound and inbound quarantine replay authorization now records
+  bounded operator audit evidence before immutable messages can be released.
+  Inbound poison-message evidence is retained transactionally before terminal
+  settlement, and a bounded coordinator composes inbox, domain transaction,
+  retry, quarantine, and acknowledgement. Local conformance proves one durable
+  command survives an abandoned delivery across both client and NATS broker
+  restarts with one domain transition. Domain workflows remain absent.
 
 ## What EdgeAgent is
 
@@ -125,7 +125,8 @@ The initial workspace contains:
 - `edgeagent-outbox-relay`, which maps durable publisher outcomes to bounded
   retry, confirmed publication, or retained quarantine;
 - `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
-  consumer's domain transition and retains terminal inbound quarantine evidence;
+  consumer's domain transition, retains terminal inbound quarantine evidence,
+  and audits authorized access to exact replay bytes;
 - `edgeagent-telemetry`, which emits bounded event-spine metrics and correlated
   structured diagnostics without exposing payloads as telemetry;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
@@ -166,15 +167,16 @@ acknowledgements and failures to published, delayed-retry, or terminal-quarantin
 state. The consumer adapter exposes bounded pull delivery, redelivery metadata,
 an opaque redelivery-stable message key, and confirmed acknowledge/retry/terminal
 settlement. The inbox adapter durably retains exact poison-message bytes and a
-bounded reason before terminal settlement. The handler coordinator composes
-these primitives into commit-and-ack, delayed retry, or quarantine-and-terminate.
+bounded reason before terminal settlement, then requires append-only operator
+authorization before exposing those bytes for replay. The handler coordinator
+composes these primitives into commit-and-ack, delayed retry, or quarantine-and-terminate.
 The relay and handler emit exporter-neutral counters, duration histograms, and
 structured diagnostic events at their durable publication, persistence,
 handling, and acknowledgement boundaries. Metric dimensions are restricted to
 bounded stage and outcome values; message and trace identities remain diagnostic
 fields and payloads are never emitted.
-Service-specific domain handlers, inbound quarantine replay, control-plane replay
-authorization, and generated schema validation remain separate M02 increments. See the
+Service-specific domain handlers, the control-plane replay publisher, and
+generated schema validation remain separate M02 increments. See the
 [message contract guide](docs/development/message-contracts.md),
 [messaging adapter guide](docs/development/messaging-adapters.md),
 [handler guide](docs/development/inbox-handler.md),
