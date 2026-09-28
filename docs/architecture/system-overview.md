@@ -135,6 +135,13 @@ consumer and opaque transport message key. Identical redelivery updates bounded
 attempt evidence; changed content under the same key fails closed. A consumer
 may request terminal broker settlement only after that quarantine transaction commits.
 
+`edgeagent-inbox-handler` composes those storage and transport primitives for one
+delivery. It validates before domain work, invokes service-owned database-only
+handlers inside the inbox transaction, acknowledges only after commit, applies
+bounded deterministic retry to transient handler failures, and commits quarantine
+evidence before terminal settlement. It deliberately does not own intake loops,
+connection lifecycle, parallelism, or service-specific domain policy.
+
 The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by

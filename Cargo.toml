@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/contracts",
+    "crates/inbox-handler",
     "crates/inbox-postgres",
     "crates/messaging",
     "crates/messaging-nats",
@@ -26,6 +27,7 @@ repository = "https://github.com/stanimirivanov/edge-agent"
 async-nats = { version = "=0.50.0", default-features = false, features = ["jetstream", "ring", "server_2_14"] }
 cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-features = false }
 edgeagent-contracts = { path = "crates/contracts" }
+edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }
 edgeagent-messaging = { path = "crates/messaging" }
 edgeagent-outbox-postgres = { path = "crates/outbox-postgres" }
 edgeagent-service-runtime = { path = "crates/service-runtime" }
