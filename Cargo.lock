@@ -306,6 +306,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-inbox-handler"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
+ "edgeagent-messaging",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "edgeagent-inbox-postgres"
 version = "0.1.0"
 dependencies = [

@@ -12,8 +12,8 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, handler composition, and operator replay remain
-  separate M02 capabilities. PostgreSQL outbox, inbox, and inbound quarantine
+- Generated payload schemas, service-specific domain handlers, and operator
+  replay remain separate M02 capabilities. PostgreSQL outbox, inbox, and inbound quarantine
   persistence implement transaction boundaries, while messaging adapters
   provide durable publication, delivery, and confirmed settlement.
 
@@ -191,8 +191,8 @@ process. The NATS publisher binding and PostgreSQL outbox are documented in the
 [messaging adapter guide](messaging-adapters.md) and
 [outbox guide](postgres-outbox.md). The transactional consumer boundary is
 documented in the [inbox guide](postgres-inbox.md). Generated JSON Schemas, a
-schema registry, stream provisioning, long-running relay and handler
-composition, quarantine replay tooling, and telemetry export remain independently
+schema registry, stream provisioning, long-running relay and consumer service
+loops, quarantine replay tooling, and telemetry export remain independently
 reviewable M02 increments built on this contract. Outbound relay mechanics are documented in the
 [relay guide](outbox-relay.md).
 

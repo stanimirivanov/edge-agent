@@ -141,7 +141,8 @@ the schema. Run it only against an isolated development or CI database.
 ## Current limitations
 
 This crate provides transactional storage semantics, not a running transport
-consumer. It does not classify handler failures, choose acknowledgement deadlines,
-retry delays or attempt limits, compose terminal settlement, delete evidence,
-authorize replay, or emit telemetry. Those policies remain separate M02 increments
-because they affect message loss, recovery time, evidence retention, and operator control.
+consumer. Transactional failure classification, retry, and settlement composition
+are implemented separately in the [handler guide](inbox-handler.md). Neither crate
+chooses acknowledgement-progress deadlines, deletes evidence, authorizes replay,
+or emits telemetry; those capabilities remain separate M02 increments because
+they affect message loss, recovery time, evidence retention, and operator control.

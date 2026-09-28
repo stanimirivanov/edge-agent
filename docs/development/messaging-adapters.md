@@ -129,9 +129,10 @@ The adapters publish and consume one message at a time. They do not run a
 service loop, validate payload schemas, invoke domain handlers, persist inbound
 quarantine evidence, extend acknowledgement deadlines, or authorize replay.
 Consumer `max_deliver` exhaustion is not a quarantine mechanism and must not be
-configured to discard work before the future application policy records a
-terminal decision. Stream/consumer provisioning, handler composition, inbound
-failure policy, operator replay, and messaging telemetry remain separate M02
+configured to discard work before the handler policy records a
+terminal decision. Stream/consumer provisioning, long-running intake, operator
+replay, and messaging telemetry remain separate M02
 capabilities. PostgreSQL outbox storage and the bounded relay are documented in
 the [outbox](postgres-outbox.md) and [relay](outbox-relay.md) guides. Durable
-inbound quarantine storage is documented in the [inbox guide](postgres-inbox.md).
+inbound quarantine storage is documented in the [inbox guide](postgres-inbox.md),
+and transactional processing policy in the [handler guide](inbox-handler.md).
