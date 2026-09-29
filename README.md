@@ -16,8 +16,10 @@
   settlement. Outbound and inbound quarantine replay authorization now records
   bounded operator audit evidence before immutable messages can be released.
   Inbound poison-message evidence is retained transactionally before terminal
-  settlement, and a bounded coordinator composes inbox, domain transaction,
-  retry, quarantine, and acknowledgement. Local conformance proves one durable
+  settlement, and a persistence-neutral coordinator composes an atomic inbound
+  store with retry, quarantine, and acknowledgement policy. The PostgreSQL
+  adapter owns transaction mechanics and preserves one commit for inbox,
+  service-owned state, and outbox work. Local conformance proves one durable
   command survives an abandoned delivery across both client and NATS broker
   restarts with one domain transition. Domain workflows remain absent.
 
@@ -114,21 +116,22 @@ The initial workspace contains:
 
 - `edgeagent-contracts`, which owns stable component identities, descriptor
   validation, and the validated CloudEvents message envelope;
-- `edgeagent-messaging`, which owns application publication, consumption, and
-  outbox relay-storage ports plus portable acknowledgement/failure semantics;
+- `edgeagent-messaging`, which owns application publication, consumption,
+  outbox relay-storage, and atomic inbound-store ports plus portable
+  acknowledgement/failure semantics;
 - `edgeagent-messaging-nats`, which publishes and pulls messages through NATS
   JetStream without leaking broker APIs into application code;
-- `edgeagent-inbox-handler`, which coordinates one transactional delivery from
-  validation through inbox/domain work and confirmed settlement;
+- `edgeagent-inbox-handler`, which applies persistence-neutral policy to one
+  delivery from validation through atomic processing and confirmed settlement;
 - `edgeagent-outbox-postgres`, which atomically stores exact envelope bytes,
   implements the relay-storage port with short transactions, leases unpublished
   records, and audits authorized outbound replay requests;
 - `edgeagent-outbox-relay`, which applies persistence-neutral policy to map
   durable publisher outcomes to bounded retry, confirmed publication, or
   retained quarantine;
-- `edgeagent-inbox-postgres`, which atomically deduplicates delivery with a
-  consumer's domain transition, retains terminal inbound quarantine evidence,
-  and audits authorized access to exact replay bytes;
+- `edgeagent-inbox-postgres`, which implements the atomic inbound-store port,
+  owns PostgreSQL transaction boundaries around inbox and service-owned SQL,
+  retains terminal quarantine evidence, and audits access to exact replay bytes;
 - `edgeagent-telemetry`, which emits bounded event-spine metrics and correlated
   structured diagnostics without exposing payloads as telemetry;
 - `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
@@ -158,22 +161,25 @@ limit, and declares work-queue or replay retention semantics. A committed
 golden fixture fixes the initial wire representation.
 
 The contract does not generate identifiers or read the wall clock. The
-application-owned publisher and relay-storage ports keep orchestration
-independent of transport and database implementations. The NATS adapter
-validates every attempt, derives its subject, attaches the stable `(source, id)`
-identity for broker deduplication, and awaits a JetStream persistence
-acknowledgement. The PostgreSQL outbox stores the same envelope bytes inside a
-caller-owned domain transaction and implements short, lease-guarded relay
-transactions. The PostgreSQL inbox records a
-consumer-scoped identity in the same transaction as its domain effect, so a
-redelivery cannot repeat a committed transition. A bounded relay maps publisher
+application-owned publisher, relay-storage, and inbound-store ports keep
+orchestration independent of transport and database implementations. The NATS
+adapter validates every attempt, derives its subject, attaches the stable
+`(source, id)` identity for broker deduplication, and awaits a JetStream
+persistence acknowledgement. The PostgreSQL outbox stores the same envelope
+bytes inside a caller-owned domain transaction and implements short,
+lease-guarded relay transactions. The PostgreSQL inbound-store adapter owns
+begin, commit, and rollback while it records a consumer-scoped identity and
+invokes service-owned SQL in the same transaction, so a redelivery cannot
+repeat a committed transition. Only its adapter-specific callback receives the
+concrete database transaction. A bounded relay maps publisher
 acknowledgements and failures to published, delayed-retry, or terminal-quarantine
 state. The consumer adapter exposes bounded pull delivery, redelivery metadata,
 an opaque redelivery-stable message key, and confirmed acknowledge/retry/terminal
 settlement. The inbox adapter durably retains exact poison-message bytes and a
 bounded reason before terminal settlement, then requires append-only operator
-authorization before exposing those bytes for replay. The handler coordinator
-composes these primitives into commit-and-ack, delayed retry, or quarantine-and-terminate.
+authorization before exposing those bytes for replay. The persistence-neutral
+handler coordinator maps committed store results and portable failure
+categories to commit-and-ack, delayed retry, or quarantine-and-terminate.
 The relay and handler emit exporter-neutral counters, duration histograms, and
 structured diagnostic events at their durable publication, persistence,
 handling, and acknowledgement boundaries. Metric dimensions are restricted to

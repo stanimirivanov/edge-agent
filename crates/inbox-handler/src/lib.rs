@@ -5,129 +5,21 @@
 use edgeagent_contracts::{
     MessageContractError, MessageEnvelope, MessageRegistry, MessageRoutingError,
 };
-use edgeagent_inbox_postgres::{
-    DeliveryDisposition as InboxDisposition, InboxError, InboxErrorKind, PostgresInbox,
-    QuarantineDisposition, QuarantineEvidence,
-};
 use edgeagent_messaging::{
-    ConsumeError, DeliveryDisposition as SettlementDisposition, MessageDelivery,
+    ConsumeError, DeliveryDisposition as SettlementDisposition, InboundMessageStore,
+    InboundProcessingError, InboundQuarantine, InboxDisposition, InboxStoreError,
+    InboxStoreErrorKind, MessageDelivery,
 };
+pub use edgeagent_messaging::{HandlerFailure, HandlerFailureKind, QuarantineDisposition};
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::future::Future;
-use std::pin::Pin;
 use std::time::{Duration, Instant};
-use tokio_postgres::{Client, Transaction};
 
 const MAX_ATTEMPTS: u32 = 100;
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// Future returned by one transactional domain handler invocation.
-pub type HandlerFuture<'handler> =
-    Pin<Box<dyn Future<Output = Result<(), HandlerFailure>> + Send + 'handler>>;
-
-/// Service-owned domain work performed inside the inbox transaction.
-pub trait TransactionalMessageHandler: Sync {
-    /// Apply the first delivery's domain transition and enqueue resulting messages.
-    ///
-    /// Implementations MUST restrict this future to database work on the supplied
-    /// transaction. Network calls and other external effects cannot be rolled back.
-    fn handle<'handler>(
-        &'handler self,
-        transaction: &'handler Transaction<'_>,
-        envelope: &'handler MessageEnvelope,
-    ) -> HandlerFuture<'handler>;
-}
-
-/// Handler failure classification used by retry and quarantine policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HandlerFailureKind {
-    /// The same immutable message may succeed on a later delivery.
-    Transient,
-    /// Retrying cannot change the result without code, policy, or operator action.
-    Permanent,
-}
-
-impl Display for HandlerFailureKind {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Transient => formatter.write_str("message handler failed transiently"),
-            Self::Permanent => formatter.write_str("message handler rejected the delivery"),
-        }
-    }
-}
-
-/// Bounded handler failure with an operator-safe static reason code.
-#[derive(Debug)]
-pub struct HandlerFailure {
-    kind: HandlerFailureKind,
-    code: &'static str,
-    source: Option<Box<dyn Error + Send + Sync>>,
-}
-
-impl HandlerFailure {
-    /// Construct a transient failure without exposing internal details.
-    #[must_use]
-    pub const fn transient(code: &'static str) -> Self {
-        Self {
-            kind: HandlerFailureKind::Transient,
-            code,
-            source: None,
-        }
-    }
-
-    /// Construct a permanent failure without exposing internal details.
-    #[must_use]
-    pub const fn permanent(code: &'static str) -> Self {
-        Self {
-            kind: HandlerFailureKind::Permanent,
-            code,
-            source: None,
-        }
-    }
-
-    /// Construct a classified failure while preserving its internal cause.
-    #[must_use]
-    pub fn with_source<E>(kind: HandlerFailureKind, code: &'static str, source: E) -> Self
-    where
-        E: Error + Send + Sync + 'static,
-    {
-        Self {
-            kind,
-            code,
-            source: Some(Box::new(source)),
-        }
-    }
-
-    /// Return the retry classification.
-    #[must_use]
-    pub const fn kind(&self) -> HandlerFailureKind {
-        self.kind
-    }
-
-    /// Return the candidate quarantine reason code.
-    #[must_use]
-    pub const fn code(&self) -> &'static str {
-        self.code
-    }
-}
-
-impl Display for HandlerFailure {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.kind, formatter)
-    }
-}
-
-impl Error for HandlerFailure {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|source| source as &(dyn Error + 'static))
-    }
-}
 
 /// Bounded retry policy shared by every delivery handled by one logical consumer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -193,9 +85,7 @@ pub enum MessageFailure {
     /// The decoded envelope is unsupported or violates its registered route.
     Routing(MessageRoutingError),
     /// Inbox state rejected or could not persist the delivery.
-    Inbox(InboxError),
-    /// PostgreSQL could not begin, roll back, or commit a transaction.
-    Storage(tokio_postgres::Error),
+    Inbox(InboxStoreError),
     /// The service-owned domain handler returned a classified failure.
     Handler(HandlerFailure),
 }
@@ -206,7 +96,6 @@ impl Display for MessageFailure {
             Self::Envelope(_) => formatter.write_str("message envelope is invalid"),
             Self::Routing(_) => formatter.write_str("message route is invalid"),
             Self::Inbox(error) => Display::fmt(error, formatter),
-            Self::Storage(_) => formatter.write_str("message transaction failed"),
             Self::Handler(error) => Display::fmt(error, formatter),
         }
     }
@@ -218,7 +107,6 @@ impl Error for MessageFailure {
             Self::Envelope(error) => Some(error),
             Self::Routing(error) => Some(error),
             Self::Inbox(error) => Some(error),
-            Self::Storage(error) => Some(error),
             Self::Handler(error) => Some(error),
         }
     }
@@ -261,19 +149,19 @@ pub enum HandlingOutcome {
 
 /// Process and settle exactly one delivery.
 ///
-/// Domain writes occur only for a first inbox delivery and share its transaction.
-/// Acknowledgement follows commit. Permanent failures commit quarantine evidence
-/// before terminal settlement. Transient failures request deterministic delayed
-/// redelivery; infrastructure failures are never converted into terminal success.
+/// The supplied store owns the atomic inbox and service transition. Broker
+/// acknowledgement follows its committed result. Permanent failures commit
+/// quarantine evidence before terminal settlement. Transient failures request
+/// deterministic delayed redelivery; infrastructure failures are never
+/// converted into terminal success.
 ///
 /// # Errors
 ///
 /// Returns a configuration, invariant, quarantine, or broker-settlement failure.
 /// The owned delivery is dropped without successful settlement on error.
 pub async fn handle_once(
-    client: &mut Client,
+    store: &mut dyn InboundMessageStore,
     registry: &MessageRegistry<'_>,
-    handler: &dyn TransactionalMessageHandler,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
 ) -> Result<HandlingOutcome, HandlerError> {
@@ -285,9 +173,8 @@ pub async fn handle_once(
     };
     let handling_started = Instant::now();
     let result = handle_decoded_once(
-        client,
+        store,
         registry,
-        handler,
         policy,
         delivery,
         decoded_envelope,
@@ -312,9 +199,8 @@ pub async fn handle_once(
 }
 
 async fn handle_decoded_once(
-    client: &mut Client,
+    store: &mut dyn InboundMessageStore,
     registry: &MessageRegistry<'_>,
-    handler: &dyn TransactionalMessageHandler,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
     decoded_envelope: Result<MessageEnvelope, MessageContractError>,
@@ -324,7 +210,7 @@ async fn handle_decoded_once(
         Ok(envelope) => envelope,
         Err(error) => {
             return quarantine(
-                client,
+                store,
                 policy,
                 delivery,
                 telemetry_context,
@@ -336,7 +222,7 @@ async fn handle_decoded_once(
     };
     if let Err(error) = registry.validate(&envelope) {
         return quarantine(
-            client,
+            store,
             policy,
             delivery,
             telemetry_context,
@@ -346,96 +232,12 @@ async fn handle_decoded_once(
         .await;
     }
 
-    let inbox = PostgresInbox;
-    let transaction = match client.transaction().await {
-        Ok(transaction) => transaction,
-        Err(error) => {
-            return retry(
-                delivery,
-                policy,
-                telemetry_context,
-                MessageFailure::Storage(error),
-            )
-            .await;
-        }
-    };
-    let inbox_disposition = match inbox
-        .record_delivery(&transaction, &policy.consumer_name, registry, &envelope)
+    let persistence_started = Instant::now();
+    match store
+        .process(&policy.consumer_name, registry, &envelope)
         .await
     {
-        Ok(disposition) => disposition,
-        Err(error) => {
-            let kind = error.kind();
-            if let Err(rollback_error) = transaction.rollback().await {
-                return retry(
-                    delivery,
-                    policy,
-                    telemetry_context,
-                    MessageFailure::Storage(rollback_error),
-                )
-                .await;
-            }
-            return match kind {
-                InboxErrorKind::Contract => {
-                    quarantine(
-                        client,
-                        policy,
-                        delivery,
-                        telemetry_context,
-                        "routing_invalid",
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
-                }
-                InboxErrorKind::MessageIdentityConflict => {
-                    quarantine(
-                        client,
-                        policy,
-                        delivery,
-                        telemetry_context,
-                        "message_identity_conflict",
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
-                }
-                InboxErrorKind::Storage => {
-                    retry(
-                        delivery,
-                        policy,
-                        telemetry_context,
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
-                }
-                InboxErrorKind::InvalidConsumerName
-                | InboxErrorKind::InvalidQuarantineEvidence
-                | InboxErrorKind::QuarantineIdentityConflict
-                | InboxErrorKind::InvalidReplayRequest
-                | InboxErrorKind::ReplayRequestConflict
-                | InboxErrorKind::NotQuarantined
-                | InboxErrorKind::StorageInvariant => Err(HandlerError::inbox(error)),
-            };
-        }
-    };
-
-    match inbox_disposition {
-        InboxDisposition::Duplicate => {
-            let persistence_started = Instant::now();
-            if let Err(error) = transaction.commit().await {
-                record_persistence(
-                    telemetry_context,
-                    delivery.metadata().delivery_attempt(),
-                    EventSpineOutcome::Failed,
-                    persistence_started,
-                );
-                return retry(
-                    delivery,
-                    policy,
-                    telemetry_context,
-                    MessageFailure::Storage(error),
-                )
-                .await;
-            }
+        Ok(InboxDisposition::Duplicate) => {
             record_persistence(
                 telemetry_context,
                 delivery.metadata().delivery_attempt(),
@@ -444,45 +246,60 @@ async fn handle_decoded_once(
             );
             acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Duplicate).await
         }
-        InboxDisposition::FirstDelivery => match handler.handle(&transaction, &envelope).await {
-            Ok(()) => {
-                let persistence_started = Instant::now();
-                if let Err(error) = transaction.commit().await {
-                    record_persistence(
+        Ok(InboxDisposition::Applied) => {
+            record_persistence(
+                telemetry_context,
+                delivery.metadata().delivery_attempt(),
+                EventSpineOutcome::Succeeded,
+                persistence_started,
+            );
+            acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Applied).await
+        }
+        Err(InboundProcessingError::Handler(failure)) => {
+            resolve_handler_failure(store, policy, delivery, telemetry_context, failure).await
+        }
+        Err(InboundProcessingError::Store(error)) => {
+            record_persistence(
+                telemetry_context,
+                delivery.metadata().delivery_attempt(),
+                EventSpineOutcome::Failed,
+                persistence_started,
+            );
+            match error.kind() {
+                InboxStoreErrorKind::Contract => {
+                    quarantine(
+                        store,
+                        policy,
+                        delivery,
                         telemetry_context,
-                        delivery.metadata().delivery_attempt(),
-                        EventSpineOutcome::Failed,
-                        persistence_started,
-                    );
-                    return retry(
+                        "routing_invalid",
+                        MessageFailure::Inbox(error),
+                    )
+                    .await
+                }
+                InboxStoreErrorKind::MessageIdentityConflict => {
+                    quarantine(
+                        store,
+                        policy,
+                        delivery,
+                        telemetry_context,
+                        "message_identity_conflict",
+                        MessageFailure::Inbox(error),
+                    )
+                    .await
+                }
+                InboxStoreErrorKind::Unavailable => {
+                    retry(
                         delivery,
                         policy,
                         telemetry_context,
-                        MessageFailure::Storage(error),
+                        MessageFailure::Inbox(error),
                     )
-                    .await;
+                    .await
                 }
-                record_persistence(
-                    telemetry_context,
-                    delivery.metadata().delivery_attempt(),
-                    EventSpineOutcome::Succeeded,
-                    persistence_started,
-                );
-                acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Applied).await
+                InboxStoreErrorKind::Invariant => Err(HandlerError::inbox(error)),
             }
-            Err(failure) => {
-                if let Err(rollback_error) = transaction.rollback().await {
-                    return retry(
-                        delivery,
-                        policy,
-                        telemetry_context,
-                        MessageFailure::Storage(rollback_error),
-                    )
-                    .await;
-                }
-                resolve_handler_failure(client, policy, delivery, telemetry_context, failure).await
-            }
-        },
+        }
     }
 }
 
@@ -533,7 +350,7 @@ async fn acknowledge(
 }
 
 async fn resolve_handler_failure(
-    client: &mut Client,
+    store: &mut dyn InboundMessageStore,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
     telemetry_context: &EventSpineContext,
@@ -555,7 +372,7 @@ async fn resolve_handler_failure(
     } else {
         let code = failure.code();
         quarantine(
-            client,
+            store,
             policy,
             delivery,
             telemetry_context,
@@ -601,7 +418,7 @@ async fn retry(
 }
 
 async fn quarantine(
-    client: &mut Client,
+    store: &mut dyn InboundMessageStore,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
     telemetry_context: &EventSpineContext,
@@ -609,42 +426,27 @@ async fn quarantine(
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     validate_failure_code(failure_code)?;
-    let evidence = QuarantineEvidence::new(
-        delivery.metadata().message_key(),
-        delivery.metadata().subject(),
-        delivery.metadata().delivery_attempt(),
-        delivery.payload(),
-        failure_code,
-    )
-    .map_err(HandlerError::inbox)?;
-    let inbox = PostgresInbox;
-    let transaction = match client.transaction().await {
-        Ok(transaction) => transaction,
-        Err(error) => {
-            return retry(
-                delivery,
-                policy,
-                telemetry_context,
-                MessageFailure::Storage(error),
-            )
-            .await;
-        }
+    let persistence_started = Instant::now();
+    let quarantine_result = {
+        let evidence = InboundQuarantine::new(
+            delivery.metadata().message_key(),
+            delivery.metadata().subject(),
+            delivery.metadata().delivery_attempt(),
+            delivery.payload(),
+            failure_code,
+        )
+        .map_err(HandlerError::inbox)?;
+        store.quarantine(&policy.consumer_name, evidence).await
     };
-    let disposition = match inbox
-        .quarantine_delivery(&transaction, &policy.consumer_name, evidence)
-        .await
-    {
+    let disposition = match quarantine_result {
         Ok(disposition) => disposition,
-        Err(error) if error.kind() == InboxErrorKind::Storage => {
-            if let Err(rollback_error) = transaction.rollback().await {
-                return retry(
-                    delivery,
-                    policy,
-                    telemetry_context,
-                    MessageFailure::Storage(rollback_error),
-                )
-                .await;
-            }
+        Err(error) if error.kind() == InboxStoreErrorKind::Unavailable => {
+            record_persistence(
+                telemetry_context,
+                delivery.metadata().delivery_attempt(),
+                EventSpineOutcome::Failed,
+                persistence_started,
+            );
             return retry(
                 delivery,
                 policy,
@@ -653,24 +455,16 @@ async fn quarantine(
             )
             .await;
         }
-        Err(error) => return Err(HandlerError::inbox(error)),
+        Err(error) => {
+            record_persistence(
+                telemetry_context,
+                delivery.metadata().delivery_attempt(),
+                EventSpineOutcome::Failed,
+                persistence_started,
+            );
+            return Err(HandlerError::inbox(error));
+        }
     };
-    let persistence_started = Instant::now();
-    if let Err(error) = transaction.commit().await {
-        record_persistence(
-            telemetry_context,
-            delivery.metadata().delivery_attempt(),
-            EventSpineOutcome::Failed,
-            persistence_started,
-        );
-        return retry(
-            delivery,
-            policy,
-            telemetry_context,
-            MessageFailure::Storage(error),
-        )
-        .await;
-    }
     let attempt = delivery.metadata().delivery_attempt();
     record_persistence(
         telemetry_context,
@@ -809,7 +603,7 @@ impl HandlerError {
         }
     }
 
-    fn inbox(error: InboxError) -> Self {
+    fn inbox(error: InboxStoreError) -> Self {
         Self {
             kind: HandlerErrorKind::Inbox,
             reason: None,

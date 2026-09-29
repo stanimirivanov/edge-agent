@@ -113,6 +113,24 @@ class VerifyArchitectureTests(unittest.TestCase):
                 self.assertEqual(1, len(problems))
                 self.assertIn(dependency, problems[0].message)
 
+    def test_inbox_handler_cannot_import_storage_adapter_or_driver(self) -> None:
+        for dependency in (
+            verify_architecture.INBOX_POSTGRES,
+            "tokio-postgres",
+        ):
+            with self.subTest(dependency=dependency):
+                problems = verify_architecture.check_dependencies(
+                    "crates/inbox-handler",
+                    {
+                        *verify_architecture.INBOX_HANDLER_DEPENDENCIES,
+                        dependency,
+                    },
+                    verify_architecture.INBOX_HANDLER_DEPENDENCIES,
+                )
+
+                self.assertEqual(1, len(problems))
+                self.assertIn(dependency, problems[0].message)
+
     def test_telemetry_cannot_import_transport_or_storage_adapters(self) -> None:
         problems = verify_architecture.check_dependencies(
             "crates/telemetry",

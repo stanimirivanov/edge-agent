@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 edgeagent-contracts.workspace = true
+edgeagent-messaging.workspace = true
 tokio-postgres.workspace = true
 
 [dev-dependencies]

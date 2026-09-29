@@ -101,9 +101,12 @@ infrastructure adapters, but it may not read another service's private tables.
 Cross-service behavior uses public APIs or messages.
 
 The application-owned `edgeagent-messaging` ports define durable publication,
-outbox relay storage, one-at-a-time delivery, broker metadata, and confirmed
-settlement without broker or database types. `edgeagent-messaging-nats` derives
-publication subjects, uses stable
+outbox relay storage, atomic inbound processing and quarantine, one-at-a-time
+delivery, broker metadata, and confirmed settlement without broker or database
+types. `InboundMessageStore` expresses the semantic requirement to commit inbox
+identity with a first delivery's service-owned transition; concrete adapters own
+the transaction mechanics. `edgeagent-messaging-nats` derives publication
+subjects, uses stable
 message identity for bounded JetStream deduplication, and exposes bounded pull
 delivery with confirmed acknowledge, delayed retry, or terminal settlement.
 Deployment configuration—not application code—owns streams, durable consumers,
@@ -133,12 +136,16 @@ idempotent by replay-request identity. Authentication, authorization, and any
 dual-control requirement belong to the future operator control plane; direct
 table updates are not a supported replay path.
 
-`edgeagent-inbox-postgres` records `(consumer_name, source, id)` before a
-consumer applies its local transition, using the same caller-owned transaction.
-The stable logical consumer name allows independent handlers to process one
-event while replicas of each handler share deduplication state. Identical
-redelivery skips domain work; changed content under a committed identity fails
-closed. Consumers acknowledge transport delivery only after commit, so a crash
+`edgeagent-inbox-postgres` implements the atomic inbound store port. It owns
+transaction begin, commit, and rollback while it records `(consumer_name,
+source, id)` and invokes service-owned SQL work for a first delivery. The SQL
+callback is an adapter-specific composition seam; only that seam receives a
+`tokio_postgres::Transaction`, so database-driver types do not enter portable
+application policy. The stable logical consumer name allows independent
+handlers to process one event while replicas of each handler share
+deduplication state. Identical redelivery skips domain work; changed content
+under a committed identity fails closed. Consumers acknowledge transport
+delivery only after the store returns a committed disposition, so a crash
 cannot leave a durable inbox marker without its corresponding domain effect.
 The same adapter retains exact untrusted poison-message bytes under a logical
 consumer and opaque transport message key. Identical redelivery updates bounded
@@ -149,12 +156,13 @@ failure evidence before returning the original subject and bytes to a separate
 control-plane publisher. The authorization is idempotent by replay-request
 identity, never deletes quarantine evidence, and cannot publish on its own.
 
-`edgeagent-inbox-handler` composes those storage and transport primitives for one
-delivery. It validates before domain work, invokes service-owned database-only
-handlers inside the inbox transaction, acknowledges only after commit, applies
-bounded deterministic retry to transient handler failures, and commits quarantine
-evidence before terminal settlement. It deliberately does not own intake loops,
-connection lifecycle, parallelism, or service-specific domain policy.
+`edgeagent-inbox-handler` contains persistence-neutral application policy for
+one delivery. It validates before store work, invokes the semantic inbound port,
+acknowledges only a committed `Applied` or `Duplicate` result, applies bounded
+deterministic retry to transient or unavailable outcomes, and commits quarantine
+evidence before terminal settlement. It deliberately does not own database
+transactions, intake loops, connection lifecycle, parallelism, or
+service-specific domain policy.
 
 `edgeagent-telemetry` owns the event-spine signal taxonomy independently of any
 exporter. The outbox relay and inbox handler emit operation counts, duration
@@ -176,6 +184,9 @@ The binding workspace decision is recorded in
 [ADR-0001](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md).
 Cross-repository authority and handoffs are fixed by
 [ADR-0004](../decisions/0004-separate-application-ui-gitops-and-substrate-ownership.md).
+The persistence-neutral inbound boundary and adapter-owned transaction are
+fixed by
+[ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
 Deployment profiles and provider mappings are defined in
 [Deployment Portability](deployment-portability.md).
 
