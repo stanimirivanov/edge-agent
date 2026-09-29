@@ -9,8 +9,14 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+mod inbox;
 mod outbox;
 
+pub use inbox::{
+    HandlerFailure, HandlerFailureKind, InboundMessageStore, InboundProcessingError,
+    InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,
+    QuarantineDisposition,
+};
 pub use outbox::{
     ClaimedMessage, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
 };

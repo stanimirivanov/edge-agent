@@ -2,105 +2,161 @@
 
 ## TL;DR
 
-- `edgeagent-inbox-handler` processes and settles one delivery at a time.
-- It decodes and routes untrusted bytes before domain work, records the inbox
-  identity, and invokes a service-owned handler in one PostgreSQL transaction.
-- A successful first delivery commits before acknowledgement; a duplicate skips
-  domain work and acknowledges after its no-op transaction commits.
-- Transient handler failures roll back and request deterministic delayed
-  redelivery. Permanent or exhausted handler failures commit exact quarantine
-  evidence before terminal settlement.
-- Database and settlement ambiguity never become terminal success. Redelivery
-  resolves committed work through inbox or quarantine idempotency.
+- `edgeagent-inbox-handler` applies portable one-delivery policy through
+  `InboundMessageStore`; it has no database-driver types in its application
+  boundary.
+- `process` is one semantic atomic operation: deduplicate the delivery and, for
+  a first delivery, commit service-owned state and outbox records with the
+  inbox identity.
+- `PostgresInboundMessageStore` owns PostgreSQL transaction begin, commit, and
+  rollback. Only its adapter-specific service callback receives a
+  `tokio_postgres::Transaction`.
+- A committed first delivery or identical duplicate is acknowledged. Transient
+  failures request bounded delayed redelivery.
+- Permanent or exhausted failures commit exact quarantine evidence before
+  terminal settlement; storage or settlement ambiguity never becomes success.
 
-## Boundary and control flow
+## Application boundary
 
-`TransactionalMessageHandler` is the service-owned extension point. It receives
-only a validated `MessageEnvelope` and the caller-owned PostgreSQL transaction.
-Implementations may update service-owned tables and enqueue outbox messages in
-that transaction. They must not perform network calls or other external effects
-because those operations cannot roll back atomically.
+`edgeagent-messaging` owns the portable inbound values and
+`InboundMessageStore` port required by the coordinator. This is a semantic
+capability, not an inbox-table repository:
 
-`handle_once` owns the complete one-delivery control flow:
+- `process(consumer_name, registry, envelope)` atomically deduplicates the
+  message and applies service-owned work for a first delivery. It returns
+  `Applied` or `Duplicate` only after commit.
+- `quarantine(consumer_name, evidence)` atomically retains bounded terminal
+  evidence. It returns `Inserted` or `AlreadyPresent` only after commit.
+
+The port exposes stable contract, identity-conflict, availability, and
+invariant error categories. Adapter causes remain in the error chain for
+redacted diagnostics, but database diagnostics and payload content do not enter
+public errors or metric dimensions.
+
+`edgeagent-inbox-handler::handle_once` receives a mutable store, message
+registry, handler policy, and owned transport delivery. It owns decoding,
+routing, retry classification, quarantine ordering, settlement, and telemetry.
+It does not receive a database client or transaction and does not own an intake
+loop, connection lifecycle, parallelism, or service-specific domain policy.
+
+The durable rationale is recorded in
+[ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
+
+## PostgreSQL composition
+
+`edgeagent-inbox-postgres::PostgresInboundMessageStore` implements the portable
+port. A composition root constructs it from a mutable `tokio_postgres::Client`
+and a `PostgresTransactionalMessageHandler` implementation, then passes the
+store to `handle_once`.
+
+The adapter begins the transaction, records or verifies the inbox identity,
+invokes the PostgreSQL callback only for a first delivery, and commits or rolls
+back. The callback receives the validated `MessageEnvelope` and the adapter's
+`tokio_postgres::Transaction`. It may update service-owned tables and enqueue
+outbox messages in that transaction. It must delegate deterministic business
+decisions to application or domain code, must not write another service's
+tables, and must not perform network calls or other external effects that
+cannot roll back atomically.
+
+The PostgreSQL callback is deliberately infrastructure-specific. Driver types
+remain inside the PostgreSQL adapter and composition layer; they do not become
+domain types or leak back into portable coordinator policy.
+
+## One-delivery control flow
+
+`handle_once` applies this order:
 
 1. Decode the raw structured CloudEvents bytes and validate them against the
    process `MessageRegistry`.
-2. Quarantine malformed, unsupported, or misrouted messages before terminal settlement.
-3. Start a transaction and record the consumer-scoped inbox identity.
-4. On `FirstDelivery`, invoke the domain handler and commit its state, inbox
-   record, and any outbox messages atomically.
-5. On `Duplicate`, skip the handler and commit the no-op transaction.
-6. Confirm broker acknowledgement only after a successful commit.
-7. Roll back transient handler failures and request deterministic delayed redelivery.
-8. Roll back permanent or delivery-attempt-exhausted handler failures, persist quarantine
-   evidence in a new short transaction, commit it, and then confirm terminal settlement.
+2. For malformed, unsupported, or misrouted input, call `quarantine`; request
+   terminal settlement only after the evidence commits.
+3. For a valid envelope, call `process` once.
+4. The store begins its concrete transaction and records or verifies the
+   consumer-scoped inbox identity.
+5. On a first delivery, the store invokes service-owned work and commits the
+   inbox identity, domain transition, and any outbox records atomically.
+6. On an identical duplicate, the store skips service-owned work and returns a
+   committed `Duplicate` disposition.
+7. The coordinator acknowledges `Applied` or `Duplicate` only after the store
+   returns success.
+8. A transient service failure rolls back and requests deterministic delayed
+   redelivery while the attempt budget remains.
+9. A permanent or exhausted service failure rolls back the processing
+   transaction, commits quarantine evidence through a separate store operation,
+   and then requests terminal settlement.
 
-The coordinator does not receive messages or run a loop. A composition root
-owns `MessageConsumer`, connection lifecycle, graceful drain, concurrency, and
-recreation of unavailable consumer streams. This keeps intake and service
-lifecycle independently reviewable from transactional correctness.
+The coordinator never assumes a failed commit rolled back. An unavailable or
+ambiguous store result requests redelivery. Durable inbox and quarantine
+identity resolve the outcome on the next attempt.
 
 ## Retry and terminal policy
 
-`HandlerPolicy` requires a stable logical consumer name, 1–100 delivery attempts,
-and base/maximum delays from one millisecond through 24 hours. Retry delay uses
-capped exponential backoff with deterministic message-key jitter. Every replica
-therefore makes the same decision for the same delivery without synchronized randomness.
-The limit uses the broker's delivery-attempt counter, so transport and storage
-redeliveries also consume the bounded delivery budget.
+`HandlerPolicy` requires a stable logical consumer name, 1–100 delivery
+attempts, and base/maximum delays from one millisecond through 24 hours. Retry
+delay uses capped exponential backoff with deterministic message-key jitter.
+Every replica therefore makes the same decision for the same delivery without
+synchronized randomness. The broker's delivery-attempt counter is the budget,
+so transport and storage redeliveries count toward the same limit.
 
 | Failure | Resolution |
 | --- | --- |
-| Malformed envelope or invalid route | Persist `envelope_invalid` or `routing_invalid`, then terminally settle |
-| Inbox message-identity conflict | Persist `message_identity_conflict`, then terminally settle |
-| Transient handler below delivery-attempt limit | Roll back and request delayed redelivery |
-| Permanent handler failure | Roll back, persist the handler's bounded reason code, then terminally settle |
-| Transient handler at delivery-attempt limit | Treat as terminal and retain its bounded reason code |
-| PostgreSQL availability or commit ambiguity | Request redelivery; never terminally settle without quarantine evidence |
-| Storage invariant or quarantine identity conflict | Return an error, leave delivery unsettled, and fail closed for operator investigation |
+| Malformed envelope or invalid route | Commit `envelope_invalid` or `routing_invalid`, then terminally settle |
+| Inbox message-identity conflict | Commit `message_identity_conflict`, then terminally settle |
+| Transient service handler below attempt limit | Roll back and request delayed redelivery |
+| Permanent service handler failure | Roll back, commit its bounded reason code, then terminally settle |
+| Transient service handler at attempt limit | Treat as terminal and retain its bounded reason code |
+| Store unavailable or commit outcome ambiguous | Request redelivery; never terminally settle without committed quarantine evidence |
+| Store invariant or quarantine identity conflict | Return an error, leave delivery unsettled, and fail closed for operator investigation |
 | Settlement confirmation failure | Return `Settlement`; rely on inbox or quarantine idempotency when redelivered |
 
 Handler reason codes are static lowercase ASCII tokens of at most 64 bytes.
-Public errors and outcomes do not copy payload content or database diagnostics;
-internal causes remain available through the Rust error chain for redacted logs.
+Portable quarantine evidence also bounds delivery key, subject, attempt, and
+payload before adapter work.
 
 ## Crash and acknowledgement safety
 
-A crash before domain commit leaves no inbox record or domain effect. A crash
-after commit but before acknowledgement causes redelivery; the inbox returns
-`Duplicate`, so the handler does not run twice. A crash after quarantine commit
-but before terminal-settlement confirmation causes redelivery; quarantine returns
-`AlreadyPresent` before terminal settlement is retried.
+A crash before the processing transaction commits leaves no inbox record or
+domain effect. A crash after commit but before acknowledgement causes
+redelivery; `process` returns `Duplicate`, so service-owned work does not run
+again. A crash after quarantine commit but before terminal-settlement
+confirmation causes redelivery; `quarantine` returns `AlreadyPresent` before
+terminal settlement is retried.
 
-Commit failures are treated as ambiguous because PostgreSQL may have committed
-without returning confirmation. The coordinator requests redelivery rather than
-assuming rollback. This is safe for the same reason: committed work is discovered
-through the retained identity, while uncommitted work executes again.
+PostgreSQL commit failures are treated as ambiguous because the server may have
+committed without returning confirmation. Redelivery is safe in either case:
+committed work is discovered through retained identity, while uncommitted work
+can execute again.
 
 ## Verification
 
-Default tests validate policy bounds, reason codes, and deterministic backoff
-without external services. The isolated local-platform conformance test runs with:
+Credential-free tests use an in-memory `InboundMessageStore` to exercise
+portable applied, duplicate, retry, quarantine, unavailable-store, invariant,
+and settlement policy without PostgreSQL. Adapter integration remains
+responsible for proving the concrete transaction boundary.
+
+The isolated PostgreSQL conformance test runs with:
 
 ```text
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-handler --test postgres_handler -- --ignored --exact coordinator_preserves_commit_retry_and_quarantine_ordering
 ```
 
-It proves first-delivery commit, duplicate suppression, transient rollback and
-retry, poison-message quarantine, permanent handler quarantine, lost terminal
+It composes `PostgresInboundMessageStore` with the coordinator and proves
+first-delivery commit, duplicate suppression, transient rollback and retry,
+poison-message quarantine, permanent-handler quarantine, lost terminal
 confirmation recovery, and acknowledgement-loss recovery. Run it only against
 an isolated development or CI database.
 
 The [event-spine recovery conformance](event-spine-conformance.md) additionally
-composes this coordinator with the real outbox relay and JetStream adapters,
+composes the coordinator with the production PostgreSQL and JetStream adapters,
 then abandons a delivery and reconnects before handling its redelivery.
 
 ## Current limitations
 
 This increment does not provide a long-running consumer loop, connection pool,
 parallelism, acknowledgement-progress extension, graceful shutdown, payload
-schema generation, authorization policy, operator replay, or telemetry exporter
-installation. It emits bounded durable-outcome signals through the
-[event-spine telemetry contract](event-spine-telemetry.md). Domain
-handlers and their tables remain service-specific. Those capabilities stay in
-separate M02 increments because they change lifecycle, recovery, or domain behavior.
+schema generation, authorization policy, operator replay publisher, or
+telemetry exporter installation. It emits bounded durable-outcome signals
+through the [event-spine telemetry contract](event-spine-telemetry.md).
+Service-specific handlers and their tables remain owned by their vertical
+slices. Those capabilities stay in separate M02 increments because they change
+lifecycle, recovery, or domain behavior.

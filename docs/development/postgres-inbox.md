@@ -2,8 +2,8 @@
 
 ## TL;DR
 
-- `edgeagent-inbox-postgres` records a validated CloudEvent before a consumer
-  applies its domain transition, using the same caller-owned transaction.
+- `edgeagent-inbox-postgres` implements the atomic inbound-store port and owns
+  the transaction that combines a validated CloudEvent with service-owned SQL.
 - Inbox identity is `(consumer_name, source, id)`, so redelivery to one logical
   consumer is idempotent while independent consumers can process the same event.
 - An identical committed delivery returns `Duplicate`; different immutable
@@ -23,21 +23,31 @@ Every consuming service applies `PostgresInbox::MIGRATIONS` in order inside its
 own PostgreSQL schema. The migrations create inbox and quarantine tables in the
 connection's current schema; they do not create shared cross-service storage.
 
-A handler opens a transaction and calls `PostgresInbox::record_delivery` before
-performing domain work. The required control flow is:
+Application coordination uses `PostgresInboundMessageStore`, which implements
+the portable `InboundMessageStore` capability. Across the persistence-neutral
+coordinator and this adapter, the required control flow is below; the adapter
+owns every PostgreSQL transaction step:
 
 1. Decode the untrusted transport bytes and validate the envelope against the
    consumer's `MessageRegistry`.
-2. Begin a PostgreSQL transaction.
-3. Call `record_delivery` with a stable logical consumer name.
-4. On `FirstDelivery`, apply the domain transition and enqueue any resulting
-   message in the same transaction, then commit.
-5. On `Duplicate`, skip domain work and commit the no-op transaction.
-6. Acknowledge the transport delivery only after a successful commit.
-7. On a transient storage or domain failure, roll back and request bounded redelivery.
-8. On a permanent validation or policy failure, open a short transaction,
+2. The adapter begins a PostgreSQL transaction and calls `record_delivery` with
+   a stable logical consumer name.
+3. On `FirstDelivery`, invoke the adapter-specific
+   `PostgresTransactionalMessageHandler` so it can apply service-owned SQL and
+   enqueue any resulting message in the same transaction, then commit.
+4. On `Duplicate`, skip service-owned work and commit the no-op transaction.
+5. Return the portable committed disposition to the coordinator, which then
+   acknowledges the transport delivery.
+6. On a transient storage or service failure, roll back and request bounded redelivery.
+7. On a permanent validation or policy failure, open a short transaction,
    call `quarantine_delivery` with exact bytes and bounded reason, commit it,
    and only then request terminal transport settlement.
+
+Only `PostgresTransactionalMessageHandler` receives the concrete
+`tokio_postgres::Transaction`. This callback is an infrastructure composition
+seam for service-owned SQL, not a domain or persistence-neutral application
+port. It must not perform network calls or other effects that cannot roll back
+with the transaction.
 
 This ordering closes both crash windows. A failure before commit leaves no
 deduplication marker and can be retried. A failure after commit but before
@@ -129,7 +139,7 @@ permissions needed for this operation.
 | `ReplayRequestConflict` | A replay request identity already names different authorization evidence | Fail closed and investigate request-ID reuse |
 | `NotQuarantined` | The requested consumer and delivery key do not identify retained quarantine evidence | Reject without creating audit evidence |
 | `Storage` | PostgreSQL rejected or could not complete an operation | Roll back and apply bounded transient-failure policy |
-| `StorageInvariant` | A conflicting key disappeared or stored columns violate adapter assumptions | Roll back, quarantine, and investigate corruption or unsupported mutation |
+| `StorageInvariant` | A conflicting key disappeared or stored columns violate adapter assumptions | Roll back, leave unsettled, and investigate corruption or unsupported mutation |
 
 Public errors expose stable categories and bounded validation text. PostgreSQL
 causes remain in the Rust error chain for redacted diagnostics. Envelope payload
@@ -174,10 +184,11 @@ then removes the schema. Run it only against an isolated development or CI datab
 
 ## Current limitations
 
-This crate provides transactional storage semantics, not a running transport
-consumer. Transactional failure classification, retry, and settlement composition
-are implemented separately in the [handler guide](inbox-handler.md). Neither crate
-chooses acknowledgement-progress deadlines, deletes evidence, authenticates or
-authorizes operators, publishes replay bytes, records publication outcomes, or
-emits telemetry. Those capabilities remain separate increments because they affect
-message loss, recovery time, evidence retention, and operator control.
+This crate provides transactional storage semantics and a PostgreSQL-specific
+service callback, not a running transport consumer. Portable failure
+classification, retry, settlement, and event-spine telemetry are implemented by
+the coordinator described in the [handler guide](inbox-handler.md). Neither
+crate chooses acknowledgement-progress deadlines, deletes evidence,
+authenticates or authorizes operators, publishes replay bytes, or records replay
+publication outcomes. Those capabilities remain separate increments because
+they affect message loss, recovery time, evidence retention, and operator control.

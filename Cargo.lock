@@ -327,6 +327,7 @@ name = "edgeagent-inbox-postgres"
 version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
+ "edgeagent-messaging",
  "serde_json",
  "tokio",
  "tokio-postgres",

@@ -6,11 +6,11 @@ use async_nats::jetstream::stream::{Config as StreamConfig, RetentionPolicy, Sto
 use edgeagent_contracts::{
     Component, MessageDefinition, MessageEnvelope, MessageMetadata, MessageRegistry,
 };
-use edgeagent_inbox_handler::{
-    HandlerFailure, HandlerFuture, HandlerPolicy, HandlingOutcome, TransactionalMessageHandler,
-    handle_once,
+use edgeagent_inbox_handler::{HandlerFailure, HandlerPolicy, HandlingOutcome, handle_once};
+use edgeagent_inbox_postgres::{
+    PostgresHandlerFuture, PostgresInboundMessageStore, PostgresInbox,
+    PostgresTransactionalMessageHandler,
 };
-use edgeagent_inbox_postgres::PostgresInbox;
 use edgeagent_messaging::{MessageConsumer, PublishDisposition};
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
@@ -77,12 +77,12 @@ fn envelope(message_id: &str) -> Result<MessageEnvelope, Box<dyn Error + Send + 
 
 struct EffectHandler;
 
-impl TransactionalMessageHandler for EffectHandler {
+impl PostgresTransactionalMessageHandler for EffectHandler {
     fn handle<'handler>(
         &'handler self,
         transaction: &'handler Transaction<'_>,
         envelope: &'handler MessageEnvelope,
-    ) -> HandlerFuture<'handler> {
+    ) -> PostgresHandlerFuture<'handler> {
         Box::pin(async move {
             transaction
                 .execute(
@@ -291,14 +291,10 @@ async fn verify_restart_recovery(
         Duration::from_millis(10),
         Duration::from_secs(1),
     )?;
-    let outcome = handle_once(
-        &mut database,
-        &registry,
-        &EffectHandler,
-        &handler_policy,
-        redelivery,
-    )
-    .await?;
+    let outcome = {
+        let mut store = PostgresInboundMessageStore::new(&mut database, &EffectHandler);
+        handle_once(&mut store, &registry, &handler_policy, redelivery).await?
+    };
     assert!(matches!(
         outcome,
         HandlingOutcome::Applied { attempt } if attempt == redelivery_attempt

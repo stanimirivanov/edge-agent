@@ -2,16 +2,23 @@
 
 #![forbid(unsafe_code)]
 
-use edgeagent_contracts::{MessageEnvelope, MessageRegistry, MessageRoutingError};
+use edgeagent_contracts::{
+    MAX_PORTABLE_MESSAGE_BYTES, MessageEnvelope, MessageRegistry, MessageRoutingError,
+};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use tokio_postgres::{Row, Transaction};
+
+mod handler;
+
+pub use handler::{
+    PostgresHandlerFuture, PostgresInboundMessageStore, PostgresTransactionalMessageHandler,
+};
 
 const MAX_CONSUMER_NAME_BYTES: usize = 128;
 const MAX_DELIVERY_KEY_BYTES: usize = 512;
 const MAX_TRANSPORT_SUBJECT_BYTES: usize = 512;
 const MAX_FAILURE_CODE_BYTES: usize = 64;
-const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
 const MAX_REPLAY_REQUEST_ID_BYTES: usize = 128;
 const MAX_OPERATOR_ID_BYTES: usize = 256;
 
@@ -211,7 +218,7 @@ impl<'delivery> QuarantineEvidence<'delivery> {
             MAX_FAILURE_CODE_BYTES,
             "failure_code must be a lowercase ASCII token of 1 to 64 bytes",
         )?;
-        if payload.len() > MAX_PAYLOAD_BYTES {
+        if payload.len() > MAX_PORTABLE_MESSAGE_BYTES {
             return Err(InboxError::invalid_quarantine_evidence(
                 "quarantine payload must not exceed 256 KiB",
             ));
@@ -743,7 +750,7 @@ fn replay_authorization_from_columns(
 #[cfg(test)]
 mod tests {
     use super::{
-        AUTHORIZE_QUARANTINE_REPLAY_SQL, InboxErrorKind, MAX_PAYLOAD_BYTES, PostgresInbox,
+        AUTHORIZE_QUARANTINE_REPLAY_SQL, InboxErrorKind, MAX_PORTABLE_MESSAGE_BYTES, PostgresInbox,
         QuarantineEvidence, ReplayRequest, validate_consumer_name,
     };
 
@@ -810,7 +817,7 @@ mod tests {
             .map(|error| error.kind()),
             Some(InboxErrorKind::InvalidQuarantineEvidence)
         );
-        let oversized = vec![0_u8; MAX_PAYLOAD_BYTES + 1];
+        let oversized = vec![0_u8; MAX_PORTABLE_MESSAGE_BYTES + 1];
         assert_eq!(
             QuarantineEvidence::new(
                 "6:ORDERS:41",

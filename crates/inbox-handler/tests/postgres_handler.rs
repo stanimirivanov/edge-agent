@@ -4,10 +4,13 @@ use edgeagent_contracts::{
     Component, MessageDefinition, MessageEnvelope, MessageMetadata, MessageRegistry,
 };
 use edgeagent_inbox_handler::{
-    HandlerErrorKind, HandlerFailure, HandlerFuture, HandlerPolicy, HandlingOutcome,
-    TransactionalMessageHandler, handle_once,
+    HandlerError, HandlerErrorKind, HandlerFailure, HandlerPolicy, HandlingOutcome,
+    QuarantineDisposition, handle_once as coordinate_once,
 };
-use edgeagent_inbox_postgres::{PostgresInbox, QuarantineDisposition};
+use edgeagent_inbox_postgres::{
+    PostgresHandlerFuture, PostgresInboundMessageStore, PostgresInbox,
+    PostgresTransactionalMessageHandler,
+};
 use edgeagent_messaging::{
     ConsumeError, DeliveryDisposition, DeliveryMetadata, DeliverySettlement, MessageDelivery,
     SettlementFuture,
@@ -74,20 +77,14 @@ impl TestHandler {
     }
 }
 
-impl TransactionalMessageHandler for TestHandler {
+impl PostgresTransactionalMessageHandler for TestHandler {
     fn handle<'handler>(
         &'handler self,
         transaction: &'handler Transaction<'_>,
         envelope: &'handler MessageEnvelope,
-    ) -> HandlerFuture<'handler> {
+    ) -> PostgresHandlerFuture<'handler> {
         Box::pin(async move {
             let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
-            if matches!(self.behavior, Behavior::FailFirstTransient) && call == 1 {
-                return Err(HandlerFailure::transient("dependency_unavailable"));
-            }
-            if matches!(self.behavior, Behavior::Permanent) {
-                return Err(HandlerFailure::permanent("policy_rejected"));
-            }
             transaction
                 .execute(
                     "INSERT INTO handler_effects (message_source, message_id) VALUES ($1, $2)",
@@ -101,9 +98,26 @@ impl TransactionalMessageHandler for TestHandler {
                         error,
                     )
                 })?;
+            if matches!(self.behavior, Behavior::FailFirstTransient) && call == 1 {
+                return Err(HandlerFailure::transient("dependency_unavailable"));
+            }
+            if matches!(self.behavior, Behavior::Permanent) {
+                return Err(HandlerFailure::permanent("policy_rejected"));
+            }
             Ok(())
         })
     }
+}
+
+async fn handle_once(
+    client: &mut tokio_postgres::Client,
+    registry: &MessageRegistry<'_>,
+    handler: &dyn PostgresTransactionalMessageHandler,
+    policy: &HandlerPolicy,
+    delivery: MessageDelivery,
+) -> Result<HandlingOutcome, HandlerError> {
+    let mut store = PostgresInboundMessageStore::new(client, handler);
+    coordinate_once(&mut store, registry, policy, delivery).await
 }
 
 #[derive(Clone)]
@@ -270,6 +284,14 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             failure: _,
         }
     ));
+    let rolled_back = client
+        .query_one(
+            "SELECT (SELECT count(*) FROM handler_effects WHERE message_id = $1), (SELECT count(*) FROM edgeagent_message_inbox WHERE consumer_name = $2 AND message_id = $1)",
+            &[&"handler-transient-01", &"execution_simulator_v1"],
+        )
+        .await?;
+    assert_eq!(rolled_back.try_get::<_, i64>(0)?, 0);
+    assert_eq!(rolled_back.try_get::<_, i64>(1)?, 0);
     assert!(matches!(
         handle_once(
             &mut client,
