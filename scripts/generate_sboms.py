@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 
 from verify_supply_chain import (
     ArtifactSpec,
@@ -94,6 +95,46 @@ def rust_sbom_command(
     ]
 
 
+def _workspace_package_directories(root: Path) -> list[Path]:
+    """Return explicit workspace package directories without expanding globs."""
+
+    manifest_path = root / "Cargo.toml"
+    try:
+        with manifest_path.open("rb") as source:
+            manifest = tomllib.load(source)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise GenerationError(f"could not read workspace members: {error}") from error
+    workspace = manifest.get("workspace")
+    members = workspace.get("members") if isinstance(workspace, dict) else None
+    if not isinstance(members, list) or not all(
+        isinstance(member, str) and member and not any(token in member for token in "*?[")
+        for member in members
+    ):
+        raise GenerationError("workspace members must be explicit non-empty paths")
+
+    resolved_root = root.resolve()
+    directories = []
+    for member in members:
+        directory = (root / member).resolve()
+        try:
+            directory.relative_to(resolved_root)
+        except ValueError as error:
+            raise GenerationError(f"workspace member escapes repository: {member}") from error
+        directories.append(directory)
+    return sorted(set(directories))
+
+
+def _package_sboms(package_directories: list[Path]) -> list[Path]:
+    """Find transient cargo-cyclonedx outputs adjacent to package manifests."""
+
+    return sorted(
+        path
+        for directory in package_directories
+        for path in directory.glob("*.cdx.json")
+        if path.is_file()
+    )
+
+
 def image_sbom_command(
     spec: ArtifactSpec,
     *,
@@ -153,6 +194,20 @@ def generate_rust_sboms(
 ) -> None:
     """Generate one dependency-complete Cargo SBOM per deployable binary."""
 
+    package_directories = _workspace_package_directories(root)
+    resolved_output = output.resolve()
+    if any(
+        resolved_output == directory or directory in resolved_output.parents
+        for directory in package_directories
+    ):
+        raise GenerationError(
+            "Rust SBOM output must be outside workspace package directories"
+        )
+    preexisting = _package_sboms(package_directories)
+    if preexisting:
+        raise GenerationError(
+            f"refusing to overwrite unexpected generated file: {preexisting[0]}"
+        )
     output.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
     environment.setdefault(
@@ -163,9 +218,6 @@ def generate_rust_sboms(
         spec: root / "services" / spec.service / f"{spec.binary}_bin.cdx.json"
         for spec in specs
     }
-    for generated in generated_files.values():
-        if generated.exists():
-            raise GenerationError(f"refusing to overwrite unexpected generated file: {generated}")
     try:
         _run(
             rust_sbom_command(
@@ -183,7 +235,7 @@ def generate_rust_sboms(
             shutil.move(str(generated), destination)
             print(f"generated {destination}")
     finally:
-        for generated in generated_files.values():
+        for generated in _package_sboms(package_directories):
             generated.unlink(missing_ok=True)
 
 

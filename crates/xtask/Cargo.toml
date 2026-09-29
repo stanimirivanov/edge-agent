@@ -1,0 +1,15 @@
+[package]
+name = "edgeagent-xtask"
+version.workspace = true
+description = "Repository-owned EdgeAgent development tasks"
+edition.workspace = true
+license.workspace = true
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cargo_metadata.workspace = true
+
+[lints]
+workspace = true

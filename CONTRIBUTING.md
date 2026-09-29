@@ -25,6 +25,7 @@ Lowercase wording is explanatory and does not create hidden policy.
 |---|---|
 | Product purpose, scope, and invariants | [Product vision](docs/product/vision.md) |
 | Architecture, ownership, and control flow | [System architecture](docs/architecture/system-overview.md) |
+| Direct workspace package and dependency policy | [Workspace dependency rules](docs/architecture/dependency-rules.md) |
 | Deployment profiles and provider capability mapping | [Deployment portability](docs/architecture/deployment-portability.md) |
 | Contributor workflow and completion | This document |
 | Concise contributor and agent entry point | [AGENTS.md](AGENTS.md) |
@@ -165,6 +166,7 @@ The current foundation requires:
 python scripts/verify_repository.py --format-check
 python scripts/verify_repository.py
 python scripts/verify_architecture.py
+cargo xtask architecture
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
@@ -180,6 +182,12 @@ cargo test --locked --workspace --all-targets
 `make verify` runs the same commands where `make` is available. Application
 tooling may add stricter commands but must preserve a documented one-command
 verification entry point.
+
+The Python architecture verifier checks manifest and repository conventions,
+including complete direct dependency keys. `cargo xtask architecture` checks
+Cargo's normalized internal package graph, architectural roles, dependency
+classes, stale policy, and production cycles. Run both after changing a Cargo
+manifest; a pass from one does not replace the other.
 
 Changes to `Dockerfile`, `.dockerignore`, `deploy/images.toml`, service package
 names, component descriptors, or runtime packaging MUST also run
@@ -279,6 +287,7 @@ A pull request MUST state:
 - [ ] The change is one coherent capability with explicit exclusions.
 - [ ] Material assumptions and unresolved questions are visible.
 - [ ] Dependencies point inward and infrastructure does not own domain policy.
+- [ ] Workspace packages and direct internal edges match the executable dependency policy.
 - [ ] Public contracts and persisted meaning are compatible or have an approved evolution plan.
 - [ ] Tests cover observable success and important rejection/failure paths.
 - [ ] Time, units, evidence lineage, lifecycle, idempotency, cancellation, and retries are explicit where relevant.

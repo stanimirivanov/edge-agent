@@ -4,7 +4,7 @@
 
 - `Cargo.lock` is authoritative; build, lint, test, packaging, and policy checks reject lockfile drift.
 - `deny.toml` rejects vulnerable, unsound, unmaintained, yanked, wildcard, unapproved-license, and unapproved-source dependencies according to explicit policy.
-- CI emits a dependency-complete CycloneDX SBOM and a runtime-image CycloneDX SBOM for every deployable in `deploy/images.toml`.
+- CI emits a dependency-complete CycloneDX SBOM and a runtime-image CycloneDX SBOM for every deployable in `deploy/images.toml`; repository-only tools are excluded from release artifacts.
 - Default verification remains offline. The authoritative advisory refresh, tool installation, image builds, and artifact upload run in the supply-chain CI job.
 - Provenance attestations and image signatures require a release identity and registry; they remain a separate M01 increment.
 
@@ -43,13 +43,18 @@ pipeline produces two complementary artifacts under `artifacts/sbom/`:
 | `<binary>.image.cdx.json` | Syft | Files and packages present in the final OCI runtime filesystem |
 
 The Rust generator uses CycloneDX 1.5, strict SPDX parsing, all features, all
-target-specific dependencies, and one document per binary. It derives the
-timestamp from `SOURCE_DATE_EPOCH`, defaulting to the current Git commit time,
-so repeated generation for one commit does not introduce a random serial or
-wall-clock drift. Syft emits CycloneDX 1.6 for image evidence; the verifier
-accepts only the declared 1.5 source and 1.6 image envelopes. The Syft command
-pins `cyclonedx-json@1.6` explicitly so a newer default cannot silently change
-the image evidence contract.
+target-specific dependencies, and one document per binary. It runs
+`cargo-cyclonedx` once against the workspace, publishes only the service outputs
+selected by `deploy/images.toml`, and removes every transient package-adjacent
+`*.cdx.json` document after success or failure. Non-deployable packages such as
+`edgeagent-xtask` remain governed workspace dependencies but do not become source
+or image SBOM release artifacts. The generator derives the timestamp
+from `SOURCE_DATE_EPOCH`, defaulting to the current Git commit time, so repeated
+generation for one commit does not introduce a random serial or wall-clock
+drift. Syft emits CycloneDX 1.6 for image evidence; the verifier accepts only
+the declared 1.5 source and 1.6 image envelopes. The Syft command pins
+`cyclonedx-json@1.6` explicitly so a newer default cannot silently change the
+image evidence contract.
 
 Generated SBOMs are evidence artifacts, not source files. They remain ignored
 under `artifacts/`, are validated before upload, and are retained by CI for 14

@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPTS = Path(__file__).parents[1] / "scripts"
@@ -31,6 +33,13 @@ class GenerateSbomsTests(unittest.TestCase):
             binary="edgeagent-gateway",
         )
 
+    @staticmethod
+    def _write_test_workspace(root: Path) -> None:
+        (root / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["services/gateway", "tools/maintenance"]\n',
+            encoding="utf-8",
+        )
+
     def test_rust_command_covers_workspace_binaries_reproducibly(self) -> None:
         command = generate_sboms.rust_sbom_command(
             cargo_cyclonedx="cargo-cyclonedx",
@@ -41,6 +50,122 @@ class GenerateSbomsTests(unittest.TestCase):
         self.assertIn("binaries", command)
         self.assertIn("all", command)
         self.assertNotIn("--override-filename", command)
+
+    def test_rust_generation_moves_only_deployables_and_cleans_tool_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_test_workspace(root)
+            output = root / "artifacts" / "sbom"
+            service_output = (
+                root
+                / "services"
+                / self.deployable.service
+                / f"{self.deployable.binary}_bin.cdx.json"
+            )
+            tool_output = root / "tools" / "maintenance" / "maintenance_cdylib.cdx.json"
+
+            def generate(*_args: object, **_kwargs: object) -> object:
+                service_output.parent.mkdir(parents=True)
+                service_output.write_text("service", encoding="utf-8")
+                tool_output.parent.mkdir(parents=True)
+                tool_output.write_text("tool", encoding="utf-8")
+                return mock.Mock(returncode=0)
+
+            with (
+                mock.patch.object(generate_sboms, "_git_value", return_value="0"),
+                mock.patch.object(generate_sboms, "_run", side_effect=generate) as runner,
+            ):
+                generate_sboms.generate_rust_sboms(
+                    root,
+                    output,
+                    [self.deployable],
+                    cargo_cyclonedx="cargo-cyclonedx",
+                    spec_version="1.5",
+                )
+
+            self.assertEqual(1, runner.call_count)
+            self.assertTrue((output / self.deployable.source_filename).is_file())
+            self.assertFalse(service_output.exists())
+            self.assertFalse(tool_output.exists())
+
+    def test_rust_generation_cleans_partial_tool_output_after_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_test_workspace(root)
+            tool_output = root / "tools" / "maintenance" / "maintenance_cdylib.cdx.json"
+
+            def fail(*_args: object, **_kwargs: object) -> object:
+                tool_output.parent.mkdir(parents=True)
+                tool_output.write_text("partial", encoding="utf-8")
+                raise generate_sboms.GenerationError("simulated failure")
+
+            with (
+                mock.patch.object(generate_sboms, "_git_value", return_value="0"),
+                mock.patch.object(generate_sboms, "_run", side_effect=fail),
+                self.assertRaisesRegex(
+                    generate_sboms.GenerationError,
+                    "simulated failure",
+                ),
+            ):
+                generate_sboms.generate_rust_sboms(
+                    root,
+                    root / "artifacts" / "sbom",
+                    [self.deployable],
+                    cargo_cyclonedx="cargo-cyclonedx",
+                    spec_version="1.5",
+                )
+
+            self.assertFalse(tool_output.exists())
+
+    def test_rust_generation_preserves_preexisting_package_sbom_and_does_not_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_test_workspace(root)
+            preexisting = root / "tools" / "maintenance" / "manual.cdx.json"
+            preexisting.parent.mkdir(parents=True)
+            preexisting.write_text("evidence", encoding="utf-8")
+
+            with (
+                mock.patch.object(generate_sboms, "_run") as runner,
+                self.assertRaisesRegex(
+                    generate_sboms.GenerationError,
+                    "refusing to overwrite",
+                ),
+            ):
+                generate_sboms.generate_rust_sboms(
+                    root,
+                    root / "artifacts" / "sbom",
+                    [self.deployable],
+                    cargo_cyclonedx="cargo-cyclonedx",
+                    spec_version="1.5",
+                )
+
+            runner.assert_not_called()
+            self.assertEqual("evidence", preexisting.read_text(encoding="utf-8"))
+
+    def test_rust_generation_rejects_output_inside_a_workspace_package(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_test_workspace(root)
+            output = root / "services" / "gateway" / "artifacts"
+
+            with (
+                mock.patch.object(generate_sboms, "_run") as runner,
+                self.assertRaisesRegex(
+                    generate_sboms.GenerationError,
+                    "outside workspace package directories",
+                ),
+            ):
+                generate_sboms.generate_rust_sboms(
+                    root,
+                    output,
+                    [self.deployable],
+                    cargo_cyclonedx="cargo-cyclonedx",
+                    spec_version="1.5",
+                )
+
+            runner.assert_not_called()
+            self.assertFalse(output.exists())
 
     def test_image_command_forces_local_daemon_and_cyclonedx_json(self) -> None:
         output = Path("artifacts/sbom/edgeagent-gateway.image.cdx.json")

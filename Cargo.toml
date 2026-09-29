@@ -10,6 +10,7 @@ members = [
     "crates/outbox-relay",
     "crates/service-runtime",
     "crates/telemetry",
+    "crates/xtask",
     "services/audit-projector",
     "services/execution-simulator",
     "services/gateway",
@@ -26,6 +27,7 @@ repository = "https://github.com/stanimirivanov/edge-agent"
 
 [workspace.dependencies]
 async-nats = { version = "=0.50.0", default-features = false, features = ["jetstream", "ring", "server_2_14"] }
+cargo_metadata = { version = "=0.23.1", default-features = false }
 cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-features = false }
 edgeagent-contracts = { path = "crates/contracts" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }

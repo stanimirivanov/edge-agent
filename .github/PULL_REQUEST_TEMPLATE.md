@@ -19,10 +19,19 @@ Describe the problem and observable result.
 Describe material decisions, assumptions, contracts, event compatibility,
 service ownership, data meaning, deployment profiles, and ADRs.
 
+## Architecture
+
+- Owning capability and package role:
+- Inbound caller or adapter:
+- Consumed ports and outbound adapters:
+- Internal dependency edges added, removed, or reclassified:
+- End-to-end behavior proved:
+
 ## Verification
 
 | Command or check | Outcome | Evidence or reason not run |
 |---|---|---|
+| `cargo xtask architecture` | | |
 | `make verify` | | |
 
 ## Risk and operations
@@ -34,6 +43,7 @@ portability, and operational effects. Write “None” only after reviewing each
 ## Review checklist
 
 - [ ] The change delivers one coherent capability.
+- [ ] Package ownership and dependency changes are explicit and point inward.
 - [ ] Important success, rejection, and failure paths are tested.
 - [ ] Market facts and model output cross explicit validation boundaries.
 - [ ] Stateful event handling is idempotent under duplicates and redelivery.

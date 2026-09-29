@@ -141,6 +141,16 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("async-nats", problems[0].message)
 
+    def test_architecture_tool_dependencies_are_explicitly_bounded(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "crates/xtask",
+            {*verify_architecture.XTASK_DEPENDENCIES, "toml"},
+            verify_architecture.XTASK_DEPENDENCIES,
+        )
+
+        self.assertEqual(1, len(problems))
+        self.assertIn("toml", problems[0].message)
+
     def test_missing_workspace_member_is_rejected(self) -> None:
         members = set(verify_architecture.PACKAGE_RULES)
         members.remove("services/research")

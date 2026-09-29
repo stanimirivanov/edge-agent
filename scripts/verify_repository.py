@@ -52,6 +52,7 @@ TEXT_FILENAMES = {
     "Makefile",
 }
 REQUIRED_PATHS = {
+    ".cargo/config.toml",
     ".dockerignore",
     ".editorconfig",
     ".gitignore",
@@ -67,6 +68,8 @@ REQUIRED_PATHS = {
     "README.md",
     "SECURITY.md",
     "rust-toolchain.toml",
+    "crates/xtask/Cargo.toml",
+    "crates/xtask/src/main.rs",
     "scripts/verify_architecture.py",
     "scripts/verify_images.py",
     "scripts/verify_local_stack.py",
@@ -76,6 +79,7 @@ REQUIRED_PATHS = {
     "scripts/verify_supply_chain.py",
     "docs/architecture/system-overview.md",
     "docs/architecture/deployment-portability.md",
+    "docs/architecture/dependency-rules.md",
     "docs/decisions/README.md",
     "docs/development/engineering-standards.md",
     "docs/development/local-platform.md",
