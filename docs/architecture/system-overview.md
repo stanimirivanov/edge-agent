@@ -7,6 +7,7 @@
 - Deterministic components own market facts, research, policy, dry-run fills, positions, and P&L; generated language remains optional and untrusted.
 - The execution simulator accepts dry-run orders only and contains no broker credential, endpoint, or live-order adapter.
 - Signed OCI images run under a portable Kubernetes profile or cloud-managed GCP, Azure, and AWS profiles.
+- Cargo-native policy enforces every workspace package role and direct internal dependency in local verification and CI.
 - Every critical path fails closed on invalid evidence, authorization, policy, event compatibility, or numeric reconciliation.
 
 ## Context and architectural thesis
@@ -100,6 +101,16 @@ or model providers. A deployable may depend on shared contracts and
 infrastructure adapters, but it may not read another service's private tables.
 Cross-service behavior uses public APIs or messages.
 
+The workspace makes these directions executable with
+`cargo xtask architecture`. Every package has an explicit contract, port,
+application, adapter, observability, runtime-support, composition-root, or
+tooling role, and every direct internal dependency is allowlisted by normal,
+development, or build class. Development-only adapter composition supports
+conformance tests without authorizing the same production edge. The current
+graph has no temporary exceptions. See
+[Workspace dependency rules](dependency-rules.md) for the exact graph and the
+complementary responsibilities of the Rust and Python architecture checks.
+
 The application-owned `edgeagent-messaging` ports define durable publication,
 outbox relay storage, atomic inbound processing and quarantine, one-at-a-time
 delivery, broker metadata, and confirmed settlement without broker or database
@@ -187,6 +198,8 @@ Cross-repository authority and handoffs are fixed by
 The persistence-neutral inbound boundary and adapter-owned transaction are
 fixed by
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
+Executable package roles and dependency edges are fixed by
+[ADR-0007](../decisions/0007-enforce-workspace-capability-dependencies.md).
 Deployment profiles and provider mappings are defined in
 [Deployment Portability](deployment-portability.md).
 

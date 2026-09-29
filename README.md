@@ -91,6 +91,7 @@ for the complete ownership, security, and handoff contract.
 
 - [Product vision](docs/product/vision.md)
 - [System architecture](docs/architecture/system-overview.md)
+- [Workspace dependency rules](docs/architecture/dependency-rules.md)
 - [Deployment portability and multi-cloud matrix](docs/architecture/deployment-portability.md)
 - [Implementation milestones](docs/roadmap/milestones.md)
 - [Architecture decisions](docs/decisions/README.md)
@@ -134,8 +135,10 @@ The initial workspace contains:
   retains terminal quarantine evidence, and audits access to exact replay bytes;
 - `edgeagent-telemetry`, which emits bounded event-spine metrics and correlated
   structured diagnostics without exposing payloads as telemetry;
-- `edgeagent-service-runtime`, which provides the common bootstrap command surface; and
-- five independently buildable service binaries under `services/`.
+- `edgeagent-service-runtime`, which provides the common bootstrap command surface;
+- five independently buildable service binaries under `services/`; and
+- `edgeagent-xtask`, which owns Cargo-native repository checks and never enters
+  a production binary or image.
 
 Each binary currently supports `describe`, `self-check`, `version`, and `help`.
 These commands prove packaging and ownership without implying that HTTP,
@@ -260,6 +263,7 @@ Install Python 3.11 or newer and the toolchain pinned by
 python scripts/verify_repository.py --format-check
 python scripts/verify_repository.py
 python scripts/verify_architecture.py
+cargo xtask architecture
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
@@ -275,6 +279,9 @@ cargo test --locked --workspace --all-targets
 Use `python3` on POSIX or `py -3` on Windows when appropriate. On systems with
 `make`, `make verify PYTHON=python3` runs the same checks. Default verification
 uses no external service, credential, paid data, or network request.
+The Python architecture verifier checks manifest and repository structure;
+`cargo xtask architecture` independently checks Cargo's normalized internal
+package graph, roles, dependency classes, stale policy, and production cycles.
 
 ## Contributing
 

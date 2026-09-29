@@ -44,6 +44,13 @@ envelopes, and domain values distinct when their invariants or evolution differ.
 A capability owns its writes. Other capabilities use its public application
 surface or versioned events, not its tables or private types.
 
+The [workspace dependency rules](../architecture/dependency-rules.md) turn
+package roles and direct internal Cargo edges into executable policy. A new
+workspace package or internal dependency MUST add its exact role, dependency
+class, and allowance in the same pull request. `cargo xtask architecture` and
+the existing Python architecture verifier are complementary required gates;
+neither prose nor a passing compile substitutes for them.
+
 ### Rust workspace and deployables
 
 - The workspace pins a stable toolchain, uses Rust 2024, and commits `Cargo.lock`.
@@ -51,6 +58,9 @@ surface or versioned events, not its tables or private types.
   and test support. Deployable crates contain composition roots and runtime wiring.
 - Workspace dependency declarations centralize versions; crate features remain
   additive and do not silently change domain behavior.
+- Normal, development, and build edges between workspace packages MUST match
+  the exact architecture policy. A development allowance does not authorize a
+  production dependency.
 - Production code MUST NOT use `unsafe` without an accepted ADR, a documented
   invariant, focused tests, and reviewer approval.
 - `unwrap`, `expect`, and `panic!` are prohibited on recoverable production

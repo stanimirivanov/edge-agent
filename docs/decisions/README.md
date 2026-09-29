@@ -7,7 +7,8 @@
 - Accepted ADRs are historical records; supersede rather than rewrite them.
 - Record alternatives, consequences, migration, security, operations, and validation.
 - The Rust workspace, portable event architecture, dry-run execution boundary,
-  and persistence-neutral inbound coordination are accepted foundations.
+  persistence-neutral inbound coordination, and executable dependency policy
+  are accepted foundations.
 
 ## When an ADR is required
 
@@ -96,3 +97,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0004](0004-separate-application-ui-gitops-and-substrate-ownership.md) | Accepted | Separate application source, UI, GitOps desired state, and substrate ownership. |
 | [ADR-0005](0005-standardize-message-routing-and-retention.md) | Accepted | Standardize message subjects, ownership, partitions, size, and retention. |
 | [ADR-0006](0006-keep-inbound-coordination-persistence-neutral.md) | Accepted | Keep inbound orchestration behind a semantic atomic store port while adapters own transactions. |
+| [ADR-0007](0007-enforce-workspace-capability-dependencies.md) | Accepted | Enforce package roles and exact direct workspace dependency policy. |

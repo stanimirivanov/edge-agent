@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify EdgeAgent's initial Cargo workspace and dependency boundaries."""
+"""Verify EdgeAgent's Cargo workspace structure and manifest boundaries."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ OUTBOX_POSTGRES = "edgeagent-outbox-postgres"
 OUTBOX_RELAY = "edgeagent-outbox-relay"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 TELEMETRY = "edgeagent-telemetry"
+XTASK = "edgeagent-xtask"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "tokio-postgres"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
@@ -72,6 +73,7 @@ OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(
 TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
+XTASK_DEPENDENCIES = frozenset({"cargo_metadata"})
 
 PACKAGE_RULES = {
     "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),
@@ -120,6 +122,11 @@ PACKAGE_RULES = {
         "lib",
         TELEMETRY_DEPENDENCIES,
         TELEMETRY_DEV_DEPENDENCIES,
+    ),
+    "crates/xtask": PackageRule(
+        XTASK,
+        "bin",
+        XTASK_DEPENDENCIES,
     ),
     "services/audit-projector": PackageRule(
         "edgeagent-audit-projector",
@@ -229,7 +236,7 @@ def verify(root: Path) -> list[Problem]:
                 Problem(relative, f"package name must be {rule.name!r}")
             )
         if package.get("publish") is not False:
-            problems.append(Problem(relative, "foundation package must set publish = false"))
+            problems.append(Problem(relative, "workspace package must set publish = false"))
 
         for field in sorted(INHERITED_PACKAGE_FIELDS):
             if package.get(field) != {"workspace": True}:
