@@ -79,6 +79,19 @@ The command order and unavailable-check protocol remain canonical in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#verification-and-constrained-environments).
 CI runs repository policy before architecture and all heavier jobs.
 
+The local-platform CI job asserts the named test exists and runs the opt-in
+PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
+forces an existing lease to expire in the test database, reclaims the message
+under the same worker token, and requires stale publish, retry, and quarantine
+attempts to fail without
+changing the new claim. It also verifies that operator replay resets the
+attempt budget without resetting the fencing generation. Run it against only
+the isolated local PostgreSQL profile:
+
+```text
+EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
+```
+
 ## Repository policy
 
 The two repository sensors have complementary ownership. The Python verifier

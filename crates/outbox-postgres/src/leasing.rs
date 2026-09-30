@@ -5,6 +5,7 @@ use crate::validation::{
     MAX_RETRY_DELAY, duration_milliseconds, validate_token,
 };
 use crate::{ClaimedMessage, OutboxError, PostgresOutbox};
+use edgeagent_messaging::LeaseGeneration;
 use std::time::Duration;
 use tokio_postgres::{Row, Transaction};
 
@@ -23,7 +24,8 @@ WITH candidates AS (
 UPDATE edgeagent_message_outbox AS outbox
 SET lease_owner = $2,
     lease_expires_at = clock_timestamp() + ($3::BIGINT * INTERVAL '1 millisecond'),
-    attempt_count = outbox.attempt_count + 1
+    attempt_count = outbox.attempt_count + 1,
+    lease_generation = outbox.lease_generation + 1
 FROM candidates
 WHERE outbox.message_source = candidates.message_source
   AND outbox.message_id = candidates.message_id
@@ -32,19 +34,21 @@ RETURNING outbox.message_source,
           outbox.message_type,
           outbox.transport_subject,
           outbox.envelope,
-          outbox.attempt_count
+          outbox.attempt_count,
+          outbox.lease_generation
 "#;
 pub(super) const RELEASE_FOR_RETRY_SQL: &str = r#"
 UPDATE edgeagent_message_outbox
-SET available_at = clock_timestamp() + ($4::BIGINT * INTERVAL '1 millisecond'),
+SET available_at = clock_timestamp() + ($5::BIGINT * INTERVAL '1 millisecond'),
     lease_owner = NULL,
     lease_expires_at = NULL,
-    last_failure_code = $5
+    last_failure_code = $6
 WHERE message_source = $1
   AND message_id = $2
   AND published_at IS NULL
   AND quarantined_at IS NULL
   AND lease_owner = $3
+  AND lease_generation = $4
   AND lease_expires_at > clock_timestamp()
 "#;
 
@@ -90,19 +94,19 @@ impl PostgresOutbox {
     ///
     /// # Errors
     ///
-    /// Returns `LeaseLost` if the lease is absent, expired, or owned by another relay.
+    /// Returns `LeaseLost` if the exact claim is absent, expired, or superseded.
     pub async fn mark_published(
         &self,
         transaction: &Transaction<'_>,
-        message_source: &str,
-        message_id: &str,
+        claim: &ClaimedMessage,
         lease_owner: &str,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
+        let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let updated = transaction
             .execute(
-                "UPDATE edgeagent_message_outbox SET published_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL, last_failure_code = NULL WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
-                &[&message_source, &message_id, &lease_owner],
+                "UPDATE edgeagent_message_outbox SET published_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL, last_failure_code = NULL WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_generation = $4 AND lease_expires_at > clock_timestamp()",
+                &[&claim.message_source(), &claim.message_id(), &lease_owner, &lease_generation],
             )
             .await
             .map_err(OutboxError::storage)?;
@@ -117,23 +121,24 @@ impl PostgresOutbox {
     pub async fn release_for_retry(
         &self,
         transaction: &Transaction<'_>,
-        message_source: &str,
-        message_id: &str,
+        claim: &ClaimedMessage,
         lease_owner: &str,
         retry_after: Duration,
         failure_code: &str,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
         validate_token("failure_code", failure_code, MAX_FAILURE_CODE_BYTES)?;
+        let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let retry_milliseconds =
             duration_milliseconds("retry_after", retry_after, Duration::ZERO, MAX_RETRY_DELAY)?;
         let updated = transaction
             .execute(
                 RELEASE_FOR_RETRY_SQL,
                 &[
-                    &message_source,
-                    &message_id,
+                    &claim.message_source(),
+                    &claim.message_id(),
                     &lease_owner,
+                    &lease_generation,
                     &retry_milliseconds,
                     &failure_code,
                 ],
@@ -154,17 +159,17 @@ impl PostgresOutbox {
     pub async fn quarantine(
         &self,
         transaction: &Transaction<'_>,
-        message_source: &str,
-        message_id: &str,
+        claim: &ClaimedMessage,
         lease_owner: &str,
         reason: &str,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
         validate_token("quarantine_reason", reason, MAX_FAILURE_CODE_BYTES)?;
+        let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let updated = transaction
             .execute(
-                "UPDATE edgeagent_message_outbox SET quarantined_at = clock_timestamp(), quarantine_reason = $4, lease_owner = NULL, lease_expires_at = NULL, last_failure_code = $4 WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
-                &[&message_source, &message_id, &lease_owner, &reason],
+                "UPDATE edgeagent_message_outbox SET quarantined_at = clock_timestamp(), quarantine_reason = $5, lease_owner = NULL, lease_expires_at = NULL, last_failure_code = $5 WHERE message_source = $1 AND message_id = $2 AND published_at IS NULL AND quarantined_at IS NULL AND lease_owner = $3 AND lease_generation = $4 AND lease_expires_at > clock_timestamp()",
+                &[&claim.message_source(), &claim.message_id(), &lease_owner, &lease_generation, &reason],
             )
             .await
             .map_err(OutboxError::storage)?;
@@ -173,6 +178,11 @@ impl PostgresOutbox {
 }
 fn claimed_message(row: Row) -> Result<ClaimedMessage, OutboxError> {
     let attempt: i32 = row.try_get(5).map_err(OutboxError::storage)?;
+    let generation: i64 = row.try_get(6).map_err(OutboxError::storage)?;
+    let generation = u64::try_from(generation)
+        .ok()
+        .and_then(|generation| LeaseGeneration::new(generation).ok())
+        .ok_or_else(OutboxError::storage_invariant)?;
     ClaimedMessage::new(
         row.try_get(0).map_err(OutboxError::storage)?,
         row.try_get(1).map_err(OutboxError::storage)?,
@@ -180,8 +190,15 @@ fn claimed_message(row: Row) -> Result<ClaimedMessage, OutboxError> {
         row.try_get(3).map_err(OutboxError::storage)?,
         row.try_get(4).map_err(OutboxError::storage)?,
         u32::try_from(attempt).map_err(|_| OutboxError::storage_invariant())?,
+        generation,
     )
     .map_err(|_| OutboxError::storage_invariant())
+}
+
+fn sql_lease_generation(generation: LeaseGeneration) -> Result<i64, OutboxError> {
+    i64::try_from(generation.get()).map_err(|_| {
+        OutboxError::invalid_argument("lease_generation exceeds PostgreSQL bigint range")
+    })
 }
 
 fn require_updated(updated: u64) -> Result<(), OutboxError> {

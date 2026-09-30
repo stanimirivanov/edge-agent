@@ -45,14 +45,13 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
 
     fn mark_published<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
             let transaction = self.client.transaction().await.map_err(unavailable)?;
             PostgresOutbox
-                .mark_published(&transaction, message_source, message_id, lease_owner)
+                .mark_published(&transaction, claim, lease_owner)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)
@@ -61,8 +60,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
 
     fn release_for_retry<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         retry_after: Duration,
         failure_code: &'operation str,
@@ -70,14 +68,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         Box::pin(async move {
             let transaction = self.client.transaction().await.map_err(unavailable)?;
             PostgresOutbox
-                .release_for_retry(
-                    &transaction,
-                    message_source,
-                    message_id,
-                    lease_owner,
-                    retry_after,
-                    failure_code,
-                )
+                .release_for_retry(&transaction, claim, lease_owner, retry_after, failure_code)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)
@@ -86,21 +77,14 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
 
     fn quarantine<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         reason: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
             let transaction = self.client.transaction().await.map_err(unavailable)?;
             PostgresOutbox
-                .quarantine(
-                    &transaction,
-                    message_source,
-                    message_id,
-                    lease_owner,
-                    reason,
-                )
+                .quarantine(&transaction, claim, lease_owner, reason)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)

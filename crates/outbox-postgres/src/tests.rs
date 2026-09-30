@@ -34,11 +34,15 @@ fn lease_arguments_are_bounded_before_database_work() {
 fn migration_uses_exact_bytes_and_source_scoped_identity() {
     assert!(PostgresOutbox::MIGRATION_SQL.contains("envelope BYTEA NOT NULL"));
     assert!(PostgresOutbox::MIGRATION_SQL.contains("PRIMARY KEY (message_source, message_id)"));
-    assert_eq!(PostgresOutbox::MIGRATIONS.len(), 3);
+    assert_eq!(PostgresOutbox::MIGRATIONS.len(), 4);
     assert!(PostgresOutbox::QUARANTINE_MIGRATION_SQL.contains("quarantined_at TIMESTAMPTZ"));
     assert!(PostgresOutbox::REPLAY_MIGRATION_SQL.contains("edgeagent_message_outbox_replay_audit"));
+    assert!(PostgresOutbox::LEASE_GENERATION_MIGRATION_SQL.contains("lease_generation BIGINT"));
     assert!(CLAIM_BATCH_SQL.contains("quarantined_at IS NULL"));
+    assert!(CLAIM_BATCH_SQL.contains("lease_generation = outbox.lease_generation + 1"));
+    assert!(RELEASE_FOR_RETRY_SQL.contains("lease_generation = $4"));
     assert!(REPLAY_QUARANTINED_SQL.contains("attempt_count = 0"));
+    assert!(!REPLAY_QUARANTINED_SQL.contains("lease_generation ="));
 }
 
 #[test]
@@ -76,5 +80,5 @@ fn replay_authorization_evidence_is_bounded_before_database_work() {
 #[test]
 fn interval_parameters_are_prepared_as_integer_milliseconds() {
     assert!(CLAIM_BATCH_SQL.contains("$3::BIGINT * INTERVAL '1 millisecond'"));
-    assert!(RELEASE_FOR_RETRY_SQL.contains("$4::BIGINT * INTERVAL '1 millisecond'"));
+    assert!(RELEASE_FOR_RETRY_SQL.contains("$5::BIGINT * INTERVAL '1 millisecond'"));
 }

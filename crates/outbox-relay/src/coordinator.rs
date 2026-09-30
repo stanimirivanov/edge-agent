@@ -88,11 +88,7 @@ pub async fn relay_once(
             );
             let persistence_started = Instant::now();
             let persistence_result = store
-                .mark_published(
-                    message.message_source(),
-                    message.message_id(),
-                    &policy.lease_owner,
-                )
+                .mark_published(&message, &policy.lease_owner)
                 .await
                 .map_err(RelayError::from);
             record_event_spine_operation(
@@ -146,13 +142,7 @@ async fn resolve_failure(
         } => {
             let persistence_started = Instant::now();
             let persistence_result = store
-                .release_for_retry(
-                    message.message_source(),
-                    message.message_id(),
-                    &policy.lease_owner,
-                    delay,
-                    failure_code,
-                )
+                .release_for_retry(message, &policy.lease_owner, delay, failure_code)
                 .await
                 .map_err(RelayError::from);
             record_event_spine_operation(
@@ -197,12 +187,7 @@ async fn quarantine(
 ) -> Result<RelayOutcome, RelayError> {
     let persistence_started = Instant::now();
     let persistence_result = store
-        .quarantine(
-            message.message_source(),
-            message.message_id(),
-            &policy.lease_owner,
-            reason.code(),
-        )
+        .quarantine(message, &policy.lease_owner, reason.code())
         .await
         .map_err(RelayError::from);
     record_event_spine_operation(

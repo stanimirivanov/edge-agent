@@ -20,7 +20,8 @@ pub use inbox::{
     QuarantineDisposition,
 };
 pub use outbox::{
-    ClaimedMessage, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
+    ClaimedMessage, LeaseGeneration, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
+    OutboxStoreFuture,
 };
 pub use publisher::{
     MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,

@@ -12,8 +12,8 @@
   identity-derived jitter and preserve the original envelope.
 - Contract failures, explicit transport rejection, and exhausted attempts enter
   retained terminal quarantine instead of retrying forever.
-- Publication occurs outside database transactions. Lease ownership guards the
-  later published, retry, or quarantine state transition.
+- Publication occurs outside database transactions. The claim's owner and
+  generation guard the later published, retry, or quarantine transition.
 
 ## Control flow
 
@@ -22,8 +22,8 @@
 The crate root remains the stable public façade: `coordinator` owns one-record
 control flow, `policy` validates worker bounds, `retry` owns deterministic
 failure decisions and backoff, `outcome` names durable results, and `error`
-preserves bounded failure categories. The split does not change the relay's
-public API or storage transition order.
+preserves bounded failure categories. The public storage port carries the
+claim's lease generation through every outcome transition.
 `PostgresOutboxRelay` is the PostgreSQL adapter used by a service composition
 root:
 
@@ -31,8 +31,10 @@ root:
 2. Commit the claim before external I/O.
 3. Decode the exact stored bytes and validate them against the process registry.
 4. Publish the unchanged identity and content outside a database transaction.
-5. Open a new short transaction and, while the lease is still owned, mark the
-   record published, release it for retry, or move it into quarantine.
+5. Open a new short transaction and present the original `ClaimedMessage`
+   (which carries its opaque `LeaseGeneration`) with the worker token. Mark the
+   record published, release it for retry, or move it into quarantine only
+   while that exact claim remains current and unexpired.
 
 One iteration never holds a database transaction during network I/O and never
 has more than one publication in flight. A service loop can stop between
@@ -43,6 +45,9 @@ If the broker persists a message but the relay cannot record success, the lease
 eventually expires and another worker republishes the same `(source, id)` and
 canonical bytes. Broker deduplication may recognize the retry, and consumer
 inboxes still prevent duplicate committed domain effects after that window.
+The storage fence cannot retract a message already sent by a stale worker; it
+prevents that worker from changing the state of a newer claim. Reusing the same
+worker token on a later claim does not grant the earlier claim authority.
 
 ## Retry and terminal-failure policy
 
@@ -94,7 +99,7 @@ authorize the operator before invoking that storage boundary.
 | Registry validation fails | Retain and quarantine without transport I/O |
 | Publish fails transiently | Persist the classified retry time and bounded code |
 | Worker stops after broker persistence | Republish after lease expiry using identical identity and bytes |
-| Lease expires before outcome persistence | State update returns `LeaseLost`; the next owner decides the record |
+| Lease expires or is reclaimed before outcome persistence, including by the same owner token | State update returns `LeaseLost`; the current claim decides the record |
 | Outcome transaction fails | Do not report success; lease expiry provides recovery |
 
 `RelayOutcome` exposes idle, published, retry-scheduled, and quarantined states.
@@ -108,8 +113,10 @@ failures while preserving internal causes without exposing them in public text.
 
 Credential-free unit tests prove configuration bounds, permanent/transient
 classification, deterministic jitter, attempt exhaustion, and complete relay
-orchestration through in-memory publisher and storage adapters. The isolated
-PostgreSQL conformance test can be run with:
+orchestration through in-memory publisher and storage adapters. The fake store
+asserts that each published, retry, and quarantine decision forwards the exact
+generation from the committed claim. The isolated PostgreSQL conformance test
+can be run with:
 
 ```text
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-relay --test postgres_relay -- --ignored --exact relay_bounds_retry_and_quarantines_terminal_failures
@@ -118,6 +125,10 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 It verifies confirmed publication, scheduled retry, ambiguous-confirmation
 exhaustion, explicit rejection, terminal quarantine, and empty-queue behavior.
 Run it only against an isolated development or CI database.
+The [PostgreSQL outbox conformance test](postgres-outbox.md#verification) is the
+storage-boundary proof that a stale claim cannot resolve a later claim by the
+same owner token. Both are required for the lease-fencing contract in
+[ADR-0009](../decisions/0009-fence-outbox-transitions-by-claim-generation.md).
 
 ## Current limitations
 

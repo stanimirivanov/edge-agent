@@ -124,6 +124,12 @@ jobs:
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
         run: cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact transaction_identity_and_lease_invariants_hold
+      - name: Verify same-owner outbox lease fencing
+        env:
+          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+        run: |
+          cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --list | grep -Fx 'same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence: test'
+          cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
       - name: Verify PostgreSQL inbox conformance
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent

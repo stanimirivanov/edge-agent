@@ -38,10 +38,15 @@ impl PostgresOutbox {
     pub const REPLAY_MIGRATION_SQL: &'static str =
         include_str!("../migrations/0003_message_outbox_replay.sql");
 
+    /// Migration that fences each committed relay claim with a new generation.
+    pub const LEASE_GENERATION_MIGRATION_SQL: &'static str =
+        include_str!("../migrations/0004_message_outbox_lease_generation.sql");
+
     /// Ordered migrations required by this adapter.
-    pub const MIGRATIONS: [&'static str; 3] = [
+    pub const MIGRATIONS: [&'static str; 4] = [
         Self::MIGRATION_SQL,
         Self::QUARANTINE_MIGRATION_SQL,
         Self::REPLAY_MIGRATION_SQL,
+        Self::LEASE_GENERATION_MIGRATION_SQL,
     ];
 }
