@@ -21,6 +21,13 @@ service-owned database schema. The migrations create and evolve
 `edgeagent_message_outbox` in the connection's current schema; they do not
 create a shared cross-service table.
 
+The crate root is the stable public façade. `enqueue` owns exact-byte insertion
+and identity checks; `leasing` owns claim, publish, retry, and quarantine
+transitions; `replay` owns authorization audit and release; `validation` and
+`error` centralize bounded adapter inputs and failure categories. The existing
+`relay` module composes these operations behind the portable storage port.
+This organization does not change SQL or transaction semantics.
+
 Application persistence opens a PostgreSQL transaction, commits its domain
 state, and calls `PostgresOutbox::enqueue` with the same transaction before
 commit. A rollback removes both changes. External publication never occurs
