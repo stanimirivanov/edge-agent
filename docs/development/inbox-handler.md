@@ -39,6 +39,13 @@ routing, retry classification, quarantine ordering, settlement, and telemetry.
 It does not receive a database client or transaction and does not own an intake
 loop, connection lifecycle, parallelism, or service-specific domain policy.
 
+The crate root is the public façade. `coordinator` owns the one-delivery control
+flow and telemetry calls; `policy` validates consumer configuration and failure
+codes; `retry` calculates deterministic backoff; `outcome` defines confirmed
+results and classified message failures; and `error` defines bounded
+coordinator failures. These modules are private, so callers continue to use the
+same crate-root types and `handle_once` function.
+
 The durable rationale is recorded in
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
 
