@@ -259,6 +259,11 @@ services, or request a live execution mode.
 
 - GitHub owns live issue state, assignee, labels, and milestone assignment.
 - This document owns intended sequencing until an issue is created.
+- The repository-policy checker records M11 as the published milestone
+  high-water mark. Publishing M12 requires its index row, matching boundary,
+  non-empty outcome, and checker constant in the same change.
+- The milestone index uses one Markdown table whose first rendered row is the
+  `Milestone | Outcome` header; every milestone is a body row in that table.
 - Every issue names one exact milestone and one observable outcome.
 - Each work item should fit one independently reviewable pull request.
 - Later milestones may begin discovery early, but implementation cannot bypass an unmet integrity dependency.

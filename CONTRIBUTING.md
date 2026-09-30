@@ -24,12 +24,14 @@ Lowercase wording is explanatory and does not create hidden policy.
 | Concern | Canonical source |
 |---|---|
 | Product purpose, scope, and invariants | [Product vision](docs/product/vision.md) |
+| Task-to-source routing | [Documentation map](docs/README.md) |
 | Architecture, ownership, and control flow | [System architecture](docs/architecture/system-overview.md) |
 | Direct workspace package and dependency policy | [Workspace dependency rules](docs/architecture/dependency-rules.md) |
 | Deployment profiles and provider capability mapping | [Deployment portability](docs/architecture/deployment-portability.md) |
 | Contributor workflow and completion | This document |
 | Concise contributor and agent entry point | [AGENTS.md](AGENTS.md) |
 | Engineering and testing practice | [Engineering standards](docs/development/engineering-standards.md) |
+| Harness tiers, sensors, and extension rules | [Coding harness](docs/development/harness.md) |
 | Durable decisions | [Architecture decisions](docs/decisions/README.md) |
 | Intended sequencing and scope | [Milestones](docs/roadmap/milestones.md) |
 | Security reporting | [SECURITY.md](SECURITY.md) |
@@ -44,7 +46,9 @@ conflicts rather than silently choosing one source.
 A contributor MUST:
 
 - inspect the working tree and preserve unrelated changes;
-- read the relevant product, architecture, roadmap, standards, and accepted ADRs;
+- use the [documentation map](docs/README.md) to read the relevant product,
+  architecture, roadmap, standards, and accepted ADRs without bulk-loading
+  unrelated guidance;
 - identify the smallest observable outcome that can be reviewed independently;
 - identify affected public contracts, evidence meaning, security boundaries,
   provider behavior, documentation, and operations; and
@@ -124,6 +128,11 @@ Describe the problem and observable result.
 Acceptance criteria describe observable behavior or verifiable invariants, not
 implementation activities.
 
+The structured capability issue form preserves these fields in this order.
+The bug form separately requires reproducible observed and expected behavior,
+environment evidence, and explicit removal of secrets and licensed data.
+Changes to either form update this policy and the repository sensor together.
+
 ## Pull-request-sized work
 
 A pull request MUST:
@@ -164,30 +173,37 @@ The current foundation requires:
 
 ```text
 python scripts/verify_repository.py --format-check
+cargo fmt --all --check
 python scripts/verify_repository.py
+cargo xtask repository
 python scripts/verify_architecture.py
 cargo xtask architecture
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
 python scripts/verify_release.py
-python -m unittest discover -s tests -p "test_*.py"
-cargo fmt --all --check
 cargo metadata --locked --offline --format-version 1 --no-deps
 cargo check --locked --workspace --all-targets
 cargo clippy --locked --workspace --all-targets -- -D warnings
+python -m unittest discover -s tests -p "test_*.py"
 cargo test --locked --workspace --all-targets
 ```
 
-`make verify` runs the same commands where `make` is available. Application
-tooling may add stricter commands but must preserve a documented one-command
+`make repository` runs both repository-policy sensors. `make architecture`
+runs both dependency-policy sensors. `make verify` runs the complete default
+gate where `make` is available. Cargo may fetch missing locked dependencies;
+the checks themselves use no private service or credential. Application tooling
+may add stricter commands but must preserve a documented one-command
 verification entry point.
 
-The Python architecture verifier checks manifest and repository conventions,
+The Python repository verifier owns encoding, line endings, final newlines,
+required-path inventory, and a simple independent documentation baseline.
+`cargo xtask repository` owns rendered CommonMark navigation and governance
+contracts. The Python architecture verifier checks manifest conventions,
 including complete direct dependency keys. `cargo xtask architecture` checks
 Cargo's normalized internal package graph, architectural roles, dependency
-classes, stale policy, and production cycles. Run both after changing a Cargo
-manifest; a pass from one does not replace the other.
+classes, stale policy, and production cycles. Run both checks in the affected
+pair; a pass from one does not replace the other.
 
 Changes to `Dockerfile`, `.dockerignore`, `deploy/images.toml`, service package
 names, component descriptors, or runtime packaging MUST also run
@@ -263,10 +279,24 @@ A long document MUST contain `## TL;DR` near its start when it has 800 or more
 words, more than five second-level sections, or is an architecture, security,
 operational, migration, product, or end-to-end guide.
 
+The `TL;DR` MUST be the first visible second-level heading. The document title,
+ADR status metadata, and author-only HTML comments MAY precede it; narrative
+prose, images, raw HTML elements, and fenced examples MUST NOT. Raw HTML
+elements MUST NOT appear in the `TL;DR` body. Comments, images, and fenced
+examples do not satisfy the rendered summary.
+Repository-local links MUST use source-relative destinations, stay inside the
+repository, avoid directories excluded from policy discovery, use exact path
+case, and name an existing rendered heading when they include a Markdown
+fragment.
+
 Documentation is part of the contract. Public behavior, configuration,
 failure semantics, operations, and troubleshooting change with implementation.
 Examples SHOULD be executable or mechanically verified. Accepted ADRs are
 historical records; supersede rather than rewrite them.
+
+Use the feedback and extension rules in the
+[coding harness](docs/development/harness.md) when recurring review findings
+justify new guidance, a structural sensor, or a focused behavior test.
 
 ## Pull request description
 
@@ -277,6 +307,7 @@ A pull request MUST state:
 - scope, exclusions, assumptions, and unresolved questions;
 - design, data-meaning, and compatibility decisions;
 - verification commands and outcomes, including checks not run;
+- the blocker and residual risk for every check not run;
 - market-data, model-trust, security, migration, rollout, rollback, and
   operational considerations; and
 - known limitations and follow-up work.

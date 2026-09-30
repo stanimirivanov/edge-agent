@@ -73,7 +73,9 @@ OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(
 TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
-XTASK_DEPENDENCIES = frozenset({"cargo_metadata"})
+XTASK_DEPENDENCIES = frozenset(
+    {"cargo_metadata", "percent-encoding", "pulldown-cmark"}
+)
 
 PACKAGE_RULES = {
     "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),

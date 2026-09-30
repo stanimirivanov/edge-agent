@@ -2,11 +2,12 @@ PYTHON ?= python
 LOCAL_COMPOSE = docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml
 SBOM_OUTPUT ?= artifacts/sbom
 
-.PHONY: architecture check fmt help image-smoke local-down local-status local-up sbom-images sbom-rust supply-chain test verify
+.PHONY: architecture check fmt help image-smoke local-down local-status local-up repository sbom-images sbom-rust supply-chain test verify
 
 help:
 	@echo EdgeAgent engineering command surface
 	@echo   make fmt     Check repository and Rust formatting
+	@echo   make repository    Enforce text, documentation, and governance contracts
 	@echo   make architecture  Enforce manifest and capability dependency boundaries
 	@echo   make check   Validate repository, architecture, build, and lint contracts
 	@echo   make image-smoke  Build and run every OCI image using Docker
@@ -23,12 +24,17 @@ fmt:
 	$(PYTHON) scripts/verify_repository.py --format-check
 	cargo fmt --all --check
 
+repository:
+	$(PYTHON) scripts/verify_repository.py
+	cargo xtask repository
+
 architecture:
 	$(PYTHON) scripts/verify_architecture.py
 	cargo xtask architecture
 
 check:
 	$(PYTHON) scripts/verify_repository.py
+	cargo xtask repository
 	$(PYTHON) scripts/verify_architecture.py
 	cargo xtask architecture
 	$(PYTHON) scripts/verify_images.py
