@@ -4,6 +4,7 @@ use edgeagent_contracts::{MessageEnvelope, MessageRegistry, MessageRoutingError}
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
+use std::num::NonZeroU64;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -15,6 +16,8 @@ pub type OutboxStoreFuture<'operation, Output> =
 ///
 /// Implementations own their transaction boundaries. A claim must be committed
 /// before it is returned so publication never occurs inside a storage transaction.
+/// Every outcome transition must compare the generation of that exact claim,
+/// not only its worker identity; worker tokens can be reused after lease expiry.
 pub trait OutboxRelayStore: Send {
     /// Claim at most one available message for this relay worker.
     fn claim_one<'operation>(
@@ -26,16 +29,14 @@ pub trait OutboxRelayStore: Send {
     /// Record confirmed durable publication under the original lease.
     fn mark_published<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()>;
 
     /// Release a leased message for a bounded delayed retry.
     fn release_for_retry<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         retry_after: Duration,
         failure_code: &'operation str,
@@ -44,11 +45,35 @@ pub trait OutboxRelayStore: Send {
     /// Move a leased message into terminal quarantine.
     fn quarantine<'operation>(
         &'operation mut self,
-        message_source: &'operation str,
-        message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         reason: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()>;
+}
+
+/// Opaque, positive identity of one committed outbox claim.
+///
+/// Unlike the retry attempt count, this value must never reset on replay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LeaseGeneration(NonZeroU64);
+
+impl LeaseGeneration {
+    /// Construct a positive claim generation from a storage adapter.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invariant` when storage reports an unclaimed generation.
+    pub fn new(value: u64) -> Result<Self, OutboxStoreError> {
+        NonZeroU64::new(value).map(Self).ok_or_else(|| {
+            OutboxStoreError::invariant("lease generation must be greater than zero")
+        })
+    }
+
+    /// Return the numeric generation for adapter-side compare-and-set.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
 }
 
 /// One durable outbound message claimed for publication.
@@ -60,14 +85,15 @@ pub struct ClaimedMessage {
     transport_subject: String,
     envelope: Vec<u8>,
     attempt: u32,
+    lease_generation: LeaseGeneration,
 }
 
 impl ClaimedMessage {
     /// Construct a claimed message from a persistence adapter.
     ///
     /// Stored contract fields remain untrusted and are validated before
-    /// publication. Only the storage invariant that attempts are one-based is
-    /// enforced here.
+    /// publication. The constructor requires one-based attempts and an already
+    /// validated generation identifying this particular claim.
     ///
     /// # Errors
     ///
@@ -79,6 +105,7 @@ impl ClaimedMessage {
         transport_subject: String,
         envelope: Vec<u8>,
         attempt: u32,
+        lease_generation: LeaseGeneration,
     ) -> Result<Self, OutboxStoreError> {
         if attempt == 0 {
             return Err(OutboxStoreError::invariant(
@@ -92,6 +119,7 @@ impl ClaimedMessage {
             transport_subject,
             envelope,
             attempt,
+            lease_generation,
         })
     }
 
@@ -129,6 +157,12 @@ impl ClaimedMessage {
     #[must_use]
     pub const fn attempt(&self) -> u32 {
         self.attempt
+    }
+
+    /// Return the fence for this exact claim, including after owner-token reuse.
+    #[must_use]
+    pub const fn lease_generation(&self) -> LeaseGeneration {
+        self.lease_generation
     }
 
     /// Decode and revalidate the stored bytes and denormalized routing metadata.
@@ -248,10 +282,20 @@ fn require_equal(
 
 #[cfg(test)]
 mod tests {
-    use super::{ClaimedMessage, OutboxStoreErrorKind};
+    use super::{ClaimedMessage, LeaseGeneration, OutboxStoreError, OutboxStoreErrorKind};
 
     #[test]
-    fn claimed_message_attempt_is_one_based() {
+    fn lease_generation_is_positive() -> Result<(), OutboxStoreError> {
+        assert_eq!(
+            LeaseGeneration::new(0).err().map(|error| error.kind()),
+            Some(OutboxStoreErrorKind::Invariant)
+        );
+        assert_eq!(LeaseGeneration::new(1)?.get(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn claimed_message_attempt_is_one_based() -> Result<(), OutboxStoreError> {
         let result = ClaimedMessage::new(
             "urn:edgeagent:component:gateway".to_owned(),
             "message-01".to_owned(),
@@ -259,11 +303,13 @@ mod tests {
             "edgeagent.command.execution.submit-dry-run-order.v1".to_owned(),
             b"{}".to_vec(),
             0,
+            LeaseGeneration::new(1)?,
         );
 
         assert_eq!(
             result.err().map(|error| error.kind()),
             Some(OutboxStoreErrorKind::Invariant)
         );
+        Ok(())
     }
 }

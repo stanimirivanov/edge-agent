@@ -8,7 +8,9 @@
   different content under the same identity is rejected.
 - Relay workers claim bounded batches with `FOR UPDATE SKIP LOCKED` and expiring
   leases, so concurrent workers receive disjoint records and crashed work recovers.
-- Publication and retry release require the current, unexpired lease owner.
+- Publication, retry release, and quarantine require the current, unexpired
+  lease owner **and** the generation returned by that specific claim. Reusing a
+  worker token cannot authorize an older claim.
 - An authorized replay request atomically appends operator audit evidence and
   releases immutable quarantine content with a fresh attempt budget.
 - Published and quarantined records remain as operational evidence; the adapter
@@ -26,7 +28,6 @@ and identity checks; `leasing` owns claim, publish, retry, and quarantine
 transitions; `replay` owns authorization audit and release; `validation` and
 `error` centralize bounded adapter inputs and failure categories. The existing
 `relay` module composes these operations behind the portable storage port.
-This organization does not change SQL or transaction semantics.
 
 Application persistence opens a PostgreSQL transaction, commits its domain
 state, and calls `PostgresOutbox::enqueue` with the same transaction before
@@ -39,7 +40,7 @@ The outbox stores:
 - versioned message type and definition-derived transport subject;
 - exact structured JSON bytes in `BYTEA`;
 - creation and next-availability timestamps from the database clock;
-- attempt count, current lease owner, and lease expiry;
+- attempt count, monotonic lease generation, current lease owner, and lease expiry;
 - publication time and the last bounded failure code;
 - terminal quarantine time and bounded operator reason; and
 - append-only replay request, actor, reason, prior quarantine, and attempt evidence.
@@ -56,13 +57,16 @@ A relay performs each state change in a short transaction:
 1. `claim_batch` validates the worker token, batch size, and lease duration.
 2. PostgreSQL selects eligible records in deterministic order using
    `FOR UPDATE SKIP LOCKED`.
-3. The claim sets a database-clock lease and increments the attempt counter.
+3. The claim sets a database-clock lease and increments both the attempt counter
+   and a per-record lease generation. Its committed result returns an opaque
+   `LeaseGeneration` with the message.
 4. Outside the transaction, the relay revalidates stored bytes against its
    `MessageRegistry` and publishes through `MessagePublisher`.
-5. A confirmed `Persisted` or `Duplicate` result calls `mark_published` in a
-   new transaction.
-6. A retryable failure calls `release_for_retry` with policy-selected delay and
-   a bounded, non-sensitive reason code.
+5. A confirmed `Persisted` or `Duplicate` result calls `mark_published` with
+   that claim's generation in a new transaction.
+6. A retryable failure calls `release_for_retry` with the same generation,
+   policy-selected delay, and a bounded, non-sensitive reason code. Terminal
+   quarantine also requires the claim's generation.
 
 If a relay stops after claiming, the record becomes eligible when its lease
 expires. If it stops after broker persistence but before `mark_published`, the
@@ -70,13 +74,19 @@ next worker republishes the same identity and relies on bounded broker
 deduplication. The [transactional PostgreSQL inbox](postgres-inbox.md) provides
 consumer-side deduplication after the broker window expires.
 
-The adapter rejects completion by another owner or after lease expiry. This
-prevents a slow worker from marking a record after ownership has transferred.
-Lease duration must exceed the configured publication timeout while remaining
-short enough for the recovery objective; the adapter bounds it to 15 minutes.
+Every outcome predicate compares message identity, worker token, claim
+generation, and unexpired lease. The adapter rejects a stale claim even when
+the expired lease was reclaimed by a worker using the **same** token. The
+attempt counter cannot serve as the fence: authorized replay resets the attempt
+budget, but never resets lease generation. A stale worker may still have sent
+the identical message to the broker; fencing prevents it from recording an
+outcome for a newer claim, while broker and inbox deduplication contain duplicate
+effects. Lease duration must exceed the configured publication timeout while
+remaining short enough for the recovery objective; the adapter bounds it to
+15 minutes.
 
 `quarantine` retains a leased record while removing it from future claims. It
-requires the current unexpired lease, pairs timestamp with a bounded reason,
+requires the current unexpired claim, pairs timestamp with a bounded reason,
 and cannot coexist with published state. The
 [bounded relay](outbox-relay.md) owns publication failure classification and
 attempt policy; storage does not infer those application decisions.
@@ -95,7 +105,8 @@ Migration 0003 adds `edgeagent_message_outbox_replay_audit`. One transaction:
 2. appends its replay request ID, operator identity, reason, prior quarantine
    reason, prior attempt count, and database timestamps;
 3. clears quarantine and prior failure state; and
-4. resets the attempt count so the next relay claim begins at attempt one.
+4. resets the attempt count so the next relay claim begins at attempt one,
+   without resetting the monotonic lease generation.
 
 The envelope, CloudEvents identity, routing metadata, and creation time never
 change. Preserving identity makes an uncertain earlier publication safe: broker
@@ -120,7 +131,7 @@ direct table access, and audit rows must remain append-only under deployment pol
 | `InvalidArgument` | Batch, lease, worker, delay, or reason code violates a bound | Correct relay configuration or policy |
 | `Storage` | PostgreSQL operation failed | Roll back and apply bounded transient-failure policy |
 | `StorageInvariant` | Stored data contradicts adapter assumptions | Quarantine and investigate corruption or unsupported mutation |
-| `LeaseLost` | Lease expired, disappeared, or belongs to another worker | Stop processing that record without marking it |
+| `LeaseLost` | Lease expired, disappeared, or its owner/generation no longer names this claim | Stop processing that record without marking it |
 | `ReplayRequestConflict` | Replay request identity already names different evidence | Fail closed and investigate request-ID reuse |
 | `NotQuarantined` | Target is missing, published, or already released | Refresh operator state; do not infer success |
 
@@ -132,6 +143,26 @@ Database roles should grant each service access only to its own schema. Relay
 workers need select/update access to their service's outbox, while unrelated
 services and browser identities receive none. Migration authority remains
 separate from runtime identity in deployment profiles.
+
+## Migration and rollout
+
+The additive migration initializes `lease_generation BIGINT NOT NULL DEFAULT 0`
+for existing records. Each successful claim increments it atomically under the
+row lock; a generation overflow fails the claim rather than wrapping or
+reusing an earlier generation. Publication, retry, quarantine, and audited
+replay leave the generation unchanged. The next claim after replay receives a
+new generation even though its attempt count restarts at one. This is the
+persisted and public-port compatibility decision in
+[ADR-0009](../decisions/0009-fence-outbox-transitions-by-claim-generation.md).
+
+Quiesce older relay binaries and drain their in-flight work or let their leases
+expire. Apply the migration, then start only the generation-aware version. An
+older binary can still execute its owner-only outcome predicate, so mixed relay
+versions do not provide fencing. A rollback
+that restores an older relay must use the same quiesce-and-drain procedure and
+explicitly accepts loss of the fencing guarantee; retaining the corrected relay
+is the safe operational default. The column is additive and does not change
+message identity, envelope bytes, or retained audit evidence.
 
 ## Verification
 
@@ -148,8 +179,21 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 It creates a process-scoped schema and verifies transactional rollback,
 idempotent enqueue, conflicting content, leasing, foreign-owner rejection,
 quarantine, audited replay, duplicate and conflicting replay requests, attempt
-budget reset, unchanged envelope bytes, publication, and queue exhaustion. It
-then removes the schema. Run it only against an isolated development or CI database.
+budget reset, unchanged envelope bytes, publication, and queue exhaustion.
+
+The same-owner fencing regression is a separate isolated test:
+
+```text
+EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
+```
+
+It expires and reclaims a record with the same worker token, rejects the old
+generation for publish, retry, and quarantine without altering the new claim,
+and proves audited replay resets attempt budget without reusing the generation.
+Both tests remove their process-scoped schemas. Run them only against an
+isolated development or CI database. The local-platform CI job invokes these
+ignored tests explicitly; the default credential-free test gate does not run
+them.
 
 ## Current limitations
 

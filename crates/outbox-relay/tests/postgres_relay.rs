@@ -131,9 +131,9 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
         .await?;
     client.batch_execute(PostgresOutbox::MIGRATION_SQL).await?;
     enqueue(&mut client, "relay-success-01").await?;
-    client
-        .batch_execute(PostgresOutbox::QUARANTINE_MIGRATION_SQL)
-        .await?;
+    for migration in PostgresOutbox::MIGRATIONS.iter().skip(1) {
+        client.batch_execute(migration).await?;
+    }
 
     let definitions = [COMMAND];
     let registry = MessageRegistry::new(&definitions)?;

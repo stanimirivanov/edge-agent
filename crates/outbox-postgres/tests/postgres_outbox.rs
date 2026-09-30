@@ -127,14 +127,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     let first = &claimed[0];
     let second = &claimed[1];
     let transaction = client.transaction().await?;
-    let lost = outbox
-        .mark_published(
-            &transaction,
-            first.message_source(),
-            first.message_id(),
-            "relay_02",
-        )
-        .await;
+    let lost = outbox.mark_published(&transaction, first, "relay_02").await;
     assert_eq!(
         lost.err().map(|error| error.kind()),
         Some(OutboxErrorKind::LeaseLost)
@@ -145,20 +138,14 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     outbox
         .release_for_retry(
             &transaction,
-            first.message_source(),
-            first.message_id(),
+            first,
             "relay_01",
             Duration::ZERO,
             "transport_unavailable",
         )
         .await?;
     outbox
-        .mark_published(
-            &transaction,
-            second.message_source(),
-            second.message_id(),
-            "relay_01",
-        )
+        .mark_published(&transaction, second, "relay_01")
         .await?;
     transaction.commit().await?;
 
@@ -169,13 +156,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     assert_eq!(retried.len(), 1);
     assert_eq!(retried[0].attempt(), 2);
     outbox
-        .quarantine(
-            &transaction,
-            retried[0].message_source(),
-            retried[0].message_id(),
-            "relay_02",
-            "transport_rejected",
-        )
+        .quarantine(&transaction, &retried[0], "relay_02", "transport_rejected")
         .await?;
     transaction.commit().await?;
 
@@ -262,13 +243,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     assert_eq!(replayed[0].attempt(), 1);
     assert_eq!(replayed[0].envelope_bytes(), retried[0].envelope_bytes());
     outbox
-        .quarantine(
-            &transaction,
-            replayed[0].message_source(),
-            replayed[0].message_id(),
-            "relay_03",
-            "transport_rejected",
-        )
+        .quarantine(&transaction, &replayed[0], "relay_03", "transport_rejected")
         .await?;
     transaction.commit().await?;
 
@@ -324,12 +299,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
         retried[0].envelope_bytes()
     );
     outbox
-        .mark_published(
-            &transaction,
-            replayed_again[0].message_source(),
-            replayed_again[0].message_id(),
-            "relay_04",
-        )
+        .mark_published(&transaction, &replayed_again[0], "relay_04")
         .await?;
     transaction.commit().await?;
 
@@ -353,6 +323,188 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
         )
         .await?;
     assert_eq!(audit_count.try_get::<_, i64>(0)?, 2);
+
+    client
+        .batch_execute(&format!(
+            "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+        ))
+        .await?;
+    connection_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
+async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence()
+-> Result<(), Box<dyn Error>> {
+    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
+    let (mut client, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
+    let connection_task = tokio::spawn(connection);
+    let schema = format!("edgeagent_outbox_fence_test_{}", process::id());
+    client
+        .batch_execute(&format!(
+            "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+        ))
+        .await?;
+    for migration in PostgresOutbox::MIGRATIONS {
+        client.batch_execute(migration).await?;
+    }
+
+    let outbox = PostgresOutbox;
+    let envelope = COMMAND.build(metadata(Component::Gateway), &json!({"quantity": 1}))?;
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox.enqueue(&transaction, COMMAND, &envelope).await?,
+        EnqueueDisposition::Inserted
+    );
+    transaction.commit().await?;
+
+    let owner = "relay_same_owner";
+    let lease_duration = Duration::from_secs(15 * 60);
+    let transaction = client.transaction().await?;
+    let mut first_claims = outbox
+        .claim_batch(&transaction, owner, 1, lease_duration)
+        .await?;
+    assert_eq!(first_claims.len(), 1);
+    let first_claim = first_claims.remove(0);
+    transaction.commit().await?;
+    assert_eq!(first_claim.attempt(), 1);
+
+    // Expire only the first claim without sleeping or depending on scheduler timing.
+    let first_generation = i64::try_from(first_claim.lease_generation().get())?;
+    let expired = client
+        .execute(
+            "UPDATE edgeagent_message_outbox SET lease_expires_at = clock_timestamp() - INTERVAL '1 millisecond' WHERE message_source = $1 AND message_id = $2 AND lease_owner = $3 AND lease_generation = $4",
+            &[
+                &first_claim.message_source(),
+                &first_claim.message_id(),
+                &owner,
+                &first_generation,
+            ],
+        )
+        .await?;
+    assert_eq!(expired, 1);
+
+    let transaction = client.transaction().await?;
+    let mut current_claims = outbox
+        .claim_batch(&transaction, owner, 1, lease_duration)
+        .await?;
+    assert_eq!(current_claims.len(), 1);
+    let current_claim = current_claims.remove(0);
+    transaction.commit().await?;
+    assert_eq!(current_claim.attempt(), 2);
+    assert!(current_claim.lease_generation().get() > first_claim.lease_generation().get());
+
+    let transaction = client.transaction().await?;
+    let stale_publish = outbox
+        .mark_published(&transaction, &first_claim, owner)
+        .await;
+    assert_eq!(
+        stale_publish.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::LeaseLost)
+    );
+    let stale_retry = outbox
+        .release_for_retry(
+            &transaction,
+            &first_claim,
+            owner,
+            Duration::ZERO,
+            "transport_unavailable",
+        )
+        .await;
+    assert_eq!(
+        stale_retry.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::LeaseLost)
+    );
+    let stale_quarantine = outbox
+        .quarantine(&transaction, &first_claim, owner, "transport_rejected")
+        .await;
+    assert_eq!(
+        stale_quarantine.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::LeaseLost)
+    );
+    transaction.commit().await?;
+
+    let state = client
+        .query_one(
+            "SELECT lease_owner, lease_generation, attempt_count, published_at IS NULL, quarantined_at IS NULL, last_failure_code, lease_expires_at > clock_timestamp() FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2",
+            &[&current_claim.message_source(), &current_claim.message_id()],
+        )
+        .await?;
+    assert_eq!(
+        state.try_get::<_, Option<String>>(0)?.as_deref(),
+        Some(owner)
+    );
+    assert_eq!(
+        state.try_get::<_, i64>(1)?,
+        i64::try_from(current_claim.lease_generation().get())?
+    );
+    assert_eq!(state.try_get::<_, i32>(2)?, 2);
+    assert!(state.try_get::<_, bool>(3)?);
+    assert!(state.try_get::<_, bool>(4)?);
+    assert_eq!(state.try_get::<_, Option<String>>(5)?, None);
+    assert!(state.try_get::<_, bool>(6)?);
+
+    let transaction = client.transaction().await?;
+    outbox
+        .quarantine(&transaction, &current_claim, owner, "transport_rejected")
+        .await?;
+    transaction.commit().await?;
+
+    let replay_request = ReplayRequest::new(
+        "fence-replay-01",
+        "urn:edgeagent:operator:alice",
+        "configuration_remediated",
+    )?;
+    let transaction = client.transaction().await?;
+    assert_eq!(
+        outbox
+            .replay_quarantined(
+                &transaction,
+                current_claim.message_source(),
+                current_claim.message_id(),
+                replay_request,
+            )
+            .await?,
+        ReplayDisposition::Released
+    );
+    transaction.commit().await?;
+
+    let released = client
+        .query_one(
+            "SELECT lease_generation, attempt_count, quarantined_at IS NULL FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2",
+            &[&current_claim.message_source(), &current_claim.message_id()],
+        )
+        .await?;
+    assert_eq!(
+        released.try_get::<_, i64>(0)?,
+        i64::try_from(current_claim.lease_generation().get())?
+    );
+    assert_eq!(released.try_get::<_, i32>(1)?, 0);
+    assert!(released.try_get::<_, bool>(2)?);
+
+    let transaction = client.transaction().await?;
+    let mut replayed_claims = outbox
+        .claim_batch(&transaction, owner, 1, lease_duration)
+        .await?;
+    assert_eq!(replayed_claims.len(), 1);
+    let replayed_claim = replayed_claims.remove(0);
+    transaction.commit().await?;
+    assert_eq!(replayed_claim.attempt(), 1);
+    assert!(replayed_claim.lease_generation().get() > current_claim.lease_generation().get());
+
+    let transaction = client.transaction().await?;
+    let stale_after_replay = outbox
+        .mark_published(&transaction, &current_claim, owner)
+        .await;
+    assert_eq!(
+        stale_after_replay.err().map(|error| error.kind()),
+        Some(OutboxErrorKind::LeaseLost)
+    );
+    outbox
+        .mark_published(&transaction, &replayed_claim, owner)
+        .await?;
+    transaction.commit().await?;
 
     client
         .batch_execute(&format!(

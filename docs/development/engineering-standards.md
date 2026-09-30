@@ -110,6 +110,10 @@ neither prose nor a passing compile substitutes for them.
 - External calls remain outside database transactions.
 - Exact retry requires stable identity plus immutable-content comparison; a key
   match alone does not prove equivalent work.
+- A recoverable lease MUST carry a per-claim fencing value, not just a reusable
+  worker identity. Every state-changing completion MUST compare the current
+  owner, fencing value, and unexpired lease atomically. An attempt counter is
+  not a fence when retry or replay can reset it.
 
 ### Concurrency and background work
 
@@ -230,6 +234,11 @@ prompts, model/tool schemas, and evaluation fixtures as compatibility boundaries
 - Defect fixes include a regression test that fails before the fix.
 - Cover success plus relevant rejection, duplicate, stale/conflicting evidence,
   authorization, timeout, retry, cancellation, partial failure, and recovery.
+- Lease conformance tests MUST expire and reclaim a record under the same
+  worker identity, then prove that the stale claim cannot publish, retry, or
+  quarantine the newer claim. Application tests MUST prove the exact claim
+  fence reaches each completion path; adapter tests MUST prove the atomic
+  persistence guard.
 - Use controlled clocks and synthetic fixtures. Default CI must not require a
   network, paid provider, credentials, or externally mutable market data.
 - Gate live-provider tests explicitly and prevent them from publishing or trading.

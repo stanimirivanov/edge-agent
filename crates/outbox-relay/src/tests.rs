@@ -3,8 +3,8 @@ use crate::{QuarantineReason, RelayErrorKind, RelayOutcome, RelayPolicy, relay_o
 
 use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRegistry};
 use edgeagent_messaging::{
-    ClaimedMessage, MessagePublisher, OutboxRelayStore, OutboxStoreFuture, PublishDisposition,
-    PublishErrorKind, PublishFuture, PublishReceipt,
+    ClaimedMessage, LeaseGeneration, MessagePublisher, OutboxRelayStore, OutboxStoreFuture,
+    PublishDisposition, PublishError, PublishErrorKind, PublishFuture, PublishReceipt,
 };
 use serde_json::json;
 use std::error::Error;
@@ -16,11 +16,20 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     Component::ExecutionSimulator,
     "order",
 );
+const CLAIM_GENERATION: u64 = 7;
+
+#[derive(Debug, Eq, PartialEq)]
+enum Transition {
+    Claimed,
+    Published(u64),
+    RetryScheduled(u64),
+    Quarantined(u64),
+}
 
 #[derive(Default)]
 struct InMemoryStore {
     claimed: Option<ClaimedMessage>,
-    transitions: Vec<&'static str>,
+    transitions: Vec<Transition>,
 }
 
 impl OutboxRelayStore for InMemoryStore {
@@ -30,46 +39,46 @@ impl OutboxRelayStore for InMemoryStore {
         _lease_duration: Duration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
         Box::pin(async move {
-            self.transitions.push("claimed");
+            self.transitions.push(Transition::Claimed);
             Ok(self.claimed.take())
         })
     }
 
     fn mark_published<'operation>(
         &'operation mut self,
-        _message_source: &'operation str,
-        _message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            self.transitions.push("published");
+            self.transitions
+                .push(Transition::Published(claim.lease_generation().get()));
             Ok(())
         })
     }
 
     fn release_for_retry<'operation>(
         &'operation mut self,
-        _message_source: &'operation str,
-        _message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
         _retry_after: Duration,
         _failure_code: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            self.transitions.push("retry_scheduled");
+            self.transitions
+                .push(Transition::RetryScheduled(claim.lease_generation().get()));
             Ok(())
         })
     }
 
     fn quarantine<'operation>(
         &'operation mut self,
-        _message_source: &'operation str,
-        _message_id: &'operation str,
+        claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
         _reason: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            self.transitions.push("quarantined");
+            self.transitions
+                .push(Transition::Quarantined(claim.lease_generation().get()));
             Ok(())
         })
     }
@@ -84,6 +93,23 @@ impl MessagePublisher for PersistingPublisher {
         _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
     ) -> PublishFuture<'publisher> {
         Box::pin(async { Ok(PublishReceipt::new(PublishDisposition::Persisted)) })
+    }
+}
+
+struct FailingPublisher(PublishErrorKind);
+
+impl MessagePublisher for FailingPublisher {
+    fn publish<'publisher>(
+        &'publisher self,
+        _definition: MessageDefinition,
+        _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
+    ) -> PublishFuture<'publisher> {
+        Box::pin(async move {
+            Err(PublishError::with_source(
+                self.0,
+                std::io::Error::other("synthetic publication failure"),
+            ))
+        })
     }
 }
 
@@ -112,6 +138,7 @@ fn claimed_message() -> Result<ClaimedMessage, Box<dyn Error>> {
         COMMAND.subject()?,
         envelope.to_json()?,
         1,
+        LeaseGeneration::new(CLAIM_GENERATION)?,
     )?)
 }
 
@@ -140,7 +167,74 @@ async fn relay_orchestration_depends_only_on_application_ports() -> Result<(), B
             attempt: 1,
         }
     ));
-    assert_eq!(store.transitions, ["claimed", "published"]);
+    assert_eq!(
+        store.transitions,
+        [Transition::Claimed, Transition::Published(CLAIM_GENERATION)]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_forwards_claim_generation_for_retry_and_quarantine() -> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        "relay_port_test",
+        Duration::from_secs(30),
+        3,
+        Duration::from_secs(1),
+        Duration::from_secs(60),
+    )?;
+
+    let mut retry_store = InMemoryStore {
+        claimed: Some(claimed_message()?),
+        ..InMemoryStore::default()
+    };
+    let retry = relay_once(
+        &mut retry_store,
+        &registry,
+        &FailingPublisher(PublishErrorKind::Unavailable),
+        &policy,
+    )
+    .await?;
+    assert!(matches!(
+        retry,
+        RelayOutcome::RetryScheduled { attempt: 1, .. }
+    ));
+    assert_eq!(
+        retry_store.transitions,
+        [
+            Transition::Claimed,
+            Transition::RetryScheduled(CLAIM_GENERATION)
+        ]
+    );
+
+    let mut quarantine_store = InMemoryStore {
+        claimed: Some(claimed_message()?),
+        ..InMemoryStore::default()
+    };
+    let quarantined = relay_once(
+        &mut quarantine_store,
+        &registry,
+        &FailingPublisher(PublishErrorKind::Rejected),
+        &policy,
+    )
+    .await?;
+    assert!(matches!(
+        quarantined,
+        RelayOutcome::Quarantined {
+            reason: QuarantineReason::TransportRejected,
+            attempt: 1,
+            ..
+        }
+    ));
+    assert_eq!(
+        quarantine_store.transitions,
+        [
+            Transition::Claimed,
+            Transition::Quarantined(CLAIM_GENERATION)
+        ]
+    );
     Ok(())
 }
 

@@ -137,8 +137,9 @@ iteration, so external I/O never occurs inside a database transaction and
 in-flight work is explicitly bounded. Durable publisher acknowledgement marks
 the retained record published. Transient or ambiguous failures use capped
 identity-jittered backoff; permanent failures and exhausted attempts enter
-retained terminal quarantine. Lease loss prevents a stale worker from recording
-an outcome after ownership has transferred.
+retained terminal quarantine. Every outcome compares the generation of its
+committed claim, preventing a stale worker from changing a newer claim even
+when the same worker token is reused after expiry.
 
 Outbound replay appends bounded operator identity and reason evidence before it
 releases an immutable quarantined outbox record. Replay preserves the original
