@@ -23,6 +23,12 @@ Every consuming service applies `PostgresInbox::MIGRATIONS` in order inside its
 own PostgreSQL schema. The migrations create inbox and quarantine tables in the
 connection's current schema; they do not create shared cross-service storage.
 
+The crate root is the stable public façade. `delivery`, `quarantine`, and
+`replay` own their respective SQL and transaction-scoped operations;
+`validation` bounds inputs before storage work, `error` preserves redacted
+failure categories, and `handler` composes the adapter with the portable
+inbound port. This organization changes no transaction or replay contract.
+
 Application coordination uses `PostgresInboundMessageStore`, which implements
 the portable `InboundMessageStore` capability. Across the persistence-neutral
 coordinator and this adapter, the required control flow is below; the adapter
