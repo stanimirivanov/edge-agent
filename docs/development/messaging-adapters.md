@@ -15,6 +15,14 @@
 - Default tests are offline; the local-platform CI job runs publisher and
   consumer conformance tests against the checked-in NATS profile.
 
+## Port ownership
+
+`edgeagent-messaging` keeps a stable public façade in `lib.rs`. `publisher`
+owns durable publication receipts and errors; `consumer` owns delivery metadata,
+one-at-a-time intake, and confirmed settlement. `inbox` defines atomic inbound
+processing and quarantine, while `outbox` defines relay storage. These are
+portable contracts; transport-specific behavior stays in adapter crates.
+
 ## Publication boundary and control flow
 
 Application code depends on `MessagePublisher`, `PublishReceipt`, and
