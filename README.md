@@ -89,6 +89,7 @@ for the complete ownership, security, and handoff contract.
 
 ## Repository map
 
+- [Task-routed documentation map](docs/README.md)
 - [Product vision](docs/product/vision.md)
 - [System architecture](docs/architecture/system-overview.md)
 - [Workspace dependency rules](docs/architecture/dependency-rules.md)
@@ -97,6 +98,7 @@ for the complete ownership, security, and handoff contract.
 - [Architecture decisions](docs/decisions/README.md)
 - [Contributor workflow](CONTRIBUTING.md)
 - [Engineering standards](docs/development/engineering-standards.md)
+- [Coding harness and feedback tiers](docs/development/harness.md)
 - [Message envelope contract](docs/development/message-contracts.md)
 - [Messaging adapters](docs/development/messaging-adapters.md)
 - [Transactional inbox handler](docs/development/inbox-handler.md)
@@ -261,34 +263,43 @@ Install Python 3.11 or newer and the toolchain pinned by
 
 ```text
 python scripts/verify_repository.py --format-check
+cargo fmt --all --check
 python scripts/verify_repository.py
+cargo xtask repository
 python scripts/verify_architecture.py
 cargo xtask architecture
 python scripts/verify_images.py
 python scripts/verify_local_stack.py
 python scripts/verify_supply_chain.py
 python scripts/verify_release.py
-python -m unittest discover -s tests -p "test_*.py"
-cargo fmt --all --check
 cargo metadata --locked --offline --format-version 1 --no-deps
 cargo check --locked --workspace --all-targets
 cargo clippy --locked --workspace --all-targets -- -D warnings
+python -m unittest discover -s tests -p "test_*.py"
 cargo test --locked --workspace --all-targets
 ```
 
 Use `python3` on POSIX or `py -3` on Windows when appropriate. On systems with
 `make`, `make verify PYTHON=python3` runs the same checks. Default verification
-uses no external service, credential, paid data, or network request.
-The Python architecture verifier checks manifest and repository structure;
-`cargo xtask architecture` independently checks Cargo's normalized internal
-package graph, roles, dependency classes, stale policy, and production cycles.
+uses no external service, credential, or paid data. Cargo may access crates.io
+to fetch missing packages from the committed lockfile; subsequent runs can use
+the local Cargo cache.
+The Python repository verifier checks text formatting, required inventory, and
+an independent documentation baseline; `cargo xtask repository` parses
+rendered CommonMark and enforces navigation, ADR, milestone, and authoring
+template contracts. The Python architecture verifier checks manifest and
+repository structure; `cargo xtask architecture` independently checks Cargo's
+normalized internal package graph, roles, dependency classes, stale policy,
+and production cycles. Use `make repository` and `make architecture` for the
+fast structural loops described in the [coding harness](docs/development/harness.md).
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) before making
-changes. The project favors one independently reviewable capability per issue
-and pull request. Never commit credentials, personal data, licensed market-data
-payloads, private prompts, or local model artifacts.
+Read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md), then use the
+[documentation map](docs/README.md) to load only the relevant sources before
+making changes. The project favors one independently reviewable capability per
+issue and pull request. Never commit credentials, personal data, licensed
+market-data payloads, private prompts, or local model artifacts.
 
 ## License
 

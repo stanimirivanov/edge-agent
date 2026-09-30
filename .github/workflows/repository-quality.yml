@@ -20,8 +20,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Check repository policy
+        run: cargo xtask repository
       - name: Check capability dependency policy
         run: cargo xtask architecture
 
@@ -36,6 +40,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -48,6 +54,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Check repository contracts
         run: python scripts/verify_repository.py
+      - name: Check rendered repository policy
+        run: cargo xtask repository
       - name: Check architecture boundaries
         run: python scripts/verify_architecture.py
       - name: Check OCI image contracts
@@ -74,6 +82,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -88,6 +98,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -154,6 +166,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v7
         with:

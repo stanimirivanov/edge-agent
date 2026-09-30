@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-- Read the product, architecture, roadmap, contributor policy, and relevant decisions before changing behavior.
+- Read the contributor policy, then use the documentation map to load only the product, architecture, roadmap, and decisions relevant to the task.
 - Preserve pre-existing work and deliver one coherent, independently reviewable capability.
 - Keep domain policy independent of frameworks, transports, storage, market-data vendors, and model providers.
 - Treat market data, retrieved content, user input, and model output as untrusted.
@@ -17,11 +17,10 @@ terms such as MUST, SHOULD, and MAY have the meanings defined there.
 ## Before changing anything
 
 1. You MUST inspect the working tree and preserve unrelated changes.
-2. You MUST read [CONTRIBUTING.md](CONTRIBUTING.md), the
-   [product vision](docs/product/vision.md), the
-   [system architecture](docs/architecture/system-overview.md), relevant
-   [engineering standards](docs/development/engineering-standards.md), and
-   accepted [architecture decisions](docs/decisions/README.md).
+2. You MUST read [CONTRIBUTING.md](CONTRIBUTING.md), then use the
+   [documentation map](docs/README.md) to load the product, architecture,
+   engineering, roadmap, and accepted-decision sources relevant to the task.
+   Do not bulk-read unrelated guides.
 3. You MUST identify the exact milestone and smallest observable outcome.
 4. You MUST use repository-local verification. You MUST NOT claim an
    unavailable or unexecuted check passed.
@@ -99,7 +98,9 @@ not silently choose the convenient source.
   idempotent commands, and rejection of every unsupported execution mode.
 - Public contracts, configuration, operational behavior, and documentation
   change in the same pull request as implementation.
-- Run `make verify` or the equivalent commands in the README. Review the full
+- Use the feedback tiers in the [coding harness](docs/development/harness.md).
+  Run `make repository` and `make architecture` while editing, then run
+  `make verify` or the equivalent commands in the README. Review the full
   diff for secrets, unrelated work, compatibility changes, and generated files.
 - Finish every work item with the completion report defined in
   [CONTRIBUTING.md](CONTRIBUTING.md#completion-report).

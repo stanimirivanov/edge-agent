@@ -8,7 +8,7 @@
 - Record alternatives, consequences, migration, security, operations, and validation.
 - The Rust workspace, portable event architecture, dry-run execution boundary,
   persistence-neutral inbound coordination, and executable dependency policy
-  are accepted foundations.
+  are accepted foundations; repository governance is progressively enforced.
 
 ## When an ADR is required
 
@@ -33,14 +33,29 @@ Use a four-digit sequence and short kebab-case name:
 0001-select-the-initial-runtime.md
 ```
 
-Statuses are Proposed, Accepted, Rejected, Deprecated, or Superseded. A
-superseded ADR links to its replacement. Do not edit the decision or
-consequences of an accepted ADR to make history appear cleaner; add a dated
-note or a new ADR.
+Statuses are Proposed, Accepted, Rejected, Deprecated, or Superseded. Milestone
+metadata uses the exact identifier and title published in the roadmap index.
+Only an Accepted decision can establish that it supersedes earlier decisions.
+When accepted, update each earlier record to Superseded and record both
+directions in the same change. A later-superseded replacement retains its own
+`Supersedes` history. Proposed, Rejected, and Deprecated records do not name
+decisions they supersede. Do not edit the decision or consequences of an
+accepted ADR to make history appear cleaner; add a dated note or a new ADR.
 
 Before allocating a number, inspect this index and the decision directory from
 fresh repository state. Use the lowest unused number. Resolve a concurrent
 collision by renumbering the later unpublished ADR.
+
+The repository-policy checker records each published ADR's number, canonical
+filename, and canonical title in its `PUBLISHED_ADRS` identity ledger. Accepted
+identity is immutable: do not reuse a number, rename its file, or rewrite its
+title. When publishing the next ADR, append its identity to that ledger in the
+same change. Removing, renumbering, renaming, or substituting published history
+must fail verification.
+
+The `## Index` section uses one Markdown table. Its first rendered row is the
+`ADR | Status | Decision` header and every published decision is a body row in
+that same table; splitting history across tables is invalid.
 
 ## Template
 
@@ -53,6 +68,10 @@ collision by renumbering the later unpublished ADR.
 - Deciders:
 - Supersedes:
 - Superseded by:
+
+## TL;DR
+
+Summarize the decision, primary reason, and material boundary.
 
 ## Context
 
@@ -98,3 +117,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0005](0005-standardize-message-routing-and-retention.md) | Accepted | Standardize message subjects, ownership, partitions, size, and retention. |
 | [ADR-0006](0006-keep-inbound-coordination-persistence-neutral.md) | Accepted | Keep inbound orchestration behind a semantic atomic store port while adapters own transactions. |
 | [ADR-0007](0007-enforce-workspace-capability-dependencies.md) | Accepted | Enforce package roles and exact direct workspace dependency policy. |
+| [ADR-0008](0008-enforce-progressive-coding-harness-policy.md) | Accepted | Enforce progressive repository guidance and deterministic governance policy. |
