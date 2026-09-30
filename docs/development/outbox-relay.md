@@ -19,6 +19,11 @@
 
 `relay_once` composes the application-owned `MessagePublisher` and
 `OutboxRelayStore` ports. It depends on neither transport nor persistence SDKs.
+The crate root remains the stable public façade: `coordinator` owns one-record
+control flow, `policy` validates worker bounds, `retry` owns deterministic
+failure decisions and backoff, `outcome` names durable results, and `error`
+preserves bounded failure categories. The split does not change the relay's
+public API or storage transition order.
 `PostgresOutboxRelay` is the PostgreSQL adapter used by a service composition
 root:
 
