@@ -82,6 +82,17 @@ broker can redeliver it. `Acknowledge`, delayed negative acknowledgement, and
 terminal settlement all use JetStream acknowledgement-sync and complete only
 after the server confirms receipt.
 
+If broker metadata fails parsing or portable validation, no `MessageDelivery`
+exists and the handler cannot persist quarantine evidence under a trustworthy
+transport identity. `JetStreamConsumer` returns `Protocol`, leaves the raw
+message unsettled, and stops pulling on that instance. The service must fail
+readiness and surface the bounded error for operator investigation; it must
+not loop on the same instance, acknowledge, or terminally settle the message.
+After correcting the broker or consumer configuration, replace the consumer
+instance and allow redelivery. An operator must inspect `max_deliver` and
+acknowledgement-wait settings before repeated restart attempts: exhaustion is
+not a substitute for durable quarantine.
+
 ## Failure and retry contract
 
 | Category | Meaning | Caller action |
@@ -106,7 +117,7 @@ Consumer failures use a separate portable classification:
 | Category | Meaning | Caller action |
 | --- | --- | --- |
 | `Unavailable` | Pull stream could not start, ended, or failed | Reconnect/recreate under bounded service policy; no delivery was acknowledged |
-| `Protocol` | Broker delivery metadata was missing, invalid, or outside portable bounds | Leave unsettled, fail readiness if systemic, and investigate provisioning/server compatibility |
+| `Protocol` | Broker delivery metadata was missing, invalid, or outside portable bounds | The instance halts intake without settlement; fail readiness, investigate provisioning/server compatibility, and replace only after correction |
 | `InvalidDisposition` | `RetryDelay` construction rejected a delay outside 1 millisecond to 24 hours | Correct handler policy before consuming the delivery; no settlement was sent |
 | `ConfirmationUnknown` | Settlement was sent or attempted but confirmation failed | Do not assume success; permit redelivery and rely on inbox idempotency |
 

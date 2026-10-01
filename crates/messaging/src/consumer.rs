@@ -23,6 +23,11 @@ pub trait MessageConsumer: Send {
     /// Cancellation drops the receive future without acknowledging a message.
     /// The returned delivery remains unsettled until the caller explicitly
     /// chooses one terminal disposition.
+    /// If broker metadata cannot be represented as a delivery, no
+    /// `MessageDelivery` exists for handler-owned quarantine. A `Protocol`
+    /// error is not a reason to acknowledge the raw message; callers must
+    /// follow the adapter's documented recovery policy rather than blindly
+    /// retrying intake.
     fn receive(&mut self) -> ReceiveFuture<'_>;
 }
 
@@ -48,8 +53,9 @@ impl DeliveryMetadata {
     ///
     /// # Errors
     ///
-    /// Returns `Protocol` when the subject is empty or the broker reports a
-    /// zero delivery attempt or sequence.
+    /// Returns `Protocol` when the message key or subject is not 1 to 512
+    /// visible ASCII bytes, or the broker reports a zero delivery attempt or
+    /// sequence.
     pub fn new(
         message_key: impl Into<String>,
         subject: impl Into<String>,
