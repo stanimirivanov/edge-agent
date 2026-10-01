@@ -175,7 +175,7 @@ impl MessageConsumer for JetStreamConsumer {
                     ConsumerSequence::new(info.consumer_sequence)?,
                 ))
             })())?;
-            let payload = message.payload.to_vec();
+            let payload = message.payload.clone();
             let (_, acker) = message.split();
             Ok(MessageDelivery::new(
                 payload,

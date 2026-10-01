@@ -378,6 +378,7 @@ dependencies = [
 name = "edgeagent-messaging"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "edgeagent-contracts",
  "tracing",
 ]

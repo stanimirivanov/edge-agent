@@ -65,7 +65,9 @@ One delivery follows this control flow:
    assembling `DeliveryMetadata`. Expose their existing scalar getters plus
    the pending count to handlers; invalid text or zero counters fail as
    `Protocol` before a delivery can be constructed.
-3. Pass the raw structured envelope bytes to the handler as untrusted input.
+3. Share the raw structured envelope bytes with the portable delivery without
+   copying the NATS payload buffer; the handler still receives an untrusted
+   byte slice and validates it independently.
 4. Validate the envelope and perform inbox/domain/outbox work in one local
    transaction.
 5. After commit, consume the delivery with `Acknowledge` and wait for broker
