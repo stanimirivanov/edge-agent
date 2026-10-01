@@ -107,6 +107,8 @@ neither prose nor a passing compile substitutes for them.
 - Preserve causes when wrapping failures.
 - Bound input, output, collection size, symbols per request, lookback windows,
   concurrency, retries, model tokens, execution time, and memory-heavy work.
+- Validate fallible settlement parameters before consuming an owned delivery or
+  other one-shot resource; a caller-side error MUST leave recovery possible.
 - External calls remain outside database transactions.
 - Exact retry requires stable identity plus immutable-content comparison; a key
   match alone does not prove equivalent work.

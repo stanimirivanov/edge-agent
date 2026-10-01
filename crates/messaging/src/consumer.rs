@@ -192,9 +192,41 @@ pub enum DeliveryDisposition {
     /// Confirm successful handling after the local transaction commits.
     Acknowledge,
     /// Request redelivery after a bounded delay while preserving message identity.
-    RetryAfter(Duration),
+    RetryAfter(RetryDelay),
     /// Stop redelivery only after durable quarantine evidence has committed.
     Quarantined,
+}
+
+/// Portable, prevalidated delay for requesting broker redelivery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RetryDelay(Duration);
+
+impl RetryDelay {
+    /// Minimum supported delayed redelivery interval.
+    pub const MIN: Duration = Duration::from_millis(1);
+    /// Maximum supported delayed redelivery interval.
+    pub const MAX: Duration = Duration::from_secs(24 * 60 * 60);
+
+    /// Validate the delay before a delivery is consumed for settlement.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidDisposition` for a delay outside 1 millisecond to 24 hours.
+    pub fn new(delay: Duration) -> Result<Self, ConsumeError> {
+        if delay < Self::MIN || delay > Self::MAX {
+            Err(ConsumeError::invalid_disposition(
+                "retry delay must be between 1 millisecond and 24 hours",
+            ))
+        } else {
+            Ok(Self(delay))
+        }
+    }
+
+    /// Return the delay accepted by the portable settlement contract.
+    #[must_use]
+    pub const fn get(self) -> Duration {
+        self.0
+    }
 }
 
 /// Caller-actionable delivery and settlement failure categories.
@@ -204,7 +236,7 @@ pub enum ConsumeErrorKind {
     Unavailable,
     /// Broker delivery metadata violates the portable contract.
     Protocol,
-    /// The requested settlement is outside portable bounds.
+    /// A retry delay was rejected before constructing a settlement disposition.
     InvalidDisposition,
     /// Settlement may have reached the broker, but confirmation was lost.
     ConfirmationUnknown,
@@ -314,8 +346,9 @@ impl Error for ConsumeError {
 mod tests {
     use super::{
         ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
-        MessageDelivery, SettlementFuture,
+        MessageDelivery, RetryDelay, SettlementFuture,
     };
+    use std::time::Duration;
 
     struct NoopSettlement;
 
@@ -338,6 +371,23 @@ mod tests {
         assert!(rendered.contains("payload_bytes"));
         assert_eq!(delivery.payload(), payload);
         Ok(())
+    }
+
+    #[test]
+    fn retry_delay_validates_before_delivery_is_consumed() {
+        for valid in [RetryDelay::MIN, RetryDelay::MAX] {
+            assert!(matches!(RetryDelay::new(valid), Ok(delay) if delay.get() == valid));
+        }
+        for invalid in [
+            Duration::ZERO,
+            RetryDelay::MIN - Duration::from_nanos(1),
+            RetryDelay::MAX + Duration::from_nanos(1),
+        ] {
+            assert_eq!(
+                RetryDelay::new(invalid).err().map(|error| error.kind()),
+                Some(ConsumeErrorKind::InvalidDisposition)
+            );
+        }
     }
 
     #[test]

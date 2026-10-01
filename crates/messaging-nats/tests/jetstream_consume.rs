@@ -5,7 +5,7 @@ use async_nats::jetstream::consumer::{AckPolicy, pull};
 use async_nats::jetstream::stream::{Config, StorageType};
 use edgeagent_contracts::{Component, MessageDefinition, MessageEnvelope, MessageMetadata};
 use edgeagent_messaging::{
-    DeliveryDisposition, MessageConsumer, MessagePublisher, PublishDisposition,
+    DeliveryDisposition, MessageConsumer, MessagePublisher, PublishDisposition, RetryDelay,
 };
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use serde_json::json;
@@ -90,7 +90,9 @@ async fn delivery_settlement_controls_redelivery_and_acknowledgement() -> Result
     assert_eq!(first.metadata().subject(), COMMAND.subject()?);
     let retried_message_key = first.metadata().message_key().to_owned();
     first
-        .settle(DeliveryDisposition::RetryAfter(Duration::from_millis(1)))
+        .settle(DeliveryDisposition::RetryAfter(RetryDelay::new(
+            Duration::from_millis(1),
+        )?))
         .await?;
 
     let retry = tokio::time::timeout(Duration::from_secs(5), consumer.receive()).await??;

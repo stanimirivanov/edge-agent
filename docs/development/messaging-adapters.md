@@ -67,17 +67,20 @@ One delivery follows this control flow:
    transaction.
 5. After commit, consume the delivery with `Acknowledge` and wait for broker
    confirmation.
-6. On a classified transient failure, use `RetryAfter` with a delay from one
-   millisecond through 24 hours.
+6. On a classified transient failure, construct `RetryDelay` before consuming
+   the delivery, then use `RetryAfter`. Delays from one millisecond through 24
+   hours are accepted; invalid delays never reach broker settlement.
 7. Use `Quarantined` only after durable quarantine evidence commits through the
    consumer-owned persistence adapter; it stops JetStream redelivery and is not
    itself a quarantine store.
 
 Settlement consumes `MessageDelivery`, preventing two terminal actions through
-the safe API. Dropping the delivery or cancelling before settlement sends no
-acknowledgement, so the broker can redeliver it. `Acknowledge`, delayed negative
-acknowledgement, and terminal settlement all use JetStream acknowledgement-sync
-and complete only after the server confirms receipt.
+the safe API. Validate a retry delay before calling `settle`: a constructor
+error leaves the delivery available for a corrected disposition. Dropping the
+delivery or cancelling before settlement sends no acknowledgement, so the
+broker can redeliver it. `Acknowledge`, delayed negative acknowledgement, and
+terminal settlement all use JetStream acknowledgement-sync and complete only
+after the server confirms receipt.
 
 ## Failure and retry contract
 
@@ -104,7 +107,7 @@ Consumer failures use a separate portable classification:
 | --- | --- | --- |
 | `Unavailable` | Pull stream could not start, ended, or failed | Reconnect/recreate under bounded service policy; no delivery was acknowledged |
 | `Protocol` | Broker delivery metadata was missing, invalid, or outside portable bounds | Leave unsettled, fail readiness if systemic, and investigate provisioning/server compatibility |
-| `InvalidDisposition` | Retry delay was zero or exceeded 24 hours | Correct handler policy; no settlement was sent |
+| `InvalidDisposition` | `RetryDelay` construction rejected a delay outside 1 millisecond to 24 hours | Correct handler policy before consuming the delivery; no settlement was sent |
 | `ConfirmationUnknown` | Settlement was sent or attempted but confirmation failed | Do not assume success; permit redelivery and rely on inbox idempotency |
 
 Public errors remain bounded while adapter causes stay in the error chain for
