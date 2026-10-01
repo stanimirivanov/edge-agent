@@ -6,7 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-const MAX_DELIVERY_TEXT_BYTES: usize = 512;
+use crate::metadata::DeliveryMetadata;
 
 /// Future returned while waiting for one durable consumer delivery.
 pub type ReceiveFuture<'consumer> =
@@ -35,111 +35,6 @@ pub trait MessageConsumer: Send {
 pub trait DeliverySettlement: Send {
     /// Apply and confirm exactly one terminal disposition.
     fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture;
-}
-
-/// Portable metadata needed for idempotency, ordering diagnostics, and backpressure.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeliveryMetadata {
-    message_key: String,
-    subject: String,
-    delivery_attempt: u32,
-    pending: u64,
-    stream_sequence: u64,
-    consumer_sequence: u64,
-}
-
-impl DeliveryMetadata {
-    /// Construct validated transport metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Protocol` when the message key or subject is not 1 to 512
-    /// visible ASCII bytes, or the broker reports a zero delivery attempt or
-    /// sequence.
-    pub fn new(
-        message_key: impl Into<String>,
-        subject: impl Into<String>,
-        delivery_attempt: u32,
-        pending: u64,
-        stream_sequence: u64,
-        consumer_sequence: u64,
-    ) -> Result<Self, ConsumeError> {
-        let message_key = message_key.into();
-        let subject = subject.into();
-        validate_delivery_text(
-            &message_key,
-            "message key must contain 1 to 512 visible ASCII bytes",
-        )?;
-        validate_delivery_text(
-            &subject,
-            "delivery subject must contain 1 to 512 visible ASCII bytes",
-        )?;
-        if delivery_attempt == 0 {
-            return Err(ConsumeError::protocol(
-                "delivery attempt must be greater than zero",
-            ));
-        }
-        if stream_sequence == 0 || consumer_sequence == 0 {
-            return Err(ConsumeError::protocol(
-                "delivery sequences must be greater than zero",
-            ));
-        }
-        Ok(Self {
-            message_key,
-            subject,
-            delivery_attempt,
-            pending,
-            stream_sequence,
-            consumer_sequence,
-        })
-    }
-
-    /// Return the opaque transport identity stable across redelivery.
-    #[must_use]
-    pub fn message_key(&self) -> &str {
-        &self.message_key
-    }
-
-    /// Return the broker subject that selected this delivery.
-    #[must_use]
-    pub fn subject(&self) -> &str {
-        &self.subject
-    }
-
-    /// Return the one-based broker delivery attempt.
-    #[must_use]
-    pub const fn delivery_attempt(&self) -> u32 {
-        self.delivery_attempt
-    }
-
-    /// Return messages known by the broker to be pending for this consumer.
-    #[must_use]
-    pub const fn pending(&self) -> u64 {
-        self.pending
-    }
-
-    /// Return the broker stream sequence used for ordering diagnostics.
-    #[must_use]
-    pub const fn stream_sequence(&self) -> u64 {
-        self.stream_sequence
-    }
-
-    /// Return the consumer delivery sequence used for redelivery diagnostics.
-    #[must_use]
-    pub const fn consumer_sequence(&self) -> u64 {
-        self.consumer_sequence
-    }
-}
-
-fn validate_delivery_text(value: &str, reason: &'static str) -> Result<(), ConsumeError> {
-    if value.is_empty()
-        || value.len() > MAX_DELIVERY_TEXT_BYTES
-        || !value.bytes().all(|byte| byte.is_ascii_graphic())
-    {
-        Err(ConsumeError::protocol(reason))
-    } else {
-        Ok(())
-    }
 }
 
 /// An untrusted delivery whose settlement is consumed exactly once.
@@ -351,8 +246,12 @@ impl Error for ConsumeError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
-        MessageDelivery, RetryDelay, SettlementFuture,
+        ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliverySettlement, MessageDelivery,
+        RetryDelay, SettlementFuture,
+    };
+    use crate::metadata::{
+        ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
+        StreamSequence,
     };
     use std::time::Duration;
 
@@ -367,7 +266,14 @@ mod tests {
     #[test]
     fn delivery_debug_omits_payload_bytes() -> Result<(), ConsumeError> {
         let payload = b"private-delivery-sentinel-7391";
-        let metadata = DeliveryMetadata::new("orders:11", "events.subject", 1, 0, 11, 13)?;
+        let metadata = DeliveryMetadata::new(
+            DeliveryMessageKey::new("orders:11")?,
+            DeliverySubject::new("events.subject")?,
+            DeliveryAttempt::new(1)?,
+            0,
+            StreamSequence::new(11)?,
+            ConsumerSequence::new(13)?,
+        );
         let delivery = MessageDelivery::new(payload.to_vec(), metadata, Box::new(NoopSettlement));
 
         let rendered = format!("{delivery:?}");
@@ -394,54 +300,5 @@ mod tests {
                 Some(ConsumeErrorKind::InvalidDisposition)
             );
         }
-    }
-
-    #[test]
-    fn delivery_metadata_requires_a_subject_and_positive_attempt() {
-        assert_eq!(
-            DeliveryMetadata::new("stream:1", "", 1, 0, 1, 1)
-                .err()
-                .map(|error| error.kind()),
-            Some(ConsumeErrorKind::Protocol)
-        );
-        assert_eq!(
-            DeliveryMetadata::new(
-                "stream:1",
-                "edgeagent.command.execution.submit.v1",
-                0,
-                0,
-                1,
-                1,
-            )
-            .err()
-            .map(|error| error.kind()),
-            Some(ConsumeErrorKind::Protocol)
-        );
-        assert_eq!(
-            DeliveryMetadata::new("", "edgeagent.command.execution.submit.v1", 1, 0, 1, 1,)
-                .err()
-                .map(|error| error.kind()),
-            Some(ConsumeErrorKind::Protocol)
-        );
-        let metadata = DeliveryMetadata::new(
-            "orders:11",
-            "edgeagent.command.execution.submit.v1",
-            2,
-            7,
-            11,
-            13,
-        );
-        assert_eq!(
-            metadata
-                .map(|metadata| {
-                    (
-                        metadata.message_key().to_owned(),
-                        metadata.delivery_attempt(),
-                        metadata.pending(),
-                    )
-                })
-                .map_err(|error| error.kind()),
-            Ok(("orders:11".to_owned(), 2, 7))
-        );
     }
 }

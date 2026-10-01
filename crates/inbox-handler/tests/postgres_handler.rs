@@ -12,8 +12,9 @@ use edgeagent_inbox_postgres::{
     PostgresTransactionalMessageHandler,
 };
 use edgeagent_messaging::{
-    ConsumeError, DeliveryDisposition, DeliveryMetadata, DeliverySettlement, MessageDelivery,
-    SettlementFuture,
+    ConsumeError, ConsumerSequence, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
+    DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageDelivery, SettlementFuture,
+    StreamSequence,
 };
 use serde_json::json;
 use std::env;
@@ -153,13 +154,13 @@ fn delivery(
     fail_confirmation: bool,
 ) -> Result<MessageDelivery, Box<dyn Error>> {
     let metadata = DeliveryMetadata::new(
-        message_key,
-        COMMAND.subject()?,
-        attempt,
+        DeliveryMessageKey::new(message_key)?,
+        DeliverySubject::new(COMMAND.subject()?)?,
+        DeliveryAttempt::new(attempt)?,
         0,
-        stream_sequence,
-        u64::from(attempt),
-    )?;
+        StreamSequence::new(stream_sequence)?,
+        ConsumerSequence::new(u64::from(attempt))?,
+    );
     Ok(MessageDelivery::new(
         payload,
         metadata,
