@@ -18,8 +18,9 @@
 ## Port ownership
 
 `edgeagent-messaging` keeps a stable public façade in `lib.rs`. `publisher`
-owns durable publication receipts and errors; `consumer` owns delivery metadata,
-one-at-a-time intake, and confirmed settlement. `inbox` defines atomic inbound
+owns durable publication receipts and errors; `metadata` owns validated
+delivery identities and counters; `consumer` owns one-at-a-time intake and
+confirmed settlement. `inbox` defines atomic inbound
 processing and quarantine, while `outbox` defines relay storage. These are
 portable contracts; transport-specific behavior stays in adapter crates.
 
@@ -59,9 +60,11 @@ acknowledgement wait, maximum deliveries, pending limits, replicas, and ACLs.
 One delivery follows this control flow:
 
 1. Pull one message without acknowledging it.
-2. Parse broker metadata and expose an opaque redelivery-stable message key,
-   subject, one-based delivery attempt, pending count, stream sequence, and
-   consumer sequence through portable types.
+2. Parse untrusted broker metadata into distinct, validated message-key,
+   subject, attempt, stream-sequence, and consumer-sequence values before
+   assembling `DeliveryMetadata`. Expose their existing scalar getters plus
+   the pending count to handlers; invalid text or zero counters fail as
+   `Protocol` before a delivery can be constructed.
 3. Pass the raw structured envelope bytes to the handler as untrusted input.
 4. Validate the envelope and perform inbox/domain/outbox work in one local
    transaction.

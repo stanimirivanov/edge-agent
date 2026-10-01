@@ -14,9 +14,10 @@ use async_nats::jetstream::message::PublishMessage;
 use async_nats::jetstream::publish::PublishAck;
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
 use edgeagent_messaging::{
-    ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
-    MessageConsumer, MessageDelivery, MessagePublisher, PublishDisposition, PublishError,
-    PublishErrorKind, PublishFuture, PublishReceipt, ReceiveFuture, SettlementFuture,
+    ConsumeError, ConsumeErrorKind, ConsumerSequence, DeliveryAttempt, DeliveryDisposition,
+    DeliveryMessageKey, DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageConsumer,
+    MessageDelivery, MessagePublisher, PublishDisposition, PublishError, PublishErrorKind,
+    PublishFuture, PublishReceipt, ReceiveFuture, SettlementFuture, StreamSequence,
 };
 use futures_util::StreamExt;
 
@@ -157,18 +158,22 @@ impl MessageConsumer for JetStreamConsumer {
                 let info = message.info().map_err(|error| {
                     ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
                 })?;
-                let delivery_attempt = u32::try_from(info.delivered).map_err(|error| {
-                    ConsumeError::with_source(ConsumeErrorKind::Protocol, error)
-                })?;
-                let message_key = delivery_message_key(info.stream, info.stream_sequence)?;
-                DeliveryMetadata::new(
+                let delivery_attempt =
+                    DeliveryAttempt::new(u32::try_from(info.delivered).map_err(|error| {
+                        ConsumeError::with_source(ConsumeErrorKind::Protocol, error)
+                    })?)?;
+                let message_key = DeliveryMessageKey::new(delivery_message_key(
+                    info.stream,
+                    info.stream_sequence,
+                )?)?;
+                Ok(DeliveryMetadata::new(
                     message_key,
-                    message.subject.to_string(),
+                    DeliverySubject::new(message.subject.to_string())?,
                     delivery_attempt,
                     info.pending,
-                    info.stream_sequence,
-                    info.consumer_sequence,
-                )
+                    StreamSequence::new(info.stream_sequence)?,
+                    ConsumerSequence::new(info.consumer_sequence)?,
+                ))
             })())?;
             let payload = message.payload.to_vec();
             let (_, acker) = message.split();

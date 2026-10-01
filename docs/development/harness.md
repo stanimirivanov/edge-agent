@@ -91,6 +91,9 @@ adjacent invalid values. A disposition must contain a validated delay, so an
 invalid caller input cannot consume a delivery before broker settlement.
 They also assert that a broker-metadata protocol fault halts the consumer's
 pre-pull gate; a caller retry loop cannot silently consume another delivery.
+The metadata tests exercise distinct field mapping, the inclusive 512-byte
+text bound, non-ASCII and non-graphic rejection, and positive counter parsing;
+the infallible assembly signature prevents primitive field transposition.
 
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It

@@ -7,17 +7,22 @@
 
 mod consumer;
 mod inbox;
+mod metadata;
 mod outbox;
 mod publisher;
 
 pub use consumer::{
-    ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
-    MessageConsumer, MessageDelivery, ReceiveFuture, RetryDelay, SettlementFuture,
+    ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliverySettlement, MessageConsumer,
+    MessageDelivery, ReceiveFuture, RetryDelay, SettlementFuture,
 };
 pub use inbox::{
     HandlerFailure, HandlerFailureKind, InboundMessageStore, InboundProcessingError,
     InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,
     QuarantineDisposition,
+};
+pub use metadata::{
+    ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
+    StreamSequence,
 };
 pub use outbox::{
     ClaimedMessage, LeaseGeneration, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
