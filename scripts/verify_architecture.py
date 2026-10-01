@@ -59,7 +59,7 @@ INBOX_HANDLER_DEV_DEPENDENCIES = frozenset(
         "tokio-postgres",
     }
 )
-MESSAGING_DEPENDENCIES = frozenset({CONTRACTS})
+MESSAGING_DEPENDENCIES = frozenset({CONTRACTS, "tracing"})
 MESSAGING_NATS_DEPENDENCIES = frozenset(
     {"async-nats", CONTRACTS, "futures-util", MESSAGING}
 )

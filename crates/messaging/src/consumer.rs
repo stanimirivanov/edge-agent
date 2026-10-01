@@ -21,6 +21,9 @@ pub trait MessageConsumer: Send {
     /// Wait for the next delivery.
     ///
     /// Cancellation drops the receive future without acknowledging a message.
+    /// If the broker already delivered it, redelivery after ack-wait can
+    /// increment `delivery_attempt`; shutdown cancellation must not be treated
+    /// as a handler failure when applying attempt-based policy.
     /// The returned delivery remains unsettled until the caller explicitly
     /// chooses one terminal disposition.
     /// If broker metadata cannot be represented as a delivery, no
@@ -38,10 +41,12 @@ pub trait DeliverySettlement: Send {
 }
 
 /// An untrusted delivery whose settlement is consumed exactly once.
+/// Dropping it before settlement emits a payload-safe warning and leaves broker
+/// redelivery to the adapter; the warning is not a durable disposition.
 pub struct MessageDelivery {
     payload: Vec<u8>,
     metadata: DeliveryMetadata,
-    settlement: Box<dyn DeliverySettlement>,
+    settlement: Option<Box<dyn DeliverySettlement>>,
 }
 
 impl MessageDelivery {
@@ -55,7 +60,7 @@ impl MessageDelivery {
         Self {
             payload,
             metadata,
-            settlement,
+            settlement: Some(settlement),
         }
     }
 
@@ -72,8 +77,29 @@ impl MessageDelivery {
     }
 
     /// Consume this delivery and confirm its terminal broker disposition.
-    pub fn settle(self, disposition: DeliveryDisposition) -> SettlementFuture {
-        self.settlement.settle(disposition)
+    /// A lost confirmation permits redelivery; handlers must deduplicate by
+    /// the stable message identity even after committing their local work.
+    pub fn settle(mut self, disposition: DeliveryDisposition) -> SettlementFuture {
+        match self.settlement.take() {
+            Some(settlement) => settlement.settle(disposition),
+            None => Box::pin(async {
+                Err(ConsumeError::protocol(
+                    "delivery settlement is missing after ownership transfer",
+                ))
+            }),
+        }
+    }
+}
+
+impl Drop for MessageDelivery {
+    fn drop(&mut self) {
+        if self.settlement.is_some() {
+            tracing::warn!(
+                delivery_attempt = self.metadata.delivery_attempt(),
+                payload_bytes = self.payload.len(),
+                "message delivery dropped without settlement"
+            );
+        }
     }
 }
 
@@ -253,7 +279,52 @@ mod tests {
         ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
         StreamSequence,
     };
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Event, Metadata, Subscriber};
+
+    struct WarningSubscriber(Arc<Mutex<Vec<String>>>);
+
+    impl Subscriber for WarningSubscriber {
+        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+            *metadata.level() == tracing::Level::WARN
+        }
+
+        fn new_span(&self, _span: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+
+        fn record(&self, _span: &Id, _values: &Record<'_>) {}
+
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+
+        fn event(&self, event: &Event<'_>) {
+            let mut fields = WarningFields::default();
+            event.record(&mut fields);
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(fields.0);
+        }
+
+        fn enter(&self, _span: &Id) {}
+
+        fn exit(&self, _span: &Id) {}
+    }
+
+    #[derive(Default)]
+    struct WarningFields(String);
+
+    impl Visit for WarningFields {
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.0.push_str(field.name());
+            self.0.push('=');
+            self.0.push_str(&format!("{value:?}"));
+            self.0.push(';');
+        }
+    }
 
     struct NoopSettlement;
 
@@ -282,6 +353,45 @@ mod tests {
         assert!(!rendered.contains("private-delivery-sentinel-7391"));
         assert!(rendered.contains("payload_bytes"));
         assert_eq!(delivery.payload(), payload);
+        Ok(())
+    }
+
+    #[test]
+    fn unsettled_drop_warns_once_without_payload_and_settle_does_not_warn()
+    -> Result<(), ConsumeError> {
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let payload = b"private-unsettled-sentinel-7391";
+        let metadata = || -> Result<DeliveryMetadata, ConsumeError> {
+            Ok(DeliveryMetadata::new(
+                DeliveryMessageKey::new("orders:11")?,
+                DeliverySubject::new("events.subject")?,
+                DeliveryAttempt::new(1)?,
+                0,
+                StreamSequence::new(11)?,
+                ConsumerSequence::new(13)?,
+            ))
+        };
+        tracing::subscriber::with_default(WarningSubscriber(Arc::clone(&records)), || {
+            drop(MessageDelivery::new(
+                payload.to_vec(),
+                metadata()?,
+                Box::new(NoopSettlement),
+            ));
+            drop(
+                MessageDelivery::new(payload.to_vec(), metadata()?, Box::new(NoopSettlement))
+                    .settle(DeliveryDisposition::Acknowledge),
+            );
+            Ok::<(), ConsumeError>(())
+        })?;
+
+        let records = records
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(records.len(), 1);
+        assert!(records[0].contains("delivery_attempt"));
+        assert!(records[0].contains("payload_bytes"));
+        assert!(!records[0].contains("private-unsettled-sentinel-7391"));
+        assert!(!records[0].contains(&format!("{payload:?}")));
         Ok(())
     }
 

@@ -94,6 +94,9 @@ pre-pull gate; a caller retry loop cannot silently consume another delivery.
 The metadata tests exercise distinct field mapping, the inclusive 512-byte
 text bound, non-ASCII and non-graphic rejection, and positive counter parsing;
 the infallible assembly signature prevents primitive field transposition.
+The delivery-ownership test records warnings on unsettled drop, requires no
+warning after settlement ownership transfers, and rejects both textual and
+numeric-byte payload leakage from the warning fields.
 
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
