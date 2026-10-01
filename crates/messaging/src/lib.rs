@@ -12,7 +12,7 @@ mod publisher;
 
 pub use consumer::{
     ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
-    MessageConsumer, MessageDelivery, ReceiveFuture, SettlementFuture,
+    MessageConsumer, MessageDelivery, ReceiveFuture, RetryDelay, SettlementFuture,
 };
 pub use inbox::{
     HandlerFailure, HandlerFailureKind, InboundMessageStore, InboundProcessingError,

@@ -19,9 +19,6 @@ use edgeagent_messaging::{
     PublishErrorKind, PublishFuture, PublishReceipt, ReceiveFuture, SettlementFuture,
 };
 use futures_util::StreamExt;
-use std::time::Duration;
-
-const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Durable publisher backed by a configured NATS JetStream context.
 ///
@@ -166,7 +163,7 @@ struct JetStreamSettlement {
 impl DeliverySettlement for JetStreamSettlement {
     fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture {
         Box::pin(async move {
-            let kind = acknowledgement_kind(disposition)?;
+            let kind = acknowledgement_kind(disposition);
             self.acker.double_ack_with(kind).await.map_err(|error| {
                 ConsumeError::with_boxed_source(ConsumeErrorKind::ConfirmationUnknown, error)
             })
@@ -174,18 +171,11 @@ impl DeliverySettlement for JetStreamSettlement {
     }
 }
 
-fn acknowledgement_kind(disposition: DeliveryDisposition) -> Result<AckKind, ConsumeError> {
+fn acknowledgement_kind(disposition: DeliveryDisposition) -> AckKind {
     match disposition {
-        DeliveryDisposition::Acknowledge => Ok(AckKind::Ack),
-        DeliveryDisposition::Quarantined => Ok(AckKind::Term),
-        DeliveryDisposition::RetryAfter(delay)
-            if delay >= Duration::from_millis(1) && delay <= MAX_RETRY_DELAY =>
-        {
-            Ok(AckKind::Nak(Some(delay)))
-        }
-        DeliveryDisposition::RetryAfter(_) => Err(ConsumeError::invalid_disposition(
-            "retry delay must be between 1 millisecond and 24 hours",
-        )),
+        DeliveryDisposition::Acknowledge => AckKind::Ack,
+        DeliveryDisposition::Quarantined => AckKind::Term,
+        DeliveryDisposition::RetryAfter(delay) => AckKind::Nak(Some(delay.get())),
     }
 }
 
@@ -266,7 +256,7 @@ mod tests {
     use async_nats::jetstream::publish::PublishAck;
     use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRoutingError};
     use edgeagent_messaging::{
-        ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind,
+        ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind, RetryDelay,
     };
     use serde_json::json;
     use std::error::Error;
@@ -384,25 +374,21 @@ mod tests {
     }
 
     #[test]
-    fn settlement_maps_to_confirmed_acknowledgement_kinds() {
+    fn settlement_maps_to_confirmed_acknowledgement_kinds() -> Result<(), Box<dyn Error>> {
         assert!(matches!(
             acknowledgement_kind(DeliveryDisposition::Acknowledge),
-            Ok(AckKind::Ack)
+            AckKind::Ack
         ));
         assert!(matches!(
             acknowledgement_kind(DeliveryDisposition::Quarantined),
-            Ok(AckKind::Term)
+            AckKind::Term
         ));
+        let delay = RetryDelay::new(Duration::from_secs(2))?;
         assert!(matches!(
-            acknowledgement_kind(DeliveryDisposition::RetryAfter(Duration::from_secs(2))),
-            Ok(AckKind::Nak(Some(delay))) if delay == Duration::from_secs(2)
+            acknowledgement_kind(DeliveryDisposition::RetryAfter(delay)),
+            AckKind::Nak(Some(delay)) if delay == Duration::from_secs(2)
         ));
-        assert_eq!(
-            acknowledgement_kind(DeliveryDisposition::RetryAfter(Duration::ZERO))
-                .err()
-                .map(|error| error.kind()),
-            Some(ConsumeErrorKind::InvalidDisposition)
-        );
+        Ok(())
     }
 
     #[test]

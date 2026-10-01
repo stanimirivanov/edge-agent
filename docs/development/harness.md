@@ -86,6 +86,10 @@ safe byte counts remain available. Add a focused test when a new payload
 carrier is introduced; a source-text ban on `derive(Debug)` would be too noisy
 to prove this behavior.
 
+The T2 messaging contract tests exercise both inclusive retry-delay bounds and
+adjacent invalid values. A disposition must contain a validated delay, so an
+invalid caller input cannot consume a delivery before broker settlement.
+
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
 forces an existing lease to expire in the test database, reclaims the message

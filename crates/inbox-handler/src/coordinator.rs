@@ -2,7 +2,7 @@ use edgeagent_contracts::{MessageContractError, MessageEnvelope, MessageRegistry
 use edgeagent_messaging::{
     DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
     InboundProcessingError, InboundQuarantine, InboxDisposition, InboxStoreErrorKind,
-    MessageDelivery,
+    MessageDelivery, RetryDelay,
 };
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
@@ -256,7 +256,12 @@ async fn retry(
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
-    let delay = retry_delay(policy, delivery.metadata().message_key(), attempt);
+    let delay = RetryDelay::new(retry_delay(
+        policy,
+        delivery.metadata().message_key(),
+        attempt,
+    ))
+    .map_err(HandlerError::settlement)?;
     let started = Instant::now();
     let settlement_result = delivery
         .settle(SettlementDisposition::RetryAfter(delay))
@@ -274,7 +279,7 @@ async fn retry(
     settlement_result.map_err(HandlerError::settlement)?;
     Ok(HandlingOutcome::RetryRequested {
         attempt,
-        delay,
+        delay: delay.get(),
         failure,
     })
 }
