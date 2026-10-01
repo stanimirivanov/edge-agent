@@ -379,6 +379,7 @@ name = "edgeagent-messaging"
 version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
+ "tracing",
 ]
 
 [[package]]

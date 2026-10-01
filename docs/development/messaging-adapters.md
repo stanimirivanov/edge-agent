@@ -79,11 +79,16 @@ One delivery follows this control flow:
 
 Settlement consumes `MessageDelivery`, preventing two terminal actions through
 the safe API. Validate a retry delay before calling `settle`: a constructor
-error leaves the delivery available for a corrected disposition. Dropping the
-delivery or cancelling before settlement sends no acknowledgement, so the
-broker can redeliver it. `Acknowledge`, delayed negative acknowledgement, and
-terminal settlement all use JetStream acknowledgement-sync and complete only
-after the server confirms receipt.
+error leaves the delivery available for a corrected disposition. Dropping an
+unsettled delivery emits one structured warning with only attempt and payload
+byte count; it sends no acknowledgement and is not durable quarantine.
+Cancelling `receive` may leave an already delivered message unacknowledged,
+causing redelivery and an incremented attempt count after ack-wait. Shutdown
+policy must not misclassify that as a handler failure. Once `settle` is called,
+dropping or cancelling its future does not establish whether the broker
+confirmed the action; rely on inbox idempotency if redelivered. `Acknowledge`,
+delayed negative acknowledgement, and terminal settlement all use JetStream
+acknowledgement-sync and complete only after the server confirms receipt.
 
 If broker metadata fails parsing or portable validation, no `MessageDelivery`
 exists and the handler cannot persist quarantine evidence under a trustworthy
