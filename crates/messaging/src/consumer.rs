@@ -288,6 +288,15 @@ mod tests {
     struct WarningSubscriber(Arc<Mutex<Vec<String>>>);
 
     impl Subscriber for WarningSubscriber {
+        // Parallel tests can register this callsite before this subscriber is
+        // installed. Re-evaluate interest against the current thread's default.
+        fn register_callsite(
+            &self,
+            _metadata: &'static Metadata<'static>,
+        ) -> tracing::subscriber::Interest {
+            tracing::subscriber::Interest::sometimes()
+        }
+
         fn enabled(&self, metadata: &Metadata<'_>) -> bool {
             *metadata.level() == tracing::Level::WARN
         }
