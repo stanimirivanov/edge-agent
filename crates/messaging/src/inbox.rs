@@ -64,13 +64,25 @@ pub enum QuarantineDisposition {
 }
 
 /// Bounded poison-message evidence supplied to an inbound storage adapter.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// `Debug` reports the payload size without exposing its bytes.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct InboundQuarantine<'delivery> {
     delivery_key: &'delivery str,
     transport_subject: &'delivery str,
     delivery_attempt: u32,
     payload: &'delivery [u8],
     failure_code: &'delivery str,
+}
+
+impl std::fmt::Debug for InboundQuarantine<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("InboundQuarantine")
+            .field("delivery_attempt", &self.delivery_attempt)
+            .field("failure_code", &self.failure_code)
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'delivery> InboundQuarantine<'delivery> {
@@ -379,7 +391,7 @@ fn validate_token(
 
 #[cfg(test)]
 mod tests {
-    use super::{InboundQuarantine, InboxStoreErrorKind};
+    use super::{InboundQuarantine, InboxStoreError, InboxStoreErrorKind};
 
     #[test]
     fn quarantine_evidence_is_bounded_before_adapter_work() {
@@ -389,5 +401,20 @@ mod tests {
             result.err().map(|error| error.kind()),
             Some(InboxStoreErrorKind::Invariant)
         );
+    }
+
+    #[test]
+    fn quarantine_debug_omits_payload_bytes() -> Result<(), InboxStoreError> {
+        let payload = b"private-payload-sentinel-7391";
+        let evidence =
+            InboundQuarantine::new("delivery-01", "events.subject", 1, payload, "poison")?;
+
+        let rendered = format!("{evidence:?}");
+
+        assert!(!rendered.contains(&format!("{payload:?}")));
+        assert!(!rendered.contains("private-payload-sentinel-7391"));
+        assert!(rendered.contains("payload_bytes"));
+        assert_eq!(evidence.payload(), payload);
+        Ok(())
     }
 }

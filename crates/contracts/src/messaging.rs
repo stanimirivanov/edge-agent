@@ -73,9 +73,19 @@ impl MessageMetadata {
 }
 
 /// A CloudEvents 1.0 structured JSON message that passed EdgeAgent validation.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Its `Debug` representation never traverses the payload data.
+#[derive(Clone, Eq, PartialEq)]
 pub struct MessageEnvelope {
     event: Event,
+}
+
+impl std::fmt::Debug for MessageEnvelope {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("MessageEnvelope")
+            .field("message_type", &self.message_type())
+            .finish_non_exhaustive()
+    }
 }
 
 impl MessageEnvelope {
@@ -458,6 +468,20 @@ mod tests {
 
         assert_eq!(actual, expected);
         assert_eq!(encoded, repeated);
+        Ok(())
+    }
+
+    #[test]
+    fn envelope_debug_omits_json_payload() -> Result<(), Box<dyn Error>> {
+        const SENTINEL: &str = "licensed-payload-sentinel-7391";
+        let payload = json!({"private_content": SENTINEL});
+        let envelope = MessageEnvelope::from_payload(metadata(), &payload)?;
+
+        let rendered = format!("{envelope:?}");
+
+        assert!(rendered.contains("MessageEnvelope"));
+        assert!(!rendered.contains(SENTINEL));
+        assert_eq!(envelope.payload::<Value>()?, payload);
         Ok(())
     }
 

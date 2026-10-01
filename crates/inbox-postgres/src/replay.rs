@@ -98,11 +98,22 @@ impl<'request> ReplayRequest<'request> {
 }
 
 /// Authorized exact bytes for a control-plane replay publisher.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// `Debug` reports the payload size without exposing its bytes.
+#[derive(Clone, Eq, PartialEq)]
 pub struct ReplayAuthorization {
     disposition: ReplayDisposition,
     transport_subject: String,
     payload: Vec<u8>,
+}
+
+impl std::fmt::Debug for ReplayAuthorization {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReplayAuthorization")
+            .field("disposition", &self.disposition)
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ReplayAuthorization {
@@ -207,4 +218,26 @@ fn replay_authorization_from_columns(
         transport_subject: row.try_get(offset).map_err(InboxError::storage)?,
         payload: row.try_get(offset + 1).map_err(InboxError::storage)?,
     })
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::{ReplayAuthorization, ReplayDisposition};
+
+    #[test]
+    fn replay_authorization_debug_omits_payload_bytes() {
+        let payload = b"private-replay-sentinel-7391";
+        let authorization = ReplayAuthorization {
+            disposition: ReplayDisposition::Authorized,
+            transport_subject: "events.subject".to_owned(),
+            payload: payload.to_vec(),
+        };
+
+        let rendered = format!("{authorization:?}");
+
+        assert!(!rendered.contains(&format!("{payload:?}")));
+        assert!(!rendered.contains("private-replay-sentinel-7391"));
+        assert!(rendered.contains("payload_bytes"));
+        assert_eq!(authorization.payload(), payload);
+    }
 }

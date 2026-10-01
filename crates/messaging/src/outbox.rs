@@ -77,7 +77,8 @@ impl LeaseGeneration {
 }
 
 /// One durable outbound message claimed for publication.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// `Debug` reports the envelope size without exposing its bytes.
+#[derive(Clone, Eq, PartialEq)]
 pub struct ClaimedMessage {
     message_source: String,
     message_id: String,
@@ -86,6 +87,18 @@ pub struct ClaimedMessage {
     envelope: Vec<u8>,
     attempt: u32,
     lease_generation: LeaseGeneration,
+}
+
+impl std::fmt::Debug for ClaimedMessage {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ClaimedMessage")
+            .field("message_type", &self.message_type)
+            .field("attempt", &self.attempt)
+            .field("lease_generation", &self.lease_generation)
+            .field("envelope_bytes", &self.envelope.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ClaimedMessage {
@@ -310,6 +323,28 @@ mod tests {
             result.err().map(|error| error.kind()),
             Some(OutboxStoreErrorKind::Invariant)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn claimed_message_debug_omits_envelope_bytes() -> Result<(), OutboxStoreError> {
+        let payload = b"private-envelope-sentinel-7391";
+        let claim = ClaimedMessage::new(
+            "urn:edgeagent:component:gateway".to_owned(),
+            "message-01".to_owned(),
+            "com.edgeagent.execution.submit-dry-run-order.v1".to_owned(),
+            "edgeagent.command.execution.submit-dry-run-order.v1".to_owned(),
+            payload.to_vec(),
+            1,
+            LeaseGeneration::new(1)?,
+        )?;
+
+        let rendered = format!("{claim:?}");
+
+        assert!(!rendered.contains(&format!("{payload:?}")));
+        assert!(!rendered.contains("private-envelope-sentinel-7391"));
+        assert!(rendered.contains("envelope_bytes"));
+        assert_eq!(claim.envelope_bytes(), payload);
         Ok(())
     }
 }

@@ -189,11 +189,21 @@ fn acknowledgement_kind(disposition: DeliveryDisposition) -> Result<AckKind, Con
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 struct PreparedPublish {
     subject: String,
     message_id: String,
     payload: Vec<u8>,
+}
+
+impl std::fmt::Debug for PreparedPublish {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreparedPublish")
+            .field("subject", &self.subject)
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
 }
 
 fn prepare_publish(
@@ -247,8 +257,8 @@ fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
 #[cfg(test)]
 mod tests {
     use super::{
-        acknowledgement_kind, delivery_message_key, map_acknowledgement_error, map_send_error,
-        prepare_publish, receipt, validate_consumer_configuration,
+        PreparedPublish, acknowledgement_kind, delivery_message_key, map_acknowledgement_error,
+        map_send_error, prepare_publish, receipt, validate_consumer_configuration,
     };
     use async_nats::jetstream::AckKind;
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
@@ -305,6 +315,23 @@ mod tests {
         );
         assert_eq!(prepared.payload, envelope.to_json()?);
         Ok(())
+    }
+
+    #[test]
+    fn prepared_publication_debug_omits_payload_bytes() {
+        let payload = b"private-publication-sentinel-7391";
+        let prepared = PreparedPublish {
+            subject: "events.subject".to_owned(),
+            message_id: "message-01".to_owned(),
+            payload: payload.to_vec(),
+        };
+
+        let rendered = format!("{prepared:?}");
+
+        assert!(!rendered.contains(&format!("{payload:?}")));
+        assert!(!rendered.contains("private-publication-sentinel-7391"));
+        assert!(rendered.contains("payload_bytes"));
+        assert_eq!(prepared.payload, payload);
     }
 
     #[test]

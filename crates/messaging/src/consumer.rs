@@ -312,7 +312,33 @@ impl Error for ConsumeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConsumeErrorKind, DeliveryMetadata};
+    use super::{
+        ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliveryMetadata, DeliverySettlement,
+        MessageDelivery, SettlementFuture,
+    };
+
+    struct NoopSettlement;
+
+    impl DeliverySettlement for NoopSettlement {
+        fn settle(self: Box<Self>, _disposition: DeliveryDisposition) -> SettlementFuture {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    #[test]
+    fn delivery_debug_omits_payload_bytes() -> Result<(), ConsumeError> {
+        let payload = b"private-delivery-sentinel-7391";
+        let metadata = DeliveryMetadata::new("orders:11", "events.subject", 1, 0, 11, 13)?;
+        let delivery = MessageDelivery::new(payload.to_vec(), metadata, Box::new(NoopSettlement));
+
+        let rendered = format!("{delivery:?}");
+
+        assert!(!rendered.contains(&format!("{payload:?}")));
+        assert!(!rendered.contains("private-delivery-sentinel-7391"));
+        assert!(rendered.contains("payload_bytes"));
+        assert_eq!(delivery.payload(), payload);
+        Ok(())
+    }
 
     #[test]
     fn delivery_metadata_requires_a_subject_and_positive_attempt() {
