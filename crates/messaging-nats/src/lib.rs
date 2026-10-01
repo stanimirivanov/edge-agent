@@ -75,8 +75,35 @@ impl MessagePublisher for JetStreamPublisher {
 /// be provisioned with application-compatible subject, retention, maximum
 /// delivery, acknowledgement wait, and pending limits. Provisioning remains a
 /// deployment concern. This adapter bounds client-side prefetch to one message.
+/// Invalid broker metadata leaves the raw message unsettled and halts this
+/// instance before another pull; replacement requires operator investigation.
 pub struct JetStreamConsumer {
     messages: pull::Stream,
+    protocol_gate: ConsumerProtocolGate,
+}
+
+#[derive(Default)]
+struct ConsumerProtocolGate {
+    halted: bool,
+}
+
+impl ConsumerProtocolGate {
+    fn before_pull(&self) -> Result<(), ConsumeError> {
+        if self.halted {
+            Err(ConsumeError::protocol(
+                "consumer halted after invalid broker delivery metadata",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn metadata<T>(&mut self, result: Result<T, ConsumeError>) -> Result<T, ConsumeError> {
+        if result.is_err() {
+            self.halted = true;
+        }
+        result
+    }
 }
 
 impl JetStreamConsumer {
@@ -93,7 +120,10 @@ impl JetStreamConsumer {
             .messages()
             .await
             .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
-        Ok(Self { messages })
+        Ok(Self {
+            messages,
+            protocol_gate: ConsumerProtocolGate::default(),
+        })
     }
 }
 
@@ -116,26 +146,30 @@ fn validate_consumer_configuration(
 impl MessageConsumer for JetStreamConsumer {
     fn receive(&mut self) -> ReceiveFuture<'_> {
         Box::pin(async move {
+            self.protocol_gate.before_pull()?;
             let message = self
                 .messages
                 .next()
                 .await
                 .ok_or_else(|| ConsumeError::unavailable("consumer stream ended"))?
                 .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
-            let info = message.info().map_err(|error| {
-                ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
-            })?;
-            let delivery_attempt = u32::try_from(info.delivered)
-                .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Protocol, error))?;
-            let message_key = delivery_message_key(info.stream, info.stream_sequence)?;
-            let metadata = DeliveryMetadata::new(
-                message_key,
-                message.subject.to_string(),
-                delivery_attempt,
-                info.pending,
-                info.stream_sequence,
-                info.consumer_sequence,
-            )?;
+            let metadata = self.protocol_gate.metadata((|| {
+                let info = message.info().map_err(|error| {
+                    ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
+                })?;
+                let delivery_attempt = u32::try_from(info.delivered).map_err(|error| {
+                    ConsumeError::with_source(ConsumeErrorKind::Protocol, error)
+                })?;
+                let message_key = delivery_message_key(info.stream, info.stream_sequence)?;
+                DeliveryMetadata::new(
+                    message_key,
+                    message.subject.to_string(),
+                    delivery_attempt,
+                    info.pending,
+                    info.stream_sequence,
+                    info.consumer_sequence,
+                )
+            })())?;
             let payload = message.payload.to_vec();
             let (_, acker) = message.split();
             Ok(MessageDelivery::new(
@@ -247,8 +281,9 @@ fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
 #[cfg(test)]
 mod tests {
     use super::{
-        PreparedPublish, acknowledgement_kind, delivery_message_key, map_acknowledgement_error,
-        map_send_error, prepare_publish, receipt, validate_consumer_configuration,
+        ConsumerProtocolGate, PreparedPublish, acknowledgement_kind, delivery_message_key,
+        map_acknowledgement_error, map_send_error, prepare_publish, receipt,
+        validate_consumer_configuration,
     };
     use async_nats::jetstream::AckKind;
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
@@ -256,7 +291,8 @@ mod tests {
     use async_nats::jetstream::publish::PublishAck;
     use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRoutingError};
     use edgeagent_messaging::{
-        ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind, RetryDelay,
+        ConsumeError, ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind,
+        RetryDelay,
     };
     use serde_json::json;
     use std::error::Error;
@@ -426,6 +462,26 @@ mod tests {
         );
         assert_eq!(
             delivery_message_key("", 41).err().map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+    }
+
+    #[test]
+    fn malformed_metadata_halts_this_consumer_without_retrying_the_pull() {
+        let mut gate = ConsumerProtocolGate::default();
+        assert!(gate.before_pull().is_ok());
+        assert!(matches!(gate.metadata(Ok(41_u64)), Ok(41)));
+        assert!(gate.before_pull().is_ok());
+
+        let error = ConsumeError::protocol("invalid broker metadata");
+        assert_eq!(
+            gate.metadata::<u64>(Err(error))
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        assert_eq!(
+            gate.before_pull().err().map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
         );
     }

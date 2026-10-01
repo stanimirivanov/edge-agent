@@ -89,6 +89,8 @@ to prove this behavior.
 The T2 messaging contract tests exercise both inclusive retry-delay bounds and
 adjacent invalid values. A disposition must contain a validated delay, so an
 invalid caller input cannot consume a delivery before broker settlement.
+They also assert that a broker-metadata protocol fault halts the consumer's
+pre-pull gate; a caller retry loop cannot silently consume another delivery.
 
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
