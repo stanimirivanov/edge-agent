@@ -6,6 +6,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+use bytes::Bytes;
+
 use crate::metadata::DeliveryMetadata;
 
 /// Future returned while waiting for one durable consumer delivery.
@@ -44,21 +46,22 @@ pub trait DeliverySettlement: Send {
 /// Dropping it before settlement emits a payload-safe warning and leaves broker
 /// redelivery to the adapter; the warning is not a durable disposition.
 pub struct MessageDelivery {
-    payload: Vec<u8>,
+    payload: Bytes,
     metadata: DeliveryMetadata,
     settlement: Option<Box<dyn DeliverySettlement>>,
 }
 
 impl MessageDelivery {
-    /// Construct a delivery from a transport adapter.
+    /// Construct a delivery from a transport adapter without copying a `Bytes`
+    /// payload. Owned byte vectors remain accepted by existing callers.
     #[must_use]
     pub fn new(
-        payload: Vec<u8>,
+        payload: impl Into<Bytes>,
         metadata: DeliveryMetadata,
         settlement: Box<dyn DeliverySettlement>,
     ) -> Self {
         Self {
-            payload,
+            payload: payload.into(),
             metadata,
             settlement: Some(settlement),
         }
@@ -279,6 +282,7 @@ mod tests {
         ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
         StreamSequence,
     };
+    use bytes::Bytes;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tracing::field::{Field, Visit};
@@ -362,6 +366,25 @@ mod tests {
         assert!(!rendered.contains("private-delivery-sentinel-7391"));
         assert!(rendered.contains("payload_bytes"));
         assert_eq!(delivery.payload(), payload);
+        Ok(())
+    }
+
+    #[test]
+    fn delivery_shares_bytes_payload_without_copying() -> Result<(), ConsumeError> {
+        let payload = Bytes::from_static(b"private-shared-delivery-sentinel-7391");
+        let metadata = DeliveryMetadata::new(
+            DeliveryMessageKey::new("orders:12")?,
+            DeliverySubject::new("events.subject")?,
+            DeliveryAttempt::new(1)?,
+            0,
+            StreamSequence::new(12)?,
+            ConsumerSequence::new(14)?,
+        );
+        let delivery = MessageDelivery::new(payload.clone(), metadata, Box::new(NoopSettlement));
+
+        assert_eq!(delivery.payload(), payload.as_ref());
+        assert_eq!(delivery.payload().as_ptr(), payload.as_ptr());
+        drop(delivery.settle(DeliveryDisposition::Acknowledge));
         Ok(())
     }
 
