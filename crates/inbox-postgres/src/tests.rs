@@ -2,6 +2,7 @@ use crate::replay::AUTHORIZE_QUARANTINE_REPLAY_SQL;
 use crate::validation::validate_consumer_name;
 use crate::{InboxErrorKind, PostgresInbox, QuarantineEvidence, ReplayRequest};
 use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
+use std::error::Error;
 
 #[test]
 fn consumer_names_are_bounded_stable_tokens() {
@@ -76,6 +77,25 @@ fn quarantine_evidence_is_bounded_before_database_work() {
         .map(|error| error.kind()),
         Some(InboxErrorKind::InvalidQuarantineEvidence)
     );
+}
+
+#[test]
+fn quarantine_evidence_debug_omits_payload_bytes() -> Result<(), Box<dyn Error>> {
+    let payload = b"private-quarantine-sentinel-7391";
+    let evidence = QuarantineEvidence::new(
+        "6:ORDERS:41",
+        "edgeagent.command.execution.submit-dry-run-order.v1",
+        2,
+        payload,
+        "envelope_invalid",
+    )?;
+
+    let rendered = format!("{evidence:?}");
+
+    assert!(!rendered.contains(&format!("{payload:?}")));
+    assert!(!rendered.contains("private-quarantine-sentinel-7391"));
+    assert!(rendered.contains("payload_bytes"));
+    Ok(())
 }
 
 #[test]

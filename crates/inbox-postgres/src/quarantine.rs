@@ -39,13 +39,25 @@ pub enum QuarantineDisposition {
 }
 
 /// Validated poison-message evidence retained before terminal broker settlement.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// `Debug` reports the payload size without exposing its bytes.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct QuarantineEvidence<'delivery> {
     delivery_key: &'delivery str,
     transport_subject: &'delivery str,
     delivery_attempt: i32,
     payload: &'delivery [u8],
     failure_code: &'delivery str,
+}
+
+impl std::fmt::Debug for QuarantineEvidence<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("QuarantineEvidence")
+            .field("delivery_attempt", &self.delivery_attempt)
+            .field("failure_code", &self.failure_code)
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'delivery> QuarantineEvidence<'delivery> {

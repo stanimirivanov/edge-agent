@@ -79,6 +79,13 @@ The command order and unavailable-check protocol remain canonical in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#verification-and-constrained-environments).
 CI runs repository policy before architecture and all heavier jobs.
 
+The Rust workspace tests include T2 `Debug` redaction contracts for payload-
+bearing envelope, delivery, publication, outbox, quarantine, and replay values.
+Synthetic sentinels must not appear as text or formatted numeric byte arrays;
+safe byte counts remain available. Add a focused test when a new payload
+carrier is introduced; a source-text ban on `derive(Debug)` would be too noisy
+to prove this behavior.
+
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
 forces an existing lease to expire in the test database, reclaims the message

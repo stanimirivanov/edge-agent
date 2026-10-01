@@ -254,6 +254,10 @@ prompts, model/tool schemas, and evaluation fixtures as compatibility boundaries
 - Deny by default; authentication identifies while authorization controls each protected use case and data boundary.
 - Secrets come from an approved secret mechanism and are never committed defaults.
 - Do not log credentials, authorization headers, personal data, raw private prompts, or licensed payloads.
+- Values that own or borrow raw message, envelope, or provider payloads MUST use
+  explicit payload-redacting `Debug` implementations. A diagnostic may expose
+  bounded metadata and byte counts, never raw data or its numeric byte array.
+  Focused tests MUST verify redaction with synthetic text and byte sentinels.
 - Expose structured logs, traces, and bounded-cardinality metrics sufficient to replay and diagnose decisions.
 - Correlation identifiers are not authorization grants.
 - Dependencies need a current use, compatible license, maintained release,
