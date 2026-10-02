@@ -101,11 +101,11 @@ mapping, the inclusive 512-byte text bound, non-ASCII and non-graphic rejection,
 and positive attempt parsing. NATS adapter tests separately reject invalid
 stream and consumer sequences; the infallible portable assembly signature
 prevents primitive field transposition without requiring broker-only counters.
-The delivery-ownership test records warnings on unsettled drop, requires no
-warning after settlement ownership transfers, and rejects both textual and
+The delivery-ownership integration test runs in its own executable because
+tracing callsite interests are process-global and parallel unit tests can race
+its subscriber registration. It records warnings on unsettled drop, requires
+no warning after settlement ownership transfers, and rejects both textual and
 numeric-byte payload leakage from the warning fields.
-Its test subscriber requests per-event interest checks so parallel tests cannot
-cache an earlier callsite decision that suppresses the warning assertion.
 
 The contracts crate has an ignored, opt-in throughput probe for comparing
 clone-based and borrowed typed decoding:
