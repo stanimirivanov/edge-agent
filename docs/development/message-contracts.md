@@ -62,9 +62,11 @@ Every message contains:
 | `data` | JSON payload; its meaning is owned by the declared schema |
 
 Identifiers are limited to 128 bytes and use ASCII letters, digits, hyphen,
-underscore, dot, or colon. Other bounded metadata is limited to visible ASCII
-without spaces so it remains safe in logs, broker headers, metrics, and
-cross-cloud adapters. Payload content is not copied into validation errors.
+underscore, dot, or colon. The `type`, `dataschema`, and other bounded metadata
+are limited to 512 bytes of visible ASCII without spaces so they remain safe
+in logs, broker headers, metrics, and cross-cloud adapters. The 512-byte
+limit applies both when producing and decoding envelopes and to static routing
+definitions. Payload content is not copied into validation errors.
 
 The committed
 [`research-request-received.json`](../../crates/contracts/fixtures/v1/research-request-received.json)
@@ -96,6 +98,10 @@ scope as `<declared-prefix>/<identifier>`, preventing unbounded subject and ACL
 cardinality. Ordering outside one partition key is explicitly undefined.
 
 The initial portable envelope maximum is 256 KiB, including metadata and data.
+Decoders reject raw structured input above 256 KiB before JSON or CloudEvents
+parsing, including whitespace-padded input. Routing still checks the encoded
+size of producer-built envelopes. An exactly 256 KiB valid JSON input is
+accepted by the raw boundary; an additional byte is not.
 Larger evidence belongs in object storage; the message carries an immutable
 reference, digest, size, media type, and entitlement metadata. Broker profiles
 may support larger messages but cannot increase this application contract.
@@ -142,7 +148,8 @@ clock, random source, locale, or network.
 
 1. A transport adapter passes untrusted bytes to
    `MessageEnvelope::from_json`.
-2. JSON and CloudEvents parsing must succeed.
+2. The raw input must fit within 256 KiB before JSON and CloudEvents parsing;
+   both parsers must then succeed.
 3. EdgeAgent rejects CloudEvents 0.3, missing required attributes, unsupported
    message-type syntax, invalid identifiers, non-string extensions, malformed
    trace context, missing schema identity, and non-JSON data.
@@ -159,7 +166,10 @@ clock, random source, locale, or network.
    resolves to an inbox duplicate. Transient failures request bounded delayed
    redelivery; terminal settlement follows durable quarantine persistence.
 
-Envelope and payload validation failures are permanent failures. Consumers can
+Oversized raw input returns `MessageContractError::EnvelopeTooLarge` with only
+byte counts; malformed input within the limit returns `EnvelopeDecoding`.
+Invalid `type` or `dataschema` metadata returns `InvalidMetadata`. These are
+permanent validation failures. Consumers can
 retain their exact untrusted bytes with bounded reason codes before requesting
 terminal settlement instead of retrying them blindly. Transport outage and
 acknowledgement loss are separate transient failures and do not change message identity.
@@ -181,6 +191,8 @@ the older contract until its retention and replay window closes.
 The CloudEvents version, extension names, identifier constraints, and golden
 fixture are compatibility surfaces. Changing one requires explicit migration
 analysis and, when semantics change, a superseding architecture decision.
+The inbound byte and metadata limits tighten previously accepted inputs without
+changing field encoding; see [ADR-0011](../decisions/0011-bound-untrusted-envelopes-before-decoding.md).
 
 ## Current limitations
 

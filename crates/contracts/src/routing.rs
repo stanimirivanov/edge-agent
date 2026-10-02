@@ -1,6 +1,7 @@
 //! Versioned routing, ownership, partition, retention, and size contracts.
 
 use crate::message_type::{is_lowercase_token, parse_message_type};
+use crate::messaging::MAX_METADATA_LENGTH;
 use crate::{Component, MessageContractError, MessageEnvelope, MessageMetadata};
 use serde::Serialize;
 use std::error::Error;
@@ -161,8 +162,7 @@ impl MessageDefinition {
     ///
     /// Returns an error when the definition's type name is invalid.
     pub fn subject(self) -> Result<String, MessageRoutingError> {
-        let parts = parse_message_type(self.message_type)
-            .ok_or_else(|| invalid_definition("message_type", "is not a valid EdgeAgent type"))?;
+        let parts = definition_type(self.message_type)?;
         Ok(format!(
             "edgeagent.{}.{}.{}.{}",
             self.kind.subject_token(),
@@ -179,8 +179,16 @@ impl MessageDefinition {
     /// Returns an error for invalid names, schemas, partitions, or a retention
     /// class that conflicts with command/event semantics.
     pub fn validate(self) -> Result<(), MessageRoutingError> {
-        parse_message_type(self.message_type)
-            .ok_or_else(|| invalid_definition("message_type", "is not a valid EdgeAgent type"))?;
+        definition_type(self.message_type)?;
+        if self.data_schema.len() > MAX_METADATA_LENGTH {
+            return Err(invalid_definition("data_schema", "exceeds 512 bytes"));
+        }
+        if !self.data_schema.bytes().all(|byte| byte.is_ascii_graphic()) {
+            return Err(invalid_definition(
+                "data_schema",
+                "must contain visible ASCII without spaces",
+            ));
+        }
         Url::parse(self.data_schema)
             .map_err(|_| invalid_definition("data_schema", "must be an absolute URI"))?;
         if !is_lowercase_token(self.partition_prefix) {
@@ -417,12 +425,23 @@ const fn invalid_definition(field: &'static str, reason: &'static str) -> Messag
     MessageRoutingError::InvalidDefinition { field, reason }
 }
 
+fn definition_type(
+    value: &str,
+) -> Result<crate::message_type::MessageTypeParts<'_>, MessageRoutingError> {
+    if value.len() > MAX_METADATA_LENGTH {
+        return Err(invalid_definition("message_type", "exceeds 512 bytes"));
+    }
+    parse_message_type(value)
+        .ok_or_else(|| invalid_definition("message_type", "is not a valid EdgeAgent type"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         DeliveryMode, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageRegistry,
         MessageRoutingError, RetentionClass, RetentionMode,
     };
+    use crate::messaging::MAX_METADATA_LENGTH;
     use crate::{Component, MessageMetadata};
     use serde_json::json;
     use std::error::Error;
@@ -456,6 +475,48 @@ mod tests {
             trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
             trace_state: None,
         }
+    }
+
+    #[test]
+    fn static_definition_respects_type_and_schema_limits() {
+        let type_prefix = "com.edgeagent.research.";
+        let type_suffix = ".v1";
+        let name = "a".repeat(MAX_METADATA_LENGTH - type_prefix.len() - type_suffix.len());
+        let at_limit: &'static str =
+            Box::leak(format!("{type_prefix}{name}{type_suffix}").into_boxed_str());
+        let over_limit: &'static str =
+            Box::leak(format!("{type_prefix}{name}a{type_suffix}").into_boxed_str());
+        let schema_prefix = "urn:edgeagent:schema:";
+        let schema_name = "a".repeat(MAX_METADATA_LENGTH - schema_prefix.len());
+        let schema_at_limit: &'static str =
+            Box::leak(format!("{schema_prefix}{schema_name}").into_boxed_str());
+        let schema_over_limit: &'static str =
+            Box::leak(format!("{schema_prefix}{schema_name}a").into_boxed_str());
+
+        let mut definition = COMMAND;
+        definition.message_type = at_limit;
+        assert!(definition.validate().is_ok());
+        definition.message_type = over_limit;
+        assert!(matches!(
+            definition.validate(),
+            Err(MessageRoutingError::InvalidDefinition {
+                field: "message_type",
+                ..
+            })
+        ));
+        assert!(definition.subject().is_err());
+
+        definition.message_type = COMMAND.message_type;
+        definition.data_schema = schema_at_limit;
+        assert!(definition.validate().is_ok());
+        definition.data_schema = schema_over_limit;
+        assert!(matches!(
+            definition.validate(),
+            Err(MessageRoutingError::InvalidDefinition {
+                field: "data_schema",
+                ..
+            })
+        ));
     }
 
     #[test]
