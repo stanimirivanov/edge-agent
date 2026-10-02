@@ -201,10 +201,10 @@ fn envelope(message_id: &str) -> Result<MessageEnvelope, Box<dyn Error>> {
         MessageMetadata {
             id: message_id.to_owned(),
             source: Component::Gateway.source_uri().to_owned(),
-            message_type: COMMAND.message_type.to_owned(),
+            message_type: COMMAND.message_type().to_owned(),
             subject: format!("order/{message_id}"),
             time: "2026-09-29T00:00:00Z".to_owned(),
-            data_schema: COMMAND.data_schema.to_owned(),
+            data_schema: COMMAND.data_schema().to_owned(),
             correlation_id: format!("correlation-{message_id}"),
             causation_id: format!("request-{message_id}"),
             idempotency_key: message_id.to_owned(),

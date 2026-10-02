@@ -1,5 +1,5 @@
 use super::{
-    DeliveryMode, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageRegistry,
+    DeliveryMode, EventRetention, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageRegistry,
     MessageRoutingError, RetentionClass, RetentionMode,
 };
 use crate::messaging::MAX_METADATA_LENGTH;
@@ -18,17 +18,17 @@ const EVENT: MessageDefinition = MessageDefinition::event(
     "urn:edgeagent:schema:dry-run-order-accepted:v1",
     Component::ExecutionSimulator,
     "order",
-    RetentionClass::AuditEvent,
+    EventRetention::Audit,
 );
 
 fn metadata(definition: MessageDefinition) -> MessageMetadata {
     MessageMetadata {
         id: "message-01".to_owned(),
         source: Component::ExecutionSimulator.source_uri().to_owned(),
-        message_type: definition.message_type.to_owned(),
+        message_type: definition.message_type().to_owned(),
         subject: "order/order-01".to_owned(),
         time: "2026-09-26T00:00:00Z".to_owned(),
-        data_schema: definition.data_schema.to_owned(),
+        data_schema: definition.data_schema().to_owned(),
         correlation_id: "correlation-01".to_owned(),
         causation_id: "command-01".to_owned(),
         idempotency_key: "order-01".to_owned(),
@@ -89,13 +89,13 @@ fn command_definition_derives_work_queue_subject() -> Result<(), Box<dyn Error>>
         "edgeagent.command.execution.submit-dry-run-order.v1"
     );
     assert_eq!(COMMAND.delivery_mode(), DeliveryMode::WorkQueue);
-    assert_eq!(COMMAND.kind.subject_namespace(), "edgeagent.command");
+    assert_eq!(COMMAND.kind().subject_namespace(), "edgeagent.command");
     assert_eq!(
-        COMMAND.retention.mode(),
+        COMMAND.retention().mode(),
         RetentionMode::UntilAcknowledgedOrExpired
     );
-    assert_eq!(COMMAND.retention.seconds(), 604_800);
-    assert_eq!(COMMAND.owner, Component::ExecutionSimulator);
+    assert_eq!(COMMAND.retention().seconds(), 604_800);
+    assert_eq!(COMMAND.owner(), Component::ExecutionSimulator);
     Ok(())
 }
 
@@ -108,9 +108,18 @@ fn event_definition_derives_retained_subject() -> Result<(), Box<dyn Error>> {
         "edgeagent.event.execution.dry-run-order-accepted.v1"
     );
     assert_eq!(EVENT.delivery_mode(), DeliveryMode::RetainedStream);
-    assert_eq!(EVENT.kind.subject_namespace(), "edgeagent.event");
-    assert_eq!(EVENT.retention.mode(), RetentionMode::ReplayWindow);
-    assert_eq!(EVENT.retention.seconds(), 31_536_000);
+    assert_eq!(EVENT.kind().subject_namespace(), "edgeagent.event");
+    assert_eq!(EVENT.retention().mode(), RetentionMode::ReplayWindow);
+    assert_eq!(EVENT.retention().seconds(), 31_536_000);
+    let workflow = MessageDefinition::event(
+        EVENT.message_type(),
+        EVENT.data_schema(),
+        EVENT.owner(),
+        EVENT.partition_prefix(),
+        EventRetention::Workflow,
+    );
+    assert_eq!(workflow.retention(), RetentionClass::WorkflowEvent);
+    assert_eq!(workflow.retention().seconds(), 2_592_000);
     Ok(())
 }
 
@@ -125,14 +134,56 @@ fn registry_rejects_duplicate_types() {
 }
 
 #[test]
+fn registry_rejects_invalid_definition_at_construction() {
+    let invalid = MessageDefinition {
+        data_schema: "relative/schema",
+        ..COMMAND
+    };
+    assert!(matches!(
+        MessageRegistry::new(&[invalid]),
+        Err(MessageRoutingError::InvalidDefinition {
+            field: "data_schema",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn registry_and_standalone_checks_agree_for_validated_definitions() -> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND, EVENT];
+    let registry = MessageRegistry::new(&definitions)?;
+
+    let mut wrong_schema = metadata(COMMAND);
+    wrong_schema.data_schema = "urn:edgeagent:schema:other:v1".to_owned();
+    let mut wrong_partition = metadata(COMMAND);
+    wrong_partition.partition_key = "account/account-01".to_owned();
+    let mut wrong_producer = metadata(EVENT);
+    wrong_producer.source = Component::Gateway.source_uri().to_owned();
+
+    for (definition, metadata) in [
+        (COMMAND, metadata(COMMAND)),
+        (COMMAND, wrong_schema),
+        (COMMAND, wrong_partition),
+        (EVENT, metadata(EVENT)),
+        (EVENT, wrong_producer),
+    ] {
+        let envelope = crate::MessageEnvelope::from_payload(metadata, &json!({}))?;
+        assert_eq!(
+            registry.validate(&envelope).map(|_| ()),
+            definition.validate_envelope(&envelope)
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn event_rejects_command_retention() {
-    let invalid = MessageDefinition::event(
-        EVENT.message_type,
-        EVENT.data_schema,
-        EVENT.owner,
-        EVENT.partition_prefix,
-        RetentionClass::Command,
-    );
+    // Private fields let the contract test model a corrupt internal definition;
+    // external callers cannot construct this combination.
+    let invalid = MessageDefinition {
+        retention: RetentionClass::Command,
+        ..EVENT
+    };
 
     assert!(matches!(
         invalid.validate(),

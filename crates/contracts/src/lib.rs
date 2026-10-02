@@ -11,8 +11,8 @@ mod routing;
 
 pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};
 pub use routing::{
-    DeliveryMode, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageKind, MessageRegistry,
-    MessageRoutingError, RetentionClass, RetentionMode,
+    DeliveryMode, EventRetention, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageKind,
+    MessageRegistry, MessageRoutingError, RetentionClass, RetentionMode,
 };
 
 /// Version of the machine-readable component description contract.

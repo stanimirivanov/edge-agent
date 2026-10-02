@@ -39,10 +39,10 @@ async fn persisted_message_identity_deduplicates_on_retry() -> Result<(), Box<dy
         MessageMetadata {
             id: "conformance-message-01".to_owned(),
             source: Component::Gateway.source_uri().to_owned(),
-            message_type: COMMAND.message_type.to_owned(),
+            message_type: COMMAND.message_type().to_owned(),
             subject: "order/conformance-order-01".to_owned(),
             time: "2026-09-26T00:00:00Z".to_owned(),
-            data_schema: COMMAND.data_schema.to_owned(),
+            data_schema: COMMAND.data_schema().to_owned(),
             correlation_id: "conformance-correlation-01".to_owned(),
             causation_id: "conformance-request-01".to_owned(),
             idempotency_key: "conformance-order-01".to_owned(),
