@@ -285,11 +285,7 @@ fn require_equal(
     if expected == actual {
         Ok(())
     } else {
-        Err(MessageRoutingError::ContractMismatch {
-            field,
-            expected: expected.to_owned(),
-            actual: actual.to_owned(),
-        })
+        Err(MessageRoutingError::ContractMismatch { field })
     }
 }
 

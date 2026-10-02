@@ -167,12 +167,20 @@ clock, random source, locale, or network.
    redelivery; terminal settlement follows durable quarantine persistence.
 
 Oversized raw input returns `MessageContractError::EnvelopeTooLarge` with only
-byte counts; malformed input within the limit returns `EnvelopeDecoding`.
+byte counts; malformed input within the limit returns `EnvelopeDecoding` with
+parser line and column, not the parser's free-form text.
 Invalid `type` or `dataschema` metadata returns `InvalidMetadata`. These are
 permanent validation failures. Consumers can
 retain their exact untrusted bytes with bounded reason codes before requesting
 terminal settlement instead of retrying them blindly. Transport outage and
 acknowledgement loss are separate transient failures and do not change message identity.
+
+Contract and routing errors expose stable categories, safe field names, counts,
+and parser coordinates through `Display` and `Debug`. They do not retain
+serializer, deserializer, SDK, unsupported-type, or mismatched metadata text.
+Authorized operators inspect exact quarantined bytes through the evidence path,
+not through an error chain. The Rust error-variant change is documented in
+[ADR-0012](../decisions/0012-keep-message-contract-diagnostics-payload-safe.md).
 
 Unknown CloudEvents extension attributes survive SDK decoding and encoding.
 Consumers ignore extensions they do not understand unless a payload or routing

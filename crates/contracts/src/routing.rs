@@ -247,8 +247,6 @@ impl MessageDefinition {
         if partition_suffix.is_none_or(str::is_empty) {
             return Err(MessageRoutingError::ContractMismatch {
                 field: "partitionkey",
-                expected: format!("{}/<identifier>", self.partition_prefix),
-                actual: partition_key.to_owned(),
             });
         }
         if self.kind == MessageKind::Event {
@@ -285,12 +283,10 @@ impl<'definitions> MessageRegistry<'definitions> {
             let subject = definition.subject()?;
             for previous in &definitions[..index] {
                 if previous.message_type == definition.message_type {
-                    return Err(MessageRoutingError::DuplicateMessageType(
-                        definition.message_type,
-                    ));
+                    return Err(MessageRoutingError::DuplicateMessageType);
                 }
                 if previous.subject()? == subject {
-                    return Err(MessageRoutingError::DuplicateSubject(subject));
+                    return Err(MessageRoutingError::DuplicateSubject);
                 }
             }
         }
@@ -320,15 +316,18 @@ impl<'definitions> MessageRegistry<'definitions> {
         &self,
         envelope: &MessageEnvelope,
     ) -> Result<&'definitions MessageDefinition, MessageRoutingError> {
-        let definition = self.resolve(envelope.message_type()).ok_or_else(|| {
-            MessageRoutingError::UnsupportedMessageType(envelope.message_type().to_owned())
-        })?;
+        let definition = self
+            .resolve(envelope.message_type())
+            .ok_or(MessageRoutingError::UnsupportedMessageType)?;
         definition.validate_envelope(envelope)?;
         Ok(definition)
     }
 }
 
 /// Routing definition or envelope eligibility failure.
+///
+/// Diagnostic variants do not retain message-provided values. Inspect the
+/// quarantined envelope through the authorized evidence path when needed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageRoutingError {
     /// A static routing definition is internally invalid.
@@ -338,20 +337,16 @@ pub enum MessageRoutingError {
         /// Stable explanation.
         reason: &'static str,
     },
-    /// Two definitions declare the same message type.
-    DuplicateMessageType(&'static str),
-    /// Two definitions resolve to the same transport subject.
-    DuplicateSubject(String),
+    /// Two definitions declare the same message type; the value is withheld.
+    DuplicateMessageType,
+    /// Two definitions resolve to the same transport subject; the value is withheld.
+    DuplicateSubject,
     /// No definition accepts the envelope's exact major-version type.
-    UnsupportedMessageType(String),
+    UnsupportedMessageType,
     /// Envelope metadata conflicts with its registered definition.
     ContractMismatch {
         /// Mismatching envelope field.
         field: &'static str,
-        /// Definition-owned value.
-        expected: String,
-        /// Envelope-provided value.
-        actual: String,
     },
     /// Encoded structured message exceeds the portable limit.
     EnvelopeTooLarge {
@@ -370,21 +365,10 @@ impl Display for MessageRoutingError {
             Self::InvalidDefinition { field, reason } => {
                 write!(formatter, "invalid message definition {field}: {reason}")
             }
-            Self::DuplicateMessageType(message_type) => {
-                write!(formatter, "duplicate message type: {message_type}")
-            }
-            Self::DuplicateSubject(subject) => write!(formatter, "duplicate subject: {subject}"),
-            Self::UnsupportedMessageType(message_type) => {
-                write!(formatter, "unsupported message type: {message_type}")
-            }
-            Self::ContractMismatch {
-                field,
-                expected,
-                actual,
-            } => write!(
-                formatter,
-                "message {field} mismatch: expected {expected}, got {actual}"
-            ),
+            Self::DuplicateMessageType => formatter.write_str("duplicate message type"),
+            Self::DuplicateSubject => formatter.write_str("duplicate subject"),
+            Self::UnsupportedMessageType => formatter.write_str("unsupported message type"),
+            Self::ContractMismatch { field } => write!(formatter, "message {field} mismatch"),
             Self::EnvelopeTooLarge {
                 actual_bytes,
                 maximum_bytes,
@@ -397,7 +381,14 @@ impl Display for MessageRoutingError {
     }
 }
 
-impl Error for MessageRoutingError {}
+impl Error for MessageRoutingError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Envelope(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<MessageContractError> for MessageRoutingError {
     fn from(error: MessageContractError) -> Self {
@@ -413,11 +404,7 @@ fn require_equal(
     if expected == actual {
         Ok(())
     } else {
-        Err(MessageRoutingError::ContractMismatch {
-            field,
-            expected: expected.to_owned(),
-            actual: actual.to_owned(),
-        })
+        Err(MessageRoutingError::ContractMismatch { field })
     }
 }
 
@@ -559,9 +546,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(MessageRoutingError::DuplicateMessageType(
-                "com.edgeagent.execution.submit-dry-run-order.v1"
-            ))
+            Err(MessageRoutingError::DuplicateMessageType)
         ));
     }
 
@@ -596,7 +581,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(MessageRoutingError::UnsupportedMessageType(_))
+            Err(MessageRoutingError::UnsupportedMessageType)
         ));
         Ok(())
     }
@@ -624,6 +609,54 @@ mod tests {
                 ..
             })
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn routing_errors_do_not_echo_untrusted_metadata() -> Result<(), Box<dyn Error>> {
+        const SENTINEL: &str = "private-schema-sentinel-7391";
+        let mut wrong_schema = metadata(COMMAND);
+        wrong_schema.data_schema = format!("urn:edgeagent:schema:{SENTINEL}");
+        let envelope = crate::MessageEnvelope::from_payload(wrong_schema, &json!({}))?;
+        let Err(error) = COMMAND.validate_envelope(&envelope) else {
+            return Err("wrong schema must fail".into());
+        };
+
+        assert!(!error.to_string().contains(SENTINEL));
+        assert!(!format!("{error:?}").contains(SENTINEL));
+
+        let mut unsupported = metadata(COMMAND);
+        unsupported.message_type = format!("com.edgeagent.{SENTINEL}.request.v1");
+        let envelope = crate::MessageEnvelope::from_payload(unsupported, &json!({}))?;
+        let definitions = [COMMAND];
+        let registry = MessageRegistry::new(&definitions)?;
+        let Err(error) = registry.validate(&envelope) else {
+            return Err("unregistered type must fail".into());
+        };
+
+        assert!(matches!(error, MessageRoutingError::UnsupportedMessageType));
+        assert!(!error.to_string().contains(SENTINEL));
+        assert!(!format!("{error:?}").contains(SENTINEL));
+        Ok(())
+    }
+
+    #[test]
+    fn nested_contract_error_chain_remains_payload_safe() -> Result<(), Box<dyn Error>> {
+        const SENTINEL: &str = "private-parser-sentinel-7391";
+        let input = format!("{{\"type\": {SENTINEL}}}");
+        let Err(contract) = crate::MessageEnvelope::from_json(input.as_bytes()) else {
+            return Err("malformed input must fail".into());
+        };
+        let routing = MessageRoutingError::from(contract);
+
+        assert!(matches!(routing, MessageRoutingError::Envelope(_)));
+        assert!(!routing.to_string().contains(SENTINEL));
+        assert!(!format!("{routing:?}").contains(SENTINEL));
+        assert!(
+            routing
+                .source()
+                .is_some_and(|source| !source.to_string().contains(SENTINEL))
+        );
         Ok(())
     }
 
