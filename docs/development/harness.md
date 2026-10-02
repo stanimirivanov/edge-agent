@@ -107,6 +107,16 @@ numeric-byte payload leakage from the warning fields.
 Its test subscriber requests per-event interest checks so parallel tests cannot
 cache an earlier callsite decision that suppresses the warning assertion.
 
+The contracts crate has an ignored, opt-in throughput probe for comparing
+clone-based and borrowed typed decoding:
+
+```text
+cargo test --release --locked -p edgeagent-contracts --lib payload_decode_throughput_probe -- --ignored --nocapture
+```
+
+Its timings are machine-dependent evidence, not a CI threshold. The default
+suite asserts byte-for-byte canonical fixture encoding.
+
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
 forces an existing lease to expire in the test database, reclaims the message
