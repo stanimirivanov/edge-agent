@@ -53,7 +53,7 @@ pub(super) fn validate_event(event: &Event) -> Result<(), MessageContractError> 
     )?;
     validate_trace_parent(required_extension(event, TRACE_PARENT)?)?;
     if let Some(trace_state) = optional_string_extension(event, TRACE_STATE)? {
-        validate_visible(TRACE_STATE, trace_state, MAX_METADATA_LENGTH)?;
+        validate_trace_state(trace_state)?;
     }
     Ok(())
 }
@@ -149,6 +149,69 @@ pub(super) fn validate_trace_parent(value: &str) -> Result<(), MessageContractEr
         ));
     }
     Ok(())
+}
+
+pub(super) fn validate_trace_state(value: &str) -> Result<(), MessageContractError> {
+    if value.len() > MAX_METADATA_LENGTH {
+        return Err(invalid(TRACE_STATE, "exceeds 512 bytes"));
+    }
+
+    let mut keys = Vec::new();
+    for (index, member) in value.split(',').enumerate() {
+        // The W3C grammar counts empty members and permits HTTP OWS around each member.
+        if index >= 32 {
+            return Err(invalid(TRACE_STATE, "exceeds 32 list members"));
+        }
+        let member = member.trim_matches([' ', '\t']);
+        if member.is_empty() {
+            continue;
+        }
+        let Some((key, entry_value)) = member.split_once('=') else {
+            return Err(invalid(TRACE_STATE, "must contain W3C key=value entries"));
+        };
+        if !valid_trace_state_key(key) || !valid_trace_state_value(entry_value) {
+            return Err(invalid(TRACE_STATE, "must contain W3C key=value entries"));
+        }
+        if keys.contains(&key) {
+            return Err(invalid(TRACE_STATE, "contains a duplicate key"));
+        }
+        keys.push(key);
+    }
+    Ok(())
+}
+
+fn valid_trace_state_key(key: &str) -> bool {
+    let valid_tail = |byte: &u8| {
+        byte.is_ascii_lowercase()
+            || byte.is_ascii_digit()
+            || matches!(byte, b'_' | b'-' | b'*' | b'/')
+    };
+    if let Some((tenant, system)) = key.split_once('@') {
+        (1..=241).contains(&tenant.len())
+            && (1..=14).contains(&system.len())
+            && tenant
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            && system
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_lowercase)
+            && tenant.as_bytes()[1..].iter().all(valid_tail)
+            && system.as_bytes()[1..].iter().all(valid_tail)
+    } else {
+        (1..=256).contains(&key.len())
+            && key.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+            && key.as_bytes()[1..].iter().all(valid_tail)
+    }
+}
+
+fn valid_trace_state_value(value: &str) -> bool {
+    (1..=256).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| (b' '..=b'~').contains(&byte) && !matches!(byte, b',' | b'='))
+        && value.as_bytes().last().is_some_and(|byte| *byte != b' ')
 }
 
 fn is_lower_hex(value: &str, length: usize) -> bool {

@@ -15,7 +15,7 @@ pub use self::error::MessageContractError;
 use self::error::envelope_decoding;
 use self::validation::{
     invalid, validate_event, validate_identifier, validate_message_type, validate_source,
-    validate_trace_parent, validate_visible,
+    validate_trace_parent, validate_trace_state, validate_visible,
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json";
@@ -56,7 +56,8 @@ pub struct MessageMetadata {
     pub partition_key: String,
     /// W3C Trace Context `traceparent` value using version 00.
     pub trace_parent: String,
-    /// Optional bounded W3C `tracestate` value.
+    /// Optional W3C `tracestate` list, limited to 512 bytes and 32 members.
+    /// Empty members and surrounding HTTP whitespace are permitted.
     pub trace_state: Option<String>,
 }
 
@@ -73,7 +74,7 @@ impl MessageMetadata {
         validate_visible(PARTITION_KEY, &self.partition_key, MAX_METADATA_LENGTH)?;
         validate_trace_parent(&self.trace_parent)?;
         if let Some(trace_state) = &self.trace_state {
-            validate_visible(TRACE_STATE, trace_state, MAX_METADATA_LENGTH)?;
+            validate_trace_state(trace_state)?;
         }
         Ok(())
     }

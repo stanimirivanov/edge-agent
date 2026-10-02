@@ -313,6 +313,89 @@ fn zero_trace_identifier_is_rejected() {
 }
 
 #[test]
+fn w3c_tracestate_is_accepted_by_producer_and_decoder() -> Result<(), Box<dyn Error>> {
+    let thirty_two_members = (0..32)
+        .map(|index| format!("vendor{index}=value"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let max_key = format!("{}=x", "a".repeat(256));
+    let max_value = format!("a={}", "x".repeat(256));
+    let max_state = format!("a={},b={}", "x".repeat(254), "y".repeat(253));
+    assert_eq!(max_state.len(), MAX_METADATA_LENGTH);
+    for state in [
+        "",
+        " \t ",
+        "vendor=one, other=two",
+        "\tvendor=one two\t,,\tother=three\t",
+        "1tenant@system=value",
+        &thirty_two_members,
+        &max_key,
+        &max_value,
+        &max_state,
+    ] {
+        let mut candidate = metadata();
+        candidate.trace_state = Some(state.to_owned());
+        let produced = MessageEnvelope::from_payload(candidate, &json!({}))?;
+        assert_eq!(produced.extension("tracestate"), Some(state));
+
+        let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+        wire["tracestate"] = json!(state);
+        let decoded = MessageEnvelope::from_json(&serde_json::to_vec(&wire)?)?;
+        assert_eq!(decoded.extension("tracestate"), Some(state));
+    }
+    Ok(())
+}
+
+#[test]
+fn malformed_tracestate_is_rejected_by_producer_and_decoder() -> Result<(), Box<dyn Error>> {
+    let thirty_three_members = (0..33)
+        .map(|index| format!("vendor{index}=value"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let overlong_key = format!("{}=x", "a".repeat(257));
+    let overlong_value = format!("a={}", "x".repeat(257));
+    let overlong_state = format!("a={}", "x".repeat(MAX_METADATA_LENGTH));
+    let thirty_three_empty_members = ",".repeat(32);
+    for state in [
+        "vendor",
+        "Vendor=value",
+        "vendor=",
+        "vendor=value=more",
+        "vendor=one,vendor=two",
+        "vendor.one=value",
+        "tenant@1system=value",
+        "a@b@c=value",
+        "vendor=one\nmore",
+        &thirty_three_members,
+        &thirty_three_empty_members,
+        &overlong_key,
+        &overlong_value,
+        &overlong_state,
+    ] {
+        let mut candidate = metadata();
+        candidate.trace_state = Some(state.to_owned());
+        assert!(matches!(
+            MessageEnvelope::from_payload(candidate, &json!({})),
+            Err(MessageContractError::InvalidMetadata {
+                field: "tracestate",
+                ..
+            })
+        ));
+
+        let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+        wire["tracestate"] = json!(state);
+        assert!(matches!(
+            MessageEnvelope::from_json(&serde_json::to_vec(&wire)?),
+            Err(MessageContractError::InvalidMetadata {
+                field: "tracestate",
+                ..
+            })
+        ));
+    }
+    Ok(())
+}
+
+#[test]
 fn relative_source_is_rejected() {
     let mut invalid_metadata = metadata();
     invalid_metadata.source = "/gateway".to_owned();
