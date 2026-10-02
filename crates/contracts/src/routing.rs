@@ -130,12 +130,18 @@ impl RetentionClass {
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MessageDefinition {
-    message_type: &'static str,
-    data_schema: &'static str,
-    kind: MessageKind,
-    owner: Component,
-    partition_prefix: &'static str,
-    retention: RetentionClass,
+    /// CloudEvents type including the payload major version.
+    pub message_type: &'static str,
+    /// Immutable absolute URI for the payload schema.
+    pub data_schema: &'static str,
+    /// Command or event semantics.
+    pub kind: MessageKind,
+    /// Sole command handler or authoritative event producer.
+    pub owner: Component,
+    /// Aggregate namespace required at the start of `partitionkey`.
+    pub partition_prefix: &'static str,
+    /// Portable retention behavior.
+    pub retention: RetentionClass,
 }
 
 impl MessageDefinition {
