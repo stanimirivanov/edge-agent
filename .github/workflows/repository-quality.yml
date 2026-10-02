@@ -74,6 +74,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Run Rust tests
         run: cargo test --locked --workspace --all-targets
+      - name: Verify canonical envelope bytes with preserve_order
+        run: cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order
 
   container-smoke:
     name: Container smoke tests

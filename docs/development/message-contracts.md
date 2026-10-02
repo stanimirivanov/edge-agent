@@ -147,10 +147,11 @@ of retained events to destructive work queues is not portable behavior.
    state transition. A relay later revalidates them and uses `MessagePublisher`
    to wait for durable transport acknowledgement.
 
-The compact JSON encoder normalizes object-key order so the same validated
-envelope has stable bytes. JSON object order remains semantically irrelevant;
-consumers compare message identity and canonical content rather than raw
-transport framing.
+The compact JSON encoder sorts object keys recursively, independent of
+`serde_json/preserve_order` feature unification. The same validated envelope
+therefore has stable bytes across default and feature-unified builds. JSON
+object order remains semantically irrelevant; consumers compare message
+identity and canonical content rather than raw transport framing.
 
 The contract never generates an ID or timestamp. A retry therefore cannot
 silently become a new command, and deterministic tests do not depend on a

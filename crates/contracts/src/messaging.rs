@@ -7,6 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
+mod canonical_json;
 mod error;
 mod validation;
 
@@ -196,14 +197,13 @@ impl MessageEnvelope {
     }
 
     /// Encode this validated envelope as CloudEvents structured JSON.
+    /// Object keys are sorted recursively, regardless of `serde_json` features.
     ///
     /// # Errors
     ///
     /// Returns an error only if the SDK cannot serialize its validated event.
     pub fn to_json(&self) -> Result<Vec<u8>, MessageContractError> {
-        let value = serde_json::to_value(&self.event)
-            .map_err(|_| MessageContractError::EnvelopeEncoding)?;
-        serde_json::to_vec(&value).map_err(|_| MessageContractError::EnvelopeEncoding)
+        canonical_json::to_vec(&self.event).map_err(|_| MessageContractError::EnvelopeEncoding)
     }
 
     /// Decode the JSON data field into a caller-owned payload type.
