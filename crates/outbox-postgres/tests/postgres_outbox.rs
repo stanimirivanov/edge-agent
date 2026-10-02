@@ -1,7 +1,7 @@
 //! Opt-in conformance test against the checked-in local PostgreSQL profile.
 
 use edgeagent_contracts::{
-    Component, MessageDefinition, MessageMetadata, MessageRegistry, RetentionClass,
+    Component, EventRetention, MessageDefinition, MessageMetadata, MessageRegistry,
 };
 use edgeagent_outbox_postgres::{
     EnqueueDisposition, OutboxErrorKind, PostgresOutbox, ReplayDisposition, ReplayRequest,
@@ -24,17 +24,17 @@ const EVENT: MessageDefinition = MessageDefinition::event(
     "urn:edgeagent:schema:dry-run-order-accepted:v1",
     Component::ExecutionSimulator,
     "order",
-    RetentionClass::AuditEvent,
+    EventRetention::Audit,
 );
 
 fn metadata(source: Component) -> MessageMetadata {
     MessageMetadata {
         id: "outbox-message-01".to_owned(),
         source: source.source_uri().to_owned(),
-        message_type: COMMAND.message_type.to_owned(),
+        message_type: COMMAND.message_type().to_owned(),
         subject: "order/outbox-order-01".to_owned(),
         time: "2026-09-26T00:00:00Z".to_owned(),
-        data_schema: COMMAND.data_schema.to_owned(),
+        data_schema: COMMAND.data_schema().to_owned(),
         correlation_id: "outbox-correlation-01".to_owned(),
         causation_id: "outbox-request-01".to_owned(),
         idempotency_key: "outbox-order-01".to_owned(),

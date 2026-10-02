@@ -118,10 +118,10 @@ fn claimed_message() -> Result<ClaimedMessage, Box<dyn Error>> {
         MessageMetadata {
             id: "relay-port-message-01".to_owned(),
             source: Component::Gateway.source_uri().to_owned(),
-            message_type: COMMAND.message_type.to_owned(),
+            message_type: COMMAND.message_type().to_owned(),
             subject: "order/relay-port-order-01".to_owned(),
             time: "2026-09-28T00:00:00Z".to_owned(),
-            data_schema: COMMAND.data_schema.to_owned(),
+            data_schema: COMMAND.data_schema().to_owned(),
             correlation_id: "relay-port-correlation-01".to_owned(),
             causation_id: "relay-port-request-01".to_owned(),
             idempotency_key: "relay-port-order-01".to_owned(),

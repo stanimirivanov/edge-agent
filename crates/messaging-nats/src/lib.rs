@@ -323,10 +323,10 @@ mod tests {
             MessageMetadata {
                 id: "message-01".to_owned(),
                 source: Component::Gateway.source_uri().to_owned(),
-                message_type: COMMAND.message_type.to_owned(),
+                message_type: COMMAND.message_type().to_owned(),
                 subject: "order/order-01".to_owned(),
                 time: "2026-09-26T00:00:00Z".to_owned(),
-                data_schema: COMMAND.data_schema.to_owned(),
+                data_schema: COMMAND.data_schema().to_owned(),
                 correlation_id: "correlation-01".to_owned(),
                 causation_id: "request-01".to_owned(),
                 idempotency_key: "order-01".to_owned(),
@@ -376,11 +376,11 @@ mod tests {
     #[test]
     fn invalid_envelope_fails_before_transport_publication() -> Result<(), Box<dyn Error>> {
         let event_definition = MessageDefinition::event(
-            COMMAND.message_type,
-            COMMAND.data_schema,
+            COMMAND.message_type(),
+            COMMAND.data_schema(),
             Component::ExecutionSimulator,
-            COMMAND.partition_prefix,
-            edgeagent_contracts::RetentionClass::WorkflowEvent,
+            COMMAND.partition_prefix(),
+            edgeagent_contracts::EventRetention::Workflow,
         );
         let envelope = envelope()?;
 

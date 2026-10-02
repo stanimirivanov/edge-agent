@@ -3,6 +3,8 @@
 use super::{MessageDefinition, MessageRoutingError};
 use crate::MessageEnvelope;
 /// Validated lookup table for the message definitions supported by a process.
+/// Static definitions are checked at construction and cannot be mutated while
+/// the registry borrows them, so per-envelope checks need only inspect data.
 #[derive(Clone, Copy, Debug)]
 pub struct MessageRegistry<'definitions> {
     definitions: &'definitions [MessageDefinition],
@@ -23,7 +25,7 @@ impl<'definitions> MessageRegistry<'definitions> {
     ///     "order",
     /// )];
     /// let registry = MessageRegistry::new(&definitions)?;
-    /// assert_eq!(registry.resolve(definitions[0].message_type), Some(&definitions[0]));
+    /// assert_eq!(registry.resolve(definitions[0].message_type()), Some(&definitions[0]));
     /// assert!(registry.resolve("com.edgeagent.execution.unknown.v1").is_none());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -38,7 +40,7 @@ impl<'definitions> MessageRegistry<'definitions> {
             definition.validate()?;
             let subject = definition.subject()?;
             for previous in &definitions[..index] {
-                if previous.message_type == definition.message_type {
+                if previous.message_type() == definition.message_type() {
                     return Err(MessageRoutingError::DuplicateMessageType);
                 }
                 if previous.subject()? == subject {
@@ -54,7 +56,7 @@ impl<'definitions> MessageRegistry<'definitions> {
     pub fn resolve(&self, message_type: &str) -> Option<&'definitions MessageDefinition> {
         self.definitions
             .iter()
-            .find(|definition| definition.message_type == message_type)
+            .find(|definition| definition.message_type() == message_type)
     }
 
     /// Return every validated definition in declaration order.
@@ -75,7 +77,7 @@ impl<'definitions> MessageRegistry<'definitions> {
         let definition = self
             .resolve(envelope.message_type())
             .ok_or(MessageRoutingError::UnsupportedMessageType)?;
-        definition.validate_envelope(envelope)?;
+        definition.validate_envelope_validated(envelope)?;
         Ok(definition)
     }
 }

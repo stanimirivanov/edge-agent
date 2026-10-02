@@ -75,6 +75,24 @@ pub enum RetentionClass {
     AuditEvent,
 }
 
+/// Retention choices valid only for completed events.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EventRetention {
+    /// Keep an ordinary workflow fact replayable for at least thirty days.
+    Workflow,
+    /// Keep a material audit fact replayable for at least 365 days.
+    Audit,
+}
+
+impl EventRetention {
+    const fn class(self) -> RetentionClass {
+        match self {
+            Self::Workflow => RetentionClass::WorkflowEvent,
+            Self::Audit => RetentionClass::AuditEvent,
+        }
+    }
+}
+
 impl RetentionClass {
     /// Return the mode that gives the duration its meaning.
     #[must_use]
@@ -97,20 +115,27 @@ impl RetentionClass {
 }
 
 /// Static routing and compatibility definition for one message major version.
+/// The fields cannot be changed after construction; call [`Self::validate`] or
+/// put definitions in a [`MessageRegistry`] to validate textual invariants.
+///
+/// ```compile_fail
+/// use edgeagent_contracts::{Component, MessageDefinition};
+/// let mut definition = MessageDefinition::command(
+///     "com.edgeagent.execution.submit-dry-run-order.v1",
+///     "urn:edgeagent:schema:submit-dry-run-order:v1",
+///     Component::ExecutionSimulator,
+///     "order",
+/// );
+/// definition.message_type = "com.edgeagent.execution.other.v1";
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MessageDefinition {
-    /// CloudEvents type including the payload major version.
-    pub message_type: &'static str,
-    /// Immutable absolute URI for the payload schema.
-    pub data_schema: &'static str,
-    /// Command or event semantics.
-    pub kind: MessageKind,
-    /// Sole command handler or authoritative event producer.
-    pub owner: Component,
-    /// Aggregate namespace required at the start of `partitionkey`.
-    pub partition_prefix: &'static str,
-    /// Portable retention behavior.
-    pub retention: RetentionClass,
+    message_type: &'static str,
+    data_schema: &'static str,
+    kind: MessageKind,
+    owner: Component,
+    partition_prefix: &'static str,
+    retention: RetentionClass,
 }
 
 impl MessageDefinition {
@@ -133,13 +158,27 @@ impl MessageDefinition {
     }
 
     /// Define an event produced authoritatively by one component.
+    ///
+    /// The event-only retention type prevents command retention from being
+    /// assigned to an event.
+    ///
+    /// ```compile_fail
+    /// use edgeagent_contracts::{Component, MessageDefinition, RetentionClass};
+    /// let _ = MessageDefinition::event(
+    ///     "com.edgeagent.execution.dry-run-order-accepted.v1",
+    ///     "urn:edgeagent:schema:dry-run-order-accepted:v1",
+    ///     Component::ExecutionSimulator,
+    ///     "order",
+    ///     RetentionClass::Command,
+    /// );
+    /// ```
     #[must_use]
     pub const fn event(
         message_type: &'static str,
         data_schema: &'static str,
         owner: Component,
         partition_prefix: &'static str,
-        retention: RetentionClass,
+        retention: EventRetention,
     ) -> Self {
         Self {
             message_type,
@@ -147,8 +186,44 @@ impl MessageDefinition {
             kind: MessageKind::Event,
             owner,
             partition_prefix,
-            retention,
+            retention: retention.class(),
         }
+    }
+
+    /// Return the exact CloudEvents type, including the payload major version.
+    #[must_use]
+    pub const fn message_type(self) -> &'static str {
+        self.message_type
+    }
+
+    /// Return the immutable absolute payload-schema URI.
+    #[must_use]
+    pub const fn data_schema(self) -> &'static str {
+        self.data_schema
+    }
+
+    /// Return whether this definition describes a command or an event.
+    #[must_use]
+    pub const fn kind(self) -> MessageKind {
+        self.kind
+    }
+
+    /// Return the sole handler or authoritative producer.
+    #[must_use]
+    pub const fn owner(self) -> Component {
+        self.owner
+    }
+
+    /// Return the required aggregate namespace for `partitionkey`.
+    #[must_use]
+    pub const fn partition_prefix(self) -> &'static str {
+        self.partition_prefix
+    }
+
+    /// Return the portable retention class.
+    #[must_use]
+    pub const fn retention(self) -> RetentionClass {
+        self.retention
     }
 
     /// Return portable queue or stream delivery behavior.
@@ -225,12 +300,13 @@ impl MessageDefinition {
     ) -> Result<MessageEnvelope, MessageRoutingError> {
         self.validate()?;
         let envelope = MessageEnvelope::from_payload(metadata, payload)?;
-        self.validate_envelope(&envelope)?;
+        self.validate_envelope_validated(&envelope)?;
         Ok(envelope)
     }
 
     /// Validate a decoded envelope against type, schema, ownership, partition,
-    /// and portable size policy.
+    /// and portable size policy. The definition is also validated here; use a
+    /// [`MessageRegistry`] to validate static definitions once at startup.
     ///
     /// # Errors
     ///
@@ -238,6 +314,15 @@ impl MessageDefinition {
     /// this route.
     pub fn validate_envelope(self, envelope: &MessageEnvelope) -> Result<(), MessageRoutingError> {
         self.validate()?;
+        self.validate_envelope_validated(envelope)
+    }
+
+    // Only call after the immutable definition passed validation at this
+    // boundary or when its containing registry was constructed.
+    fn validate_envelope_validated(
+        self,
+        envelope: &MessageEnvelope,
+    ) -> Result<(), MessageRoutingError> {
         require_equal("type", self.message_type, envelope.message_type())?;
         require_equal(
             "dataschema",

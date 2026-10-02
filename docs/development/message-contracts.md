@@ -45,6 +45,13 @@ kind, owner, partition namespace, and retention class. `MessageRegistry`
 rejects invalid or duplicate definitions and resolves untrusted envelopes only
 by their exact type. This makes broker configuration and service authorization
 derivable from code-reviewed contracts rather than duplicated strings.
+Definition fields are private: callers use `command` or `event` constructors and
+read-only accessors. `event` accepts `EventRetention::Workflow` or
+`EventRetention::Audit`, so command retention cannot be assigned to an event.
+Textual type, schema, and partition values remain validated at registry
+construction. A registry then checks each envelope against those immutable
+definitions without reparsing static policy. Standalone definition checks stay
+defensive and validate the definition first.
 
 ## Wire contract
 
@@ -214,6 +221,11 @@ the older contract until its retention and replay window closes.
 The CloudEvents version, extension names, identifier constraints, and golden
 fixture are compatibility surfaces. Changing one requires explicit migration
 analysis and, when semantics change, a superseding architecture decision.
+This refactor changes only the Rust API for routing definitions: replace direct
+field reads with accessors and pass `EventRetention` to `MessageDefinition::event`.
+All workspace callers have been migrated; no CloudEvents bytes, subjects,
+retention durations, or stored definition records change. The constructors
+remain `const`, while startup validation still rejects invalid textual values.
 `tracestate` validation now follows the previously declared W3C contract:
 conforming whitespace and empty members are accepted, while previously accepted
 malformed entries or duplicate keys fail as permanent invalid metadata. Existing

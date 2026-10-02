@@ -24,10 +24,10 @@ fn metadata(message_id: &str) -> MessageMetadata {
     MessageMetadata {
         id: message_id.to_owned(),
         source: Component::Gateway.source_uri().to_owned(),
-        message_type: COMMAND.message_type.to_owned(),
+        message_type: COMMAND.message_type().to_owned(),
         subject: "order/inbox-order-01".to_owned(),
         time: "2026-09-27T00:00:00Z".to_owned(),
-        data_schema: COMMAND.data_schema.to_owned(),
+        data_schema: COMMAND.data_schema().to_owned(),
         correlation_id: "inbox-correlation-01".to_owned(),
         causation_id: "inbox-request-01".to_owned(),
         idempotency_key: "inbox-order-01".to_owned(),
