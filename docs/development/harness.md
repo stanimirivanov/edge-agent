@@ -115,7 +115,11 @@ cargo test --release --locked -p edgeagent-contracts --lib payload_decode_throug
 ```
 
 Its timings are machine-dependent evidence, not a CI threshold. The default
-suite asserts byte-for-byte canonical fixture encoding.
+suite asserts byte-for-byte canonical fixture encoding. The T2 `make verify`
+gate and the Linux/Windows repository-quality job also run
+`cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order`.
+This catches dependency feature unification that could otherwise change
+persisted envelope bytes without changing contract source code.
 
 The local-platform CI job asserts the named test exists and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It

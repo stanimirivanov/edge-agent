@@ -8,6 +8,23 @@ use std::hint::black_box;
 use std::time::Instant;
 
 const FIXTURE: &[u8] = include_bytes!("../../fixtures/v1/research-request-received.json");
+const CANONICAL_FIXTURE: &str = concat!(
+    "{\"causationid\":\"command-01\",",
+    "\"correlationid\":\"correlation-01\",",
+    "\"data\":{\"request_id\":\"request-01\"},",
+    "\"datacontenttype\":\"application/json\",",
+    "\"dataschema\":\"urn:edgeagent:schema:research-request-received:v1\",",
+    "\"id\":\"message-01\",",
+    "\"idempotencykey\":\"research-request-01\",",
+    "\"partitionkey\":\"research-request/request-01\",",
+    "\"source\":\"urn:edgeagent:component:gateway\",",
+    "\"specversion\":\"1.0\",",
+    "\"subject\":\"research-request/request-01\",",
+    "\"time\":\"2026-09-26T00:00:00Z\",",
+    "\"traceparent\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\",",
+    "\"tracestate\":\"vendor=value\",",
+    "\"type\":\"com.edgeagent.research.request-received.v1\"}"
+);
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct ResearchRequestReceived {
@@ -60,7 +77,7 @@ fn fixture_round_trips_and_decodes_typed_payload() -> Result<(), Box<dyn Error>>
 
     assert_eq!(payload.request_id, "request-01");
     assert_eq!(actual, expected);
-    assert_eq!(encoded, serde_json::to_vec(&expected)?);
+    assert_eq!(encoded, CANONICAL_FIXTURE.as_bytes());
     assert_eq!(envelope.id(), "message-01");
     assert_eq!(
         envelope.deduplication_key(),
@@ -82,8 +99,22 @@ fn payload_builder_matches_golden_fixture() -> Result<(), Box<dyn Error>> {
     let actual: Value = serde_json::from_slice(&encoded)?;
 
     assert_eq!(actual, expected);
-    assert_eq!(encoded, serde_json::to_vec(&expected)?);
+    assert_eq!(encoded, CANONICAL_FIXTURE.as_bytes());
     assert_eq!(encoded, repeated);
+    Ok(())
+}
+
+#[test]
+fn nested_payload_keys_are_sorted_recursively() -> Result<(), Box<dyn Error>> {
+    let payload = json!({"z": {"b": 2, "a": 1}, "a": [{"y": 2, "x": 1}]});
+    let envelope = MessageEnvelope::from_payload(metadata(), &payload)?;
+    let encoded = String::from_utf8(envelope.to_json()?)?;
+
+    assert!(encoded.contains("\"data\":{\"a\":[{\"x\":1,\"y\":2}],\"z\":{\"a\":1,\"b\":2}}"));
+    let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+    wire["data"] = json!({"a": [{"x": 1, "y": 2}], "z": {"a": 1, "b": 2}});
+    let decoded = MessageEnvelope::from_json(&serde_json::to_vec(&wire)?)?;
+    assert_eq!(decoded.to_json()?, encoded.as_bytes());
     Ok(())
 }
 
