@@ -65,15 +65,20 @@ Every message contains:
 | `idempotencykey` | Stable retry key whose content must remain identical |
 | `partitionkey` | Aggregate key within which ordering matters |
 | `traceparent` | Non-zero W3C Trace Context version 00 value |
-| `tracestate` | Optional bounded visible W3C vendor state |
+| `tracestate` | Optional W3C vendor-state list, at most 512 bytes and 32 members |
 | `data` | JSON payload; its meaning is owned by the declared schema |
 
 Identifiers are limited to 128 bytes and use ASCII letters, digits, hyphen,
 underscore, dot, or colon. The `type`, `dataschema`, and other bounded metadata
-are limited to 512 bytes of visible ASCII without spaces so they remain safe
-in logs, broker headers, metrics, and cross-cloud adapters. The 512-byte
-limit applies both when producing and decoding envelopes and to static routing
-definitions. Payload content is not copied into validation errors.
+except `tracestate` are limited to 512 bytes of visible ASCII without spaces so
+they remain safe in logs, broker headers, metrics, and cross-cloud adapters.
+`tracestate` instead follows the W3C list grammar: up to 32 comma-separated
+members, each a unique lowercase vendor key and a bounded printable-ASCII value.
+Spaces and horizontal tabs around members, including empty members and an empty
+header value, are accepted; controls and malformed nonempty members are rejected.
+The complete `tracestate` value is limited to 512 bytes. The metadata limits
+apply when both producing and decoding envelopes and to static routing definitions
+where relevant. Payload content is not copied into validation errors.
 
 The committed
 [`research-request-received.json`](../../crates/contracts/fixtures/v1/research-request-received.json)
@@ -208,6 +213,10 @@ the older contract until its retention and replay window closes.
 The CloudEvents version, extension names, identifier constraints, and golden
 fixture are compatibility surfaces. Changing one requires explicit migration
 analysis and, when semantics change, a superseding architecture decision.
+`tracestate` validation now follows the previously declared W3C contract:
+conforming whitespace and empty members are accepted, while previously accepted
+malformed entries or duplicate keys fail as permanent invalid metadata. Existing
+messages with valid W3C state need no wire migration.
 The inbound byte and metadata limits tighten previously accepted inputs without
 changing field encoding; see [ADR-0011](../decisions/0011-bound-untrusted-envelopes-before-decoding.md).
 
