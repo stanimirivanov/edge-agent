@@ -85,6 +85,11 @@ Synthetic sentinels must not appear as text or formatted numeric byte arrays;
 safe byte counts remain available. Add a focused test when a new payload
 carrier is introduced; a source-text ban on `derive(Debug)` would be too noisy
 to prove this behavior.
+The contracts T2 tests also inject synthetic private text through failing
+Serde implementations, malformed JSON, and mismatched routing metadata. Public
+error `Display` and `Debug` must retain the failure category without echoing
+that text. When adding a public error wrapper, test its exposed `source` chain
+as well; a redacted top-level message does not make an unsafe source safe.
 
 The T2 messaging contract tests exercise both inclusive retry-delay bounds and
 adjacent invalid values. A disposition must contain a validated delay, so an

@@ -112,8 +112,8 @@ impl MessageEnvelope {
         payload: &T,
     ) -> Result<Self, MessageContractError> {
         metadata.validate()?;
-        let data = serde_json::to_value(payload)
-            .map_err(|error| MessageContractError::PayloadEncoding(error.to_string()))?;
+        let data =
+            serde_json::to_value(payload).map_err(|_| MessageContractError::PayloadEncoding)?;
 
         let mut builder = EventBuilderV10::new()
             .id(metadata.id)
@@ -133,7 +133,7 @@ impl MessageEnvelope {
 
         let event = builder
             .build()
-            .map_err(|error| MessageContractError::CloudEvent(error.to_string()))?;
+            .map_err(|_| MessageContractError::CloudEvent)?;
         validate_event(&event)?;
         Ok(Self { event })
     }
@@ -152,16 +152,15 @@ impl MessageEnvelope {
                 maximum_bytes: MAX_PORTABLE_MESSAGE_BYTES,
             });
         }
-        let raw_metadata: RawEnvelopeMetadata = serde_json::from_slice(bytes)
-            .map_err(|error| MessageContractError::EnvelopeDecoding(error.to_string()))?;
+        let raw_metadata: RawEnvelopeMetadata =
+            serde_json::from_slice(bytes).map_err(envelope_decoding)?;
         if let Some(message_type) = raw_metadata.message_type.as_deref() {
             validate_message_type(message_type)?;
         }
         if let Some(data_schema) = raw_metadata.dataschema.as_deref() {
             validate_visible("dataschema", data_schema, MAX_METADATA_LENGTH)?;
         }
-        let event = serde_json::from_slice(bytes)
-            .map_err(|error| MessageContractError::EnvelopeDecoding(error.to_string()))?;
+        let event = serde_json::from_slice(bytes).map_err(envelope_decoding)?;
         validate_event(&event)?;
         Ok(Self { event })
     }
@@ -173,9 +172,8 @@ impl MessageEnvelope {
     /// Returns an error only if the SDK cannot serialize its validated event.
     pub fn to_json(&self) -> Result<Vec<u8>, MessageContractError> {
         let value = serde_json::to_value(&self.event)
-            .map_err(|error| MessageContractError::EnvelopeEncoding(error.to_string()))?;
-        serde_json::to_vec(&value)
-            .map_err(|error| MessageContractError::EnvelopeEncoding(error.to_string()))
+            .map_err(|_| MessageContractError::EnvelopeEncoding)?;
+        serde_json::to_vec(&value).map_err(|_| MessageContractError::EnvelopeEncoding)
     }
 
     /// Decode the JSON data field into a caller-owned payload type.
@@ -187,8 +185,7 @@ impl MessageEnvelope {
         let Some(Data::Json(value)) = self.event.data() else {
             return Err(invalid("data", "must contain a JSON value"));
         };
-        serde_json::from_value(value.clone())
-            .map_err(|error| MessageContractError::PayloadDecoding(error.to_string()))
+        serde_json::from_value(value.clone()).map_err(|_| MessageContractError::PayloadDecoding)
     }
 
     /// Return the message identity.
@@ -247,6 +244,11 @@ impl MessageEnvelope {
 }
 
 /// Validation or encoding failure at the EdgeAgent message boundary.
+///
+/// Serde and CloudEvents diagnostic text may include caller-controlled data.
+/// This error retains only stable categories, safe field names, byte counts,
+/// and parser coordinates; it does not expose the underlying diagnostic as a
+/// source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageContractError {
     /// One required metadata value violates a stable invariant.
@@ -256,16 +258,21 @@ pub enum MessageContractError {
         /// Stable, non-sensitive explanation.
         reason: &'static str,
     },
-    /// Payload-to-JSON serialization failed.
-    PayloadEncoding(String),
-    /// JSON-to-payload deserialization failed.
-    PayloadDecoding(String),
-    /// CloudEvents construction failed.
-    CloudEvent(String),
-    /// Structured JSON serialization failed.
-    EnvelopeEncoding(String),
-    /// Structured JSON parsing failed.
-    EnvelopeDecoding(String),
+    /// Payload-to-JSON serialization failed; serializer text is withheld.
+    PayloadEncoding,
+    /// JSON-to-payload deserialization failed; decoder text is withheld.
+    PayloadDecoding,
+    /// CloudEvents construction failed; SDK text is withheld.
+    CloudEvent,
+    /// Structured JSON serialization failed; serializer text is withheld.
+    EnvelopeEncoding,
+    /// Structured JSON parsing failed; only safe parser coordinates are retained.
+    EnvelopeDecoding {
+        /// Parser line, when available (zero for semantic errors).
+        line: usize,
+        /// Parser column, when available (zero for semantic errors).
+        column: usize,
+    },
     /// Raw structured envelope exceeds the portable byte limit.
     EnvelopeTooLarge {
         /// Actual raw input length in bytes.
@@ -281,15 +288,14 @@ impl Display for MessageContractError {
             Self::InvalidMetadata { field, reason } => {
                 write!(formatter, "invalid {field}: {reason}")
             }
-            Self::PayloadEncoding(error) => write!(formatter, "cannot encode payload: {error}"),
-            Self::PayloadDecoding(error) => write!(formatter, "cannot decode payload: {error}"),
-            Self::CloudEvent(error) => write!(formatter, "cannot build CloudEvent: {error}"),
-            Self::EnvelopeEncoding(error) => {
-                write!(formatter, "cannot encode CloudEvent envelope: {error}")
-            }
-            Self::EnvelopeDecoding(error) => {
-                write!(formatter, "cannot decode CloudEvent envelope: {error}")
-            }
+            Self::PayloadEncoding => formatter.write_str("cannot encode payload"),
+            Self::PayloadDecoding => formatter.write_str("cannot decode payload"),
+            Self::CloudEvent => formatter.write_str("cannot build CloudEvent"),
+            Self::EnvelopeEncoding => formatter.write_str("cannot encode CloudEvent envelope"),
+            Self::EnvelopeDecoding { line, column } => write!(
+                formatter,
+                "cannot decode CloudEvent envelope at line {line}, column {column}"
+            ),
             Self::EnvelopeTooLarge {
                 actual_bytes,
                 maximum_bytes,
@@ -302,6 +308,13 @@ impl Display for MessageContractError {
 }
 
 impl Error for MessageContractError {}
+
+fn envelope_decoding(error: serde_json::Error) -> MessageContractError {
+    MessageContractError::EnvelopeDecoding {
+        line: error.line(),
+        column: error.column(),
+    }
+}
 
 fn validate_event(event: &Event) -> Result<(), MessageContractError> {
     if event.specversion() != SpecVersion::V10 {
@@ -456,7 +469,7 @@ mod tests {
     use super::{MAX_METADATA_LENGTH, MessageContractError, MessageEnvelope, MessageMetadata};
     use crate::MAX_PORTABLE_MESSAGE_BYTES;
     use cloudevents::event::{EventBuilder, EventBuilderV03};
-    use serde::{Deserialize, Serialize};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use serde_json::{Value, json};
     use std::error::Error;
 
@@ -465,6 +478,25 @@ mod tests {
     #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
     struct ResearchRequestReceived {
         request_id: String,
+    }
+
+    const SECRET_SENTINEL: &str = "private-payload-sentinel-7391";
+
+    struct RejectingPayload;
+
+    impl Serialize for RejectingPayload {
+        fn serialize<S: Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+            Err(<S::Error as serde::ser::Error>::custom(SECRET_SENTINEL))
+        }
+    }
+
+    #[derive(Debug)]
+    struct RejectingDecode;
+
+    impl<'de> Deserialize<'de> for RejectingDecode {
+        fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+            Err(<D::Error as serde::de::Error>::custom(SECRET_SENTINEL))
+        }
     }
 
     fn metadata() -> MessageMetadata {
@@ -534,6 +566,39 @@ mod tests {
     }
 
     #[test]
+    fn contract_errors_do_not_expose_serializer_or_decoder_text() -> Result<(), Box<dyn Error>> {
+        let Err(encoding) = MessageEnvelope::from_payload(metadata(), &RejectingPayload) else {
+            return Err("custom serializer must fail".into());
+        };
+        let envelope = MessageEnvelope::from_payload(metadata(), &json!({}))?;
+        let Err(decoding) = envelope.payload::<RejectingDecode>() else {
+            return Err("custom deserializer must fail".into());
+        };
+
+        for error in [encoding, decoding] {
+            assert!(!error.to_string().contains(SECRET_SENTINEL));
+            assert!(!format!("{error:?}").contains(SECRET_SENTINEL));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_envelope_error_exposes_only_parser_coordinates() -> Result<(), Box<dyn Error>> {
+        let input = format!("{{\"type\": {SECRET_SENTINEL}}}");
+        let Err(error) = MessageEnvelope::from_json(input.as_bytes()) else {
+            return Err("malformed JSON must fail".into());
+        };
+
+        assert!(matches!(
+            error,
+            MessageContractError::EnvelopeDecoding { line: 1, .. }
+        ));
+        assert!(!error.to_string().contains(SECRET_SENTINEL));
+        assert!(!format!("{error:?}").contains(SECRET_SENTINEL));
+        Ok(())
+    }
+
+    #[test]
     fn invalid_message_type_is_rejected_before_serialization() {
         let mut invalid_metadata = metadata();
         invalid_metadata.message_type = "research.request.received".to_owned();
@@ -566,7 +631,7 @@ mod tests {
         ));
         assert!(matches!(
             MessageEnvelope::from_json(b"not json"),
-            Err(MessageContractError::EnvelopeDecoding(_))
+            Err(MessageContractError::EnvelopeDecoding { .. })
         ));
         Ok(())
     }

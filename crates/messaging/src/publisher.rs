@@ -136,9 +136,7 @@ mod tests {
 
     #[test]
     fn public_error_is_stable_while_contract_cause_is_preserved() {
-        let error = PublishError::from(MessageRoutingError::UnsupportedMessageType(
-            "com.edgeagent.research.unknown.v1".to_owned(),
-        ));
+        let error = PublishError::from(MessageRoutingError::UnsupportedMessageType);
 
         assert_eq!(error.kind(), PublishErrorKind::Contract);
         assert_eq!(error.to_string(), "message contract rejected publication");

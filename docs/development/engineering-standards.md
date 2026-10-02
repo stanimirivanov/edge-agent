@@ -105,6 +105,10 @@ neither prose nor a passing compile substitutes for them.
 - Public errors MUST NOT expose provider internals, credentials, stack traces,
   prompts, or licensed payloads.
 - Preserve causes when wrapping failures.
+- At untrusted contract boundaries, do not retain free-form parser, serializer,
+  SDK, or mismatched-value text in a public error when it may contain payload
+  data. Retain stable categories, safe field names, and numeric coordinates;
+  test `Display`, `Debug`, and exposed error chains with synthetic sentinels.
 - Bound input, output, collection size, symbols per request, lookback windows,
   concurrency, retries, model tokens, execution time, and memory-heavy work.
 - Validate fallible settlement parameters before consuming an owned delivery or
