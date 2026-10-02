@@ -156,7 +156,9 @@ clock, random source, locale, or network.
 4. The registry rejects unknown major versions and mismatched schema,
    partition, event producer, or size policy.
 5. The consumer requests its expected payload type through
-   `MessageEnvelope::payload`; type mismatch is a payload-decoding failure.
+   `MessageEnvelope::payload`; it deserializes from the borrowed JSON value
+   without cloning the complete payload tree. Type mismatch remains a
+   payload-decoding failure.
 6. Only a validated envelope proceeds to schema compatibility and authorization.
 7. The PostgreSQL inbox records `(consumer_name, source, id)` before domain
    handling. The consumer applies a first delivery and any resulting outbox

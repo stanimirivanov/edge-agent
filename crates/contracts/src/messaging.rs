@@ -178,6 +178,9 @@ impl MessageEnvelope {
 
     /// Decode the JSON data field into a caller-owned payload type.
     ///
+    /// The stored JSON tree is borrowed during deserialization rather than
+    /// cloned in full for every typed decode.
+    ///
     /// # Errors
     ///
     /// Returns an error when the payload does not match the requested type.
@@ -185,7 +188,7 @@ impl MessageEnvelope {
         let Some(Data::Json(value)) = self.event.data() else {
             return Err(invalid("data", "must contain a JSON value"));
         };
-        serde_json::from_value(value.clone()).map_err(|_| MessageContractError::PayloadDecoding)
+        T::deserialize(value).map_err(|_| MessageContractError::PayloadDecoding)
     }
 
     /// Return the message identity.
@@ -472,6 +475,8 @@ mod tests {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use serde_json::{Value, json};
     use std::error::Error;
+    use std::hint::black_box;
+    use std::time::Instant;
 
     const FIXTURE: &[u8] = include_bytes!("../fixtures/v1/research-request-received.json");
 
@@ -526,6 +531,7 @@ mod tests {
 
         assert_eq!(payload.request_id, "request-01");
         assert_eq!(actual, expected);
+        assert_eq!(encoded, serde_json::to_vec(&expected)?);
         assert_eq!(envelope.id(), "message-01");
         assert_eq!(
             envelope.deduplication_key(),
@@ -547,7 +553,42 @@ mod tests {
         let actual: Value = serde_json::from_slice(&encoded)?;
 
         assert_eq!(actual, expected);
+        assert_eq!(encoded, serde_json::to_vec(&expected)?);
         assert_eq!(encoded, repeated);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "manual, environment-dependent throughput probe"]
+    fn payload_decode_throughput_probe() -> Result<(), Box<dyn Error>> {
+        const ROUNDS: usize = 300;
+        let payload = (0..40_000_u32).collect::<Vec<_>>();
+        let envelope = MessageEnvelope::from_payload(metadata(), &payload)?;
+        let message_bytes = envelope.to_json()?.len();
+        assert!(
+            (MAX_PORTABLE_MESSAGE_BYTES / 2..=MAX_PORTABLE_MESSAGE_BYTES).contains(&message_bytes)
+        );
+        let Some(cloudevents::event::Data::Json(value)) = envelope.event.data() else {
+            return Err("benchmark payload must be JSON".into());
+        };
+
+        let start = Instant::now();
+        for _ in 0..ROUNDS {
+            let decoded: Vec<u32> = serde_json::from_value(black_box(value.clone()))?;
+            black_box(decoded);
+        }
+        let cloned = start.elapsed();
+
+        let start = Instant::now();
+        for _ in 0..ROUNDS {
+            let decoded = black_box(&envelope).payload::<Vec<u32>>()?;
+            black_box(decoded);
+        }
+        let borrowed = start.elapsed();
+
+        eprintln!(
+            "payload decode, {message_bytes} bytes, {ROUNDS} rounds: cloned={cloned:?}, borrowed={borrowed:?}"
+        );
         Ok(())
     }
 
