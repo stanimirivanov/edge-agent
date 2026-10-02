@@ -1,19 +1,20 @@
 //! Validated, transport-neutral EdgeAgent message envelopes.
 
 use crate::message_type::parse_message_type;
+use crate::routing::MAX_PORTABLE_MESSAGE_BYTES;
 use cloudevents::Event;
 use cloudevents::event::{
     AttributesReader, Data, EventBuilder, EventBuilderV10, ExtensionValue, SpecVersion,
 };
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use url::Url;
 
 const JSON_CONTENT_TYPE: &str = "application/json";
 const MAX_IDENTIFIER_LENGTH: usize = 128;
-const MAX_METADATA_LENGTH: usize = 512;
+pub(crate) const MAX_METADATA_LENGTH: usize = 512;
 const CORRELATION_ID: &str = "correlationid";
 const CAUSATION_ID: &str = "causationid";
 const IDEMPOTENCY_KEY: &str = "idempotencykey";
@@ -59,6 +60,7 @@ impl MessageMetadata {
         validate_identifier("id", &self.id)?;
         validate_source(&self.source)?;
         validate_message_type(&self.message_type)?;
+        validate_visible("dataschema", &self.data_schema, MAX_METADATA_LENGTH)?;
         validate_visible("subject", &self.subject, MAX_METADATA_LENGTH)?;
         validate_identifier(CORRELATION_ID, &self.correlation_id)?;
         validate_identifier(CAUSATION_ID, &self.causation_id)?;
@@ -77,6 +79,16 @@ impl MessageMetadata {
 #[derive(Clone, Eq, PartialEq)]
 pub struct MessageEnvelope {
     event: Event,
+}
+
+// The SDK parses dataschema into Url, which may shorten a path during
+// normalization. Check supplied text before that conversion so the metadata
+// byte limit cannot be bypassed with dot segments.
+#[derive(Deserialize)]
+struct RawEnvelopeMetadata {
+    #[serde(rename = "type")]
+    message_type: Option<String>,
+    dataschema: Option<String>,
 }
 
 impl std::fmt::Debug for MessageEnvelope {
@@ -130,9 +142,24 @@ impl MessageEnvelope {
     ///
     /// # Errors
     ///
-    /// Returns an error for malformed JSON, unsupported CloudEvents versions,
-    /// absent required attributes, invalid extensions, or non-JSON payloads.
+    /// Returns an error for an oversized envelope before parsing, malformed
+    /// JSON, unsupported CloudEvents versions, absent required attributes,
+    /// invalid extensions, or non-JSON payloads.
     pub fn from_json(bytes: &[u8]) -> Result<Self, MessageContractError> {
+        if bytes.len() > MAX_PORTABLE_MESSAGE_BYTES {
+            return Err(MessageContractError::EnvelopeTooLarge {
+                actual_bytes: bytes.len(),
+                maximum_bytes: MAX_PORTABLE_MESSAGE_BYTES,
+            });
+        }
+        let raw_metadata: RawEnvelopeMetadata = serde_json::from_slice(bytes)
+            .map_err(|error| MessageContractError::EnvelopeDecoding(error.to_string()))?;
+        if let Some(message_type) = raw_metadata.message_type.as_deref() {
+            validate_message_type(message_type)?;
+        }
+        if let Some(data_schema) = raw_metadata.dataschema.as_deref() {
+            validate_visible("dataschema", data_schema, MAX_METADATA_LENGTH)?;
+        }
         let event = serde_json::from_slice(bytes)
             .map_err(|error| MessageContractError::EnvelopeDecoding(error.to_string()))?;
         validate_event(&event)?;
@@ -239,6 +266,13 @@ pub enum MessageContractError {
     EnvelopeEncoding(String),
     /// Structured JSON parsing failed.
     EnvelopeDecoding(String),
+    /// Raw structured envelope exceeds the portable byte limit.
+    EnvelopeTooLarge {
+        /// Actual raw input length in bytes.
+        actual_bytes: usize,
+        /// Maximum permitted raw input length in bytes.
+        maximum_bytes: usize,
+    },
 }
 
 impl Display for MessageContractError {
@@ -256,6 +290,13 @@ impl Display for MessageContractError {
             Self::EnvelopeDecoding(error) => {
                 write!(formatter, "cannot decode CloudEvent envelope: {error}")
             }
+            Self::EnvelopeTooLarge {
+                actual_bytes,
+                maximum_bytes,
+            } => write!(
+                formatter,
+                "CloudEvent envelope is {actual_bytes} bytes; maximum is {maximum_bytes} bytes"
+            ),
         }
     }
 }
@@ -282,9 +323,14 @@ fn validate_event(event: &Event) -> Result<(), MessageContractError> {
     if event.datacontenttype() != Some(JSON_CONTENT_TYPE) {
         return Err(invalid("datacontenttype", "must be application/json"));
     }
-    if event.dataschema().is_none() {
-        return Err(invalid("dataschema", "is required"));
-    }
+    validate_visible(
+        "dataschema",
+        event
+            .dataschema()
+            .ok_or_else(|| invalid("dataschema", "is required"))?
+            .as_str(),
+        MAX_METADATA_LENGTH,
+    )?;
     if !matches!(event.data(), Some(Data::Json(_))) {
         return Err(invalid("data", "must contain a JSON value"));
     }
@@ -366,6 +412,7 @@ fn validate_visible(
 }
 
 fn validate_message_type(value: &str) -> Result<(), MessageContractError> {
+    validate_visible("type", value, MAX_METADATA_LENGTH)?;
     if parse_message_type(value).is_none() {
         return Err(invalid(
             "type",
@@ -406,7 +453,8 @@ const fn invalid(field: &'static str, reason: &'static str) -> MessageContractEr
 
 #[cfg(test)]
 mod tests {
-    use super::{MessageContractError, MessageEnvelope, MessageMetadata};
+    use super::{MAX_METADATA_LENGTH, MessageContractError, MessageEnvelope, MessageMetadata};
+    use crate::MAX_PORTABLE_MESSAGE_BYTES;
     use cloudevents::event::{EventBuilder, EventBuilderV03};
     use serde::{Deserialize, Serialize};
     use serde_json::{Value, json};
@@ -496,6 +544,122 @@ mod tests {
             result,
             Err(MessageContractError::InvalidMetadata { field: "type", .. })
         ));
+    }
+
+    #[test]
+    fn raw_envelope_limit_precedes_json_decoding() -> Result<(), Box<dyn Error>> {
+        let mut at_limit = FIXTURE.to_vec();
+        at_limit.resize(MAX_PORTABLE_MESSAGE_BYTES, b' ');
+        assert!(MessageEnvelope::from_json(&at_limit).is_ok());
+
+        at_limit.push(b' ');
+        assert_eq!(
+            MessageEnvelope::from_json(&at_limit),
+            Err(MessageContractError::EnvelopeTooLarge {
+                actual_bytes: MAX_PORTABLE_MESSAGE_BYTES + 1,
+                maximum_bytes: MAX_PORTABLE_MESSAGE_BYTES,
+            })
+        );
+        assert!(matches!(
+            MessageEnvelope::from_json(&vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1]),
+            Err(MessageContractError::EnvelopeTooLarge { .. })
+        ));
+        assert!(matches!(
+            MessageEnvelope::from_json(b"not json"),
+            Err(MessageContractError::EnvelopeDecoding(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn message_type_limit_applies_to_producer_and_decoder() -> Result<(), Box<dyn Error>> {
+        let prefix = "com.edgeagent.research.";
+        let suffix = ".v1";
+        let name = "a".repeat(MAX_METADATA_LENGTH - prefix.len() - suffix.len());
+        let at_limit = format!("{prefix}{name}{suffix}");
+        let over_limit = format!("{prefix}{name}a{suffix}");
+
+        for (value, accepted) in [(at_limit, true), (over_limit, false)] {
+            let mut candidate = metadata();
+            candidate.message_type.clone_from(&value);
+            let producer = MessageEnvelope::from_payload(candidate, &json!({}));
+            assert_eq!(producer.is_ok(), accepted);
+            if !accepted {
+                assert!(matches!(
+                    producer,
+                    Err(MessageContractError::InvalidMetadata { field: "type", .. })
+                ));
+            }
+
+            let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+            wire["type"] = json!(value);
+            let decoder = MessageEnvelope::from_json(&serde_json::to_vec(&wire)?);
+            assert_eq!(decoder.is_ok(), accepted);
+            if !accepted {
+                assert!(matches!(
+                    decoder,
+                    Err(MessageContractError::InvalidMetadata { field: "type", .. })
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn schema_limit_applies_to_producer_and_decoder() -> Result<(), Box<dyn Error>> {
+        let prefix = "urn:edgeagent:schema:";
+        let name = "a".repeat(MAX_METADATA_LENGTH - prefix.len());
+        let at_limit = format!("{prefix}{name}");
+        let over_limit = format!("{prefix}{name}a");
+
+        for (value, accepted) in [(at_limit, true), (over_limit, false)] {
+            let mut candidate = metadata();
+            candidate.data_schema.clone_from(&value);
+            let producer = MessageEnvelope::from_payload(candidate, &json!({}));
+            assert_eq!(producer.is_ok(), accepted);
+            if !accepted {
+                assert!(matches!(
+                    producer,
+                    Err(MessageContractError::InvalidMetadata {
+                        field: "dataschema",
+                        ..
+                    })
+                ));
+            }
+
+            let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+            wire["dataschema"] = json!(value);
+            let decoder = MessageEnvelope::from_json(&serde_json::to_vec(&wire)?);
+            assert_eq!(decoder.is_ok(), accepted);
+            if !accepted {
+                assert!(matches!(
+                    decoder,
+                    Err(MessageContractError::InvalidMetadata {
+                        field: "dataschema",
+                        ..
+                    })
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn decoder_rejects_overlong_schema_even_when_uri_normalizes_shorter()
+    -> Result<(), Box<dyn Error>> {
+        let schema = format!("https://example.invalid/{}", "a/../".repeat(110));
+        assert!(schema.len() > MAX_METADATA_LENGTH);
+        let mut wire: Value = serde_json::from_slice(FIXTURE)?;
+        wire["dataschema"] = json!(schema);
+
+        assert!(matches!(
+            MessageEnvelope::from_json(&serde_json::to_vec(&wire)?),
+            Err(MessageContractError::InvalidMetadata {
+                field: "dataschema",
+                ..
+            })
+        ));
+        Ok(())
     }
 
     #[test]

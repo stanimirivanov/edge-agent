@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 10] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 11] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -71,6 +71,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 10] = [
         number: 10,
         path: "docs/decisions/0010-keep-delivery-metadata-transport-neutral.md",
         title: "Keep delivery metadata transport-neutral",
+    },
+    PublishedIdentity {
+        number: 11,
+        path: "docs/decisions/0011-bound-untrusted-envelopes-before-decoding.md",
+        title: "Bound untrusted envelopes before decoding",
     },
 ];
 
