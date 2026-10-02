@@ -121,3 +121,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0007](0007-enforce-workspace-capability-dependencies.md) | Accepted | Enforce package roles and exact direct workspace dependency policy. |
 | [ADR-0008](0008-enforce-progressive-coding-harness-policy.md) | Accepted | Enforce progressive repository guidance and deterministic governance policy. |
 | [ADR-0009](0009-fence-outbox-transitions-by-claim-generation.md) | Accepted | Fence outbox transitions by claim generation. |
+| [ADR-0010](0010-keep-delivery-metadata-transport-neutral.md) | Accepted | Keep delivery metadata transport-neutral. |

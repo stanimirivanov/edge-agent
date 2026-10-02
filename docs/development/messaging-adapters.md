@@ -60,11 +60,12 @@ acknowledgement wait, maximum deliveries, pending limits, replicas, and ACLs.
 One delivery follows this control flow:
 
 1. Pull one message without acknowledging it.
-2. Parse untrusted broker metadata into distinct, validated message-key,
-   subject, attempt, stream-sequence, and consumer-sequence values before
-   assembling `DeliveryMetadata`. Expose their existing scalar getters plus
-   the pending count to handlers; invalid text or zero counters fail as
-   `Protocol` before a delivery can be constructed.
+2. Validate untrusted JetStream stream identity, positive stream and consumer
+   sequences, and delivery count inside the adapter. Assemble portable
+   `DeliveryMetadata` from the derived opaque message key, validated subject,
+   and positive attempt; invalid text or counters fail as `Protocol` before a
+   delivery can be constructed. Pending count and broker sequences do not
+   enter application policy.
 3. Share the raw structured envelope bytes with the portable delivery without
    copying the NATS payload buffer; the handler still receives an untrusted
    byte slice and validates it independently.

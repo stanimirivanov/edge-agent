@@ -278,10 +278,7 @@ mod tests {
         ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliverySettlement, MessageDelivery,
         RetryDelay, SettlementFuture,
     };
-    use crate::metadata::{
-        ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
-        StreamSequence,
-    };
+    use crate::metadata::{DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject};
     use bytes::Bytes;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -354,9 +351,6 @@ mod tests {
             DeliveryMessageKey::new("orders:11")?,
             DeliverySubject::new("events.subject")?,
             DeliveryAttempt::new(1)?,
-            0,
-            StreamSequence::new(11)?,
-            ConsumerSequence::new(13)?,
         );
         let delivery = MessageDelivery::new(payload.to_vec(), metadata, Box::new(NoopSettlement));
 
@@ -376,9 +370,6 @@ mod tests {
             DeliveryMessageKey::new("orders:12")?,
             DeliverySubject::new("events.subject")?,
             DeliveryAttempt::new(1)?,
-            0,
-            StreamSequence::new(12)?,
-            ConsumerSequence::new(14)?,
         );
         let delivery = MessageDelivery::new(payload.clone(), metadata, Box::new(NoopSettlement));
 
@@ -398,9 +389,6 @@ mod tests {
                 DeliveryMessageKey::new("orders:11")?,
                 DeliverySubject::new("events.subject")?,
                 DeliveryAttempt::new(1)?,
-                0,
-                StreamSequence::new(11)?,
-                ConsumerSequence::new(13)?,
             ))
         };
         tracing::subscriber::with_default(WarningSubscriber(Arc::clone(&records)), || {

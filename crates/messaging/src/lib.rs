@@ -20,10 +20,7 @@ pub use inbox::{
     InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,
     QuarantineDisposition,
 };
-pub use metadata::{
-    ConsumerSequence, DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject,
-    StreamSequence,
-};
+pub use metadata::{DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject};
 pub use outbox::{
     ClaimedMessage, LeaseGeneration, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
     OutboxStoreFuture,

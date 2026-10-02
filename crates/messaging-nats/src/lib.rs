@@ -14,10 +14,10 @@ use async_nats::jetstream::message::PublishMessage;
 use async_nats::jetstream::publish::PublishAck;
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
 use edgeagent_messaging::{
-    ConsumeError, ConsumeErrorKind, ConsumerSequence, DeliveryAttempt, DeliveryDisposition,
-    DeliveryMessageKey, DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageConsumer,
-    MessageDelivery, MessagePublisher, PublishDisposition, PublishError, PublishErrorKind,
-    PublishFuture, PublishReceipt, ReceiveFuture, SettlementFuture, StreamSequence,
+    ConsumeError, ConsumeErrorKind, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
+    DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageConsumer, MessageDelivery,
+    MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
+    PublishReceipt, ReceiveFuture, SettlementFuture,
 };
 use futures_util::StreamExt;
 
@@ -166,13 +166,11 @@ impl MessageConsumer for JetStreamConsumer {
                     info.stream,
                     info.stream_sequence,
                 )?)?;
+                validate_consumer_sequence(info.consumer_sequence)?;
                 Ok(DeliveryMetadata::new(
                     message_key,
                     DeliverySubject::new(message.subject.to_string())?,
                     delivery_attempt,
-                    info.pending,
-                    StreamSequence::new(info.stream_sequence)?,
-                    ConsumerSequence::new(info.consumer_sequence)?,
                 ))
             })())?;
             let payload = message.payload.clone();
@@ -193,6 +191,16 @@ fn delivery_message_key(stream: &str, stream_sequence: u64) -> Result<String, Co
         ));
     }
     Ok(format!("{}:{stream}:{stream_sequence}", stream.len()))
+}
+
+fn validate_consumer_sequence(sequence: u64) -> Result<(), ConsumeError> {
+    if sequence == 0 {
+        Err(ConsumeError::protocol(
+            "consumer sequence must be greater than zero",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 struct JetStreamSettlement {
@@ -288,7 +296,7 @@ mod tests {
     use super::{
         ConsumerProtocolGate, PreparedPublish, acknowledgement_kind, delivery_message_key,
         map_acknowledgement_error, map_send_error, prepare_publish, receipt,
-        validate_consumer_configuration,
+        validate_consumer_configuration, validate_consumer_sequence,
     };
     use async_nats::jetstream::AckKind;
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
@@ -469,6 +477,23 @@ mod tests {
             delivery_message_key("", 41).err().map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
         );
+        assert_eq!(
+            delivery_message_key("ORDERS", 0)
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+    }
+
+    #[test]
+    fn broker_consumer_sequence_is_validated_without_leaking_into_portable_metadata() {
+        assert_eq!(
+            validate_consumer_sequence(0)
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        assert!(validate_consumer_sequence(1).is_ok());
     }
 
     #[test]
