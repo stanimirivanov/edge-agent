@@ -33,6 +33,13 @@ The implementation uses the official CloudEvents Rust SDK with all transport
 features disabled. Protocol adapters consume the validated structured bytes
 rather than redefine the envelope.
 
+The crate keeps envelope construction and encoding in `messaging.rs`, shared
+metadata and event checks in its private `validation` module, routing policy in
+`routing.rs`, and exact-version lookup in its private `registry` module. Each
+area owns a private error module, while large unit suites live in separate test
+files. The crate-root re-exports remain the public Rust API; the internal file
+layout does not alter wire compatibility.
+
 `MessageDefinition` binds one exact major-version type to its schema, semantic
 kind, owner, partition namespace, and retention class. `MessageRegistry`
 rejects invalid or duplicate definitions and resolves untrusted envelopes only
