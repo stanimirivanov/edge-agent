@@ -12,9 +12,8 @@ use edgeagent_inbox_postgres::{
     PostgresTransactionalMessageHandler,
 };
 use edgeagent_messaging::{
-    ConsumeError, ConsumerSequence, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
-    DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageDelivery, SettlementFuture,
-    StreamSequence,
+    ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
+    DeliverySettlement, DeliverySubject, MessageDelivery, SettlementFuture,
 };
 use serde_json::json;
 use std::env;
@@ -148,7 +147,6 @@ impl DeliverySettlement for SettlementProbe {
 fn delivery(
     payload: Vec<u8>,
     message_key: &str,
-    stream_sequence: u64,
     attempt: u32,
     dispositions: Arc<Mutex<Vec<DeliveryDisposition>>>,
     fail_confirmation: bool,
@@ -157,9 +155,6 @@ fn delivery(
         DeliveryMessageKey::new(message_key)?,
         DeliverySubject::new(COMMAND.subject()?)?,
         DeliveryAttempt::new(attempt)?,
-        0,
-        StreamSequence::new(stream_sequence)?,
-        ConsumerSequence::new(u64::from(attempt))?,
     );
     Ok(MessageDelivery::new(
         payload,
@@ -224,7 +219,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 applied_bytes.clone(),
                 "18:EDGEAGENT_COMMANDS:11",
-                11,
                 1,
                 Arc::clone(&applied_settlements),
                 false,
@@ -242,7 +236,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 applied_bytes,
                 "18:EDGEAGENT_COMMANDS:11",
-                11,
                 2,
                 Arc::clone(&applied_settlements),
                 false,
@@ -272,7 +265,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 transient.clone(),
                 "18:EDGEAGENT_COMMANDS:12",
-                12,
                 1,
                 Arc::clone(&transient_settlements),
                 false,
@@ -302,7 +294,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 transient,
                 "18:EDGEAGENT_COMMANDS:12",
-                12,
                 2,
                 Arc::clone(&transient_settlements),
                 false,
@@ -322,7 +313,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
         delivery(
             b"{not-json".to_vec(),
             poison_key,
-            13,
             1,
             Arc::clone(&poison_settlements),
             true,
@@ -342,7 +332,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 b"{not-json".to_vec(),
                 poison_key,
-                13,
                 2,
                 Arc::clone(&poison_settlements),
                 false,
@@ -368,7 +357,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 envelope("handler-permanent-01")?.to_json()?,
                 "18:EDGEAGENT_COMMANDS:14",
-                14,
                 1,
                 Arc::clone(&permanent_settlements),
                 false,
@@ -394,7 +382,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
         delivery(
             acknowledgement.clone(),
             "18:EDGEAGENT_COMMANDS:15",
-            15,
             1,
             Arc::clone(&acknowledgement_settlements),
             true,
@@ -414,7 +401,6 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             delivery(
                 acknowledgement,
                 "18:EDGEAGENT_COMMANDS:15",
-                15,
                 2,
                 Arc::clone(&acknowledgement_settlements),
                 false,

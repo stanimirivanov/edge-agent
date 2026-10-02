@@ -120,6 +120,8 @@ the transaction mechanics. `edgeagent-messaging-nats` derives publication
 subjects, uses stable
 message identity for bounded JetStream deduplication, and exposes bounded pull
 delivery with confirmed acknowledge, delayed retry, or terminal settlement.
+Portable delivery metadata carries only opaque redelivery identity, route, and
+attempt; broker-specific offsets, sequences, and pending counts stay in adapters.
 Deployment configuration—not application code—owns streams, durable consumers,
 retention, replicas, acknowledgement limits, credentials, and subject ACLs.
 

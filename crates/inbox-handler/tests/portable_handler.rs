@@ -8,10 +8,10 @@ use edgeagent_inbox_handler::{
     handle_once,
 };
 use edgeagent_messaging::{
-    ConsumeError, ConsumerSequence, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
-    DeliveryMetadata, DeliverySettlement, DeliverySubject, InboundMessageStore,
-    InboundProcessingError, InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError,
-    InboxStoreErrorKind, MessageDelivery, SettlementFuture, StreamSequence,
+    ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
+    DeliverySettlement, DeliverySubject, InboundMessageStore, InboundProcessingError,
+    InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,
+    MessageDelivery, SettlementFuture,
 };
 use serde_json::json;
 use std::error::Error;
@@ -238,9 +238,6 @@ fn delivery_with_events(
             DeliveryMessageKey::new("18:EDGEAGENT_COMMANDS:41")?,
             DeliverySubject::new(COMMAND.subject()?)?,
             DeliveryAttempt::new(attempt)?,
-            0,
-            StreamSequence::new(41)?,
-            ConsumerSequence::new(u64::from(attempt))?,
         ),
         Box::new(SettlementProbe {
             dispositions,
