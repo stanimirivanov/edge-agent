@@ -44,11 +44,12 @@ the atomic processing decision. `resolution` owns failure classification,
 quarantine-before-settlement, and the one-shot delivery actions. `policy`
 validates consumer configuration and failure codes; `retry` calculates
 deterministic backoff; `outcome` defines confirmed results and classified
-message failures; and `error` defines bounded coordinator failures. Handling
-telemetry remains in `coordinator`; persistence and acknowledgement signals are
-recorded alongside their respective resolution actions. These modules are
-private, so callers continue to use the same crate-root types and `handle_once`
-function.
+message failures; and `error` defines bounded coordinator failures.
+`observability` owns one private `SpineRecorder` for approved correlation
+context, stage timing, and classified event-spine signals. It starts the
+handling timer after decoding and records persistence and acknowledgement only
+after their futures return. These modules are private, so callers continue to
+use the same crate-root types and `handle_once` function.
 
 The durable rationale is recorded in
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).

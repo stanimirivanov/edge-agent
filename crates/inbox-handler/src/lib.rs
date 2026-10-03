@@ -10,6 +10,7 @@
 
 mod coordinator;
 mod error;
+mod observability;
 mod outcome;
 mod policy;
 mod resolution;
