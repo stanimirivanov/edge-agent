@@ -2,7 +2,7 @@
 
 use edgeagent_messaging::{
     DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
-    InboundQuarantine, InboxStoreErrorKind, MessageDelivery, RetryDelay,
+    InboundQuarantine, InboxStoreError, InboxStoreErrorKind, MessageDelivery, RetryDelay,
 };
 use edgeagent_telemetry::EventSpineOutcome;
 
@@ -66,6 +66,32 @@ pub(super) async fn resolve_handler_failure(
         )
         .await
     }
+}
+
+pub(super) async fn resolve_store_failure(
+    store: &mut dyn InboundMessageStore,
+    policy: &HandlerPolicy,
+    delivery: MessageDelivery,
+    recorder: &SpineRecorder,
+    error: InboxStoreError,
+) -> Result<HandlingOutcome, HandlerError> {
+    let failure_code = match error.kind() {
+        InboxStoreErrorKind::Contract => "routing_invalid",
+        InboxStoreErrorKind::MessageIdentityConflict => "message_identity_conflict",
+        InboxStoreErrorKind::Unavailable => {
+            return retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await;
+        }
+        InboxStoreErrorKind::Invariant => return Err(HandlerError::inbox(error)),
+    };
+    quarantine(
+        store,
+        policy,
+        delivery,
+        recorder,
+        failure_code,
+        MessageFailure::Inbox(error),
+    )
+    .await
 }
 
 pub(super) async fn retry(
