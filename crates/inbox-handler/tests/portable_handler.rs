@@ -580,3 +580,53 @@ async fn invariant_and_settlement_failures_remain_hard_errors() -> Result<(), Bo
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn retry_and_quarantine_confirmation_loss_never_report_a_confirmed_outcome()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+
+    for (behavior, message_id) in [
+        (ProcessBehavior::TransientHandlerFailure, "retry-loss-01"),
+        (ProcessBehavior::PermanentHandlerFailure, "terminal-loss-01"),
+    ] {
+        let settlements = Arc::new(Mutex::new(Vec::new()));
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let result = handle_once(
+            &mut store,
+            &registry,
+            &policy()?,
+            delivery(
+                envelope(message_id)?.to_json()?,
+                1,
+                Arc::clone(&settlements),
+                true,
+            )?,
+        )
+        .await;
+
+        assert_eq!(
+            result.err().map(|error| error.kind()),
+            Some(HandlerErrorKind::Settlement)
+        );
+        match behavior {
+            ProcessBehavior::TransientHandlerFailure => {
+                assert!(matches!(
+                    observed(&settlements)?.as_slice(),
+                    [DeliveryDisposition::RetryAfter(_)]
+                ));
+                assert!(store.quarantines.is_empty());
+            }
+            ProcessBehavior::PermanentHandlerFailure => {
+                assert_eq!(
+                    observed(&settlements)?,
+                    vec![DeliveryDisposition::Quarantined]
+                );
+                assert_eq!(store.quarantines.len(), 1);
+            }
+            _ => unreachable!("test table contains only retry and terminal failures"),
+        }
+    }
+    Ok(())
+}

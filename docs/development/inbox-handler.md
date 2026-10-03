@@ -39,12 +39,16 @@ routing, retry classification, quarantine ordering, settlement, and telemetry.
 It does not receive a database client or transaction and does not own an intake
 loop, connection lifecycle, parallelism, or service-specific domain policy.
 
-The crate root is the public façade. `coordinator` owns the one-delivery control
-flow and telemetry calls; `policy` validates consumer configuration and failure
-codes; `retry` calculates deterministic backoff; `outcome` defines confirmed
-results and classified message failures; and `error` defines bounded
-coordinator failures. These modules are private, so callers continue to use the
-same crate-root types and `handle_once` function.
+The crate root is the public façade. `coordinator` owns decoding, routing, and
+the atomic processing decision. `resolution` owns failure classification,
+quarantine-before-settlement, and the one-shot delivery actions. `policy`
+validates consumer configuration and failure codes; `retry` calculates
+deterministic backoff; `outcome` defines confirmed results and classified
+message failures; and `error` defines bounded coordinator failures. Handling
+telemetry remains in `coordinator`; persistence and acknowledgement signals are
+recorded alongside their respective resolution actions. These modules are
+private, so callers continue to use the same crate-root types and `handle_once`
+function.
 
 The durable rationale is recorded in
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
@@ -138,8 +142,9 @@ can execute again.
 
 Credential-free tests use an in-memory `InboundMessageStore` to exercise
 portable applied, duplicate, retry, quarantine, unavailable-store, invariant,
-and settlement policy without PostgreSQL. Adapter integration remains
-responsible for proving the concrete transaction boundary.
+and settlement policy without PostgreSQL. They also verify that lost retry or
+terminal settlement confirmation never becomes a confirmed outcome. Adapter
+integration remains responsible for proving the concrete transaction boundary.
 
 The isolated PostgreSQL conformance test runs with:
 

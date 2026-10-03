@@ -12,6 +12,7 @@ mod coordinator;
 mod error;
 mod outcome;
 mod policy;
+mod resolution;
 mod retry;
 
 pub use coordinator::handle_once;
