@@ -3,14 +3,11 @@ use edgeagent_messaging::{
     InboundMessageStore, InboundProcessingError, InboxDisposition, InboxStoreErrorKind,
     MessageDelivery,
 };
-use edgeagent_telemetry::{
-    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
-};
-use std::time::Instant;
+use edgeagent_telemetry::EventSpineOutcome;
 
+use crate::observability::SpineRecorder;
 use crate::resolution::{
-    HandlingOutcomeKind, acknowledge, quarantine, record_persistence, resolve_handler_failure,
-    retry,
+    HandlingOutcomeKind, acknowledge, quarantine, resolve_handler_failure, retry,
 };
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
@@ -32,37 +29,18 @@ pub async fn handle_once(
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
 ) -> Result<HandlingOutcome, HandlerError> {
-    let attempt = delivery.metadata().delivery_attempt();
     let decoded_envelope = MessageEnvelope::from_json(delivery.payload());
-    let telemetry_context = match &decoded_envelope {
-        Ok(envelope) => EventSpineContext::from_envelope(envelope),
-        Err(_) => EventSpineContext::from_delivery(delivery.metadata()),
-    };
-    let handling_started = Instant::now();
+    let recorder = SpineRecorder::new(delivery.metadata(), &decoded_envelope);
     let result = handle_decoded_once(
         store,
         registry,
         policy,
         delivery,
         decoded_envelope,
-        &telemetry_context,
+        &recorder,
     )
     .await;
-    let outcome = match &result {
-        Ok(HandlingOutcome::Applied { .. }) => EventSpineOutcome::Succeeded,
-        Ok(HandlingOutcome::Duplicate { .. }) => EventSpineOutcome::Duplicate,
-        Ok(HandlingOutcome::RetryRequested { .. }) => EventSpineOutcome::RetryScheduled,
-        Ok(HandlingOutcome::Quarantined { .. }) => EventSpineOutcome::Quarantined,
-        Err(_) => EventSpineOutcome::Failed,
-    };
-    record_event_spine_operation(
-        &telemetry_context,
-        EventSpineStage::Handling,
-        outcome,
-        attempt,
-        handling_started.elapsed(),
-    );
-    result
+    recorder.finish(result)
 }
 
 async fn handle_decoded_once(
@@ -71,7 +49,7 @@ async fn handle_decoded_once(
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
     decoded_envelope: Result<MessageEnvelope, MessageContractError>,
-    telemetry_context: &EventSpineContext,
+    recorder: &SpineRecorder,
 ) -> Result<HandlingOutcome, HandlerError> {
     let envelope = match decoded_envelope {
         Ok(envelope) => envelope,
@@ -80,7 +58,7 @@ async fn handle_decoded_once(
                 store,
                 policy,
                 delivery,
-                telemetry_context,
+                recorder,
                 "envelope_invalid",
                 MessageFailure::Envelope(error),
             )
@@ -92,53 +70,38 @@ async fn handle_decoded_once(
             store,
             policy,
             delivery,
-            telemetry_context,
+            recorder,
             "routing_invalid",
             MessageFailure::Routing(error),
         )
         .await;
     }
 
-    let persistence_started = Instant::now();
+    let persistence_started = recorder.start_stage();
     match store
         .process(&policy.consumer_name, registry, &envelope)
         .await
     {
         Ok(InboxDisposition::Duplicate) => {
-            record_persistence(
-                telemetry_context,
-                delivery.metadata().delivery_attempt(),
-                EventSpineOutcome::Duplicate,
-                persistence_started,
-            );
-            acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Duplicate).await
+            recorder.record_persistence(persistence_started, EventSpineOutcome::Duplicate);
+            acknowledge(delivery, recorder, HandlingOutcomeKind::Duplicate).await
         }
         Ok(InboxDisposition::Applied) => {
-            record_persistence(
-                telemetry_context,
-                delivery.metadata().delivery_attempt(),
-                EventSpineOutcome::Succeeded,
-                persistence_started,
-            );
-            acknowledge(delivery, telemetry_context, HandlingOutcomeKind::Applied).await
+            recorder.record_persistence(persistence_started, EventSpineOutcome::Succeeded);
+            acknowledge(delivery, recorder, HandlingOutcomeKind::Applied).await
         }
         Err(InboundProcessingError::Handler(failure)) => {
-            resolve_handler_failure(store, policy, delivery, telemetry_context, failure).await
+            resolve_handler_failure(store, policy, delivery, recorder, failure).await
         }
         Err(InboundProcessingError::Store(error)) => {
-            record_persistence(
-                telemetry_context,
-                delivery.metadata().delivery_attempt(),
-                EventSpineOutcome::Failed,
-                persistence_started,
-            );
+            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
             match error.kind() {
                 InboxStoreErrorKind::Contract => {
                     quarantine(
                         store,
                         policy,
                         delivery,
-                        telemetry_context,
+                        recorder,
                         "routing_invalid",
                         MessageFailure::Inbox(error),
                     )
@@ -149,20 +112,14 @@ async fn handle_decoded_once(
                         store,
                         policy,
                         delivery,
-                        telemetry_context,
+                        recorder,
                         "message_identity_conflict",
                         MessageFailure::Inbox(error),
                     )
                     .await
                 }
                 InboxStoreErrorKind::Unavailable => {
-                    retry(
-                        delivery,
-                        policy,
-                        telemetry_context,
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
+                    retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await
                 }
                 InboxStoreErrorKind::Invariant => Err(HandlerError::inbox(error)),
             }

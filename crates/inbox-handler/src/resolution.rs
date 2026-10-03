@@ -4,11 +4,9 @@ use edgeagent_messaging::{
     DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
     InboundQuarantine, InboxStoreErrorKind, MessageDelivery, RetryDelay,
 };
-use edgeagent_telemetry::{
-    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
-};
-use std::time::Instant;
+use edgeagent_telemetry::EventSpineOutcome;
 
+use crate::observability::SpineRecorder;
 use crate::policy::validate_failure_code;
 use crate::retry::{retry_delay, should_retry_handler};
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
@@ -21,21 +19,19 @@ pub(super) enum HandlingOutcomeKind {
 
 pub(super) async fn acknowledge(
     delivery: MessageDelivery,
-    telemetry_context: &EventSpineContext,
+    recorder: &SpineRecorder,
     outcome: HandlingOutcomeKind,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
-    let started = Instant::now();
+    let started = recorder.start_stage();
     let settlement_result = delivery.settle(SettlementDisposition::Acknowledge).await;
-    record_acknowledgement(
-        telemetry_context,
-        attempt,
+    recorder.record_acknowledgement(
+        started,
         if settlement_result.is_ok() {
             EventSpineOutcome::Succeeded
         } else {
             EventSpineOutcome::Failed
         },
-        started,
     );
     settlement_result.map_err(HandlerError::settlement)?;
     Ok(match outcome {
@@ -48,7 +44,7 @@ pub(super) async fn resolve_handler_failure(
     store: &mut dyn InboundMessageStore,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
-    telemetry_context: &EventSpineContext,
+    recorder: &SpineRecorder,
     failure: HandlerFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     validate_failure_code(failure.code())?;
@@ -57,20 +53,14 @@ pub(super) async fn resolve_handler_failure(
         delivery.metadata().delivery_attempt(),
         failure.kind(),
     ) {
-        retry(
-            delivery,
-            policy,
-            telemetry_context,
-            MessageFailure::Handler(failure),
-        )
-        .await
+        retry(delivery, policy, recorder, MessageFailure::Handler(failure)).await
     } else {
         let code = failure.code();
         quarantine(
             store,
             policy,
             delivery,
-            telemetry_context,
+            recorder,
             code,
             MessageFailure::Handler(failure),
         )
@@ -81,7 +71,7 @@ pub(super) async fn resolve_handler_failure(
 pub(super) async fn retry(
     delivery: MessageDelivery,
     policy: &HandlerPolicy,
-    telemetry_context: &EventSpineContext,
+    recorder: &SpineRecorder,
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
@@ -91,19 +81,17 @@ pub(super) async fn retry(
         attempt,
     ))
     .map_err(HandlerError::settlement)?;
-    let started = Instant::now();
+    let started = recorder.start_stage();
     let settlement_result = delivery
         .settle(SettlementDisposition::RetryAfter(delay))
         .await;
-    record_acknowledgement(
-        telemetry_context,
-        attempt,
+    recorder.record_acknowledgement(
+        started,
         if settlement_result.is_ok() {
             EventSpineOutcome::RetryScheduled
         } else {
             EventSpineOutcome::Failed
         },
-        started,
     );
     settlement_result.map_err(HandlerError::settlement)?;
     Ok(HandlingOutcome::RetryRequested {
@@ -117,12 +105,12 @@ pub(super) async fn quarantine(
     store: &mut dyn InboundMessageStore,
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
-    telemetry_context: &EventSpineContext,
+    recorder: &SpineRecorder,
     failure_code: &'static str,
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     validate_failure_code(failure_code)?;
-    let persistence_started = Instant::now();
+    let persistence_started = recorder.start_stage();
     let quarantine_result = {
         let evidence = InboundQuarantine::new(
             delivery.metadata().message_key(),
@@ -137,48 +125,25 @@ pub(super) async fn quarantine(
     let disposition = match quarantine_result {
         Ok(disposition) => disposition,
         Err(error) if error.kind() == InboxStoreErrorKind::Unavailable => {
-            record_persistence(
-                telemetry_context,
-                delivery.metadata().delivery_attempt(),
-                EventSpineOutcome::Failed,
-                persistence_started,
-            );
-            return retry(
-                delivery,
-                policy,
-                telemetry_context,
-                MessageFailure::Inbox(error),
-            )
-            .await;
+            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
+            return retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await;
         }
         Err(error) => {
-            record_persistence(
-                telemetry_context,
-                delivery.metadata().delivery_attempt(),
-                EventSpineOutcome::Failed,
-                persistence_started,
-            );
+            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
             return Err(HandlerError::inbox(error));
         }
     };
     let attempt = delivery.metadata().delivery_attempt();
-    record_persistence(
-        telemetry_context,
-        attempt,
-        EventSpineOutcome::Quarantined,
-        persistence_started,
-    );
-    let acknowledgement_started = Instant::now();
+    recorder.record_persistence(persistence_started, EventSpineOutcome::Quarantined);
+    let acknowledgement_started = recorder.start_stage();
     let settlement_result = delivery.settle(SettlementDisposition::Quarantined).await;
-    record_acknowledgement(
-        telemetry_context,
-        attempt,
+    recorder.record_acknowledgement(
+        acknowledgement_started,
         if settlement_result.is_ok() {
             EventSpineOutcome::Quarantined
         } else {
             EventSpineOutcome::Failed
         },
-        acknowledgement_started,
     );
     settlement_result.map_err(HandlerError::settlement)?;
     Ok(HandlingOutcome::Quarantined {
@@ -187,34 +152,4 @@ pub(super) async fn quarantine(
         failure_code,
         failure,
     })
-}
-
-pub(super) fn record_persistence(
-    telemetry_context: &EventSpineContext,
-    attempt: u32,
-    outcome: EventSpineOutcome,
-    started: Instant,
-) {
-    record_event_spine_operation(
-        telemetry_context,
-        EventSpineStage::Persistence,
-        outcome,
-        attempt,
-        started.elapsed(),
-    );
-}
-
-fn record_acknowledgement(
-    telemetry_context: &EventSpineContext,
-    attempt: u32,
-    outcome: EventSpineOutcome,
-    started: Instant,
-) {
-    record_event_spine_operation(
-        telemetry_context,
-        EventSpineStage::Acknowledgement,
-        outcome,
-        attempt,
-        started.elapsed(),
-    );
 }
