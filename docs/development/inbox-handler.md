@@ -41,8 +41,9 @@ loop, connection lifecycle, parallelism, or service-specific domain policy.
 
 The crate root is the public façade. `coordinator` owns decoding, routing, and
 the atomic processing decision. `resolution` owns failure classification,
-quarantine-before-settlement, and the one-shot delivery actions. `policy`
-validates consumer configuration and failure codes; `retry` calculates
+including the store contract, identity-conflict, availability, and invariant
+branches, plus quarantine-before-settlement and the one-shot delivery actions.
+`policy` validates consumer configuration and failure codes; `retry` calculates
 deterministic backoff; `outcome` defines confirmed results and classified
 message failures; and `error` defines bounded coordinator failures.
 `observability` owns one private `SpineRecorder` for approved correlation

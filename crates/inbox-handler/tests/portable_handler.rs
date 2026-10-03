@@ -34,6 +34,7 @@ enum ProcessBehavior {
     Duplicate,
     TransientHandlerFailure,
     PermanentHandlerFailure,
+    Contract,
     Unavailable,
     IdentityConflict,
     Invariant,
@@ -115,6 +116,7 @@ impl InboundMessageStore for ScriptedStore {
                 ProcessBehavior::PermanentHandlerFailure => Err(InboundProcessingError::Handler(
                     HandlerFailure::permanent("policy_rejected"),
                 )),
+                ProcessBehavior::Contract => Err(store_error(InboxStoreErrorKind::Contract)),
                 ProcessBehavior::Unavailable => Err(store_error(InboxStoreErrorKind::Unavailable)),
                 ProcessBehavior::IdentityConflict => {
                     Err(store_error(InboxStoreErrorKind::MessageIdentityConflict))
@@ -447,6 +449,51 @@ async fn terminal_failure_commits_exact_quarantine_evidence_before_settlement()
         observed(&settlements)?,
         vec![DeliveryDisposition::Quarantined]
     );
+    assert_eq!(
+        observed_events(&events)?,
+        vec!["quarantine:committed", "settle:quarantined"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn store_contract_rejection_commits_routing_evidence_before_terminal_settlement()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let settlements = Arc::new(Mutex::new(Vec::new()));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let mut store = ScriptedStore::new(ProcessBehavior::Contract, QuarantineBehavior::Inserted)
+        .with_events(Arc::clone(&events));
+
+    let outcome = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery_with_events(
+            envelope("contract-01")?.to_json()?,
+            1,
+            Arc::clone(&settlements),
+            false,
+            Some(Arc::clone(&events)),
+        )?,
+    )
+    .await?;
+
+    assert!(matches!(
+        outcome,
+        HandlingOutcome::Quarantined {
+            failure_code: "routing_invalid",
+            ..
+        }
+    ));
+    assert_eq!(store.process_calls, 1);
+    assert_eq!(store.quarantines.len(), 1);
+    assert_eq!(store.quarantines[0].failure_code, "routing_invalid");
+    assert!(matches!(
+        observed(&settlements)?.as_slice(),
+        [DeliveryDisposition::Quarantined]
+    ));
     assert_eq!(
         observed_events(&events)?,
         vec!["quarantine:committed", "settle:quarantined"]

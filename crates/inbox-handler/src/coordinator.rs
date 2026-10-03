@@ -1,13 +1,12 @@
 use edgeagent_contracts::{MessageContractError, MessageEnvelope, MessageRegistry};
 use edgeagent_messaging::{
-    InboundMessageStore, InboundProcessingError, InboxDisposition, InboxStoreErrorKind,
-    MessageDelivery,
+    InboundMessageStore, InboundProcessingError, InboxDisposition, MessageDelivery,
 };
 use edgeagent_telemetry::EventSpineOutcome;
 
 use crate::observability::SpineRecorder;
 use crate::resolution::{
-    HandlingOutcomeKind, acknowledge, quarantine, resolve_handler_failure, retry,
+    HandlingOutcomeKind, acknowledge, quarantine, resolve_handler_failure, resolve_store_failure,
 };
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
@@ -95,34 +94,7 @@ async fn handle_decoded_once(
         }
         Err(InboundProcessingError::Store(error)) => {
             recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
-            match error.kind() {
-                InboxStoreErrorKind::Contract => {
-                    quarantine(
-                        store,
-                        policy,
-                        delivery,
-                        recorder,
-                        "routing_invalid",
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
-                }
-                InboxStoreErrorKind::MessageIdentityConflict => {
-                    quarantine(
-                        store,
-                        policy,
-                        delivery,
-                        recorder,
-                        "message_identity_conflict",
-                        MessageFailure::Inbox(error),
-                    )
-                    .await
-                }
-                InboxStoreErrorKind::Unavailable => {
-                    retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await
-                }
-                InboxStoreErrorKind::Invariant => Err(HandlerError::inbox(error)),
-            }
+            resolve_store_failure(store, policy, delivery, recorder, error).await
         }
     }
 }
