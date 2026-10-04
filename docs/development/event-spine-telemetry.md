@@ -23,9 +23,10 @@ the portable messaging port, and exporter-neutral `metrics` and `tracing`
 facades.
 
 The outbox relay emits broker publication results and the following durable
-outbox transition. The transactional inbox handler emits committed inbox or
-quarantine persistence, confirmed acknowledgement policy, and its final handling
-outcome. Each observation includes the one-based attempt and elapsed duration.
+outbox transition. The transactional inbox handler emits classified
+inbox-processing and quarantine-persistence results, confirmed acknowledgement
+policy, and its final handling outcome. Each observation includes the one-based
+attempt and elapsed duration.
 
 ## Signal contract
 
@@ -67,7 +68,10 @@ signal means no durable completion was confirmed; normal retry or process
 recovery policy still owns the message.
 
 Publication is observed when the publisher returns. Persistence is observed
-after the associated outbox, inbox, or quarantine commit succeeds or fails.
+after the associated outbox, inbox, or quarantine operation succeeds or fails.
+A handler failure that rolls back atomic inbox processing emits `failed`
+persistence before retry or quarantine resolution; it does not imply a
+committed inbox record.
 Acknowledgement is observed only after the broker settlement future returns.
 The final handling observation therefore describes the caller-visible
 `HandlingOutcome` or `HandlerError`, not an intermediate intention.
