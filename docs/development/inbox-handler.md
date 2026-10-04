@@ -54,6 +54,10 @@ failure that rolls back, receives one classified persistence signal before
 resolution. These modules are private, so callers continue to use the same
 crate-root types and `handle_once` function.
 
+One private settlement path records the confirmed broker result for acknowledge,
+retry, and terminal quarantine; successful applied or duplicate outcomes derive
+from the committed `InboxDisposition` rather than a second local enum.
+
 The durable rationale is recorded in
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
 
