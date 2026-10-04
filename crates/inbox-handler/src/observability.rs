@@ -3,6 +3,7 @@
 use edgeagent_contracts::{MessageContractError, MessageEnvelope};
 use edgeagent_messaging::{
     ConsumeError, DeliveryDisposition, DeliveryMetadata, InboundProcessingError, InboxDisposition,
+    InboxStoreError, QuarantineDisposition,
 };
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
@@ -42,7 +43,7 @@ impl SpineRecorder {
         StageStart(Instant::now())
     }
 
-    pub(super) fn record_persistence(&self, started: StageStart, outcome: EventSpineOutcome) {
+    fn record_persistence(&self, started: StageStart, outcome: EventSpineOutcome) {
         self.record(EventSpineStage::Persistence, outcome, started.0);
     }
 
@@ -52,6 +53,14 @@ impl SpineRecorder {
         result: &Result<InboxDisposition, InboundProcessingError>,
     ) {
         self.record_persistence(started, processing_outcome(result));
+    }
+
+    pub(super) fn record_quarantine_result(
+        &self,
+        started: StageStart,
+        result: &Result<QuarantineDisposition, InboxStoreError>,
+    ) {
+        self.record_persistence(started, quarantine_outcome(result));
     }
 
     pub(super) fn record_settlement_result(
@@ -107,6 +116,17 @@ fn processing_outcome(
     }
 }
 
+fn quarantine_outcome(
+    result: &Result<QuarantineDisposition, InboxStoreError>,
+) -> EventSpineOutcome {
+    match result {
+        Ok(QuarantineDisposition::Inserted | QuarantineDisposition::AlreadyPresent) => {
+            EventSpineOutcome::Quarantined
+        }
+        Err(_) => EventSpineOutcome::Failed,
+    }
+}
+
 fn settlement_outcome(
     disposition: DeliveryDisposition,
     result: &Result<(), ConsumeError>,
@@ -123,7 +143,9 @@ fn settlement_outcome(
 
 #[cfg(test)]
 mod tests {
-    use super::{SpineRecorder, handling_outcome, processing_outcome, settlement_outcome};
+    use super::{
+        SpineRecorder, handling_outcome, processing_outcome, quarantine_outcome, settlement_outcome,
+    };
     use crate::{HandlerError, HandlingOutcome, MessageFailure};
     use edgeagent_contracts::MessageEnvelope;
     use edgeagent_messaging::{
@@ -224,6 +246,37 @@ mod tests {
         ];
         for (result, expected) in cases {
             assert_eq!(processing_outcome(&result), expected);
+        }
+    }
+
+    #[test]
+    fn quarantine_result_always_has_a_persistence_outcome() {
+        let cases = [
+            (
+                Ok(QuarantineDisposition::Inserted),
+                EventSpineOutcome::Quarantined,
+            ),
+            (
+                Ok(QuarantineDisposition::AlreadyPresent),
+                EventSpineOutcome::Quarantined,
+            ),
+            (
+                Err(InboxStoreError::with_source(
+                    InboxStoreErrorKind::Unavailable,
+                    io::Error::other("test storage outage"),
+                )),
+                EventSpineOutcome::Failed,
+            ),
+            (
+                Err(InboxStoreError::with_source(
+                    InboxStoreErrorKind::Invariant,
+                    io::Error::other("test invariant failure"),
+                )),
+                EventSpineOutcome::Failed,
+            ),
+        ];
+        for (result, expected) in cases {
+            assert_eq!(quarantine_outcome(&result), expected);
         }
     }
 

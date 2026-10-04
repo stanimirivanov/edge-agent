@@ -51,7 +51,9 @@ context, stage timing, and classified event-spine signals. It starts the
 handling timer after decoding and records persistence and acknowledgement only
 after their futures return. Every atomic `process` result, including a handler
 failure that rolls back, receives one classified persistence signal before
-resolution. These modules are private, so callers continue to use the same
+resolution. A completed quarantine-store result likewise produces one
+persistence signal, with both inserted and already-present evidence classified
+as quarantined. These modules are private, so callers continue to use the same
 crate-root types and `handle_once` function.
 
 One private settlement path records the confirmed broker result for acknowledge,

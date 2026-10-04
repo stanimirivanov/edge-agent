@@ -1,16 +1,14 @@
 //! Final delivery actions after routing or atomic inbound processing decides an outcome.
 
+use crate::observability::SpineRecorder;
+use crate::policy::validate_failure_code;
+use crate::retry::{retry_delay, should_retry_handler};
+use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 use edgeagent_messaging::{
     DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
     InboundQuarantine, InboxDisposition, InboxStoreError, InboxStoreErrorKind, MessageDelivery,
     RetryDelay,
 };
-use edgeagent_telemetry::EventSpineOutcome;
-
-use crate::observability::SpineRecorder;
-use crate::policy::validate_failure_code;
-use crate::retry::{retry_delay, should_retry_handler};
-use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
 pub(super) async fn acknowledge(
     delivery: MessageDelivery,
@@ -109,31 +107,25 @@ pub(super) async fn quarantine(
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
     validate_failure_code(failure_code)?;
+    let evidence = InboundQuarantine::new(
+        delivery.metadata().message_key(),
+        delivery.metadata().subject(),
+        delivery.metadata().delivery_attempt(),
+        delivery.payload(),
+        failure_code,
+    )
+    .map_err(HandlerError::inbox)?;
     let persistence_started = recorder.start_stage();
-    let quarantine_result = {
-        let evidence = InboundQuarantine::new(
-            delivery.metadata().message_key(),
-            delivery.metadata().subject(),
-            delivery.metadata().delivery_attempt(),
-            delivery.payload(),
-            failure_code,
-        )
-        .map_err(HandlerError::inbox)?;
-        store.quarantine(&policy.consumer_name, evidence).await
-    };
+    let quarantine_result = store.quarantine(&policy.consumer_name, evidence).await;
+    recorder.record_quarantine_result(persistence_started, &quarantine_result);
     let disposition = match quarantine_result {
         Ok(disposition) => disposition,
         Err(error) if error.kind() == InboxStoreErrorKind::Unavailable => {
-            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
             return retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await;
         }
-        Err(error) => {
-            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
-            return Err(HandlerError::inbox(error));
-        }
+        Err(error) => return Err(HandlerError::inbox(error)),
     };
     let attempt = delivery.metadata().delivery_attempt();
-    recorder.record_persistence(persistence_started, EventSpineOutcome::Quarantined);
     settle_delivery(delivery, SettlementDisposition::Quarantined, recorder).await?;
     Ok(HandlingOutcome::Quarantined {
         attempt,
