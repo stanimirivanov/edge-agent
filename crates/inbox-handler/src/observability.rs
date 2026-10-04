@@ -1,7 +1,7 @@
 //! One-delivery event-spine recording without affecting resolution policy.
 
 use edgeagent_contracts::{MessageContractError, MessageEnvelope};
-use edgeagent_messaging::DeliveryMetadata;
+use edgeagent_messaging::{DeliveryMetadata, InboundProcessingError, InboxDisposition};
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
@@ -44,6 +44,14 @@ impl SpineRecorder {
         self.record(EventSpineStage::Persistence, outcome, started.0);
     }
 
+    pub(super) fn record_processing_result(
+        &self,
+        started: StageStart,
+        result: &Result<InboxDisposition, InboundProcessingError>,
+    ) {
+        self.record_persistence(started, processing_outcome(result));
+    }
+
     pub(super) fn record_acknowledgement(&self, started: StageStart, outcome: EventSpineOutcome) {
         self.record(EventSpineStage::Acknowledgement, outcome, started.0);
     }
@@ -78,17 +86,29 @@ fn handling_outcome(result: &Result<HandlingOutcome, HandlerError>) -> EventSpin
     }
 }
 
+fn processing_outcome(
+    result: &Result<InboxDisposition, InboundProcessingError>,
+) -> EventSpineOutcome {
+    match result {
+        Ok(InboxDisposition::Applied) => EventSpineOutcome::Succeeded,
+        Ok(InboxDisposition::Duplicate) => EventSpineOutcome::Duplicate,
+        Err(_) => EventSpineOutcome::Failed,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SpineRecorder, handling_outcome};
+    use super::{SpineRecorder, handling_outcome, processing_outcome};
     use crate::{HandlerError, HandlingOutcome, MessageFailure};
     use edgeagent_contracts::MessageEnvelope;
     use edgeagent_messaging::{
         DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject, HandlerFailure,
+        InboundProcessingError, InboxDisposition, InboxStoreError, InboxStoreErrorKind,
         QuarantineDisposition,
     };
     use edgeagent_telemetry::EventSpineOutcome;
     use std::error::Error;
+    use std::io;
     use std::time::Duration;
 
     #[test]
@@ -152,6 +172,33 @@ mod tests {
         ];
         for (result, expected) in cases {
             assert_eq!(handling_outcome(&result), expected);
+        }
+    }
+
+    #[test]
+    fn processing_result_always_has_a_persistence_outcome() {
+        let cases = [
+            (Ok(InboxDisposition::Applied), EventSpineOutcome::Succeeded),
+            (
+                Ok(InboxDisposition::Duplicate),
+                EventSpineOutcome::Duplicate,
+            ),
+            (
+                Err(InboundProcessingError::Handler(HandlerFailure::transient(
+                    "retry",
+                ))),
+                EventSpineOutcome::Failed,
+            ),
+            (
+                Err(InboundProcessingError::Store(InboxStoreError::with_source(
+                    InboxStoreErrorKind::Unavailable,
+                    io::Error::other("test storage outage"),
+                ))),
+                EventSpineOutcome::Failed,
+            ),
+        ];
+        for (result, expected) in cases {
+            assert_eq!(processing_outcome(&result), expected);
         }
     }
 }

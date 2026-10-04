@@ -2,7 +2,6 @@ use edgeagent_contracts::{MessageContractError, MessageEnvelope, MessageRegistry
 use edgeagent_messaging::{
     InboundMessageStore, InboundProcessingError, InboxDisposition, MessageDelivery,
 };
-use edgeagent_telemetry::EventSpineOutcome;
 
 use crate::observability::SpineRecorder;
 use crate::resolution::{
@@ -77,23 +76,21 @@ async fn handle_decoded_once(
     }
 
     let persistence_started = recorder.start_stage();
-    match store
+    let processing_result = store
         .process(&policy.consumer_name, registry, &envelope)
-        .await
-    {
+        .await;
+    recorder.record_processing_result(persistence_started, &processing_result);
+    match processing_result {
         Ok(InboxDisposition::Duplicate) => {
-            recorder.record_persistence(persistence_started, EventSpineOutcome::Duplicate);
             acknowledge(delivery, recorder, HandlingOutcomeKind::Duplicate).await
         }
         Ok(InboxDisposition::Applied) => {
-            recorder.record_persistence(persistence_started, EventSpineOutcome::Succeeded);
             acknowledge(delivery, recorder, HandlingOutcomeKind::Applied).await
         }
         Err(InboundProcessingError::Handler(failure)) => {
             resolve_handler_failure(store, policy, delivery, recorder, failure).await
         }
         Err(InboundProcessingError::Store(error)) => {
-            recorder.record_persistence(persistence_started, EventSpineOutcome::Failed);
             resolve_store_failure(store, policy, delivery, recorder, error).await
         }
     }

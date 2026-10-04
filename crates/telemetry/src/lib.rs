@@ -16,7 +16,7 @@ pub const EVENT_SPINE_OPERATION_DURATION_SECONDS: &str = "edgeagent.event_spine.
 pub enum EventSpineStage {
     /// A broker publication attempt reached a classified result.
     Publication,
-    /// A durable outbox or inbox state transition committed.
+    /// A durable outbox or inbox operation reached a classified result.
     Persistence,
     /// Transactional message handling reached a classified result.
     Handling,
