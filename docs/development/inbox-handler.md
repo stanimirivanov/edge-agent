@@ -155,9 +155,14 @@ can execute again.
 
 Credential-free tests use an in-memory `InboundMessageStore` to exercise
 portable applied, duplicate, retry, quarantine, unavailable-store, invariant,
-and settlement policy without PostgreSQL. They also verify that lost retry or
-terminal settlement confirmation never becomes a confirmed outcome. Adapter
-integration remains responsible for proving the concrete transaction boundary.
+and settlement policy without PostgreSQL. A stateful quarantine test store
+verifies that lost terminal confirmation is followed by `AlreadyPresent` on
+identical redelivery, while conflicting bytes under the same delivery identity
+fail closed without settlement. It also models an ambiguous quarantine commit:
+the first attempt requests retry, and redelivery discovers retained evidence
+before terminal settlement. Tests verify that lost retry confirmation never
+becomes a confirmed outcome. Adapter integration remains responsible for
+proving the concrete transaction boundary.
 
 The isolated PostgreSQL conformance test runs with:
 

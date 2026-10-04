@@ -68,14 +68,20 @@ produce one domain transition despite duplicate or delayed delivery.
 refactoring is complete, compare the existing NATS/PostgreSQL event spine alone
 with self-hosted [Temporal](https://github.com/temporalio/temporal) and its Rust
 SDK, [Duroxide](https://github.com/microsoft/duroxide), and
-[Flawless](https://flawless.dev/). Use the same synthetic, point-in-time M08
-evaluation workflow to assess crash recovery, deterministic replay, duplicate
-and cancellation behavior, workflow evolution, Rust integration, operational
-footprint, licensing, maintenance, cloud portability, and resource use. Record
-the selected option and rejected alternatives in an ADR before implementing a
-workflow runtime. Do not begin model-provider selection, model calls, or local
-model runtime experiments until this decision is recorded. No orchestration
-framework is preselected, and the dry-run execution path remains unchanged.
+[Flawless](https://flawless.dev/), and
+[DBOS Transact for Rust](https://github.com/dbos-inc/dbos-transact-rust). Use
+the same synthetic, point-in-time M08 evaluation workflow to assess crash
+recovery, deterministic replay, duplicate and cancellation behavior, workflow
+evolution, Rust integration, operational footprint, licensing, maintenance,
+cloud portability, and resource use. For DBOS, specifically prove that the
+Rust-compatible enqueue path can commit or roll back a workflow with
+service-owned application data in one PostgreSQL transaction; distinguish
+that guarantee from transactional workflow steps and idempotency of external
+effects. Record the selected option and rejected alternatives in an ADR before
+implementing a workflow runtime. Do not begin model-provider selection, model
+calls, or local model runtime experiments until this decision is recorded. No
+orchestration framework is preselected, and the dry-run execution path remains
+unchanged.
 
 ## M03 - Market data fabric
 
