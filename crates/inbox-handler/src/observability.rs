@@ -1,7 +1,9 @@
 //! One-delivery event-spine recording without affecting resolution policy.
 
 use edgeagent_contracts::{MessageContractError, MessageEnvelope};
-use edgeagent_messaging::{DeliveryMetadata, InboundProcessingError, InboxDisposition};
+use edgeagent_messaging::{
+    ConsumeError, DeliveryDisposition, DeliveryMetadata, InboundProcessingError, InboxDisposition,
+};
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
@@ -52,8 +54,17 @@ impl SpineRecorder {
         self.record_persistence(started, processing_outcome(result));
     }
 
-    pub(super) fn record_acknowledgement(&self, started: StageStart, outcome: EventSpineOutcome) {
-        self.record(EventSpineStage::Acknowledgement, outcome, started.0);
+    pub(super) fn record_settlement_result(
+        &self,
+        started: StageStart,
+        disposition: DeliveryDisposition,
+        result: &Result<(), ConsumeError>,
+    ) {
+        self.record(
+            EventSpineStage::Acknowledgement,
+            settlement_outcome(disposition, result),
+            started.0,
+        );
     }
 
     pub(super) fn finish(
@@ -96,15 +107,29 @@ fn processing_outcome(
     }
 }
 
+fn settlement_outcome(
+    disposition: DeliveryDisposition,
+    result: &Result<(), ConsumeError>,
+) -> EventSpineOutcome {
+    if result.is_err() {
+        return EventSpineOutcome::Failed;
+    }
+    match disposition {
+        DeliveryDisposition::Acknowledge => EventSpineOutcome::Succeeded,
+        DeliveryDisposition::RetryAfter(_) => EventSpineOutcome::RetryScheduled,
+        DeliveryDisposition::Quarantined => EventSpineOutcome::Quarantined,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SpineRecorder, handling_outcome, processing_outcome};
+    use super::{SpineRecorder, handling_outcome, processing_outcome, settlement_outcome};
     use crate::{HandlerError, HandlingOutcome, MessageFailure};
     use edgeagent_contracts::MessageEnvelope;
     use edgeagent_messaging::{
-        DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject, HandlerFailure,
-        InboundProcessingError, InboxDisposition, InboxStoreError, InboxStoreErrorKind,
-        QuarantineDisposition,
+        ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
+        DeliverySubject, HandlerFailure, InboundProcessingError, InboxDisposition, InboxStoreError,
+        InboxStoreErrorKind, QuarantineDisposition, RetryDelay,
     };
     use edgeagent_telemetry::EventSpineOutcome;
     use std::error::Error;
@@ -200,5 +225,31 @@ mod tests {
         for (result, expected) in cases {
             assert_eq!(processing_outcome(&result), expected);
         }
+    }
+
+    #[test]
+    fn settlement_result_determines_confirmed_telemetry_outcome() -> Result<(), ConsumeError> {
+        let retry = DeliveryDisposition::RetryAfter(RetryDelay::new(Duration::from_millis(1))?);
+        for (disposition, expected) in [
+            (
+                DeliveryDisposition::Acknowledge,
+                EventSpineOutcome::Succeeded,
+            ),
+            (retry, EventSpineOutcome::RetryScheduled),
+            (
+                DeliveryDisposition::Quarantined,
+                EventSpineOutcome::Quarantined,
+            ),
+        ] {
+            assert_eq!(settlement_outcome(disposition, &Ok(())), expected);
+            assert_eq!(
+                settlement_outcome(
+                    disposition,
+                    &Err(ConsumeError::unavailable("confirmation lost"))
+                ),
+                EventSpineOutcome::Failed
+            );
+        }
+        Ok(())
     }
 }

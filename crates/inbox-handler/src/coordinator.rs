@@ -1,12 +1,8 @@
 use edgeagent_contracts::{MessageContractError, MessageEnvelope, MessageRegistry};
-use edgeagent_messaging::{
-    InboundMessageStore, InboundProcessingError, InboxDisposition, MessageDelivery,
-};
+use edgeagent_messaging::{InboundMessageStore, InboundProcessingError, MessageDelivery};
 
 use crate::observability::SpineRecorder;
-use crate::resolution::{
-    HandlingOutcomeKind, acknowledge, quarantine, resolve_handler_failure, resolve_store_failure,
-};
+use crate::resolution::{acknowledge, quarantine, resolve_handler_failure, resolve_store_failure};
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
 /// Process and settle exactly one delivery.
@@ -81,12 +77,7 @@ async fn handle_decoded_once(
         .await;
     recorder.record_processing_result(persistence_started, &processing_result);
     match processing_result {
-        Ok(InboxDisposition::Duplicate) => {
-            acknowledge(delivery, recorder, HandlingOutcomeKind::Duplicate).await
-        }
-        Ok(InboxDisposition::Applied) => {
-            acknowledge(delivery, recorder, HandlingOutcomeKind::Applied).await
-        }
+        Ok(disposition) => acknowledge(delivery, recorder, disposition).await,
         Err(InboundProcessingError::Handler(failure)) => {
             resolve_handler_failure(store, policy, delivery, recorder, failure).await
         }

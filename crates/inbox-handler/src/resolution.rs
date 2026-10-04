@@ -2,7 +2,8 @@
 
 use edgeagent_messaging::{
     DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
-    InboundQuarantine, InboxStoreError, InboxStoreErrorKind, MessageDelivery, RetryDelay,
+    InboundQuarantine, InboxDisposition, InboxStoreError, InboxStoreErrorKind, MessageDelivery,
+    RetryDelay,
 };
 use edgeagent_telemetry::EventSpineOutcome;
 
@@ -11,32 +12,16 @@ use crate::policy::validate_failure_code;
 use crate::retry::{retry_delay, should_retry_handler};
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
-#[derive(Clone, Copy)]
-pub(super) enum HandlingOutcomeKind {
-    Applied,
-    Duplicate,
-}
-
 pub(super) async fn acknowledge(
     delivery: MessageDelivery,
     recorder: &SpineRecorder,
-    outcome: HandlingOutcomeKind,
+    disposition: InboxDisposition,
 ) -> Result<HandlingOutcome, HandlerError> {
     let attempt = delivery.metadata().delivery_attempt();
-    let started = recorder.start_stage();
-    let settlement_result = delivery.settle(SettlementDisposition::Acknowledge).await;
-    recorder.record_acknowledgement(
-        started,
-        if settlement_result.is_ok() {
-            EventSpineOutcome::Succeeded
-        } else {
-            EventSpineOutcome::Failed
-        },
-    );
-    settlement_result.map_err(HandlerError::settlement)?;
-    Ok(match outcome {
-        HandlingOutcomeKind::Applied => HandlingOutcome::Applied { attempt },
-        HandlingOutcomeKind::Duplicate => HandlingOutcome::Duplicate { attempt },
+    settle_delivery(delivery, SettlementDisposition::Acknowledge, recorder).await?;
+    Ok(match disposition {
+        InboxDisposition::Applied => HandlingOutcome::Applied { attempt },
+        InboxDisposition::Duplicate => HandlingOutcome::Duplicate { attempt },
     })
 }
 
@@ -107,19 +92,7 @@ pub(super) async fn retry(
         attempt,
     ))
     .map_err(HandlerError::settlement)?;
-    let started = recorder.start_stage();
-    let settlement_result = delivery
-        .settle(SettlementDisposition::RetryAfter(delay))
-        .await;
-    recorder.record_acknowledgement(
-        started,
-        if settlement_result.is_ok() {
-            EventSpineOutcome::RetryScheduled
-        } else {
-            EventSpineOutcome::Failed
-        },
-    );
-    settlement_result.map_err(HandlerError::settlement)?;
+    settle_delivery(delivery, SettlementDisposition::RetryAfter(delay), recorder).await?;
     Ok(HandlingOutcome::RetryRequested {
         attempt,
         delay: delay.get(),
@@ -161,21 +134,23 @@ pub(super) async fn quarantine(
     };
     let attempt = delivery.metadata().delivery_attempt();
     recorder.record_persistence(persistence_started, EventSpineOutcome::Quarantined);
-    let acknowledgement_started = recorder.start_stage();
-    let settlement_result = delivery.settle(SettlementDisposition::Quarantined).await;
-    recorder.record_acknowledgement(
-        acknowledgement_started,
-        if settlement_result.is_ok() {
-            EventSpineOutcome::Quarantined
-        } else {
-            EventSpineOutcome::Failed
-        },
-    );
-    settlement_result.map_err(HandlerError::settlement)?;
+    settle_delivery(delivery, SettlementDisposition::Quarantined, recorder).await?;
     Ok(HandlingOutcome::Quarantined {
         attempt,
         disposition,
         failure_code,
         failure,
     })
+}
+
+/// Wait for broker confirmation and record the classified settlement result.
+async fn settle_delivery(
+    delivery: MessageDelivery,
+    disposition: SettlementDisposition,
+    recorder: &SpineRecorder,
+) -> Result<(), HandlerError> {
+    let started = recorder.start_stage();
+    let result = delivery.settle(disposition).await;
+    recorder.record_settlement_result(started, disposition, &result);
+    result.map_err(HandlerError::settlement)
 }

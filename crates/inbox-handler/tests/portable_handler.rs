@@ -602,29 +602,34 @@ async fn invariant_and_settlement_failures_remain_hard_errors() -> Result<(), Bo
     );
     assert!(observed(&invariant_settlements)?.is_empty());
 
-    let failed_ack_settlements = Arc::new(Mutex::new(Vec::new()));
-    let mut applied_store =
-        ScriptedStore::new(ProcessBehavior::Applied, QuarantineBehavior::Inserted);
-    let failed_ack = handle_once(
-        &mut applied_store,
-        &registry,
-        &policy()?,
-        delivery(
-            envelope("ack-loss-01")?.to_json()?,
-            1,
-            Arc::clone(&failed_ack_settlements),
-            true,
-        )?,
-    )
-    .await;
-    assert_eq!(
-        failed_ack.err().map(|error| error.kind()),
-        Some(HandlerErrorKind::Settlement)
-    );
-    assert_eq!(
-        observed(&failed_ack_settlements)?,
-        vec![DeliveryDisposition::Acknowledge]
-    );
+    for (behavior, message_id) in [
+        (ProcessBehavior::Applied, "applied-ack-loss"),
+        (ProcessBehavior::Duplicate, "duplicate-ack-loss"),
+    ] {
+        let failed_ack_settlements = Arc::new(Mutex::new(Vec::new()));
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let failed_ack = handle_once(
+            &mut store,
+            &registry,
+            &policy()?,
+            delivery(
+                envelope(message_id)?.to_json()?,
+                1,
+                Arc::clone(&failed_ack_settlements),
+                true,
+            )?,
+        )
+        .await;
+        assert_eq!(
+            failed_ack.err().map(|error| error.kind()),
+            Some(HandlerErrorKind::Settlement)
+        );
+        assert_eq!(store.process_calls, 1);
+        assert_eq!(
+            observed(&failed_ack_settlements)?,
+            vec![DeliveryDisposition::Acknowledge]
+        );
+    }
     Ok(())
 }
 
