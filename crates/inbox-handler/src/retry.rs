@@ -14,16 +14,29 @@ pub(super) fn should_retry_handler(
 
 pub(super) fn retry_delay(policy: &HandlerPolicy, message_key: &str, attempt: u32) -> Duration {
     let exponent = attempt.saturating_sub(1).min(63);
-    let base_milliseconds = policy.base_retry_delay.as_millis();
-    let exponential = base_milliseconds
+    // Preserve the established millisecond schedule for whole-millisecond
+    // policies while retaining precision when either configured bound is finer.
+    let quantum_nanos = if policy.base_retry_delay.as_nanos().is_multiple_of(1_000_000)
+        && policy.max_retry_delay.as_nanos().is_multiple_of(1_000_000)
+    {
+        1_000_000
+    } else {
+        1
+    };
+    let exponential = (policy.base_retry_delay.as_nanos() / quantum_nanos)
         .checked_shl(exponent)
         .unwrap_or(u128::MAX)
-        .min(policy.max_retry_delay.as_millis());
-    let lower = exponential.div_ceil(2);
+        .min(policy.max_retry_delay.as_nanos() / quantum_nanos);
+    let lower = exponential
+        .div_ceil(2)
+        .max(Duration::from_millis(1).as_nanos() / quantum_nanos);
     let width = exponential.saturating_sub(lower).saturating_add(1);
     let jitter = u128::from(identity_hash(message_key, attempt)) % width;
-    let milliseconds = lower.saturating_add(jitter);
-    Duration::from_millis(u64::try_from(milliseconds).unwrap_or(u64::MAX))
+    let nanoseconds = lower.saturating_add(jitter).saturating_mul(quantum_nanos);
+    // Validated policy caps this at 24 hours, well below u64::MAX nanoseconds.
+    u64::try_from(nanoseconds)
+        .map(Duration::from_nanos)
+        .unwrap_or(policy.max_retry_delay)
 }
 
 fn identity_hash(message_key: &str, attempt: u32) -> u64 {
@@ -39,6 +52,7 @@ fn identity_hash(message_key: &str, attempt: u32) -> u64 {
 mod tests {
     use super::{retry_delay, should_retry_handler};
     use crate::{HandlerErrorKind, HandlerFailureKind, HandlerPolicy};
+    use edgeagent_messaging::RetryDelay;
     use std::time::Duration;
 
     #[test]
@@ -53,6 +67,7 @@ mod tests {
         .map_err(|error| error.kind())?;
         let first = retry_delay(&policy, "18:EDGEAGENT_COMMANDS:7", 1);
         assert_eq!(first, retry_delay(&policy, "18:EDGEAGENT_COMMANDS:7", 1));
+        assert_eq!(first, Duration::from_millis(1_835));
         assert!(first >= Duration::from_secs(1));
         assert!(first <= Duration::from_secs(2));
         assert_ne!(first, retry_delay(&policy, "18:EDGEAGENT_COMMANDS:8", 1));
@@ -72,6 +87,32 @@ mod tests {
             1,
             HandlerFailureKind::Permanent
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn retry_delay_preserves_fractional_milliseconds() -> Result<(), HandlerErrorKind> {
+        let policy = HandlerPolicy::new(
+            "execution_simulator_v1",
+            3,
+            Duration::from_micros(1_500),
+            Duration::from_micros(1_500),
+        )
+        .map_err(|error| error.kind())?;
+        let delays = (0..32)
+            .map(|index| retry_delay(&policy, &format!("delivery-{index}"), 1))
+            .collect::<Vec<_>>();
+
+        assert!(delays.iter().all(|delay| {
+            *delay >= Duration::from_millis(1) && *delay <= Duration::from_micros(1_500)
+        }));
+        assert!(delays.iter().all(|delay| RetryDelay::new(*delay).is_ok()));
+        assert!(delays.iter().any(|delay| *delay > Duration::from_millis(1)));
+        assert!(
+            delays
+                .iter()
+                .any(|delay| !delay.subsec_nanos().is_multiple_of(1_000_000))
+        );
         Ok(())
     }
 }

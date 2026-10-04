@@ -116,8 +116,11 @@ identity resolve the outcome on the next attempt.
 attempts, and base/maximum delays from one millisecond through 24 hours. Retry
 delay uses capped exponential backoff with deterministic message-key jitter.
 Every replica therefore makes the same decision for the same delivery without
-synchronized randomness. The broker's delivery-attempt counter is the budget,
-so transport and storage redeliveries count toward the same limit.
+synchronized randomness. Whole-millisecond policies retain their established
+delay sequence; finer configured durations retain nanosecond precision while
+respecting the portable one-millisecond minimum. The broker's delivery-attempt
+counter is the budget, so transport and storage redeliveries count toward the
+same limit.
 
 | Failure | Resolution |
 | --- | --- |
