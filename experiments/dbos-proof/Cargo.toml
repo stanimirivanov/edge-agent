@@ -1,0 +1,21 @@
+[package]
+name = "edgeagent-dbos-atomic-enqueue-proof"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+publish = false
+license = "Apache-2.0"
+
+# Keep this decision-gate experiment outside EdgeAgent's production workspace.
+[workspace]
+
+[dependencies]
+dbos = "=0.5.0"
+serde = { version = "=1.0.228", features = ["derive"] }
+thiserror = "=2.0.21"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread"] }
+tokio-postgres = "=0.7.18"
+
+[dev-dependencies]
+testcontainers = "=0.28.0"
+tokio = { version = "=1.53.1", features = ["process", "time"] }

@@ -1,0 +1,27 @@
+[package]
+name = "m08-event-spine-proof"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+async-nats = { version = "=0.50.0", default-features = false, features = ["jetstream", "ring", "server_2_14"] }
+edgeagent-contracts = { path = "../../crates/contracts" }
+edgeagent-inbox-handler = { path = "../../crates/inbox-handler" }
+edgeagent-inbox-postgres = { path = "../../crates/inbox-postgres" }
+edgeagent-messaging = { path = "../../crates/messaging" }
+edgeagent-messaging-nats = { path = "../../crates/messaging-nats" }
+serde_json = "=1.0.151"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "process", "time"] }
+tokio-postgres = "=0.7.18"
+
+[dev-dependencies]
+testcontainers = "=0.28.0"
+
+[[bin]]
+name = "m08_event_spine_worker"
+path = "src/main.rs"

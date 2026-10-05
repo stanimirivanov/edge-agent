@@ -79,9 +79,12 @@ service-owned application data in one PostgreSQL transaction; distinguish
 that guarantee from transactional workflow steps and idempotency of external
 effects. Record the selected option and rejected alternatives in an ADR before
 implementing a workflow runtime. Do not begin model-provider selection, model
-calls, or local model runtime experiments until this decision is recorded. No
-orchestration framework is preselected, and the dry-run execution path remains
-unchanged.
+calls, or local model runtime experiments until this decision is recorded.
+The gate is recorded in [ADR-0013](../decisions/0013-select-durable-workflow-execution.md):
+self-hosted Temporal is selected for future long-running workflows, while the
+NATS/PostgreSQL event spine and dry-run execution path remain unchanged. The
+DBOS proof established same-transaction SQL enqueue, but did not establish
+that the current Rust executor can consume those enqueued arguments.
 
 ## M03 - Market data fabric
 
