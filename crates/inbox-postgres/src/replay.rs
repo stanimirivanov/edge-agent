@@ -186,12 +186,21 @@ impl PostgresInbox {
             .map_err(InboxError::storage)?;
         match existing {
             Some(row)
-                if row.try_get::<_, String>(0).map_err(InboxError::storage)? == consumer_name
-                    && row.try_get::<_, String>(1).map_err(InboxError::storage)?
+                if row
+                    .try_get::<_, String>(0)
+                    .map_err(InboxError::storage_invariant_with_source)?
+                    == consumer_name
+                    && row
+                        .try_get::<_, String>(1)
+                        .map_err(InboxError::storage_invariant_with_source)?
                         == delivery_key
-                    && row.try_get::<_, String>(2).map_err(InboxError::storage)?
+                    && row
+                        .try_get::<_, String>(2)
+                        .map_err(InboxError::storage_invariant_with_source)?
                         == request.requested_by
-                    && row.try_get::<_, String>(3).map_err(InboxError::storage)?
+                    && row
+                        .try_get::<_, String>(3)
+                        .map_err(InboxError::storage_invariant_with_source)?
                         == request.reason =>
             {
                 replay_authorization_from_columns(row, 4, ReplayDisposition::AlreadyAuthorized)
@@ -215,8 +224,12 @@ fn replay_authorization_from_columns(
 ) -> Result<ReplayAuthorization, InboxError> {
     Ok(ReplayAuthorization {
         disposition,
-        transport_subject: row.try_get(offset).map_err(InboxError::storage)?,
-        payload: row.try_get(offset + 1).map_err(InboxError::storage)?,
+        transport_subject: row
+            .try_get(offset)
+            .map_err(InboxError::storage_invariant_with_source)?,
+        payload: row
+            .try_get(offset + 1)
+            .map_err(InboxError::storage_invariant_with_source)?,
     })
 }
 

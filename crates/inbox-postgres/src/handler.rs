@@ -65,7 +65,7 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                 .client
                 .transaction()
                 .await
-                .map_err(|error| InboundProcessingError::Store(unavailable(error)))?;
+                .map_err(|error| InboundProcessingError::Store(classify_driver_error(error)))?;
             let disposition = match PostgresInbox
                 .record_delivery(&transaction, consumer_name, registry, envelope)
                 .await
@@ -82,10 +82,9 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
 
             match disposition {
                 PostgresDeliveryDisposition::Duplicate => {
-                    transaction
-                        .commit()
-                        .await
-                        .map_err(|error| InboundProcessingError::Store(unavailable(error)))?;
+                    transaction.commit().await.map_err(|error| {
+                        InboundProcessingError::Store(classify_driver_error(error))
+                    })?;
                     Ok(InboxDisposition::Duplicate)
                 }
                 PostgresDeliveryDisposition::FirstDelivery => {
@@ -95,10 +94,9 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                         }
                         return Err(InboundProcessingError::Handler(error));
                     }
-                    transaction
-                        .commit()
-                        .await
-                        .map_err(|error| InboundProcessingError::Store(unavailable(error)))?;
+                    transaction.commit().await.map_err(|error| {
+                        InboundProcessingError::Store(classify_driver_error(error))
+                    })?;
                     Ok(InboxDisposition::Applied)
                 }
             }
@@ -119,7 +117,11 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                 evidence.failure_code(),
             )
             .map_err(map_inbox_error)?;
-            let transaction = self.client.transaction().await.map_err(unavailable)?;
+            let transaction = self
+                .client
+                .transaction()
+                .await
+                .map_err(classify_driver_error)?;
             let disposition = match PostgresInbox
                 .quarantine_delivery(&transaction, consumer_name, postgres_evidence)
                 .await
@@ -133,7 +135,7 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                     return Err(error);
                 }
             };
-            transaction.commit().await.map_err(unavailable)?;
+            transaction.commit().await.map_err(classify_driver_error)?;
             Ok(match disposition {
                 PostgresQuarantineDisposition::Inserted => QuarantineDisposition::Inserted,
                 PostgresQuarantineDisposition::AlreadyPresent => {
@@ -145,7 +147,13 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
 }
 
 fn unavailable(error: tokio_postgres::Error) -> InboxStoreError {
-    InboxStoreError::with_source(InboxStoreErrorKind::Unavailable, error)
+    // A failed rollback cannot prove that the original operation was undone.
+    // Preserve the cause without exposing driver diagnostics through Debug.
+    map_inbox_error(InboxError::ambiguous_storage(error))
+}
+
+fn classify_driver_error(error: tokio_postgres::Error) -> InboxStoreError {
+    map_inbox_error(InboxError::storage(error))
 }
 
 fn map_inbox_error(error: InboxError) -> InboxStoreError {

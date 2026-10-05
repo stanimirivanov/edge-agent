@@ -56,8 +56,12 @@ impl PostgresInbox {
             .await
             .map_err(InboxError::storage)?
             .ok_or_else(InboxError::storage_invariant)?;
-        let existing_type: String = existing.try_get(0).map_err(InboxError::storage)?;
-        let existing_bytes: Vec<u8> = existing.try_get(1).map_err(InboxError::storage)?;
+        let existing_type: String = existing
+            .try_get("message_type")
+            .map_err(InboxError::storage_invariant_with_source)?;
+        let existing_bytes: Vec<u8> = existing
+            .try_get("envelope")
+            .map_err(InboxError::storage_invariant_with_source)?;
         if existing_type == envelope.message_type() && existing_bytes == bytes {
             Ok(DeliveryDisposition::Duplicate)
         } else {

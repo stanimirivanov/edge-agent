@@ -165,9 +165,15 @@ impl PostgresInbox {
             .await
             .map_err(InboxError::storage)?
             .ok_or_else(InboxError::storage_invariant)?;
-        let existing_subject: String = existing.try_get(0).map_err(InboxError::storage)?;
-        let existing_payload: Vec<u8> = existing.try_get(1).map_err(InboxError::storage)?;
-        let existing_failure_code: String = existing.try_get(2).map_err(InboxError::storage)?;
+        let existing_subject: String = existing
+            .try_get("transport_subject")
+            .map_err(InboxError::storage_invariant_with_source)?;
+        let existing_payload: Vec<u8> = existing
+            .try_get("payload")
+            .map_err(InboxError::storage_invariant_with_source)?;
+        let existing_failure_code: String = existing
+            .try_get("failure_code")
+            .map_err(InboxError::storage_invariant_with_source)?;
         if existing_subject != evidence.transport_subject
             || existing_payload != evidence.payload
             || existing_failure_code != evidence.failure_code
