@@ -14,6 +14,7 @@ use edgeagent_messaging::{
     MessageDelivery, SettlementFuture,
 };
 use serde_json::json;
+use std::collections::{HashMap, hash_map::Entry};
 use std::error::Error;
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -42,11 +43,12 @@ enum ProcessBehavior {
 
 #[derive(Clone, Copy)]
 enum QuarantineBehavior {
-    Inserted,
+    Available,
     Unavailable,
+    CommitThenUnavailable,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct RecordedQuarantine {
     delivery_key: String,
     transport_subject: String,
@@ -55,24 +57,32 @@ struct RecordedQuarantine {
     failure_code: String,
 }
 
+impl RecordedQuarantine {
+    fn same_immutable_evidence(&self, other: &Self) -> bool {
+        self.delivery_key == other.delivery_key
+            && self.transport_subject == other.transport_subject
+            && self.payload == other.payload
+            && self.failure_code == other.failure_code
+    }
+}
+
 struct ScriptedStore {
     process_behavior: ProcessBehavior,
     quarantine_behavior: QuarantineBehavior,
     process_calls: usize,
     quarantines: Vec<RecordedQuarantine>,
+    retained_quarantines: HashMap<(String, String), RecordedQuarantine>,
     events: Option<EventTrace>,
 }
 
 impl ScriptedStore {
-    const fn new(
-        process_behavior: ProcessBehavior,
-        quarantine_behavior: QuarantineBehavior,
-    ) -> Self {
+    fn new(process_behavior: ProcessBehavior, quarantine_behavior: QuarantineBehavior) -> Self {
         Self {
             process_behavior,
             quarantine_behavior,
             process_calls: 0,
             quarantines: Vec::new(),
+            retained_quarantines: HashMap::new(),
             events: None,
         }
     }
@@ -95,6 +105,27 @@ impl ScriptedStore {
                 .push(event);
         }
         Ok(())
+    }
+
+    fn retain_quarantine(
+        &mut self,
+        consumer_name: &str,
+        recorded: RecordedQuarantine,
+    ) -> Result<QuarantineDisposition, InboxStoreError> {
+        let key = (consumer_name.to_owned(), recorded.delivery_key.clone());
+        match self.retained_quarantines.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(recorded);
+                Ok(QuarantineDisposition::Inserted)
+            }
+            Entry::Occupied(entry) if entry.get().same_immutable_evidence(&recorded) => {
+                Ok(QuarantineDisposition::AlreadyPresent)
+            }
+            Entry::Occupied(_) => Err(InboxStoreError::with_source(
+                InboxStoreErrorKind::Invariant,
+                io::Error::other("scripted quarantine identity conflict"),
+            )),
+        }
     }
 }
 
@@ -128,30 +159,40 @@ impl InboundMessageStore for ScriptedStore {
 
     fn quarantine<'operation>(
         &'operation mut self,
-        _consumer_name: &'operation str,
+        consumer_name: &'operation str,
         evidence: InboundQuarantine<'operation>,
     ) -> InboxFuture<'operation, Result<QuarantineDisposition, InboxStoreError>> {
         Box::pin(async move {
-            self.quarantines.push(RecordedQuarantine {
+            let recorded = RecordedQuarantine {
                 delivery_key: evidence.delivery_key().to_owned(),
                 transport_subject: evidence.transport_subject().to_owned(),
                 delivery_attempt: evidence.delivery_attempt(),
                 payload: evidence.payload().to_vec(),
                 failure_code: evidence.failure_code().to_owned(),
-            });
-            match self.quarantine_behavior {
-                QuarantineBehavior::Inserted => {
-                    self.record_event("quarantine:committed")?;
-                    Ok(QuarantineDisposition::Inserted)
+            };
+            self.quarantines.push(recorded.clone());
+            let result = match self.quarantine_behavior {
+                QuarantineBehavior::Available => self.retain_quarantine(consumer_name, recorded),
+                QuarantineBehavior::Unavailable => Err(InboxStoreError::with_source(
+                    InboxStoreErrorKind::Unavailable,
+                    io::Error::other("scripted quarantine outage"),
+                )),
+                QuarantineBehavior::CommitThenUnavailable => {
+                    match self.retain_quarantine(consumer_name, recorded) {
+                        Ok(_) => Err(InboxStoreError::with_source(
+                            InboxStoreErrorKind::Unavailable,
+                            io::Error::other("scripted commit confirmation lost"),
+                        )),
+                        Err(error) => Err(error),
+                    }
                 }
-                QuarantineBehavior::Unavailable => {
-                    self.record_event("quarantine:failed")?;
-                    Err(InboxStoreError::with_source(
-                        InboxStoreErrorKind::Unavailable,
-                        io::Error::other("scripted quarantine outage"),
-                    ))
-                }
-            }
+            };
+            self.record_event(if result.is_ok() {
+                "quarantine:committed"
+            } else {
+                "quarantine:failed"
+            })?;
+            result
         })
     }
 }
@@ -285,7 +326,7 @@ async fn applied_and_duplicate_results_acknowledge_without_adapter_knowledge()
         (ProcessBehavior::Duplicate, "duplicate"),
     ] {
         let settlements = Arc::new(Mutex::new(Vec::new()));
-        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Available);
         let outcome = handle_once(
             &mut store,
             &registry,
@@ -328,7 +369,7 @@ async fn transient_handler_and_store_outages_request_redelivery() -> Result<(), 
         ProcessBehavior::Unavailable,
     ] {
         let settlements = Arc::new(Mutex::new(Vec::new()));
-        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Available);
         let outcome = handle_once(
             &mut store,
             &registry,
@@ -363,7 +404,7 @@ async fn exhausted_transient_failure_commits_quarantine_instead_of_retrying()
     let settlements = Arc::new(Mutex::new(Vec::new()));
     let mut store = ScriptedStore::new(
         ProcessBehavior::TransientHandlerFailure,
-        QuarantineBehavior::Inserted,
+        QuarantineBehavior::Available,
     );
 
     let outcome = handle_once(
@@ -407,7 +448,7 @@ async fn terminal_failure_commits_exact_quarantine_evidence_before_settlement()
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut store = ScriptedStore::new(
         ProcessBehavior::PermanentHandlerFailure,
-        QuarantineBehavior::Inserted,
+        QuarantineBehavior::Available,
     )
     .with_events(Arc::clone(&events));
     let payload = envelope("permanent-01")?.to_json()?;
@@ -463,7 +504,7 @@ async fn store_contract_rejection_commits_routing_evidence_before_terminal_settl
     let registry = MessageRegistry::new(&definitions)?;
     let settlements = Arc::new(Mutex::new(Vec::new()));
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut store = ScriptedStore::new(ProcessBehavior::Contract, QuarantineBehavior::Inserted)
+    let mut store = ScriptedStore::new(ProcessBehavior::Contract, QuarantineBehavior::Available)
         .with_events(Arc::clone(&events));
 
     let outcome = handle_once(
@@ -508,7 +549,7 @@ async fn identity_conflicts_are_quarantined_with_a_stable_reason() -> Result<(),
     let settlements = Arc::new(Mutex::new(Vec::new()));
     let mut store = ScriptedStore::new(
         ProcessBehavior::IdentityConflict,
-        QuarantineBehavior::Inserted,
+        QuarantineBehavior::Available,
     );
 
     let outcome = handle_once(
@@ -583,7 +624,7 @@ async fn invariant_and_settlement_failures_remain_hard_errors() -> Result<(), Bo
 
     let invariant_settlements = Arc::new(Mutex::new(Vec::new()));
     let mut invariant_store =
-        ScriptedStore::new(ProcessBehavior::Invariant, QuarantineBehavior::Inserted);
+        ScriptedStore::new(ProcessBehavior::Invariant, QuarantineBehavior::Available);
     let invariant = handle_once(
         &mut invariant_store,
         &registry,
@@ -607,7 +648,7 @@ async fn invariant_and_settlement_failures_remain_hard_errors() -> Result<(), Bo
         (ProcessBehavior::Duplicate, "duplicate-ack-loss"),
     ] {
         let failed_ack_settlements = Arc::new(Mutex::new(Vec::new()));
-        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Available);
         let failed_ack = handle_once(
             &mut store,
             &registry,
@@ -644,7 +685,7 @@ async fn retry_and_quarantine_confirmation_loss_never_report_a_confirmed_outcome
         (ProcessBehavior::PermanentHandlerFailure, "terminal-loss-01"),
     ] {
         let settlements = Arc::new(Mutex::new(Vec::new()));
-        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Inserted);
+        let mut store = ScriptedStore::new(behavior, QuarantineBehavior::Available);
         let result = handle_once(
             &mut store,
             &registry,
@@ -680,5 +721,163 @@ async fn retry_and_quarantine_confirmation_loss_never_report_a_confirmed_outcome
             _ => unreachable!("test table contains only retry and terminal failures"),
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn lost_terminal_confirmation_reuses_exact_quarantine_evidence_on_redelivery()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let settlements = Arc::new(Mutex::new(Vec::new()));
+    let mut store = ScriptedStore::new(ProcessBehavior::Applied, QuarantineBehavior::Available);
+    let payload = b"{invalid-json".to_vec();
+
+    let first = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(payload.clone(), 1, Arc::clone(&settlements), true)?,
+    )
+    .await;
+    assert_eq!(
+        first.err().map(|error| error.kind()),
+        Some(HandlerErrorKind::Settlement)
+    );
+    assert_eq!(store.retained_quarantines.len(), 1);
+
+    let second = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(payload.clone(), 2, Arc::clone(&settlements), false)?,
+    )
+    .await?;
+    assert!(matches!(
+        second,
+        HandlingOutcome::Quarantined {
+            attempt: 2,
+            disposition: QuarantineDisposition::AlreadyPresent,
+            failure_code: "envelope_invalid",
+            ..
+        }
+    ));
+    assert_eq!(store.process_calls, 0);
+    assert_eq!(store.retained_quarantines.len(), 1);
+    assert_eq!(store.quarantines.len(), 2);
+    assert_eq!(store.quarantines[0].payload, payload);
+    assert_eq!(store.quarantines[1].payload, payload);
+    assert_eq!(store.quarantines[0].delivery_attempt, 1);
+    assert_eq!(store.quarantines[1].delivery_attempt, 2);
+    assert_eq!(
+        observed(&settlements)?,
+        vec![
+            DeliveryDisposition::Quarantined,
+            DeliveryDisposition::Quarantined,
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn ambiguous_quarantine_commit_retries_then_discovers_retained_evidence()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let settlements = Arc::new(Mutex::new(Vec::new()));
+    let mut store = ScriptedStore::new(
+        ProcessBehavior::Applied,
+        QuarantineBehavior::CommitThenUnavailable,
+    );
+    let payload = b"{invalid-json".to_vec();
+
+    let first = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(payload.clone(), 1, Arc::clone(&settlements), false)?,
+    )
+    .await?;
+    assert!(matches!(
+        first,
+        HandlingOutcome::RetryRequested { attempt: 1, .. }
+    ));
+    assert_eq!(store.retained_quarantines.len(), 1);
+    assert!(matches!(
+        observed(&settlements)?.as_slice(),
+        [DeliveryDisposition::RetryAfter(_)]
+    ));
+
+    store.quarantine_behavior = QuarantineBehavior::Available;
+    let second = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(payload, 2, Arc::clone(&settlements), false)?,
+    )
+    .await?;
+    assert!(matches!(
+        second,
+        HandlingOutcome::Quarantined {
+            attempt: 2,
+            disposition: QuarantineDisposition::AlreadyPresent,
+            ..
+        }
+    ));
+    assert_eq!(store.retained_quarantines.len(), 1);
+    assert!(matches!(
+        observed(&settlements)?.as_slice(),
+        [
+            DeliveryDisposition::RetryAfter(_),
+            DeliveryDisposition::Quarantined
+        ]
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn conflicting_quarantine_redelivery_fails_closed_without_settlement()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let settlements = Arc::new(Mutex::new(Vec::new()));
+    let mut store = ScriptedStore::new(ProcessBehavior::Applied, QuarantineBehavior::Available);
+    let first_payload = b"{first-invalid".to_vec();
+
+    handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(first_payload.clone(), 1, Arc::clone(&settlements), false)?,
+    )
+    .await?;
+    let conflict = handle_once(
+        &mut store,
+        &registry,
+        &policy()?,
+        delivery(
+            b"{different-invalid".to_vec(),
+            2,
+            Arc::clone(&settlements),
+            false,
+        )?,
+    )
+    .await;
+
+    assert_eq!(
+        conflict.err().map(|error| error.kind()),
+        Some(HandlerErrorKind::Inbox)
+    );
+    assert_eq!(store.retained_quarantines.len(), 1);
+    assert!(
+        store
+            .retained_quarantines
+            .values()
+            .all(|e| e.payload.as_slice() == first_payload.as_slice())
+    );
+    assert_eq!(
+        observed(&settlements)?,
+        vec![DeliveryDisposition::Quarantined]
+    );
     Ok(())
 }
