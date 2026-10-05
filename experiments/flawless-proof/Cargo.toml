@@ -1,0 +1,19 @@
+[package]
+name = "edgeagent-flawless-proof"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+publish = false
+license = "Apache-2.0"
+
+[workspace]
+members = ["workflows/m08"]
+default-members = ["."]
+
+[dependencies]
+
+[dev-dependencies]
+reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls-native-roots", "multipart", "json"] }
+serde_json = "1.0.151"
+sha2 = "0.10.9"
+tempfile = "3.24.0"

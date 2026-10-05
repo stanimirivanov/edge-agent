@@ -1,0 +1,17 @@
+[package]
+name = "edgeagent-durable-execution-proofs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+duroxide = { version = "=0.1.30", features = ["sqlite"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time"] }

@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 12] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 13] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -81,6 +81,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 12] = [
         number: 12,
         path: "docs/decisions/0012-keep-message-contract-diagnostics-payload-safe.md",
         title: "Keep message contract diagnostics payload-safe",
+    },
+    PublishedIdentity {
+        number: 13,
+        path: "docs/decisions/0013-select-durable-workflow-execution.md",
+        title: "Select Temporal for durable workflow execution",
     },
 ];
 

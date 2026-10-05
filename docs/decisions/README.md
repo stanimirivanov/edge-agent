@@ -124,3 +124,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0010](0010-keep-delivery-metadata-transport-neutral.md) | Accepted | Keep delivery metadata transport-neutral. |
 | [ADR-0011](0011-bound-untrusted-envelopes-before-decoding.md) | Accepted | Bound untrusted envelopes before decoding. |
 | [ADR-0012](0012-keep-message-contract-diagnostics-payload-safe.md) | Accepted | Keep message contract diagnostics payload-safe. |
+| [ADR-0013](0013-select-durable-workflow-execution.md) | Accepted | Select Temporal for durable workflow execution. |
