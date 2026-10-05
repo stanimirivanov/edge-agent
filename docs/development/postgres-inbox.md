@@ -144,12 +144,23 @@ permissions needed for this operation.
 | `InvalidReplayRequest` | Replay request identity, operator, reason, or target is outside portable bounds | Reject before database work and correct the control-plane request |
 | `ReplayRequestConflict` | A replay request identity already names different authorization evidence | Fail closed and investigate request-ID reuse |
 | `NotQuarantined` | The requested consumer and delivery key do not identify retained quarantine evidence | Reject without creating audit evidence |
-| `Storage` | PostgreSQL rejected or could not complete an operation | Roll back and apply bounded transient-failure policy |
-| `StorageInvariant` | A conflicting key disappeared or stored columns violate adapter assumptions | Roll back, leave unsettled, and investigate corruption or unsupported mutation |
+| `Storage` | Connection or resource failure, retryable transaction rejection, or ambiguous outcome | Roll back when possible and request redelivery of the same immutable message |
+| `StorageInvariant` | Schema, permission, constraint, parameter-type, or stored-column mismatch; unexpected database rejection | Roll back, leave unsettled, and investigate the deployment or data invariant |
 
-Public errors expose stable categories and bounded validation text. PostgreSQL
-causes remain in the Rust error chain for redacted diagnostics. Envelope payload
-content is never copied into public error text.
+`InboxError` `Display` and `Debug` expose stable categories and bounded
+validation text, not PostgreSQL causes. Causes remain in the Rust error chain
+for controlled diagnostics. Envelope payload content is never copied into
+public error text.
+
+The adapter retries PostgreSQL connection exceptions, serialization failures,
+deadlocks, unknown statement completion,
+insufficient-resource responses, lock unavailability, query cancellation, and
+server shutdown/startup responses. Other server SQLSTATEs, including missing
+tables or columns, are storage invariants. A driver-reported parameter type
+mismatch or row-decoding failure is also an invariant. Connection loss during
+commit remains an ambiguous outcome and requires redelivery; the durable inbox
+identity resolves whether the first attempt committed. If explicit rollback
+fails, the adapter reports unavailability because it cannot confirm cleanup.
 
 Database roles should grant a consumer access only to its service-owned schema.
 Migration authority remains separate from runtime identity. Browser identities,
@@ -178,7 +189,7 @@ identity, exact-byte storage, and dependency direction without requiring Postgre
 The isolated local-platform conformance test can be run with:
 
 ```text
-EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-postgres --test postgres_inbox -- --ignored --exact inbox_and_quarantine_preserve_consumer_invariants
+EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-postgres --tests -- --ignored
 ```
 
 It creates a process-scoped schema and proves rollback recovery, one committed
@@ -186,7 +197,10 @@ domain transition under duplicate delivery, changed-content rejection,
 independent consumer scope, unsupported-version rejection, idempotent quarantine,
 attempt observation, quarantine identity-conflict rejection, exact replay bytes,
 idempotent authorization, conflicting request rejection, and audit snapshots. It
-then removes the schema. Run it only against an isolated development or CI database.
+also verifies that missing tables, incompatible stored types, and replay
+row-decoding faults fail closed while connection loss remains retryable. Each
+schema-mutating test removes its isolated schema. Run the suite only against an isolated
+development or CI database.
 
 ## Current limitations
 

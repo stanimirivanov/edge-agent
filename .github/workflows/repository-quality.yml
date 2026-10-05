@@ -135,7 +135,7 @@ jobs:
       - name: Verify PostgreSQL inbox conformance
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-inbox-postgres --test postgres_inbox -- --ignored --exact inbox_and_quarantine_preserve_consumer_invariants
+        run: cargo test --locked -p edgeagent-inbox-postgres --tests -- --ignored
       - name: Verify transactional handler conformance
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
