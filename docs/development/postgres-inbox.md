@@ -50,7 +50,7 @@ owns every PostgreSQL transaction step:
    and only then request terminal transport settlement.
 
 Only `PostgresTransactionalMessageHandler` receives the concrete
-`tokio_postgres::Transaction`. This callback is an infrastructure composition
+mutable `sqlx::Transaction<Postgres>`. This callback is an infrastructure composition
 seam for service-owned SQL, not a domain or persistence-neutral application
 port. It must not perform network calls or other effects that cannot roll back
 with the transaction.
@@ -161,6 +161,18 @@ mismatch or row-decoding failure is also an invariant. Connection loss during
 commit remains an ambiguous outcome and requires redelivery; the durable inbox
 identity resolves whether the first attempt committed. If explicit rollback
 fails, the adapter reports unavailability because it cannot confirm cleanup.
+
+The adapter uses SQLx `query` and `query_as` with bound values
+and typed row mappings. These calls do not use SQLx's compile-time `query!`
+metadata: builds remain database-independent, while the opt-in PostgreSQL
+conformance suite validates statements against the checked-in migrations.
+The driver decision is recorded in
+[ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md).
+Service callbacks use the same mutable SQLx transaction; mixing another
+driver connection into that callback would not preserve atomicity. The current
+outbox helper uses `tokio-postgres`, so an emitting consumer needs a compatible
+SQLx outbox write path before claiming atomic inbox-plus-outbox effects.
+Migration execution still belongs to the service composition root.
 
 Database roles should grant a consumer access only to its service-owned schema.
 Migration authority remains separate from runtime identity. Browser identities,

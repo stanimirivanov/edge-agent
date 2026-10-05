@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 13] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 14] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -86,6 +86,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 13] = [
         number: 13,
         path: "docs/decisions/0013-select-durable-workflow-execution.md",
         title: "Select Temporal for durable workflow execution",
+    },
+    PublishedIdentity {
+        number: 14,
+        path: "docs/decisions/0014-use-sqlx-for-postgresql-inbox.md",
+        title: "Use SQLx for the PostgreSQL inbox adapter",
     },
 ];
 

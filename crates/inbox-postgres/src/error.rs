@@ -103,15 +103,22 @@ impl InboxError {
         }
     }
 
-    pub(super) fn storage(error: tokio_postgres::Error) -> Self {
-        // Retry only known server-side availability and transaction states.
-        // Without SQLSTATE, a transport or commit outcome may be ambiguous;
-        // known codec failures still indicate an adapter/schema defect.
-        let kind = match error.code() {
-            Some(code) if !retryable_sqlstate(code.code()) => InboxErrorKind::StorageInvariant,
-            Some(_) => InboxErrorKind::Storage,
-            None if has_wrong_type_source(&error) => InboxErrorKind::StorageInvariant,
-            None => InboxErrorKind::Storage,
+    pub(super) fn storage(error: sqlx::Error) -> Self {
+        // Retry only known server availability and transaction states. SQLx
+        // also distinguishes local encode/decode defects from transport loss.
+        let kind = match &error {
+            sqlx::Error::Database(database) => match database.code() {
+                Some(code) if retryable_sqlstate(&code) => InboxErrorKind::Storage,
+                _ => InboxErrorKind::StorageInvariant,
+            },
+            sqlx::Error::Io(_)
+            | sqlx::Error::Tls(_)
+            | sqlx::Error::Protocol(_)
+            | sqlx::Error::PoolTimedOut
+            | sqlx::Error::PoolClosed
+            | sqlx::Error::WorkerCrashed
+            | sqlx::Error::BeginFailed => InboxErrorKind::Storage,
+            _ => InboxErrorKind::StorageInvariant,
         };
         Self {
             kind,
@@ -120,15 +127,7 @@ impl InboxError {
         }
     }
 
-    pub(super) fn storage_invariant_with_source(error: tokio_postgres::Error) -> Self {
-        Self {
-            kind: InboxErrorKind::StorageInvariant,
-            reason: None,
-            source: Some(Box::new(error)),
-        }
-    }
-
-    pub(super) fn ambiguous_storage(error: tokio_postgres::Error) -> Self {
+    pub(super) fn ambiguous_storage(error: sqlx::Error) -> Self {
         Self {
             kind: InboxErrorKind::Storage,
             reason: None,
@@ -187,17 +186,6 @@ fn retryable_sqlstate(code: &str) -> bool {
         )
 }
 
-fn has_wrong_type_source(error: &tokio_postgres::Error) -> bool {
-    let mut source = error.source();
-    while let Some(cause) = source {
-        if cause.is::<tokio_postgres::types::WrongType>() {
-            return true;
-        }
-        source = cause.source();
-    }
-    false
-}
-
 impl Display for InboxError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.kind, formatter)?;
@@ -243,6 +231,26 @@ mod tests {
         ] {
             assert!(!retryable_sqlstate(code), "{code} should be invariant");
         }
+    }
+
+    #[test]
+    fn sqlx_codec_faults_fail_closed_while_transport_loss_remains_unavailable() {
+        let decode = InboxError::storage(sqlx::Error::ColumnDecode {
+            index: "payload".to_owned(),
+            source: Box::new(std::io::Error::other("private-decode-sentinel")),
+        });
+        assert_eq!(decode.kind(), InboxErrorKind::StorageInvariant);
+        assert_eq!(decode.to_string(), "inbox storage invariant failed");
+        assert!(!format!("{decode:?}").contains("private-decode-sentinel"));
+        assert!(decode.source().is_some());
+
+        let unavailable = InboxError::storage(sqlx::Error::Io(std::io::Error::other(
+            "private-connection-sentinel",
+        )));
+        assert_eq!(unavailable.kind(), InboxErrorKind::Storage);
+        assert_eq!(unavailable.to_string(), "inbox storage operation failed");
+        assert!(!format!("{unavailable:?}").contains("private-connection-sentinel"));
+        assert!(unavailable.source().is_some());
     }
 
     #[test]

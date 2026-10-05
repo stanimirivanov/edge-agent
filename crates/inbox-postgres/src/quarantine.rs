@@ -6,7 +6,14 @@ use crate::validation::{
 };
 use crate::{InboxError, PostgresInbox};
 use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
-use tokio_postgres::Transaction;
+use sqlx::{Postgres, Transaction};
+
+#[derive(sqlx::FromRow)]
+struct StoredQuarantine {
+    transport_subject: String,
+    payload: Vec<u8>,
+    failure_code: String,
+}
 
 const INSERT_QUARANTINE_SQL: &str = r#"
 INSERT INTO edgeagent_message_quarantine (
@@ -134,64 +141,48 @@ impl PostgresInbox {
     /// storage-invariant error.
     pub async fn quarantine_delivery(
         &self,
-        transaction: &Transaction<'_>,
+        transaction: &mut Transaction<'_, Postgres>,
         consumer_name: &str,
         evidence: QuarantineEvidence<'_>,
     ) -> Result<QuarantineDisposition, InboxError> {
         validate_consumer_name(consumer_name)?;
-        let inserted = transaction
-            .execute(
-                INSERT_QUARANTINE_SQL,
-                &[
-                    &consumer_name,
-                    &evidence.delivery_key,
-                    &evidence.transport_subject,
-                    &evidence.payload,
-                    &evidence.failure_code,
-                    &evidence.delivery_attempt,
-                ],
-            )
+        let inserted = sqlx::query(INSERT_QUARANTINE_SQL)
+            .bind(consumer_name)
+            .bind(evidence.delivery_key)
+            .bind(evidence.transport_subject)
+            .bind(evidence.payload)
+            .bind(evidence.failure_code)
+            .bind(evidence.delivery_attempt)
+            .execute(&mut **transaction)
             .await
             .map_err(InboxError::storage)?;
-        if inserted == 1 {
+        if inserted.rows_affected() == 1 {
             return Ok(QuarantineDisposition::Inserted);
         }
 
-        let existing = transaction
-            .query_opt(
-                "SELECT transport_subject, payload, failure_code FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2 FOR UPDATE",
-                &[&consumer_name, &evidence.delivery_key],
-            )
+        let existing = sqlx::query_as::<_, StoredQuarantine>(
+            "SELECT transport_subject, payload, failure_code FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2 FOR UPDATE",
+        )
+            .bind(consumer_name)
+            .bind(evidence.delivery_key)
+            .fetch_optional(&mut **transaction)
             .await
             .map_err(InboxError::storage)?
             .ok_or_else(InboxError::storage_invariant)?;
-        let existing_subject: String = existing
-            .try_get("transport_subject")
-            .map_err(InboxError::storage_invariant_with_source)?;
-        let existing_payload: Vec<u8> = existing
-            .try_get("payload")
-            .map_err(InboxError::storage_invariant_with_source)?;
-        let existing_failure_code: String = existing
-            .try_get("failure_code")
-            .map_err(InboxError::storage_invariant_with_source)?;
-        if existing_subject != evidence.transport_subject
-            || existing_payload != evidence.payload
-            || existing_failure_code != evidence.failure_code
+        if existing.transport_subject != evidence.transport_subject
+            || existing.payload != evidence.payload
+            || existing.failure_code != evidence.failure_code
         {
             return Err(InboxError::quarantine_identity_conflict());
         }
-        let updated = transaction
-            .execute(
-                UPDATE_QUARANTINE_OBSERVATION_SQL,
-                &[
-                    &consumer_name,
-                    &evidence.delivery_key,
-                    &evidence.delivery_attempt,
-                ],
-            )
+        let updated = sqlx::query(UPDATE_QUARANTINE_OBSERVATION_SQL)
+            .bind(consumer_name)
+            .bind(evidence.delivery_key)
+            .bind(evidence.delivery_attempt)
+            .execute(&mut **transaction)
             .await
             .map_err(InboxError::storage)?;
-        if updated != 1 {
+        if updated.rows_affected() != 1 {
             return Err(InboxError::storage_invariant());
         }
         Ok(QuarantineDisposition::AlreadyPresent)
