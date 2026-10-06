@@ -16,13 +16,14 @@ use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
 use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
+use sqlx::{Connection, PgConnection, Postgres, Transaction};
 use std::env;
 use std::error::Error;
 use std::io;
 use std::path::Path;
 use std::process::{self, Command};
 use std::time::{Duration, Instant};
-use tokio_postgres::{NoTls, Transaction};
+use tokio_postgres::NoTls;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -80,23 +81,24 @@ struct EffectHandler;
 impl PostgresTransactionalMessageHandler for EffectHandler {
     fn handle<'handler>(
         &'handler self,
-        transaction: &'handler Transaction<'_>,
+        transaction: &'handler mut Transaction<'_, Postgres>,
         envelope: &'handler MessageEnvelope,
     ) -> PostgresHandlerFuture<'handler> {
         Box::pin(async move {
-            transaction
-                .execute(
-                    "INSERT INTO event_spine_effects (message_source, message_id) VALUES ($1, $2)",
-                    &[&envelope.source(), &envelope.id()],
+            sqlx::query(
+                "INSERT INTO event_spine_effects (message_source, message_id) VALUES ($1, $2)",
+            )
+            .bind(envelope.source())
+            .bind(envelope.id())
+            .execute(&mut **transaction)
+            .await
+            .map_err(|error| {
+                HandlerFailure::with_source(
+                    edgeagent_inbox_handler::HandlerFailureKind::Transient,
+                    "storage_unavailable",
+                    error,
                 )
-                .await
-                .map_err(|error| {
-                    HandlerFailure::with_source(
-                        edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                        "storage_unavailable",
-                        error,
-                    )
-                })?;
+            })?;
             Ok(())
         })
     }
@@ -209,6 +211,10 @@ async fn verify_restart_recovery(
             "CREATE TABLE event_spine_effects (message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (message_source, message_id))",
         )
         .await?;
+    let mut inbox_database = PgConnection::connect(&postgres_url).await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("SET search_path TO {schema};")))
+        .execute(&mut inbox_database)
+        .await?;
 
     let command = envelope(&format!("event-spine-{mode_name}-restart-01"))?;
     let transaction = database.transaction().await?;
@@ -292,7 +298,7 @@ async fn verify_restart_recovery(
         Duration::from_secs(1),
     )?;
     let outcome = {
-        let mut store = PostgresInboundMessageStore::new(&mut database, &EffectHandler);
+        let mut store = PostgresInboundMessageStore::new(&mut inbox_database, &EffectHandler);
         handle_once(&mut store, &registry, &handler_policy, redelivery).await?
     };
     assert!(matches!(

@@ -9,8 +9,8 @@ use edgeagent_inbox_postgres::{
 };
 use edgeagent_messaging::MessageConsumer;
 use edgeagent_messaging_nats::JetStreamConsumer;
+use sqlx::{Connection, PgConnection, Postgres, Transaction};
 use std::{env, error::Error, io, time::Duration};
-use tokio_postgres::{NoTls, Transaction};
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -24,12 +24,12 @@ struct StepA;
 impl PostgresTransactionalMessageHandler for StepA {
     fn handle<'handler>(
         &'handler self,
-        transaction: &'handler Transaction<'_>,
+        transaction: &'handler mut Transaction<'_, Postgres>,
         _envelope: &'handler edgeagent_contracts::MessageEnvelope,
     ) -> PostgresHandlerFuture<'handler> {
         Box::pin(async move {
-            transaction
-                .execute("INSERT INTO m08_step_a (id) VALUES (1)", &[])
+            sqlx::query("INSERT INTO m08_step_a (id) VALUES (1)")
+                .execute(&mut **transaction)
                 .await
                 .map_err(|error| {
                     HandlerFailure::with_source(
@@ -54,8 +54,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .ok_or_else(|| io::Error::other("missing NATS URL"))?;
     let hang_at_b = args.next().as_deref() == Some("hang-at-b");
 
-    let (mut database, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
-    tokio::spawn(connection);
+    let mut database = PgConnection::connect(&postgres_url).await?;
     let nats = async_nats::connect(&nats_url).await?;
     let stream = async_nats::jetstream::new(nats)
         .get_stream("M08_SPINE")
@@ -89,14 +88,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // The inbox commit and broker acknowledgement have completed. The event
     // spine has no durable continuation record for this next logical step.
-    database
-        .execute("INSERT INTO m08_step_b_started (id) VALUES (1)", &[])
+    sqlx::query("INSERT INTO m08_step_b_started (id) VALUES (1)")
+        .execute(&mut database)
         .await?;
     if hang_at_b {
         std::future::pending::<()>().await;
     }
-    database
-        .execute("INSERT INTO m08_step_b_completed (id) VALUES (1)", &[])
+    sqlx::query("INSERT INTO m08_step_b_completed (id) VALUES (1)")
+        .execute(&mut database)
         .await?;
     Ok(())
 }

@@ -10,7 +10,7 @@
   inbox identity.
 - `PostgresInboundMessageStore` owns PostgreSQL transaction begin, commit, and
   rollback. Only its adapter-specific service callback receives a
-  `tokio_postgres::Transaction`.
+  mutable `sqlx::Transaction<Postgres>`.
 - A committed first delivery or identical duplicate is acknowledged. Transient
   failures request bounded delayed redelivery.
 - Permanent or exhausted failures commit exact quarantine evidence before
@@ -61,20 +61,25 @@ retry, and terminal quarantine; successful applied or duplicate outcomes derive
 from the committed `InboxDisposition` rather than a second local enum.
 
 The durable rationale is recorded in
-[ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md).
+[ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md);
+the concrete SQLx adapter choice is recorded in
+[ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md).
 
 ## PostgreSQL composition
 
 `edgeagent-inbox-postgres::PostgresInboundMessageStore` implements the portable
-port. A composition root constructs it from a mutable `tokio_postgres::Client`
+port. A composition root constructs it from a mutable `sqlx::PgConnection`
 and a `PostgresTransactionalMessageHandler` implementation, then passes the
 store to `handle_once`.
 
 The adapter begins the transaction, records or verifies the inbox identity,
 invokes the PostgreSQL callback only for a first delivery, and commits or rolls
 back. The callback receives the validated `MessageEnvelope` and the adapter's
-`tokio_postgres::Transaction`. It may update service-owned tables and enqueue
-outbox messages in that transaction. It must delegate deterministic business
+mutable `sqlx::Transaction<Postgres>`. It may update service-owned tables and must
+enqueue any outbox messages through that same transaction. The current
+`edgeagent-outbox-postgres` helper uses `tokio-postgres` and cannot join it; an
+emitting consumer needs a compatible SQLx outbox write path before claiming
+atomic inbox-plus-outbox effects. The callback must delegate deterministic business
 decisions to application or domain code, must not write another service's
 tables, and must not perform network calls or other external effects that
 cannot roll back atomically.

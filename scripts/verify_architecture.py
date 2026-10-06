@@ -44,7 +44,7 @@ SERVICE_RUNTIME = "edgeagent-service-runtime"
 TELEMETRY = "edgeagent-telemetry"
 XTASK = "edgeagent-xtask"
 CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
-INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "tokio-postgres"})
+INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "sqlx"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 INBOX_HANDLER_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
 INBOX_HANDLER_DEV_DEPENDENCIES = frozenset(
@@ -55,6 +55,7 @@ INBOX_HANDLER_DEV_DEPENDENCIES = frozenset(
         OUTBOX_POSTGRES,
         OUTBOX_RELAY,
         "serde_json",
+        "sqlx",
         "tokio",
         "tokio-postgres",
     }

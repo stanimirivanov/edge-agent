@@ -16,6 +16,7 @@ use edgeagent_messaging::{
     DeliverySettlement, DeliverySubject, MessageDelivery, SettlementFuture,
 };
 use serde_json::json;
+use sqlx::{Connection, PgConnection, Postgres, Row, Transaction};
 use std::env;
 use std::error::Error;
 use std::io;
@@ -23,7 +24,6 @@ use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio_postgres::{NoTls, Transaction};
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -80,16 +80,15 @@ impl TestHandler {
 impl PostgresTransactionalMessageHandler for TestHandler {
     fn handle<'handler>(
         &'handler self,
-        transaction: &'handler Transaction<'_>,
+        transaction: &'handler mut Transaction<'_, Postgres>,
         envelope: &'handler MessageEnvelope,
     ) -> PostgresHandlerFuture<'handler> {
         Box::pin(async move {
             let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
-            transaction
-                .execute(
-                    "INSERT INTO handler_effects (message_source, message_id) VALUES ($1, $2)",
-                    &[&envelope.source(), &envelope.id()],
-                )
+            sqlx::query("INSERT INTO handler_effects (message_source, message_id) VALUES ($1, $2)")
+                .bind(envelope.source())
+                .bind(envelope.id())
+                .execute(&mut **transaction)
                 .await
                 .map_err(|error| {
                     HandlerFailure::with_source(
@@ -110,7 +109,7 @@ impl PostgresTransactionalMessageHandler for TestHandler {
 }
 
 async fn handle_once(
-    client: &mut tokio_postgres::Client,
+    client: &mut PgConnection,
     registry: &MessageRegistry<'_>,
     handler: &dyn PostgresTransactionalMessageHandler,
     policy: &HandlerPolicy,
@@ -180,21 +179,20 @@ fn observed(
 async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<(), Box<dyn Error>>
 {
     let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
-    let (mut client, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
-    let connection_task = tokio::spawn(connection);
+    let mut client = PgConnection::connect(&postgres_url).await?;
     let schema = format!("edgeagent_handler_test_{}", process::id());
-    client
-        .batch_execute(&format!(
-            "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-        ))
-        .await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+    )))
+    .execute(&mut client)
+    .await?;
     for migration in PostgresInbox::MIGRATIONS {
-        client.batch_execute(migration).await?;
+        sqlx::raw_sql(migration).execute(&mut client).await?;
     }
-    client
-        .batch_execute(
+    sqlx::raw_sql(
             "CREATE TABLE handler_effects (message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (message_source, message_id))",
         )
+        .execute(&mut client)
         .await?;
 
     let definitions = [COMMAND];
@@ -277,14 +275,15 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
             failure: _,
         }
     ));
-    let rolled_back = client
-        .query_one(
-            "SELECT (SELECT count(*) FROM handler_effects WHERE message_id = $1), (SELECT count(*) FROM edgeagent_message_inbox WHERE consumer_name = $2 AND message_id = $1)",
-            &[&"handler-transient-01", &"execution_simulator_v1"],
-        )
+    let rolled_back = sqlx::query(
+        "SELECT (SELECT count(*) FROM handler_effects WHERE message_id = $1), (SELECT count(*) FROM edgeagent_message_inbox WHERE consumer_name = $2 AND message_id = $1)",
+    )
+        .bind("handler-transient-01")
+        .bind("execution_simulator_v1")
+        .fetch_one(&mut client)
         .await?;
-    assert_eq!(rolled_back.try_get::<_, i64>(0)?, 0);
-    assert_eq!(rolled_back.try_get::<_, i64>(1)?, 0);
+    assert_eq!(rolled_back.try_get::<i64, _>(0)?, 0);
+    assert_eq!(rolled_back.try_get::<i64, _>(1)?, 0);
     assert!(matches!(
         handle_once(
             &mut client,
@@ -411,20 +410,18 @@ async fn coordinator_preserves_commit_retry_and_quarantine_ordering() -> Result<
     ));
     assert_eq!(acknowledgement_handler.calls(), 1);
 
-    let counts = client
-        .query_one(
-            "SELECT (SELECT count(*) FROM handler_effects), (SELECT count(*) FROM edgeagent_message_quarantine)",
-            &[],
-        )
+    let counts = sqlx::query(
+        "SELECT (SELECT count(*) FROM handler_effects), (SELECT count(*) FROM edgeagent_message_quarantine)",
+    )
+        .fetch_one(&mut client)
         .await?;
-    assert_eq!(counts.try_get::<_, i64>(0)?, 3);
-    assert_eq!(counts.try_get::<_, i64>(1)?, 2);
+    assert_eq!(counts.try_get::<i64, _>(0)?, 3);
+    assert_eq!(counts.try_get::<i64, _>(1)?, 2);
 
-    client
-        .batch_execute(&format!(
-            "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-        ))
-        .await?;
-    connection_task.abort();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+    )))
+    .execute(&mut client)
+    .await?;
     Ok(())
 }

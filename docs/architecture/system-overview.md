@@ -154,7 +154,7 @@ table updates are not a supported replay path.
 transaction begin, commit, and rollback while it records `(consumer_name,
 source, id)` and invokes service-owned SQL work for a first delivery. The SQL
 callback is an adapter-specific composition seam; only that seam receives a
-`tokio_postgres::Transaction`, so database-driver types do not enter portable
+mutable `sqlx::Transaction<Postgres>`, so database-driver types do not enter portable
 application policy. The stable logical consumer name allows independent
 handlers to process one event while replicas of each handler share
 deduplication state. Identical redelivery skips domain work; changed content

@@ -5,7 +5,23 @@ use crate::validation::{
     validate_replay_reason, validate_replay_target,
 };
 use crate::{InboxError, PostgresInbox};
-use tokio_postgres::{Row, Transaction};
+use sqlx::{Postgres, Transaction};
+
+#[derive(sqlx::FromRow)]
+struct ReplayPayload {
+    transport_subject: String,
+    payload: Vec<u8>,
+}
+
+#[derive(sqlx::FromRow)]
+struct ExistingAuthorization {
+    consumer_name: String,
+    delivery_key: String,
+    requested_by: String,
+    reason: String,
+    transport_subject: String,
+    payload: Vec<u8>,
+}
 
 pub(super) const AUTHORIZE_QUARANTINE_REPLAY_SQL: &str = r#"
 WITH candidate AS (
@@ -150,87 +166,61 @@ impl PostgresInbox {
     /// identity, missing quarantine target, storage, or storage-invariant error.
     pub async fn authorize_quarantine_replay(
         &self,
-        transaction: &Transaction<'_>,
+        transaction: &mut Transaction<'_, Postgres>,
         consumer_name: &str,
         delivery_key: &str,
         request: ReplayRequest<'_>,
     ) -> Result<ReplayAuthorization, InboxError> {
         validate_consumer_name(consumer_name)?;
         validate_replay_target(delivery_key)?;
-        let rows = transaction
-            .query(
-                AUTHORIZE_QUARANTINE_REPLAY_SQL,
-                &[
-                    &consumer_name,
-                    &delivery_key,
-                    &request.request_id,
-                    &request.requested_by,
-                    &request.reason,
-                ],
-            )
+        let rows = sqlx::query_as::<_, ReplayPayload>(AUTHORIZE_QUARANTINE_REPLAY_SQL)
+            .bind(consumer_name)
+            .bind(delivery_key)
+            .bind(request.request_id)
+            .bind(request.requested_by)
+            .bind(request.reason)
+            .fetch_all(&mut **transaction)
             .await
             .map_err(InboxError::storage)?;
         if rows.len() == 1 {
-            return replay_authorization(rows[0].clone(), ReplayDisposition::Authorized);
+            let row = rows
+                .into_iter()
+                .next()
+                .ok_or_else(InboxError::storage_invariant)?;
+            return Ok(ReplayAuthorization {
+                disposition: ReplayDisposition::Authorized,
+                transport_subject: row.transport_subject,
+                payload: row.payload,
+            });
         }
         if !rows.is_empty() {
             return Err(InboxError::storage_invariant());
         }
 
-        let existing = transaction
-            .query_opt(
-                "SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason, quarantine.transport_subject, quarantine.payload FROM edgeagent_message_quarantine_replay_audit AS audit JOIN edgeagent_message_quarantine AS quarantine USING (consumer_name, delivery_key) WHERE audit.replay_request_id = $1",
-                &[&request.request_id],
-            )
+        let existing = sqlx::query_as::<_, ExistingAuthorization>(
+            "SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason, quarantine.transport_subject, quarantine.payload FROM edgeagent_message_quarantine_replay_audit AS audit JOIN edgeagent_message_quarantine AS quarantine USING (consumer_name, delivery_key) WHERE audit.replay_request_id = $1",
+        )
+            .bind(request.request_id)
+            .fetch_optional(&mut **transaction)
             .await
             .map_err(InboxError::storage)?;
         match existing {
             Some(row)
-                if row
-                    .try_get::<_, String>(0)
-                    .map_err(InboxError::storage_invariant_with_source)?
-                    == consumer_name
-                    && row
-                        .try_get::<_, String>(1)
-                        .map_err(InboxError::storage_invariant_with_source)?
-                        == delivery_key
-                    && row
-                        .try_get::<_, String>(2)
-                        .map_err(InboxError::storage_invariant_with_source)?
-                        == request.requested_by
-                    && row
-                        .try_get::<_, String>(3)
-                        .map_err(InboxError::storage_invariant_with_source)?
-                        == request.reason =>
+                if row.consumer_name == consumer_name
+                    && row.delivery_key == delivery_key
+                    && row.requested_by == request.requested_by
+                    && row.reason == request.reason =>
             {
-                replay_authorization_from_columns(row, 4, ReplayDisposition::AlreadyAuthorized)
+                Ok(ReplayAuthorization {
+                    disposition: ReplayDisposition::AlreadyAuthorized,
+                    transport_subject: row.transport_subject,
+                    payload: row.payload,
+                })
             }
             Some(_) => Err(InboxError::replay_request_conflict()),
             None => Err(InboxError::not_quarantined()),
         }
     }
-}
-fn replay_authorization(
-    row: Row,
-    disposition: ReplayDisposition,
-) -> Result<ReplayAuthorization, InboxError> {
-    replay_authorization_from_columns(row, 0, disposition)
-}
-
-fn replay_authorization_from_columns(
-    row: Row,
-    offset: usize,
-    disposition: ReplayDisposition,
-) -> Result<ReplayAuthorization, InboxError> {
-    Ok(ReplayAuthorization {
-        disposition,
-        transport_subject: row
-            .try_get(offset)
-            .map_err(InboxError::storage_invariant_with_source)?,
-        payload: row
-            .try_get(offset + 1)
-            .map_err(InboxError::storage_invariant_with_source)?,
-    })
 }
 
 #[cfg(test)]

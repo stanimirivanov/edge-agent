@@ -10,9 +10,9 @@ use edgeagent_messaging::{
     HandlerFailure, InboundMessageStore, InboundProcessingError, InboundQuarantine,
     InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind, QuarantineDisposition,
 };
+use sqlx::{Connection, PgConnection, Postgres, Transaction};
 use std::future::Future;
 use std::pin::Pin;
-use tokio_postgres::{Client, Transaction};
 
 /// Future returned by service-owned PostgreSQL transactional work.
 pub type PostgresHandlerFuture<'handler> =
@@ -23,6 +23,9 @@ pub type PostgresHandlerFuture<'handler> =
 /// Implementations may write service-owned tables and enqueue outbox messages.
 /// They should delegate business decisions to deterministic application/domain
 /// code; the PostgreSQL transaction is deliberately confined to this adapter API.
+/// The current `edgeagent-outbox-postgres` helper uses a different driver and
+/// cannot join this SQLx transaction; an emitting consumer needs a compatible
+/// outbox write path before it can claim atomic inbox-plus-outbox effects.
 pub trait PostgresTransactionalMessageHandler: Sync {
     /// Apply a first delivery's service-owned transition inside the transaction.
     ///
@@ -31,14 +34,14 @@ pub trait PostgresTransactionalMessageHandler: Sync {
     /// and MUST return before the adapter commits the transaction.
     fn handle<'handler>(
         &'handler self,
-        transaction: &'handler Transaction<'_>,
+        transaction: &'handler mut Transaction<'_, Postgres>,
         envelope: &'handler MessageEnvelope,
     ) -> PostgresHandlerFuture<'handler>;
 }
 
 /// PostgreSQL implementation of the atomic inbound application port.
 pub struct PostgresInboundMessageStore<'client, 'handler> {
-    client: &'client mut Client,
+    client: &'client mut PgConnection,
     handler: &'handler dyn PostgresTransactionalMessageHandler,
 }
 
@@ -46,7 +49,7 @@ impl<'client, 'handler> PostgresInboundMessageStore<'client, 'handler> {
     /// Bind one database client and service-owned transactional callback.
     #[must_use]
     pub const fn new(
-        client: &'client mut Client,
+        client: &'client mut PgConnection,
         handler: &'handler dyn PostgresTransactionalMessageHandler,
     ) -> Self {
         Self { client, handler }
@@ -61,13 +64,13 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
         envelope: &'operation MessageEnvelope,
     ) -> InboxFuture<'operation, Result<InboxDisposition, InboundProcessingError>> {
         Box::pin(async move {
-            let transaction = self
+            let mut transaction = self
                 .client
-                .transaction()
+                .begin()
                 .await
                 .map_err(|error| InboundProcessingError::Store(classify_driver_error(error)))?;
             let disposition = match PostgresInbox
-                .record_delivery(&transaction, consumer_name, registry, envelope)
+                .record_delivery(&mut transaction, consumer_name, registry, envelope)
                 .await
             {
                 Ok(disposition) => disposition,
@@ -88,7 +91,7 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                     Ok(InboxDisposition::Duplicate)
                 }
                 PostgresDeliveryDisposition::FirstDelivery => {
-                    if let Err(error) = self.handler.handle(&transaction, envelope).await {
+                    if let Err(error) = self.handler.handle(&mut transaction, envelope).await {
                         if let Err(rollback_error) = transaction.rollback().await {
                             return Err(InboundProcessingError::Store(unavailable(rollback_error)));
                         }
@@ -117,13 +120,9 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
                 evidence.failure_code(),
             )
             .map_err(map_inbox_error)?;
-            let transaction = self
-                .client
-                .transaction()
-                .await
-                .map_err(classify_driver_error)?;
+            let mut transaction = self.client.begin().await.map_err(classify_driver_error)?;
             let disposition = match PostgresInbox
-                .quarantine_delivery(&transaction, consumer_name, postgres_evidence)
+                .quarantine_delivery(&mut transaction, consumer_name, postgres_evidence)
                 .await
             {
                 Ok(disposition) => disposition,
@@ -146,13 +145,13 @@ impl InboundMessageStore for PostgresInboundMessageStore<'_, '_> {
     }
 }
 
-fn unavailable(error: tokio_postgres::Error) -> InboxStoreError {
+fn unavailable(error: sqlx::Error) -> InboxStoreError {
     // A failed rollback cannot prove that the original operation was undone.
     // Preserve the cause without exposing driver diagnostics through Debug.
     map_inbox_error(InboxError::ambiguous_storage(error))
 }
 
-fn classify_driver_error(error: tokio_postgres::Error) -> InboxStoreError {
+fn classify_driver_error(error: sqlx::Error) -> InboxStoreError {
     map_inbox_error(InboxError::storage(error))
 }
 
