@@ -7,69 +7,6 @@ use crate::validation::{
 use crate::{InboxError, PostgresInbox};
 use sqlx::{Postgres, Transaction};
 
-#[derive(sqlx::FromRow)]
-struct ReplayPayload {
-    transport_subject: String,
-    payload: Vec<u8>,
-}
-
-#[derive(sqlx::FromRow)]
-struct ExistingAuthorization {
-    consumer_name: String,
-    delivery_key: String,
-    requested_by: String,
-    reason: String,
-    transport_subject: String,
-    payload: Vec<u8>,
-}
-
-pub(super) const AUTHORIZE_QUARANTINE_REPLAY_SQL: &str = r#"
-WITH candidate AS (
-    SELECT consumer_name,
-           delivery_key,
-           transport_subject,
-           payload,
-           failure_code,
-           first_delivery_attempt,
-           last_delivery_attempt,
-           quarantined_at,
-           last_observed_at
-    FROM edgeagent_message_quarantine
-    WHERE consumer_name = $1 AND delivery_key = $2
-    FOR UPDATE
-),
-audit AS (
-    INSERT INTO edgeagent_message_quarantine_replay_audit (
-        replay_request_id,
-        consumer_name,
-        delivery_key,
-        requested_by,
-        reason,
-        prior_failure_code,
-        prior_first_delivery_attempt,
-        prior_last_delivery_attempt,
-        prior_quarantined_at,
-        prior_last_observed_at
-    )
-    SELECT $3,
-           candidate.consumer_name,
-           candidate.delivery_key,
-           $4,
-           $5,
-           candidate.failure_code,
-           candidate.first_delivery_attempt,
-           candidate.last_delivery_attempt,
-           candidate.quarantined_at,
-           candidate.last_observed_at
-    FROM candidate
-    ON CONFLICT (replay_request_id) DO NOTHING
-    RETURNING consumer_name, delivery_key
-)
-SELECT candidate.transport_subject, candidate.payload
-FROM candidate
-JOIN audit USING (consumer_name, delivery_key)
-"#;
-
 /// Idempotent result of recording an inbound replay authorization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplayDisposition {
@@ -173,15 +110,17 @@ impl PostgresInbox {
     ) -> Result<ReplayAuthorization, InboxError> {
         validate_consumer_name(consumer_name)?;
         validate_replay_target(delivery_key)?;
-        let rows = sqlx::query_as::<_, ReplayPayload>(AUTHORIZE_QUARANTINE_REPLAY_SQL)
-            .bind(consumer_name)
-            .bind(delivery_key)
-            .bind(request.request_id)
-            .bind(request.requested_by)
-            .bind(request.reason)
-            .fetch_all(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?;
+        let rows = sqlx::query_file!(
+            "queries/authorize_quarantine_replay.sql",
+            consumer_name,
+            delivery_key,
+            request.request_id,
+            request.requested_by,
+            request.reason,
+        )
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?;
         if rows.len() == 1 {
             let row = rows
                 .into_iter()
@@ -197,13 +136,20 @@ impl PostgresInbox {
             return Err(InboxError::storage_invariant());
         }
 
-        let existing = sqlx::query_as::<_, ExistingAuthorization>(
-            "SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason, quarantine.transport_subject, quarantine.payload FROM edgeagent_message_quarantine_replay_audit AS audit JOIN edgeagent_message_quarantine AS quarantine USING (consumer_name, delivery_key) WHERE audit.replay_request_id = $1",
+        let existing = sqlx::query!(
+            r#"
+            SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason,
+                   quarantine.transport_subject, quarantine.payload
+            FROM edgeagent_message_quarantine_replay_audit AS audit
+            JOIN edgeagent_message_quarantine AS quarantine
+                USING (consumer_name, delivery_key)
+            WHERE audit.replay_request_id = $1
+            "#,
+            request.request_id,
         )
-            .bind(request.request_id)
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?;
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?;
         match existing {
             Some(row)
                 if row.consumer_name == consumer_name

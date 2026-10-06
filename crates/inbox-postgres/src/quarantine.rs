@@ -8,34 +8,6 @@ use crate::{InboxError, PostgresInbox};
 use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
 use sqlx::{Postgres, Transaction};
 
-#[derive(sqlx::FromRow)]
-struct StoredQuarantine {
-    transport_subject: String,
-    payload: Vec<u8>,
-    failure_code: String,
-}
-
-const INSERT_QUARANTINE_SQL: &str = r#"
-INSERT INTO edgeagent_message_quarantine (
-    consumer_name,
-    delivery_key,
-    transport_subject,
-    payload,
-    failure_code,
-    first_delivery_attempt,
-    last_delivery_attempt
-)
-VALUES ($1, $2, $3, $4, $5, $6, $6)
-ON CONFLICT (consumer_name, delivery_key) DO NOTHING
-"#;
-
-const UPDATE_QUARANTINE_OBSERVATION_SQL: &str = r#"
-UPDATE edgeagent_message_quarantine
-SET last_delivery_attempt = GREATEST(last_delivery_attempt, $3),
-    last_observed_at = clock_timestamp()
-WHERE consumer_name = $1 AND delivery_key = $2
-"#;
-
 /// Idempotent result of durably retaining a terminal inbound delivery.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuarantineDisposition {
@@ -146,42 +118,63 @@ impl PostgresInbox {
         evidence: QuarantineEvidence<'_>,
     ) -> Result<QuarantineDisposition, InboxError> {
         validate_consumer_name(consumer_name)?;
-        let inserted = sqlx::query(INSERT_QUARANTINE_SQL)
-            .bind(consumer_name)
-            .bind(evidence.delivery_key)
-            .bind(evidence.transport_subject)
-            .bind(evidence.payload)
-            .bind(evidence.failure_code)
-            .bind(evidence.delivery_attempt)
-            .execute(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?;
+        let inserted = sqlx::query!(
+            r#"
+            INSERT INTO edgeagent_message_quarantine (
+                consumer_name, delivery_key, transport_subject, payload,
+                failure_code, first_delivery_attempt, last_delivery_attempt
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $6)
+            ON CONFLICT (consumer_name, delivery_key) DO NOTHING
+            "#,
+            consumer_name,
+            evidence.delivery_key,
+            evidence.transport_subject,
+            evidence.payload,
+            evidence.failure_code,
+            evidence.delivery_attempt,
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?;
         if inserted.rows_affected() == 1 {
             return Ok(QuarantineDisposition::Inserted);
         }
 
-        let existing = sqlx::query_as::<_, StoredQuarantine>(
-            "SELECT transport_subject, payload, failure_code FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2 FOR UPDATE",
+        let existing = sqlx::query!(
+            r#"
+            SELECT transport_subject, payload, failure_code
+            FROM edgeagent_message_quarantine
+            WHERE consumer_name = $1 AND delivery_key = $2
+            FOR UPDATE
+            "#,
+            consumer_name,
+            evidence.delivery_key,
         )
-            .bind(consumer_name)
-            .bind(evidence.delivery_key)
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?
-            .ok_or_else(InboxError::storage_invariant)?;
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?
+        .ok_or_else(InboxError::storage_invariant)?;
         if existing.transport_subject != evidence.transport_subject
             || existing.payload != evidence.payload
             || existing.failure_code != evidence.failure_code
         {
             return Err(InboxError::quarantine_identity_conflict());
         }
-        let updated = sqlx::query(UPDATE_QUARANTINE_OBSERVATION_SQL)
-            .bind(consumer_name)
-            .bind(evidence.delivery_key)
-            .bind(evidence.delivery_attempt)
-            .execute(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?;
+        let updated = sqlx::query!(
+            r#"
+            UPDATE edgeagent_message_quarantine
+            SET last_delivery_attempt = GREATEST(last_delivery_attempt, $3),
+                last_observed_at = clock_timestamp()
+            WHERE consumer_name = $1 AND delivery_key = $2
+            "#,
+            consumer_name,
+            evidence.delivery_key,
+            evidence.delivery_attempt,
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?;
         if updated.rows_affected() != 1 {
             return Err(InboxError::storage_invariant());
         }

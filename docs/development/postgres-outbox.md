@@ -208,33 +208,12 @@ them.
 
 ## Compile-checked enqueue queries
 
-The enqueue insert and identity-match statements use `sqlx::query!`. Root
-`.sqlx/` metadata is generated from the four checked-in outbox migrations,
-not from a contributor's private schema. Cargo defaults to `SQLX_OFFLINE=true`,
-so `cargo check` and `cargo build` need no PostgreSQL service, `DATABASE_URL`,
-or `.env`. The database-backed local-platform CI job runs the same migrations,
-regenerates metadata with SQLx CLI `0.9.0`, and fails if any `.sqlx/` file is
-added, removed, or changed. A changed query or schema therefore requires a
-deliberate metadata refresh.
-
-To refresh metadata, use an isolated development database with the outbox
-tables visible in its default schema (the local platform's `edgeagent`
-database works), install the exact CLI version, and run from the workspace
-root:
-
-```text
-cargo install sqlx-cli --version '=0.9.0' --no-default-features --features postgres,rustls
-cargo sqlx migrate run --source crates/outbox-postgres/migrations --no-dotenv -D postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-cargo sqlx prepare --workspace --no-dotenv -D postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent -- --locked --all-targets
-git status --short -- .sqlx
-```
-
-Never point these commands at production or commit a database URL. The CLI
-overrides Cargo's offline default for preparation; its database connection
-must see the migrated outbox table without a connection-local `SET search_path`.
-Remaining outbox and inbox statements still use bound runtime SQLx queries;
-convert them in later [M02](../roadmap/milestones.md#m02---contracts-and-event-spine)
-slices. PostgreSQL conformance tests continue to verify behavior and migration
+The enqueue insert and identity-match statements use `sqlx::query!` and
+checked-in offline metadata. The [SQLx metadata guide](sqlx-metadata.md)
+describes the combined inbox/outbox schema, refresh commands, and CI freshness
+gate. Other outbox statements still use bound runtime SQLx queries and remain
+an [M02](../roadmap/milestones.md#m02---contracts-and-event-spine) follow-up.
+PostgreSQL conformance tests continue to verify behavior and migration
 compatibility, including exact-byte conflicts and atomic inbox/outbox writes.
 
 ## Current limitations
