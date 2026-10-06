@@ -168,10 +168,13 @@ metadata: builds remain database-independent, while the opt-in PostgreSQL
 conformance suite validates statements against the checked-in migrations.
 The driver decision is recorded in
 [ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md).
-Service callbacks use the same mutable SQLx transaction; mixing another
-driver connection into that callback would not preserve atomicity. The current
-outbox helper uses `tokio-postgres`, so an emitting consumer needs a compatible
-SQLx outbox write path before claiming atomic inbox-plus-outbox effects.
+Service callbacks use the same mutable SQLx transaction. An emitting consumer
+can call `PostgresOutbox::enqueue_sqlx` with that transaction to commit or roll
+back its inbox marker, service state, and outbound message together. The
+outbox's `tokio-postgres` method remains available for standalone producers and
+relay operations, but a separate driver connection cannot join the inbound
+transaction. [ADR-0015](../decisions/0015-allow-atomic-sqlx-outbox-enqueue.md)
+records this composition boundary.
 Migration execution still belongs to the service composition root.
 
 Database roles should grant a consumer access only to its service-owned schema.

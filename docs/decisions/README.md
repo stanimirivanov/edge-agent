@@ -126,3 +126,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0012](0012-keep-message-contract-diagnostics-payload-safe.md) | Accepted | Keep message contract diagnostics payload-safe. |
 | [ADR-0013](0013-select-durable-workflow-execution.md) | Accepted | Select Temporal for durable workflow execution. |
 | [ADR-0014](0014-use-sqlx-for-postgresql-inbox.md) | Accepted | Use SQLx for the PostgreSQL inbox adapter. |
+| [ADR-0015](0015-allow-atomic-sqlx-outbox-enqueue.md) | Accepted | Allow atomic SQLx outbox enqueue. |

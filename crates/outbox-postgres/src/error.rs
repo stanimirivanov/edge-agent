@@ -2,7 +2,7 @@
 
 use edgeagent_contracts::MessageRoutingError;
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// Stable failure categories for outbox callers and relay policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,11 +47,20 @@ impl Display for OutboxErrorKind {
 }
 
 /// Outbox failure with bounded public text and an optional internal cause.
-#[derive(Debug)]
 pub struct OutboxError {
     kind: OutboxErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl Debug for OutboxError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OutboxError")
+            .field("kind", &self.kind)
+            .field("reason", &self.reason)
+            .finish_non_exhaustive()
+    }
 }
 
 impl OutboxError {
@@ -69,7 +78,10 @@ impl OutboxError {
         }
     }
 
-    pub(super) fn storage(error: tokio_postgres::Error) -> Self {
+    pub(super) fn storage<E>(error: E) -> Self
+    where
+        E: Error + Send + Sync + 'static,
+    {
         Self {
             kind: OutboxErrorKind::Storage,
             reason: None,
@@ -143,5 +155,21 @@ impl From<MessageRoutingError> for OutboxError {
             reason: None,
             source: Some(Box::new(error)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OutboxError, OutboxErrorKind};
+    use std::error::Error;
+
+    #[test]
+    fn storage_error_debug_omits_driver_cause() {
+        let error = OutboxError::storage(std::io::Error::other("private-driver-sentinel-7391"));
+
+        assert_eq!(error.kind(), OutboxErrorKind::Storage);
+        assert_eq!(error.to_string(), "outbox storage operation failed");
+        assert!(!format!("{error:?}").contains("private-driver-sentinel-7391"));
+        assert!(error.source().is_some());
     }
 }

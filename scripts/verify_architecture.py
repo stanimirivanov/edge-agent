@@ -65,7 +65,7 @@ MESSAGING_NATS_DEPENDENCIES = frozenset(
     {"async-nats", CONTRACTS, "futures-util", MESSAGING}
 )
 MESSAGING_NATS_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
-OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "tokio-postgres"})
+OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "sqlx", "tokio-postgres"})
 OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_RELAY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
 OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(

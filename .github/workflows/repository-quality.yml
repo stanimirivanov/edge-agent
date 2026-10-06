@@ -140,6 +140,10 @@ jobs:
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
         run: cargo test --locked -p edgeagent-inbox-handler --test postgres_handler -- --ignored --exact coordinator_preserves_commit_retry_and_quarantine_ordering
+      - name: Verify atomic SQLx inbox and outbox enqueue
+        env:
+          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+        run: cargo test --locked -p edgeagent-inbox-handler --test sqlx_outbox_atomicity -- --ignored --exact inbox_domain_and_sqlx_outbox_commit_or_roll_back_together
       - name: Verify bounded outbox relay conformance
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent

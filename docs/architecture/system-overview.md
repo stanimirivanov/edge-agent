@@ -132,6 +132,10 @@ service applies the outbox migration inside its own schema. Concurrent relays
 claim disjoint work with expiring leases and `SKIP LOCKED`; successful
 publication marks retained evidence rather than deleting it. The CloudEvents
 `(source, id)` pair scopes identity across storage and transport.
+An inbound service callback can enqueue through the outbox's SQLx transaction
+entry point, so inbox identity, service state, and outbound intent share one
+commit. Standalone producers and the relay retain their existing PostgreSQL
+driver path; neither path publishes inside a transaction.
 
 `edgeagent-outbox-relay` contains persistence-neutral application policy. It
 processes one leased record through publisher and storage ports per worker
