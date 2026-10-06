@@ -4,26 +4,6 @@ use crate::{OutboxError, PostgresOutbox};
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
 use sqlx::{Postgres, Transaction};
 
-const INSERT_OUTBOX_SQL: &str = r"
-    INSERT INTO edgeagent_message_outbox (
-        message_source, message_id, message_type, transport_subject, envelope
-    ) VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (message_source, message_id) DO NOTHING
-";
-
-// A separate statement sees a concurrently committed conflicting insert under
-// READ COMMITTED after ON CONFLICT has waited for that transaction to finish.
-// Return only the comparison result; never transfer the stored envelope back.
-const MATCH_OUTBOX_SQL: &str = r"
-    SELECT (
-        message_type = $3
-        AND transport_subject = $4
-        AND envelope = $5
-    ) AS identical
-    FROM edgeagent_message_outbox
-    WHERE message_source = $1 AND message_id = $2
-";
-
 struct PreparedEnqueue<'envelope> {
     source: &'envelope str,
     id: &'envelope str,
@@ -81,29 +61,51 @@ impl PostgresOutbox {
         envelope: &MessageEnvelope,
     ) -> Result<EnqueueDisposition, OutboxError> {
         let prepared = prepare(definition, envelope)?;
-        let inserted = sqlx::query(INSERT_OUTBOX_SQL)
-            .bind(prepared.source)
-            .bind(prepared.id)
-            .bind(prepared.message_type)
-            .bind(&prepared.transport_subject)
-            .bind(&prepared.bytes)
-            .execute(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        let inserted = sqlx::query!(
+            r"
+            INSERT INTO edgeagent_message_outbox (
+                message_source, message_id, message_type, transport_subject, envelope
+            ) VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (message_source, message_id) DO NOTHING
+            ",
+            prepared.source,
+            prepared.id,
+            prepared.message_type,
+            prepared.transport_subject,
+            prepared.bytes,
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         if inserted.rows_affected() == 1 {
             return Ok(EnqueueDisposition::Inserted);
         }
 
-        let identical = sqlx::query_scalar::<_, bool>(MATCH_OUTBOX_SQL)
-            .bind(prepared.source)
-            .bind(prepared.id)
-            .bind(prepared.message_type)
-            .bind(&prepared.transport_subject)
-            .bind(&prepared.bytes)
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?
-            .ok_or_else(OutboxError::storage_invariant)?;
-        existing_disposition(identical)
+        // A separate statement sees a concurrently committed conflicting
+        // insert under READ COMMITTED after ON CONFLICT has waited for it.
+        // Compare in PostgreSQL; never transfer the stored envelope back.
+        // The compared columns and bindings are non-null, so `identical!`
+        // safely overrides SQLx's conservative expression nullability.
+        let existing = sqlx::query!(
+            r#"
+            SELECT (
+                message_type = $3
+                AND transport_subject = $4
+                AND envelope = $5
+            ) AS "identical!"
+            FROM edgeagent_message_outbox
+            WHERE message_source = $1 AND message_id = $2
+            "#,
+            prepared.source,
+            prepared.id,
+            prepared.message_type,
+            prepared.transport_subject,
+            prepared.bytes,
+        )
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?
+        .ok_or_else(OutboxError::storage_invariant)?;
+        existing_disposition(existing.identical)
     }
 }

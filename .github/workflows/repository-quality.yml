@@ -114,6 +114,17 @@ jobs:
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml up --detach
       - name: Verify local platform readiness
         run: python scripts/verify_local_stack.py --running
+      - name: Install pinned SQLx metadata tool
+        run: cargo install sqlx-cli --version '=0.9.0' --no-default-features --features postgres,rustls
+      - name: Verify SQLx query metadata against outbox migrations
+        env:
+          DATABASE_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+          SQLX_OFFLINE: "false"
+        run: |
+          cargo sqlx migrate run --source crates/outbox-postgres/migrations --no-dotenv
+          cargo sqlx prepare --workspace --no-dotenv -- --locked --all-targets
+          git status --short -- .sqlx
+          test -z "$(git status --porcelain -- .sqlx)"
       - name: Verify JetStream publisher conformance
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222

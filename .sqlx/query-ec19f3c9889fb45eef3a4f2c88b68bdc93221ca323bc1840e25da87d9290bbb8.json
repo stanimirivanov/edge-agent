@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO edgeagent_message_outbox (\n                message_source, message_id, message_type, transport_subject, envelope\n            ) VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (message_source, message_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Varchar",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec19f3c9889fb45eef3a4f2c88b68bdc93221ca323bc1840e25da87d9290bbb8"
+}

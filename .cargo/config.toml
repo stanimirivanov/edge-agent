@@ -1,2 +1,5 @@
 [alias]
 xtask = "run --locked --package edgeagent-xtask --"
+
+[env]
+SQLX_OFFLINE = { value = "true", force = false }
