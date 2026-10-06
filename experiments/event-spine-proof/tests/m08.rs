@@ -8,6 +8,7 @@ use edgeagent_inbox_postgres::PostgresInbox;
 use edgeagent_messaging::MessagePublisher;
 use edgeagent_messaging_nats::JetStreamPublisher;
 use serde_json::json;
+use sqlx::{Connection, PgConnection, Row};
 use std::{error::Error, io, process::Stdio, time::Duration};
 use testcontainers::{
     GenericImage, ImageExt,
@@ -15,7 +16,6 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 use tokio::process::Command;
-use tokio_postgres::NoTls;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -59,18 +59,17 @@ async fn m08_event_spine_alone_does_not_resume_post_ack_step_b() -> TestResult {
         nats.get_host().await?,
         nats.get_host_port_ipv4(4222).await?
     );
-    let (database, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
-    let connection_task = tokio::spawn(connection);
+    let mut database = PgConnection::connect(&postgres_url).await?;
     for migration in PostgresInbox::MIGRATIONS {
-        database.batch_execute(migration).await?;
+        sqlx::raw_sql(migration).execute(&mut database).await?;
     }
-    database
-        .batch_execute(
-            "CREATE TABLE m08_step_a (id INTEGER PRIMARY KEY);
+    sqlx::raw_sql(
+        "CREATE TABLE m08_step_a (id INTEGER PRIMARY KEY);
              CREATE TABLE m08_step_b_started (id INTEGER PRIMARY KEY);
              CREATE TABLE m08_step_b_completed (id INTEGER PRIMARY KEY);",
-        )
-        .await?;
+    )
+    .execute(&mut database)
+    .await?;
 
     let nats_client = async_nats::connect(&nats_url).await?;
     let context = jetstream::new(nats_client);
@@ -129,10 +128,9 @@ async fn m08_event_spine_alone_does_not_resume_post_ack_step_b() -> TestResult {
 
     tokio::time::timeout(Duration::from_secs(15), async {
         loop {
-            let count: i64 = database
-                .query_one("SELECT count(*) FROM m08_step_b_started", &[])
-                .await?
-                .get(0);
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM m08_step_b_started")
+                .fetch_one(&mut database)
+                .await?;
             if count == 1 {
                 return TestResult::Ok(());
             }
@@ -169,24 +167,22 @@ async fn m08_event_spine_alone_does_not_resume_post_ack_step_b() -> TestResult {
         "a completed message was acknowledged before Step B"
     );
 
-    let counts = database
-        .query_one(
-            "SELECT
+    let counts = sqlx::query(
+        "SELECT
                 (SELECT count(*) FROM m08_step_a),
                 (SELECT count(*) FROM m08_step_b_started),
                 (SELECT count(*) FROM m08_step_b_completed),
                 (SELECT count(*) FROM edgeagent_message_inbox)",
-            &[],
-        )
-        .await?;
-    assert_eq!(counts.get::<_, i64>(0), 1, "Step A did not repeat");
-    assert_eq!(counts.get::<_, i64>(1), 1, "Step B started once");
-    assert_eq!(counts.get::<_, i64>(2), 0, "Step B was not recovered");
+    )
+    .fetch_one(&mut database)
+    .await?;
+    assert_eq!(counts.try_get::<i64, _>(0)?, 1, "Step A did not repeat");
+    assert_eq!(counts.try_get::<i64, _>(1)?, 1, "Step B started once");
+    assert_eq!(counts.try_get::<i64, _>(2)?, 0, "Step B was not recovered");
     assert_eq!(
-        counts.get::<_, i64>(3),
+        counts.try_get::<i64, _>(3)?,
         1,
         "inbox transition committed once"
     );
-    connection_task.abort();
     Ok(())
 }
