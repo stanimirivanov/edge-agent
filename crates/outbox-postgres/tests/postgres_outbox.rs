@@ -106,6 +106,14 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
         conflict.err().map(|error| error.kind()),
         Some(OutboxErrorKind::MessageIdentityConflict)
     );
+    let stored = transaction
+        .query_one(
+            "SELECT envelope FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2",
+            &[&gateway_envelope.source(), &gateway_envelope.id()],
+        )
+        .await?;
+    let stored_bytes: Vec<u8> = stored.try_get("envelope")?;
+    assert_eq!(stored_bytes, gateway_envelope.to_json()?);
     transaction.rollback().await?;
 
     let transaction = client.transaction().await?;
