@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT (\n                message_type = $3\n                AND transport_subject = $4\n                AND envelope = $5\n            ) AS \"identical!\"\n            FROM edgeagent_message_outbox\n            WHERE message_source = $1 AND message_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identical!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "58b1ff32d1840a399f7991858d94f64aeb8844cf97c72b98b9a1050bf25c5856"
+}

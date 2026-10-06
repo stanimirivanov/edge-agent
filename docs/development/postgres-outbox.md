@@ -206,17 +206,40 @@ isolated development or CI database. The local-platform CI job invokes these
 ignored tests explicitly; the default credential-free test gate does not run
 them.
 
+## Compile-checked enqueue queries
+
+The enqueue insert and identity-match statements use `sqlx::query!`. Root
+`.sqlx/` metadata is generated from the four checked-in outbox migrations,
+not from a contributor's private schema. Cargo defaults to `SQLX_OFFLINE=true`,
+so `cargo check` and `cargo build` need no PostgreSQL service, `DATABASE_URL`,
+or `.env`. The database-backed local-platform CI job runs the same migrations,
+regenerates metadata with SQLx CLI `0.9.0`, and fails if any `.sqlx/` file is
+added, removed, or changed. A changed query or schema therefore requires a
+deliberate metadata refresh.
+
+To refresh metadata, use an isolated development database with the outbox
+tables visible in its default schema (the local platform's `edgeagent`
+database works), install the exact CLI version, and run from the workspace
+root:
+
+```text
+cargo install sqlx-cli --version '=0.9.0' --no-default-features --features postgres,rustls
+cargo sqlx migrate run --source crates/outbox-postgres/migrations --no-dotenv -D postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
+cargo sqlx prepare --workspace --no-dotenv -D postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent -- --locked --all-targets
+git status --short -- .sqlx
+```
+
+Never point these commands at production or commit a database URL. The CLI
+overrides Cargo's offline default for preparation; its database connection
+must see the migrated outbox table without a connection-local `SET search_path`.
+Remaining outbox and inbox statements still use bound runtime SQLx queries;
+convert them in later [M02](../roadmap/milestones.md#m02---contracts-and-event-spine)
+slices. PostgreSQL conformance tests continue to verify behavior and migration
+compatibility, including exact-byte conflicts and atomic inbox/outbox writes.
+
 ## Current limitations
 
 This increment provides storage and leasing, not a continuously running worker.
-The SQLx adapter uses bound runtime queries rather than compile-time
-`query!` verification. A checked-in `.env` pointing at a database would make
-the default build depend on a running service and would not be an acceptable
-substitute for reproducible offline metadata. Adopting query macros requires
-generating checked-in `.sqlx` metadata from the outbox migrations and checking
-its freshness in database-backed CI; this is the next M02 refactor task in the
-[roadmap](../roadmap/milestones.md#m02---contracts-and-event-spine). The existing
-PostgreSQL conformance tests remain the query/schema validation gate until then.
 Bounded retry and outbound quarantine policy are implemented by the relay
 crate. Control-plane authentication, authorization and dual approval, operator
 inspection UI/API, inbound quarantine replay, archival, telemetry export,
