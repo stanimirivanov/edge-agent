@@ -85,7 +85,7 @@ impl PostgresTransactionalMessageHandler for EmittingHandler {
                     )
                 })?;
             PostgresOutbox
-                .enqueue_sqlx(transaction, EVENT, &self.event)
+                .enqueue(transaction, EVENT, &self.event)
                 .await
                 .map_err(|error| {
                     edgeagent_inbox_handler::HandlerFailure::with_source(
@@ -180,14 +180,14 @@ async fn inbox_domain_and_sqlx_outbox_commit_or_roll_back_together() -> Result<(
     let mut transaction = client.begin().await?;
     assert_eq!(
         PostgresOutbox
-            .enqueue_sqlx(&mut transaction, EVENT, &event)
+            .enqueue(&mut transaction, EVENT, &event)
             .await?,
         EnqueueDisposition::AlreadyPresent
     );
     let changed = envelope(EVENT, Component::ExecutionSimulator, "changed")?;
     assert_eq!(
         PostgresOutbox
-            .enqueue_sqlx(&mut transaction, EVENT, &changed)
+            .enqueue(&mut transaction, EVENT, &changed)
             .await
             .err()
             .map(|error| error.kind()),

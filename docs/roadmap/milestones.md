@@ -64,6 +64,14 @@ Work items:
 Completion means a durable command can survive process and broker restarts and
 produce one domain transition despite duplicate or delayed delivery.
 
+**Next PR after the single-driver outbox refactor:** Compile-check the outbox
+enqueue insert and identity-match SQL with `sqlx::query!` using offline `.sqlx`
+metadata generated from the checked-in outbox migrations. Pin the generation
+tool and fail database-backed CI when metadata drifts. The default `cargo
+check` and `cargo build` must still work without PostgreSQL, environment
+variables, or a checked-in connection string. Convert remaining outbox and
+inbox queries in later reviewable slices using the same verified workflow.
+
 **Post-inbox-handler decision gate:** Immediately after the inbox-handler
 refactoring is complete, compare the existing NATS/PostgreSQL event spine alone
 with self-hosted [Temporal](https://github.com/temporalio/temporal) and its Rust

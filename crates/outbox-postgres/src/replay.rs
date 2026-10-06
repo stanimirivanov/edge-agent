@@ -5,7 +5,15 @@ use crate::validation::{
     validate_identifier, validate_token, validate_visible_ascii,
 };
 use crate::{OutboxError, PostgresOutbox};
-use tokio_postgres::Transaction;
+use sqlx::{Postgres, Transaction};
+
+#[derive(sqlx::FromRow)]
+struct StoredReplayRequest {
+    message_source: String,
+    message_id: String,
+    requested_by: String,
+    reason: String,
+}
 
 pub(super) const REPLAY_QUARANTINED_SQL: &str = r#"
 WITH candidate AS (
@@ -122,7 +130,7 @@ impl PostgresOutbox {
     /// target, storage, or storage-invariant failure.
     pub async fn replay_quarantined(
         &self,
-        transaction: &Transaction<'_>,
+        transaction: &mut Transaction<'_, Postgres>,
         message_source: &str,
         message_id: &str,
         request: ReplayRequest<'_>,
@@ -137,17 +145,13 @@ impl PostgresOutbox {
             MAX_IDENTIFIER_BYTES,
             "message_id must contain 1 to 128 portable identifier bytes",
         )?;
-        let rows = transaction
-            .query(
-                REPLAY_QUARANTINED_SQL,
-                &[
-                    &message_source,
-                    &message_id,
-                    &request.request_id,
-                    &request.requested_by,
-                    &request.reason,
-                ],
-            )
+        let rows = sqlx::query_scalar::<_, String>(REPLAY_QUARANTINED_SQL)
+            .bind(message_source)
+            .bind(message_id)
+            .bind(request.request_id)
+            .bind(request.requested_by)
+            .bind(request.reason)
+            .fetch_all(&mut **transaction)
             .await
             .map_err(OutboxError::storage)?;
         if rows.len() == 1 {
@@ -157,21 +161,19 @@ impl PostgresOutbox {
             return Err(OutboxError::storage_invariant());
         }
 
-        let existing = transaction
-            .query_opt(
-                "SELECT message_source, message_id, requested_by, reason FROM edgeagent_message_outbox_replay_audit WHERE replay_request_id = $1",
-                &[&request.request_id],
-            )
+        let existing = sqlx::query_as::<_, StoredReplayRequest>(
+            "SELECT message_source, message_id, requested_by, reason FROM edgeagent_message_outbox_replay_audit WHERE replay_request_id = $1",
+        )
+            .bind(request.request_id)
+            .fetch_optional(&mut **transaction)
             .await
             .map_err(OutboxError::storage)?;
         match existing {
             Some(row)
-                if row.try_get::<_, String>(0).map_err(OutboxError::storage)? == message_source
-                    && row.try_get::<_, String>(1).map_err(OutboxError::storage)? == message_id
-                    && row.try_get::<_, String>(2).map_err(OutboxError::storage)?
-                        == request.requested_by
-                    && row.try_get::<_, String>(3).map_err(OutboxError::storage)?
-                        == request.reason =>
+                if row.message_source == message_source
+                    && row.message_id == message_id
+                    && row.requested_by == request.requested_by
+                    && row.reason == request.reason =>
             {
                 Ok(ReplayDisposition::AlreadyRequested)
             }

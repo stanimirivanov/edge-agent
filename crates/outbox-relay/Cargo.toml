@@ -16,7 +16,7 @@ edgeagent-telemetry.workspace = true
 edgeagent-outbox-postgres.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-tokio-postgres.workspace = true
+sqlx.workspace = true
 
 [lints]
 workspace = true

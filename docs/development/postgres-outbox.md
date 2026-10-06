@@ -4,8 +4,8 @@
 
 - `edgeagent-outbox-postgres` stores exact validated CloudEvents bytes inside a
   caller-owned PostgreSQL transaction.
-- SQLx inbox callbacks use `enqueue_sqlx` on their existing transaction;
-  standalone producers and the relay retain the `tokio-postgres` path.
+- Inbox callbacks and standalone producers use one SQLx `enqueue` API, while
+  the relay uses the same driver for short claim and outcome transactions.
 - CloudEvents identity is `(source, id)`; an identical retry is idempotent and
   different content under the same identity is rejected.
 - Relay workers claim bounded batches with `FOR UPDATE SKIP LOCKED` and expiring
@@ -32,14 +32,13 @@ transitions; `replay` owns authorization audit and release; `validation` and
 `relay` module composes these operations behind the portable storage port.
 
 Application persistence writes domain state and calls `PostgresOutbox::enqueue`
-in the same `tokio-postgres` transaction before committing. A service using the
-SQLx inbound callback instead calls `PostgresOutbox::enqueue_sqlx` with that
-callback's mutable transaction. Both methods perform the same validation,
-canonical-byte identity comparison, and insert semantics. A rollback removes
-the inbox marker, service state, and outbox row together; a second database
-connection cannot provide this guarantee. External publication never occurs
-inside the transaction. [ADR-0015](../decisions/0015-allow-atomic-sqlx-outbox-enqueue.md)
-records why both driver-specific entry points coexist.
+with the caller's mutable SQLx transaction before committing. An inbound
+callback passes its existing transaction, so a rollback removes the inbox
+marker, service state, and outbox row together; a second database connection
+cannot provide this guarantee. The relay uses SQLx for separate, short lease
+and outcome transactions. External publication never occurs inside a database
+transaction. [ADR-0016](../decisions/0016-use-sqlx-throughout-the-postgresql-outbox.md)
+records the single-driver boundary and migration from the temporary dual path.
 
 The outbox stores:
 
@@ -56,8 +55,8 @@ Reusing an identity with identical type, subject, and bytes returns
 `AlreadyPresent`. Reusing it with different immutable content returns
 `MessageIdentityConflict`. This prevents a retry key from silently acquiring
 new meaning. After an insert conflict, PostgreSQL compares the validated type,
-subject, and exact envelope bytes and returns one Boolean; neither driver
-downloads the stored envelope for the comparison. The comparison runs as a
+subject, and exact envelope bytes and returns one Boolean; the adapter does not
+download the stored envelope for the comparison. The comparison runs as a
 separate statement so a conflicting transaction that commits while the insert
 waits is visible under PostgreSQL's default `READ COMMITTED` isolation.
 
@@ -140,8 +139,8 @@ direct table access, and audit rows must remain append-only under deployment pol
 | `Contract` | Envelope or message definition is invalid | Do not enqueue; correct the producer defect |
 | `MessageIdentityConflict` | Existing immutable content differs | Fail closed and investigate identity reuse |
 | `InvalidArgument` | Batch, lease, worker, delay, or reason code violates a bound | Correct relay configuration or policy |
-| `Storage` | PostgreSQL operation failed | Roll back and apply bounded transient-failure policy |
-| `StorageInvariant` | Stored data contradicts adapter assumptions | Quarantine and investigate corruption or unsupported mutation |
+| `Storage` | PostgreSQL is unavailable or a transaction is retryable or ambiguous | Roll back and apply bounded transient-failure policy |
+| `StorageInvariant` | Stored data, schema, codec, or deterministic database rejection contradicts adapter assumptions | Quarantine and investigate corruption or unsupported mutation |
 | `LeaseLost` | Lease expired, disappeared, or its owner/generation no longer names this claim | Stop processing that record without marking it |
 | `ReplayRequestConflict` | Replay request identity already names different evidence | Fail closed and investigate request-ID reuse |
 | `NotQuarantined` | Target is missing, published, or already released | Refresh operator state; do not infer success |
@@ -210,13 +209,14 @@ them.
 ## Current limitations
 
 This increment provides storage and leasing, not a continuously running worker.
-The SQLx enqueue path uses bound runtime queries rather than compile-time
+The SQLx adapter uses bound runtime queries rather than compile-time
 `query!` verification. A checked-in `.env` pointing at a database would make
 the default build depend on a running service and would not be an acceptable
 substitute for reproducible offline metadata. Adopting query macros requires
 generating checked-in `.sqlx` metadata from the outbox migrations and checking
-its freshness in database-backed CI; the existing PostgreSQL conformance tests
-remain the query/schema validation gate until then.
+its freshness in database-backed CI; this is the next M02 refactor task in the
+[roadmap](../roadmap/milestones.md#m02---contracts-and-event-spine). The existing
+PostgreSQL conformance tests remain the query/schema validation gate until then.
 Bounded retry and outbound quarantine policy are implemented by the relay
 crate. Control-plane authentication, authorization and dual approval, operator
 inspection UI/API, inbound quarantine replay, archival, telemetry export,

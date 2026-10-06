@@ -2,11 +2,8 @@
 
 use crate::{OutboxError, PostgresOutbox};
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
-use sqlx::{Postgres, Transaction as SqlxTransaction};
-use tokio_postgres::Transaction;
+use sqlx::{Postgres, Transaction};
 
-// Both drivers execute the same statements until the relay and existing
-// producers can migrate together without changing their transaction boundary.
 const INSERT_OUTBOX_SQL: &str = r"
     INSERT INTO edgeagent_message_outbox (
         message_source, message_id, message_type, transport_subject, envelope
@@ -67,70 +64,19 @@ fn existing_disposition(identical: bool) -> Result<EnqueueDisposition, OutboxErr
 }
 
 impl PostgresOutbox {
-    /// Insert an exact validated envelope in the caller's transaction.
+    /// Insert an exact validated envelope in the caller's SQLx transaction.
     ///
     /// Reusing a `(source, id)` pair with identical routing metadata and bytes
-    /// is idempotent. Reusing it with different content is a conflict.
+    /// is idempotent. Reusing it with different content is a conflict. An
+    /// inbound callback passes its existing transaction so its state and the
+    /// outbound intent commit or roll back together.
     ///
     /// # Errors
     ///
     /// Returns a contract, identity-conflict, or PostgreSQL error.
     pub async fn enqueue(
         &self,
-        transaction: &Transaction<'_>,
-        definition: MessageDefinition,
-        envelope: &MessageEnvelope,
-    ) -> Result<EnqueueDisposition, OutboxError> {
-        let prepared = prepare(definition, envelope)?;
-        let inserted = transaction
-            .execute(
-                INSERT_OUTBOX_SQL,
-                &[
-                    &prepared.source,
-                    &prepared.id,
-                    &prepared.message_type,
-                    &prepared.transport_subject,
-                    &prepared.bytes,
-                ],
-            )
-            .await
-            .map_err(OutboxError::storage)?;
-        if inserted == 1 {
-            return Ok(EnqueueDisposition::Inserted);
-        }
-
-        let existing = transaction
-            .query_opt(
-                MATCH_OUTBOX_SQL,
-                &[
-                    &prepared.source,
-                    &prepared.id,
-                    &prepared.message_type,
-                    &prepared.transport_subject,
-                    &prepared.bytes,
-                ],
-            )
-            .await
-            .map_err(OutboxError::storage)?
-            .ok_or_else(OutboxError::storage_invariant)?;
-        let identical: bool = existing
-            .try_get("identical")
-            .map_err(OutboxError::storage)?;
-        existing_disposition(identical)
-    }
-
-    /// Enqueue through the same SQLx transaction used by the PostgreSQL inbox.
-    ///
-    /// A service callback can write its own tables and call this method before
-    /// the inbound adapter commits. Both records then commit or roll back as
-    /// one unit. The relay's existing driver and portable policy are unchanged.
-    ///
-    /// # Errors
-    ///
-    /// Returns a contract, identity-conflict, or PostgreSQL error.
-    pub async fn enqueue_sqlx(
-        &self,
-        transaction: &mut SqlxTransaction<'_, Postgres>,
+        transaction: &mut Transaction<'_, Postgres>,
         definition: MessageDefinition,
         envelope: &MessageEnvelope,
     ) -> Result<EnqueueDisposition, OutboxError> {

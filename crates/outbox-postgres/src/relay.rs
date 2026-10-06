@@ -4,18 +4,18 @@ use crate::{OutboxError, OutboxErrorKind, PostgresOutbox};
 use edgeagent_messaging::{
     ClaimedMessage, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
 };
+use sqlx::{Connection, PgConnection};
 use std::time::Duration;
-use tokio_postgres::Client;
 
 /// PostgreSQL-backed outbound relay storage adapter.
 pub struct PostgresOutboxRelay<'client> {
-    client: &'client mut Client,
+    client: &'client mut PgConnection,
 }
 
 impl<'client> PostgresOutboxRelay<'client> {
     /// Bind the adapter to one service-owned PostgreSQL client.
     #[must_use]
-    pub const fn new(client: &'client mut Client) -> Self {
+    pub const fn new(client: &'client mut PgConnection) -> Self {
         Self { client }
     }
 }
@@ -27,9 +27,9 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         lease_duration: Duration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
         Box::pin(async move {
-            let transaction = self.client.transaction().await.map_err(unavailable)?;
+            let mut transaction = self.client.begin().await.map_err(unavailable)?;
             let mut messages = PostgresOutbox
-                .claim_batch(&transaction, lease_owner, 1, lease_duration)
+                .claim_batch(&mut transaction, lease_owner, 1, lease_duration)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)?;
@@ -49,9 +49,9 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let transaction = self.client.transaction().await.map_err(unavailable)?;
+            let mut transaction = self.client.begin().await.map_err(unavailable)?;
             PostgresOutbox
-                .mark_published(&transaction, claim, lease_owner)
+                .mark_published(&mut transaction, claim, lease_owner)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)
@@ -66,9 +66,15 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         failure_code: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let transaction = self.client.transaction().await.map_err(unavailable)?;
+            let mut transaction = self.client.begin().await.map_err(unavailable)?;
             PostgresOutbox
-                .release_for_retry(&transaction, claim, lease_owner, retry_after, failure_code)
+                .release_for_retry(
+                    &mut transaction,
+                    claim,
+                    lease_owner,
+                    retry_after,
+                    failure_code,
+                )
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)
@@ -82,9 +88,9 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         reason: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let transaction = self.client.transaction().await.map_err(unavailable)?;
+            let mut transaction = self.client.begin().await.map_err(unavailable)?;
             PostgresOutbox
-                .quarantine(&transaction, claim, lease_owner, reason)
+                .quarantine(&mut transaction, claim, lease_owner, reason)
                 .await
                 .map_err(operation)?;
             transaction.commit().await.map_err(unavailable)
@@ -92,7 +98,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
     }
 }
 
-fn unavailable(error: tokio_postgres::Error) -> OutboxStoreError {
+fn unavailable(error: sqlx::Error) -> OutboxStoreError {
     OutboxStoreError::with_source(OutboxStoreErrorKind::Unavailable, error)
 }
 

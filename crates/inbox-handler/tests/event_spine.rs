@@ -16,14 +16,13 @@ use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
 use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
-use sqlx::{Connection, PgConnection, Postgres, Transaction};
+use sqlx::{Connection, PgConnection, Postgres, Row, Transaction};
 use std::env;
 use std::error::Error;
 use std::io;
 use std::path::Path;
 use std::process::{self, Command};
 use std::time::{Duration, Instant};
-use tokio_postgres::NoTls;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -193,33 +192,32 @@ async fn verify_restart_recovery(
     let consumer_name = format!("event_spine_{mode_name}_v1_{process_id}");
     let schema = format!("edgeagent_spine_{mode_name}_test_{process_id}");
 
-    let (mut database, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
-    let connection_task = tokio::spawn(connection);
-    database
-        .batch_execute(&format!(
-            "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-        ))
-        .await?;
+    let mut database = PgConnection::connect(&postgres_url).await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+    )))
+    .execute(&mut database)
+    .await?;
     for migration in PostgresOutbox::MIGRATIONS {
-        database.batch_execute(migration).await?;
+        sqlx::raw_sql(migration).execute(&mut database).await?;
     }
     for migration in PostgresInbox::MIGRATIONS {
-        database.batch_execute(migration).await?;
+        sqlx::raw_sql(migration).execute(&mut database).await?;
     }
-    database
-        .batch_execute(
-            "CREATE TABLE event_spine_effects (message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (message_source, message_id))",
-        )
-        .await?;
+    sqlx::raw_sql(
+        "CREATE TABLE event_spine_effects (message_source TEXT NOT NULL, message_id VARCHAR(128) NOT NULL, PRIMARY KEY (message_source, message_id))",
+    )
+    .execute(&mut database)
+    .await?;
     let mut inbox_database = PgConnection::connect(&postgres_url).await?;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!("SET search_path TO {schema};")))
         .execute(&mut inbox_database)
         .await?;
 
     let command = envelope(&format!("event-spine-{mode_name}-restart-01"))?;
-    let transaction = database.transaction().await?;
+    let mut transaction = database.begin().await?;
     PostgresOutbox
-        .enqueue(&transaction, COMMAND, &command)
+        .enqueue(&mut transaction, COMMAND, &command)
         .await?;
     transaction.commit().await?;
 
@@ -306,26 +304,24 @@ async fn verify_restart_recovery(
         HandlingOutcome::Applied { attempt } if attempt == redelivery_attempt
     ));
 
-    let counts = database
-        .query_one(
-            "SELECT (SELECT count(*) FROM event_spine_effects), (SELECT count(*) FROM edgeagent_message_inbox), (SELECT count(*) FROM edgeagent_message_outbox WHERE published_at IS NOT NULL)",
-            &[],
-        )
-        .await?;
-    assert_eq!(counts.try_get::<_, i64>(0)?, 1);
-    assert_eq!(counts.try_get::<_, i64>(1)?, 1);
-    assert_eq!(counts.try_get::<_, i64>(2)?, 1);
+    let counts = sqlx::query(
+        "SELECT (SELECT count(*) FROM event_spine_effects) AS effects, (SELECT count(*) FROM edgeagent_message_inbox) AS inbox, (SELECT count(*) FROM edgeagent_message_outbox WHERE published_at IS NOT NULL) AS published",
+    )
+    .fetch_one(&mut database)
+    .await?;
+    assert_eq!(counts.try_get::<i64, _>("effects")?, 1);
+    assert_eq!(counts.try_get::<i64, _>("inbox")?, 1);
+    assert_eq!(counts.try_get::<i64, _>("published")?, 1);
 
     let consumer_info = inspector.info().await?;
     assert_eq!(consumer_info.num_ack_pending, 0);
     assert_eq!(consumer_info.num_pending, 0);
 
     assert!(restarted_context.delete_stream(&stream_name).await?.success);
-    database
-        .batch_execute(&format!(
-            "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-        ))
-        .await?;
-    connection_task.abort();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+    )))
+    .execute(&mut database)
+    .await?;
     Ok(())
 }
