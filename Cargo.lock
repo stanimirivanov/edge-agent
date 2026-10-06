@@ -492,6 +492,7 @@ dependencies = [
  "edgeagent-contracts",
  "edgeagent-messaging",
  "serde_json",
+ "sqlx",
  "tokio",
  "tokio-postgres",
 ]

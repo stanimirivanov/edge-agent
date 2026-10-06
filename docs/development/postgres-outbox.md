@@ -4,6 +4,8 @@
 
 - `edgeagent-outbox-postgres` stores exact validated CloudEvents bytes inside a
   caller-owned PostgreSQL transaction.
+- SQLx inbox callbacks use `enqueue_sqlx` on their existing transaction;
+  standalone producers and the relay retain the `tokio-postgres` path.
 - CloudEvents identity is `(source, id)`; an identical retry is idempotent and
   different content under the same identity is rejected.
 - Relay workers claim bounded batches with `FOR UPDATE SKIP LOCKED` and expiring
@@ -29,10 +31,15 @@ transitions; `replay` owns authorization audit and release; `validation` and
 `error` centralize bounded adapter inputs and failure categories. The existing
 `relay` module composes these operations behind the portable storage port.
 
-Application persistence opens a PostgreSQL transaction, commits its domain
-state, and calls `PostgresOutbox::enqueue` with the same transaction before
-commit. A rollback removes both changes. External publication never occurs
-inside that transaction.
+Application persistence writes domain state and calls `PostgresOutbox::enqueue`
+in the same `tokio-postgres` transaction before committing. A service using the
+SQLx inbound callback instead calls `PostgresOutbox::enqueue_sqlx` with that
+callback's mutable transaction. Both methods perform the same validation,
+canonical-byte identity comparison, and insert semantics. A rollback removes
+the inbox marker, service state, and outbox row together; a second database
+connection cannot provide this guarantee. External publication never occurs
+inside the transaction. [ADR-0015](../decisions/0015-allow-atomic-sqlx-outbox-enqueue.md)
+records why both driver-specific entry points coexist.
 
 The outbox stores:
 
@@ -174,6 +181,7 @@ The isolated local-platform conformance test can be run with:
 
 ```text
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact transaction_identity_and_lease_invariants_hold
+EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-handler --test sqlx_outbox_atomicity -- --ignored --exact inbox_domain_and_sqlx_outbox_commit_or_roll_back_together
 ```
 
 It creates a process-scoped schema and verifies transactional rollback,
