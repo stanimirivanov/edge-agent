@@ -44,6 +44,14 @@ does not change the production workspace policy. The exact assertions,
 environment limitations, and decision
 consequences are recorded in [ADR-0013](../docs/decisions/0013-select-durable-workflow-execution.md).
 
+Each proof has its own `Cargo.lock`. A feature change in a root workspace crate
+used through a path dependency can invalidate a proof lock even when its
+`Cargo.toml` is unchanged. Refresh only the affected proof with
+`cargo metadata --offline --manifest-path experiments/<package>/Cargo.toml
+--format-version 1`, review the lockfile diff, then rerun its `--locked` CI
+commands. The root workspace's `make verify` does not resolve these separate
+experiment locks.
+
 Flawless's server binary is downloadable but closed source. The automated
 proof verifies a locally pinned content digest before execution. Its replay
 re-executes deterministic code from the beginning and skips recorded effects,
