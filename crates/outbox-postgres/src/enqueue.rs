@@ -5,15 +5,27 @@ use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingErro
 use sqlx::{Postgres, Transaction as SqlxTransaction};
 use tokio_postgres::Transaction;
 
-const INSERT_OUTBOX_SQL: &str = "INSERT INTO edgeagent_message_outbox (message_source, message_id, message_type, transport_subject, envelope) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (message_source, message_id) DO NOTHING";
-const SELECT_OUTBOX_SQL: &str = "SELECT message_type, transport_subject, envelope FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2";
+// Both drivers execute the same statements until the relay and existing
+// producers can migrate together without changing their transaction boundary.
+const INSERT_OUTBOX_SQL: &str = r"
+    INSERT INTO edgeagent_message_outbox (
+        message_source, message_id, message_type, transport_subject, envelope
+    ) VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (message_source, message_id) DO NOTHING
+";
 
-#[derive(sqlx::FromRow)]
-struct StoredOutbox {
-    message_type: String,
-    transport_subject: String,
-    envelope: Vec<u8>,
-}
+// A separate statement sees a concurrently committed conflicting insert under
+// READ COMMITTED after ON CONFLICT has waited for that transaction to finish.
+// Return only the comparison result; never transfer the stored envelope back.
+const MATCH_OUTBOX_SQL: &str = r"
+    SELECT (
+        message_type = $3
+        AND transport_subject = $4
+        AND envelope = $5
+    ) AS identical
+    FROM edgeagent_message_outbox
+    WHERE message_source = $1 AND message_id = $2
+";
 
 struct PreparedEnqueue<'envelope> {
     source: &'envelope str,
@@ -21,14 +33,6 @@ struct PreparedEnqueue<'envelope> {
     message_type: &'envelope str,
     transport_subject: String,
     bytes: Vec<u8>,
-}
-
-impl PreparedEnqueue<'_> {
-    fn matches(&self, message_type: &str, transport_subject: &str, bytes: &[u8]) -> bool {
-        self.message_type == message_type
-            && self.transport_subject == transport_subject
-            && self.bytes == bytes
-    }
 }
 
 fn prepare<'envelope>(
@@ -52,6 +56,14 @@ pub enum EnqueueDisposition {
     Inserted,
     /// The same source, ID, routing metadata, and envelope bytes already exist.
     AlreadyPresent,
+}
+
+fn existing_disposition(identical: bool) -> Result<EnqueueDisposition, OutboxError> {
+    if identical {
+        Ok(EnqueueDisposition::AlreadyPresent)
+    } else {
+        Err(OutboxError::message_identity_conflict())
+    }
 }
 
 impl PostgresOutbox {
@@ -88,18 +100,23 @@ impl PostgresOutbox {
         }
 
         let existing = transaction
-            .query_opt(SELECT_OUTBOX_SQL, &[&prepared.source, &prepared.id])
+            .query_opt(
+                MATCH_OUTBOX_SQL,
+                &[
+                    &prepared.source,
+                    &prepared.id,
+                    &prepared.message_type,
+                    &prepared.transport_subject,
+                    &prepared.bytes,
+                ],
+            )
             .await
             .map_err(OutboxError::storage)?
             .ok_or_else(OutboxError::storage_invariant)?;
-        let existing_type: String = existing.try_get(0).map_err(OutboxError::storage)?;
-        let existing_subject: String = existing.try_get(1).map_err(OutboxError::storage)?;
-        let existing_bytes: Vec<u8> = existing.try_get(2).map_err(OutboxError::storage)?;
-        if prepared.matches(&existing_type, &existing_subject, &existing_bytes) {
-            Ok(EnqueueDisposition::AlreadyPresent)
-        } else {
-            Err(OutboxError::message_identity_conflict())
-        }
+        let identical: bool = existing
+            .try_get("identical")
+            .map_err(OutboxError::storage)?;
+        existing_disposition(identical)
     }
 
     /// Enqueue through the same SQLx transaction used by the PostgreSQL inbox.
@@ -131,21 +148,16 @@ impl PostgresOutbox {
             return Ok(EnqueueDisposition::Inserted);
         }
 
-        let existing = sqlx::query_as::<_, StoredOutbox>(SELECT_OUTBOX_SQL)
+        let identical = sqlx::query_scalar::<_, bool>(MATCH_OUTBOX_SQL)
             .bind(prepared.source)
             .bind(prepared.id)
+            .bind(prepared.message_type)
+            .bind(&prepared.transport_subject)
+            .bind(&prepared.bytes)
             .fetch_optional(&mut **transaction)
             .await
             .map_err(OutboxError::storage)?
             .ok_or_else(OutboxError::storage_invariant)?;
-        if prepared.matches(
-            &existing.message_type,
-            &existing.transport_subject,
-            &existing.envelope,
-        ) {
-            Ok(EnqueueDisposition::AlreadyPresent)
-        } else {
-            Err(OutboxError::message_identity_conflict())
-        }
+        existing_disposition(identical)
     }
 }

@@ -55,7 +55,11 @@ The outbox stores:
 Reusing an identity with identical type, subject, and bytes returns
 `AlreadyPresent`. Reusing it with different immutable content returns
 `MessageIdentityConflict`. This prevents a retry key from silently acquiring
-new meaning.
+new meaning. After an insert conflict, PostgreSQL compares the validated type,
+subject, and exact envelope bytes and returns one Boolean; neither driver
+downloads the stored envelope for the comparison. The comparison runs as a
+separate statement so a conflicting transaction that commits while the insert
+waits is visible under PostgreSQL's default `READ COMMITTED` isolation.
 
 ## Relay leasing and recovery
 
@@ -206,6 +210,13 @@ them.
 ## Current limitations
 
 This increment provides storage and leasing, not a continuously running worker.
+The SQLx enqueue path uses bound runtime queries rather than compile-time
+`query!` verification. A checked-in `.env` pointing at a database would make
+the default build depend on a running service and would not be an acceptable
+substitute for reproducible offline metadata. Adopting query macros requires
+generating checked-in `.sqlx` metadata from the outbox migrations and checking
+its freshness in database-backed CI; the existing PostgreSQL conformance tests
+remain the query/schema validation gate until then.
 Bounded retry and outbound quarantine policy are implemented by the relay
 crate. Control-plane authentication, authorization and dual approval, operator
 inspection UI/API, inbound quarantine replay, archival, telemetry export,

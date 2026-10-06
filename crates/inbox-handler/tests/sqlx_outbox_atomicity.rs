@@ -193,6 +193,14 @@ async fn inbox_domain_and_sqlx_outbox_commit_or_roll_back_together() -> Result<(
             .map(|error| error.kind()),
         Some(OutboxErrorKind::MessageIdentityConflict)
     );
+    let stored_bytes: Vec<u8> = sqlx::query_scalar(
+        "SELECT envelope FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2",
+    )
+    .bind(event.source())
+    .bind(event.id())
+    .fetch_one(&mut *transaction)
+    .await?;
+    assert_eq!(stored_bytes, event.to_json()?);
     transaction.rollback().await?;
 
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
