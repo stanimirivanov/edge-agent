@@ -11,7 +11,6 @@ publish = false
 edgeagent-contracts.workspace = true
 edgeagent-messaging.workspace = true
 sqlx.workspace = true
-tokio-postgres.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

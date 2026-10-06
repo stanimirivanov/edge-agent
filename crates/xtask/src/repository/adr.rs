@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 15] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 16] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -96,6 +96,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 15] = [
         number: 15,
         path: "docs/decisions/0015-allow-atomic-sqlx-outbox-enqueue.md",
         title: "Allow atomic SQLx outbox enqueue",
+    },
+    PublishedIdentity {
+        number: 16,
+        path: "docs/decisions/0016-use-sqlx-throughout-the-postgresql-outbox.md",
+        title: "Use SQLx throughout the PostgreSQL outbox",
     },
 ];
 

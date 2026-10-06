@@ -1,11 +1,11 @@
 # ADR-0015: Allow atomic SQLx outbox enqueue
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-10-06
 - Milestone: M02 - Contracts and event spine
 - Deciders: EdgeAgent maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: ADR-0016
 
 ## TL;DR
 

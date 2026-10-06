@@ -23,7 +23,7 @@ pub type PostgresHandlerFuture<'handler> =
 /// Implementations may write service-owned tables and enqueue outbox messages.
 /// They should delegate business decisions to deterministic application/domain
 /// code; the PostgreSQL transaction is deliberately confined to this adapter API.
-/// An emitting consumer can call `PostgresOutbox::enqueue_sqlx` with this SQLx
+/// An emitting consumer can call `PostgresOutbox::enqueue` with this SQLx
 /// transaction to preserve atomic inbox, service-state, and outbox writes.
 pub trait PostgresTransactionalMessageHandler: Sync {
     /// Apply a first delivery's service-owned transition inside the transaction.

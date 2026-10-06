@@ -20,7 +20,6 @@ edgeagent-outbox-postgres.workspace = true
 edgeagent-outbox-relay.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-tokio-postgres.workspace = true
 sqlx.workspace = true
 
 [lints]

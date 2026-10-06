@@ -10,6 +10,7 @@ use edgeagent_messaging::{
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
 use edgeagent_outbox_relay::{QuarantineReason, RelayError, RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
+use sqlx::{Connection, PgConnection, Row};
 use std::collections::VecDeque;
 use std::env;
 use std::error::Error;
@@ -17,7 +18,6 @@ use std::io;
 use std::process;
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio_postgres::NoTls;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -95,20 +95,17 @@ impl MessagePublisher for StubPublisher {
     }
 }
 
-async fn enqueue(
-    client: &mut tokio_postgres::Client,
-    message_id: &str,
-) -> Result<(), Box<dyn Error>> {
-    let transaction = client.transaction().await?;
+async fn enqueue(client: &mut PgConnection, message_id: &str) -> Result<(), Box<dyn Error>> {
+    let mut transaction = client.begin().await?;
     PostgresOutbox
-        .enqueue(&transaction, COMMAND, &envelope(message_id)?)
+        .enqueue(&mut transaction, COMMAND, &envelope(message_id)?)
         .await?;
     transaction.commit().await?;
     Ok(())
 }
 
 async fn relay_once_with_postgres(
-    client: &mut tokio_postgres::Client,
+    client: &mut PgConnection,
     registry: &MessageRegistry<'_>,
     publisher: &dyn MessagePublisher,
     policy: &RelayPolicy,
@@ -121,18 +118,19 @@ async fn relay_once_with_postgres(
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
 async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Box<dyn Error>> {
     let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
-    let (mut client, connection) = tokio_postgres::connect(&postgres_url, NoTls).await?;
-    let connection_task = tokio::spawn(connection);
+    let mut client = PgConnection::connect(&postgres_url).await?;
     let schema = format!("edgeagent_relay_test_{}", process::id());
-    client
-        .batch_execute(&format!(
-            "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-        ))
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+    )))
+    .execute(&mut client)
+    .await?;
+    sqlx::raw_sql(PostgresOutbox::MIGRATION_SQL)
+        .execute(&mut client)
         .await?;
-    client.batch_execute(PostgresOutbox::MIGRATION_SQL).await?;
     enqueue(&mut client, "relay-success-01").await?;
     for migration in PostgresOutbox::MIGRATIONS.iter().skip(1) {
-        client.batch_execute(migration).await?;
+        sqlx::raw_sql(*migration).execute(&mut client).await?;
     }
 
     let definitions = [COMMAND];
@@ -170,12 +168,12 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
             ..
         } if failure.kind() == PublishErrorKind::Unavailable
     ));
-    client
-        .execute(
-            "UPDATE edgeagent_message_outbox SET available_at = clock_timestamp() WHERE message_id = $1",
-            &[&"relay-exhaust-01"],
-        )
-        .await?;
+    sqlx::query(
+        "UPDATE edgeagent_message_outbox SET available_at = clock_timestamp() WHERE message_id = $1",
+    )
+    .bind("relay-exhaust-01")
+    .execute(&mut client)
+    .await?;
     assert!(matches!(
         relay_once_with_postgres(&mut client, &registry, &publisher, &policy).await?,
         RelayOutcome::Quarantined {
@@ -199,22 +197,20 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
         RelayOutcome::Idle
     ));
 
-    let row = client
-        .query_one(
-            "SELECT count(*) FILTER (WHERE published_at IS NOT NULL), count(*) FILTER (WHERE quarantined_at IS NOT NULL), count(*) FILTER (WHERE quarantine_reason = 'attempts_exhausted_confirmation_unknown'), count(*) FILTER (WHERE quarantine_reason = 'transport_rejected') FROM edgeagent_message_outbox",
-            &[],
-        )
-        .await?;
-    assert_eq!(row.try_get::<_, i64>(0)?, 1);
-    assert_eq!(row.try_get::<_, i64>(1)?, 2);
-    assert_eq!(row.try_get::<_, i64>(2)?, 1);
-    assert_eq!(row.try_get::<_, i64>(3)?, 1);
+    let row = sqlx::query(
+        "SELECT count(*) FILTER (WHERE published_at IS NOT NULL) AS published, count(*) FILTER (WHERE quarantined_at IS NOT NULL) AS quarantined, count(*) FILTER (WHERE quarantine_reason = 'attempts_exhausted_confirmation_unknown') AS exhausted, count(*) FILTER (WHERE quarantine_reason = 'transport_rejected') AS rejected FROM edgeagent_message_outbox",
+    )
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(row.try_get::<i64, _>("published")?, 1);
+    assert_eq!(row.try_get::<i64, _>("quarantined")?, 2);
+    assert_eq!(row.try_get::<i64, _>("exhausted")?, 1);
+    assert_eq!(row.try_get::<i64, _>("rejected")?, 1);
 
-    client
-        .batch_execute(&format!(
-            "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-        ))
-        .await?;
-    connection_task.abort();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+    )))
+    .execute(&mut client)
+    .await?;
     Ok(())
 }

@@ -76,7 +76,7 @@ The adapter begins the transaction, records or verifies the inbox identity,
 invokes the PostgreSQL callback only for a first delivery, and commits or rolls
 back. The callback receives the validated `MessageEnvelope` and the adapter's
 mutable `sqlx::Transaction<Postgres>`. It may update service-owned tables and must
-enqueue any outbox messages through `PostgresOutbox::enqueue_sqlx` on that same
+enqueue any outbox messages through `PostgresOutbox::enqueue` on that same
 transaction. The callback must delegate deterministic business
 decisions to application or domain code, must not write another service's
 tables, and must not perform network calls or other external effects that
