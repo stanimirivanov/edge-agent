@@ -77,6 +77,14 @@ inserts after rollback or reads the committed record. Identical content returns
 `MessageIdentityConflict`. The conflict prevents an ID from silently acquiring
 new meaning.
 
+The post-conflict read compares message type and exact `BYTEA` envelope bytes
+inside PostgreSQL and returns only a boolean. It remains a separate statement:
+`ON CONFLICT DO NOTHING` can wait for a concurrent insert whose row is not
+visible to a `SELECT` in the same statement snapshot. The incoming bytes are
+bound again for this comparison; the stored envelope is never returned to the
+adapter. No hash approximation or duplicate-row update changes identity or
+the no-op duplicate transaction.
+
 ## Inbound quarantine boundary
 
 Malformed bytes may not contain a valid CloudEvents `(source, id)` pair, so the
@@ -99,6 +107,11 @@ the last observed attempt. Different subject, payload bytes, or reason under the
 same identity returns `QuarantineIdentityConflict`. This protects against key
 collision or mutation and makes redelivery after lost terminal-settlement
 confirmation safe.
+
+On a conflicting insert, the adapter locks the retained row and compares
+subject, exact payload bytes, and reason inside PostgreSQL. That query returns
+only a boolean, not the retained payload. The lock remains held through the
+last-observed-attempt update so conflicting evidence cannot advance it.
 
 The table is retained evidence and a replay source, not an automatic retry
 queue. Runtime identities may insert and inspect only their service-owned

@@ -59,19 +59,21 @@ impl PostgresInbox {
 
         let existing = sqlx::query!(
             r#"
-            SELECT message_type, envelope
+            SELECT (message_type = $4 AND envelope = $5) AS "matches!"
             FROM edgeagent_message_inbox
             WHERE consumer_name = $1 AND message_source = $2 AND message_id = $3
             "#,
             consumer_name,
             envelope.source(),
             envelope.id(),
+            envelope.message_type(),
+            &bytes,
         )
         .fetch_optional(&mut **transaction)
         .await
         .map_err(InboxError::storage)?
         .ok_or_else(InboxError::storage_invariant)?;
-        if existing.message_type == envelope.message_type() && existing.envelope == bytes {
+        if existing.matches {
             Ok(DeliveryDisposition::Duplicate)
         } else {
             Err(InboxError::message_identity_conflict())
