@@ -5,12 +5,6 @@ use crate::{InboxError, PostgresInbox};
 use edgeagent_contracts::{MessageEnvelope, MessageRegistry, MessageRoutingError};
 use sqlx::{Postgres, Transaction};
 
-#[derive(sqlx::FromRow)]
-struct StoredDelivery {
-    message_type: String,
-    envelope: Vec<u8>,
-}
-
 /// Result of recording a delivery inside the handler's transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeliveryDisposition {
@@ -43,31 +37,40 @@ impl PostgresInbox {
         validate_consumer_name(consumer_name)?;
         registry.validate(envelope)?;
         let bytes = envelope.to_json().map_err(MessageRoutingError::from)?;
-        let inserted = sqlx::query(
-            "INSERT INTO edgeagent_message_inbox (consumer_name, message_source, message_id, message_type, envelope) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (consumer_name, message_source, message_id) DO NOTHING",
+        let inserted = sqlx::query!(
+            r#"
+            INSERT INTO edgeagent_message_inbox
+                (consumer_name, message_source, message_id, message_type, envelope)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (consumer_name, message_source, message_id) DO NOTHING
+            "#,
+            consumer_name,
+            envelope.source(),
+            envelope.id(),
+            envelope.message_type(),
+            &bytes,
         )
-            .bind(consumer_name)
-            .bind(envelope.source())
-            .bind(envelope.id())
-            .bind(envelope.message_type())
-            .bind(&bytes)
-            .execute(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?;
+        .execute(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?;
         if inserted.rows_affected() == 1 {
             return Ok(DeliveryDisposition::FirstDelivery);
         }
 
-        let existing = sqlx::query_as::<_, StoredDelivery>(
-            "SELECT message_type, envelope FROM edgeagent_message_inbox WHERE consumer_name = $1 AND message_source = $2 AND message_id = $3",
+        let existing = sqlx::query!(
+            r#"
+            SELECT message_type, envelope
+            FROM edgeagent_message_inbox
+            WHERE consumer_name = $1 AND message_source = $2 AND message_id = $3
+            "#,
+            consumer_name,
+            envelope.source(),
+            envelope.id(),
         )
-            .bind(consumer_name)
-            .bind(envelope.source())
-            .bind(envelope.id())
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(InboxError::storage)?
-            .ok_or_else(InboxError::storage_invariant)?;
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(InboxError::storage)?
+        .ok_or_else(InboxError::storage_invariant)?;
         if existing.message_type == envelope.message_type() && existing.envelope == bytes {
             Ok(DeliveryDisposition::Duplicate)
         } else {

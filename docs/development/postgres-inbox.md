@@ -162,10 +162,11 @@ commit remains an ambiguous outcome and requires redelivery; the durable inbox
 identity resolves whether the first attempt committed. If explicit rollback
 fails, the adapter reports unavailability because it cannot confirm cleanup.
 
-The adapter uses SQLx `query` and `query_as` with bound values
-and typed row mappings. These calls do not use SQLx's compile-time `query!`
-metadata: builds remain database-independent, while the opt-in PostgreSQL
-conformance suite validates statements against the checked-in migrations.
+The adapter uses compile-checked SQLx `query!` and `query_file!` statements
+with checked-in offline metadata. Default builds remain database-independent;
+the [SQLx metadata guide](sqlx-metadata.md) describes the reproducible schema
+and CI freshness check. Opt-in PostgreSQL conformance tests still validate
+runtime behavior against the checked-in migrations.
 The driver decision is recorded in
 [ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md).
 Service callbacks use the same mutable SQLx transaction. An emitting consumer

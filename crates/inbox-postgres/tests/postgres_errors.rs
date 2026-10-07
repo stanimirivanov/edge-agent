@@ -183,10 +183,12 @@ async fn replay_row_decode_fault_is_invariant_and_audit_rolls_back() -> Result<(
     );
     transaction.commit().await?;
 
-    // The replay CTE can still insert its audit row, but its selected TEXT
-    // payload cannot be decoded as the BYTEA that this adapter requires.
+    // The replay CTE can still insert its audit row, but a negative INTEGER
+    // subject has invalid UTF-8 bytes and cannot decode as the expected String.
+    // SQLx's checked macros validate the declared schema at build time, not
+    // deliberate runtime schema drift in this isolated test schema.
     sqlx::raw_sql(
-        "ALTER TABLE edgeagent_message_quarantine ALTER COLUMN payload TYPE TEXT USING encode(payload, 'hex')",
+        "ALTER TABLE edgeagent_message_quarantine ALTER COLUMN transport_subject TYPE INTEGER USING -1",
     )
         .execute(&mut client)
         .await?;

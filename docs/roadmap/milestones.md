@@ -64,11 +64,12 @@ Work items:
 Completion means a durable command can survive process and broker restarts and
 produce one domain transition despite duplicate or delayed delivery.
 
-**Outbox SQL verification slice:** The enqueue insert and identity-match SQL
-use `sqlx::query!` with checked-in offline `.sqlx` metadata generated from
-the outbox migrations. Database-backed CI regenerates and checks the metadata;
-default builds remain database-free. Convert remaining outbox and inbox
-queries in later reviewable slices using the same verified workflow.
+**PostgreSQL SQL verification slice:** Outbox enqueue and all inbox adapter SQL
+use `sqlx::query!` or `sqlx::query_file!` with checked-in offline `.sqlx`
+metadata generated from both adapters' migrations. Database-backed CI
+regenerates and checks the metadata; default builds remain database-free.
+Convert remaining outbox adapter SQL in later reviewable slices using the
+same verified workflow.
 
 **Post-inbox-handler decision gate:** Immediately after the inbox-handler
 refactoring is complete, compare the existing NATS/PostgreSQL event spine alone

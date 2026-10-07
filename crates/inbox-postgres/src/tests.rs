@@ -1,4 +1,3 @@
-use crate::replay::AUTHORIZE_QUARANTINE_REPLAY_SQL;
 use crate::validation::validate_consumer_name;
 use crate::{InboxErrorKind, PostgresInbox, QuarantineEvidence, ReplayRequest};
 use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
@@ -37,7 +36,7 @@ fn migration_scopes_identity_by_consumer_and_stores_exact_bytes() {
     assert!(
         PostgresInbox::REPLAY_MIGRATION_SQL.contains("edgeagent_message_quarantine_replay_audit")
     );
-    assert!(AUTHORIZE_QUARANTINE_REPLAY_SQL.contains("FOR UPDATE"));
+    assert!(include_str!("../queries/authorize_quarantine_replay.sql").contains("FOR UPDATE"));
 }
 
 #[test]

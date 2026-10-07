@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH candidate AS (\n    SELECT consumer_name,\n           delivery_key,\n           transport_subject,\n           payload,\n           failure_code,\n           first_delivery_attempt,\n           last_delivery_attempt,\n           quarantined_at,\n           last_observed_at\n    FROM edgeagent_message_quarantine\n    WHERE consumer_name = $1 AND delivery_key = $2\n    FOR UPDATE\n),\naudit AS (\n    INSERT INTO edgeagent_message_quarantine_replay_audit (\n        replay_request_id,\n        consumer_name,\n        delivery_key,\n        requested_by,\n        reason,\n        prior_failure_code,\n        prior_first_delivery_attempt,\n        prior_last_delivery_attempt,\n        prior_quarantined_at,\n        prior_last_observed_at\n    )\n    SELECT $3,\n           candidate.consumer_name,\n           candidate.delivery_key,\n           $4,\n           $5,\n           candidate.failure_code,\n           candidate.first_delivery_attempt,\n           candidate.last_delivery_attempt,\n           candidate.quarantined_at,\n           candidate.last_observed_at\n    FROM candidate\n    ON CONFLICT (replay_request_id) DO NOTHING\n    RETURNING consumer_name, delivery_key\n)\nSELECT candidate.transport_subject AS \"transport_subject!\",\n       candidate.payload AS \"payload!\"\nFROM candidate\nJOIN audit USING (consumer_name, delivery_key)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transport_subject!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine",
+            "name": "transport_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine",
+            "name": "payload"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "172174f171f9b64dfac84c90984947b6d69a8160e135979e3b2aaa85dde18d1d"
+}

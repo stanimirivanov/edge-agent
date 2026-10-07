@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT audit.consumer_name, audit.delivery_key, audit.requested_by, audit.reason,\n                   quarantine.transport_subject, quarantine.payload\n            FROM edgeagent_message_quarantine_replay_audit AS audit\n            JOIN edgeagent_message_quarantine AS quarantine\n                USING (consumer_name, delivery_key)\n            WHERE audit.replay_request_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "consumer_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine_replay_audit",
+            "name": "consumer_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delivery_key",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine_replay_audit",
+            "name": "delivery_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_by",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine_replay_audit",
+            "name": "requested_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine_replay_audit",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "transport_subject",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine",
+            "name": "transport_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "payload",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_quarantine",
+            "name": "payload"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "62ad9d3cd4a6c529368d6526071efcff759dc8b181707d178bce2fea4ab8d347"
+}

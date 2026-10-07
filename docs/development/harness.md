@@ -73,7 +73,7 @@ acceptance check before handoff.
 | `make verify` | The complete default repository acceptance gate passes with the locked graph | T2; Python, Rust toolchain, `make`, and locally cached or downloadable locked crates |
 | `make image-smoke` | Every deployable image builds and runs under the declared non-root, read-only, networkless contract | T3; Docker |
 | `make local-up` and focused conformance tests | PostgreSQL, NATS, object storage, telemetry, and restart behavior satisfy local integration contracts | T3; Docker with Compose |
-| `cargo sqlx prepare --workspace` plus `.sqlx/` diff check | Compile-checked outbox queries match the checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated PostgreSQL; see the [outbox guide](postgres-outbox.md#compile-checked-enqueue-queries) |
+| `cargo sqlx prepare --workspace` plus `.sqlx/` diff check | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
 | `make supply-chain` | Dependency/advisory/license policy and the complete Rust and image SBOM set pass | T3; pinned tools, network for current advisories, and Docker |
 | `cargo test --locked --manifest-path experiments/<candidate>/Cargo.toml` | Isolated M08 durable-execution decision proof for one candidate, including real worker-process restart or DBOS atomic enqueue | T3; see the [experiment guide](../../experiments/README.md) for container and cold-cache network requirements |
 
