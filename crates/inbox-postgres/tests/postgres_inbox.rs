@@ -142,6 +142,56 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
     );
     transaction.rollback().await?;
 
+    // A large envelope must still compare exactly without returning stored
+    // BYTEA to the adapter after the insert loses its identity race.
+    let large_envelope = COMMAND.build(
+        metadata("inbox-message-large"),
+        &json!({"blob": "x".repeat(128 * 1024)}),
+    )?;
+    let conflicting_large_envelope = COMMAND.build(
+        metadata("inbox-message-large"),
+        &json!({"blob": format!("{}y", "x".repeat(128 * 1024 - 1))}),
+    )?;
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .record_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                &registry,
+                &large_envelope,
+            )
+            .await?,
+        DeliveryDisposition::FirstDelivery
+    );
+    transaction.commit().await?;
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .record_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                &registry,
+                &large_envelope,
+            )
+            .await?,
+        DeliveryDisposition::Duplicate
+    );
+    assert_eq!(
+        inbox
+            .record_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                &registry,
+                &conflicting_large_envelope,
+            )
+            .await
+            .err()
+            .map(|error| error.kind()),
+        Some(InboxErrorKind::MessageIdentityConflict)
+    );
+    transaction.rollback().await?;
+
     let mut transaction = client.begin().await?;
     assert_eq!(
         inbox
@@ -239,7 +289,89 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
         quarantine_conflict.err().map(|error| error.kind()),
         Some(InboxErrorKind::QuarantineIdentityConflict)
     );
+    for evidence in [
+        QuarantineEvidence::new(
+            "18:EDGEAGENT_COMMANDS:7",
+            "edgeagent.command.execution.other.v1",
+            3,
+            poison_payload,
+            "envelope_invalid",
+        )?,
+        QuarantineEvidence::new(
+            "18:EDGEAGENT_COMMANDS:7",
+            "edgeagent.command.execution.submit-dry-run-order.v1",
+            3,
+            poison_payload,
+            "other_failure",
+        )?,
+    ] {
+        assert_eq!(
+            inbox
+                .quarantine_delivery(&mut transaction, "execution_simulator_v1", evidence)
+                .await
+                .err()
+                .map(|error| error.kind()),
+            Some(InboxErrorKind::QuarantineIdentityConflict)
+        );
+    }
     transaction.rollback().await?;
+
+    let large_payload = vec![b'x'; 256 * 1024];
+    let mut conflicting_large_payload = large_payload.clone();
+    let last_byte_index = conflicting_large_payload.len() - 1;
+    conflicting_large_payload[last_byte_index] = b'y';
+    let large_key = "18:EDGEAGENT_COMMANDS:large";
+    let subject = "edgeagent.command.execution.submit-dry-run-order.v1";
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(large_key, subject, 1, &large_payload, "envelope_invalid")?,
+            )
+            .await?,
+        QuarantineDisposition::Inserted
+    );
+    transaction.commit().await?;
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(large_key, subject, 2, &large_payload, "envelope_invalid")?,
+            )
+            .await?,
+        QuarantineDisposition::AlreadyPresent
+    );
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(
+                    large_key,
+                    subject,
+                    3,
+                    &conflicting_large_payload,
+                    "envelope_invalid",
+                )?,
+            )
+            .await
+            .err()
+            .map(|error| error.kind()),
+        Some(InboxErrorKind::QuarantineIdentityConflict)
+    );
+    transaction.commit().await?;
+    let last_attempt: i32 = sqlx::query_scalar(
+        "SELECT last_delivery_attempt FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2",
+    )
+    .bind("execution_simulator_v1")
+    .bind(large_key)
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(last_attempt, 2);
 
     let replay_request = ReplayRequest::new(
         "inbound-replay-request-01",

@@ -143,22 +143,24 @@ impl PostgresInbox {
 
         let existing = sqlx::query!(
             r#"
-            SELECT transport_subject, payload, failure_code
+            SELECT (
+                transport_subject = $3 AND payload = $4 AND failure_code = $5
+            ) AS "matches!"
             FROM edgeagent_message_quarantine
             WHERE consumer_name = $1 AND delivery_key = $2
             FOR UPDATE
             "#,
             consumer_name,
             evidence.delivery_key,
+            evidence.transport_subject,
+            evidence.payload,
+            evidence.failure_code,
         )
         .fetch_optional(&mut **transaction)
         .await
         .map_err(InboxError::storage)?
         .ok_or_else(InboxError::storage_invariant)?;
-        if existing.transport_subject != evidence.transport_subject
-            || existing.payload != evidence.payload
-            || existing.failure_code != evidence.failure_code
-        {
+        if !existing.matches {
             return Err(InboxError::quarantine_identity_conflict());
         }
         let updated = sqlx::query!(
