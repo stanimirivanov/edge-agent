@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 16] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 17] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -101,6 +101,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 16] = [
         number: 16,
         path: "docs/decisions/0016-use-sqlx-throughout-the-postgresql-outbox.md",
         title: "Use SQLx throughout the PostgreSQL outbox",
+    },
+    PublishedIdentity {
+        number: 17,
+        path: "docs/decisions/0017-align-delivery-and-quarantine-bounds.md",
+        title: "Align delivery and quarantine bounds",
     },
 ];
 

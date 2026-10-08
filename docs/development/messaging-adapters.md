@@ -63,12 +63,13 @@ One delivery follows this control flow:
 2. Validate untrusted JetStream stream identity, positive stream and consumer
    sequences, and delivery count inside the adapter. Assemble portable
    `DeliveryMetadata` from the derived opaque message key, validated subject,
-   and positive attempt; invalid text or counters fail as `Protocol` before a
-   delivery can be constructed. Pending count and broker sequences do not
-   enter application policy.
-3. Share the raw structured envelope bytes with the portable delivery without
-   copying the NATS payload buffer; the handler still receives an untrusted
-   byte slice and validates it independently.
+   and positive attempt. Reject raw payloads over the portable 256 KiB limit
+   before a delivery is constructed. Invalid text, counters, or payload size
+   fail as `Protocol`; pending count and broker sequences do not enter
+   application policy.
+3. Share an accepted raw structured envelope with the portable delivery
+   without copying the NATS payload buffer; the handler still receives an
+   untrusted byte slice and validates it independently.
 4. Validate the envelope and perform inbox/domain/outbox work in one local
    transaction.
 5. After commit, consume the delivery with `Acknowledge` and wait for broker
@@ -93,16 +94,19 @@ confirmed the action; rely on inbox idempotency if redelivered. `Acknowledge`,
 delayed negative acknowledgement, and terminal settlement all use JetStream
 acknowledgement-sync and complete only after the server confirms receipt.
 
-If broker metadata fails parsing or portable validation, no `MessageDelivery`
-exists and the handler cannot persist quarantine evidence under a trustworthy
-transport identity. `JetStreamConsumer` returns `Protocol`, leaves the raw
-message unsettled, and stops pulling on that instance. The service must fail
-readiness and surface the bounded error for operator investigation; it must
-not loop on the same instance, acknowledge, or terminally settle the message.
-After correcting the broker or consumer configuration, replace the consumer
-instance and allow redelivery. An operator must inspect `max_deliver` and
+If broker metadata fails parsing or portable validation, no trustworthy
+transport identity exists for handler-owned quarantine. If the raw payload is
+over 256 KiB, its exact bytes cannot fit the durable quarantine contract even
+when metadata is valid. In either case no `MessageDelivery` exists:
+`JetStreamConsumer` returns `Protocol`, leaves the raw message unsettled, and
+stops pulling on that instance. The service must fail readiness and surface
+the bounded error for operator investigation; it must not loop on the same
+instance, acknowledge, or terminally settle the message. Inspect the producer,
+stream payload limit, and consumer configuration before replacing the instance
+and allowing redelivery. An operator must inspect `max_deliver` and
 acknowledgement-wait settings before repeated restart attempts: exhaustion is
-not a substitute for durable quarantine.
+not a substitute for durable quarantine. Neither a protocol rejection nor a
+retained raw broker message is a committed quarantine record.
 
 ## Failure and retry contract
 
@@ -149,13 +153,16 @@ After starting the isolated local profile, run the broker conformance test:
 ```text
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_publish -- --ignored --exact persisted_message_identity_deduplicates_on_retry
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact oversized_raw_delivery_halts_intake_without_acknowledgement
 ```
 
-The publisher test verifies broker deduplication. The consumer test provisions
+The publisher test verifies broker deduplication. The settlement test provisions
 an explicit-ack durable consumer with one pending delivery, verifies delayed
 redelivery and incremented attempt metadata, confirms successful acknowledgement,
 terminates a simulated durably quarantined message, and confirms no pending
-work remains. Run them only against an isolated development or CI broker.
+work remains. The oversized-delivery test verifies the instance halts without
+acknowledging or terminally settling raw bytes. Run them only against an
+isolated development or CI broker.
 
 The [event-spine recovery conformance](event-spine-conformance.md) connects these
 adapters to the PostgreSQL outbox, relay, inbox, and handler. It proves that an

@@ -117,10 +117,11 @@ scope as `<declared-prefix>/<identifier>`, preventing unbounded subject and ACL
 cardinality. Ordering outside one partition key is explicitly undefined.
 
 The initial portable envelope maximum is 256 KiB, including metadata and data.
-Decoders reject raw structured input above 256 KiB before JSON or CloudEvents
-parsing, including whitespace-padded input. Routing still checks the encoded
-size of producer-built envelopes. An exactly 256 KiB valid JSON input is
-accepted by the raw boundary; an additional byte is not.
+Transport adapters reject raw structured input above 256 KiB before handing it
+to an application consumer. Direct decoders enforce the same limit before JSON
+or CloudEvents parsing, including whitespace-padded input. Routing still
+checks the encoded size of producer-built envelopes. An exactly 256 KiB valid
+JSON input is accepted by the raw boundary; an additional byte is not.
 Larger evidence belongs in object storage; the message carries an immutable
 reference, digest, size, media type, and entitlement metadata. Broker profiles
 may support larger messages but cannot increase this application contract.
@@ -166,10 +167,10 @@ clock, random source, locale, or network.
 
 ## Consumer flow and failure semantics
 
-1. A transport adapter passes untrusted bytes to
-   `MessageEnvelope::from_json`.
-2. The raw input must fit within 256 KiB before JSON and CloudEvents parsing;
-   both parsers must then succeed.
+1. A transport adapter rejects raw bytes over 256 KiB before constructing a
+   portable delivery. Accepted bytes remain untrusted.
+2. The handler passes accepted bytes to `MessageEnvelope::from_json`; JSON and
+   CloudEvents parsing must succeed before domain work.
 3. EdgeAgent rejects CloudEvents 0.3, missing required attributes, unsupported
    message-type syntax, invalid identifiers, non-string extensions, malformed
    trace context, missing schema identity, and non-JSON data.
@@ -188,14 +189,18 @@ clock, random source, locale, or network.
    resolves to an inbox duplicate. Transient failures request bounded delayed
    redelivery; terminal settlement follows durable quarantine persistence.
 
-Oversized raw input returns `MessageContractError::EnvelopeTooLarge` with only
-byte counts; malformed input within the limit returns `EnvelopeDecoding` with
-parser line and column, not the parser's free-form text.
+Direct decoding of oversized raw input returns
+`MessageContractError::EnvelopeTooLarge` with only byte counts. An oversized
+transport delivery instead fails as `ConsumeErrorKind::Protocol` before a
+handler can receive it; the adapter leaves the raw message unsettled and stops
+intake for operator investigation. Malformed input within the limit returns
+`EnvelopeDecoding` with parser line and column, not the parser's free-form text.
 Invalid `type` or `dataschema` metadata returns `InvalidMetadata`. These are
-permanent validation failures. Consumers can
-retain their exact untrusted bytes with bounded reason codes before requesting
-terminal settlement instead of retrying them blindly. Transport outage and
-acknowledgement loss are separate transient failures and do not change message identity.
+permanent validation failures. Consumers can retain exact bytes of accepted
+deliveries with bounded reason codes before requesting terminal settlement
+instead of retrying them blindly. Oversized raw deliveries have no committed
+quarantine evidence. Transport outage and acknowledgement loss are separate
+transient failures and do not change message identity.
 
 Contract and routing errors expose stable categories, safe field names, counts,
 and parser coordinates through `Display` and `Debug`. They do not retain

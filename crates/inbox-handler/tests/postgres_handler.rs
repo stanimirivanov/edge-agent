@@ -162,7 +162,7 @@ fn delivery(
             dispositions,
             fail_confirmation,
         }),
-    ))
+    )?)
 }
 
 fn observed(
