@@ -26,11 +26,21 @@ impl Display for RelayErrorKind {
 }
 
 /// Relay failure with bounded public text and a preserved internal cause.
-#[derive(Debug)]
 pub struct RelayError {
     kind: RelayErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for RelayError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RelayError")
+            .field("kind", &self.kind)
+            .field("reason", &self.reason)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl RelayError {
@@ -79,5 +89,66 @@ impl From<OutboxStoreError> for RelayError {
             reason: None,
             source: Some(Box::new(error)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RelayError;
+    use crate::{RelayMessageFailure, RelayOutcome};
+    use edgeagent_messaging::{
+        OutboxStoreError, OutboxStoreErrorKind, PublishError, PublishErrorKind,
+    };
+    use std::error::Error;
+    use std::fmt::{Debug, Display, Formatter};
+    use std::time::Duration;
+
+    const SENTINEL: &str = "private-relay-source-sentinel-7391";
+
+    struct PrivateCause;
+
+    impl Debug for PrivateCause {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_tuple("PrivateCause")
+                .field(&SENTINEL)
+                .finish()
+        }
+    }
+
+    impl Display for PrivateCause {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(SENTINEL)
+        }
+    }
+
+    impl Error for PrivateCause {}
+
+    #[test]
+    fn relay_errors_and_outcomes_redact_nested_causes() {
+        let error = RelayError::from(OutboxStoreError::with_source(
+            OutboxStoreErrorKind::Unavailable,
+            PrivateCause,
+        ));
+        assert!(!error.to_string().contains(SENTINEL));
+        assert!(!format!("{error:?}").contains(SENTINEL));
+        let mut cause: &dyn Error = &error;
+        while let Some(source) = cause.source() {
+            cause = source;
+        }
+        assert!(cause.is::<PrivateCause>());
+        assert_eq!(cause.to_string(), SENTINEL);
+
+        let outcome = RelayOutcome::RetryScheduled {
+            failure: PublishError::with_source(PublishErrorKind::Unavailable, PrivateCause),
+            attempt: 1,
+            delay: Duration::from_millis(1),
+        };
+        assert!(!format!("{outcome:?}").contains(SENTINEL));
+        let failure = RelayMessageFailure::Publication(PublishError::with_source(
+            PublishErrorKind::Unavailable,
+            PrivateCause,
+        ));
+        assert!(!format!("{failure:?}").contains(SENTINEL));
     }
 }

@@ -29,11 +29,21 @@ impl Display for HandlerErrorKind {
 }
 
 /// Coordinator failure with bounded public text and a preserved internal cause.
-#[derive(Debug)]
 pub struct HandlerError {
     kind: HandlerErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for HandlerError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("HandlerError")
+            .field("kind", &self.kind)
+            .field("reason", &self.reason)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl HandlerError {
@@ -91,5 +101,73 @@ impl Error for HandlerError {
         self.source
             .as_deref()
             .map(|source| source as &(dyn Error + 'static))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HandlerError;
+    use crate::{HandlingOutcome, MessageFailure};
+    use edgeagent_messaging::{
+        ConsumeError, ConsumeErrorKind, HandlerFailure, HandlerFailureKind, InboxStoreError,
+        InboxStoreErrorKind,
+    };
+    use std::error::Error;
+    use std::fmt::{Debug, Display, Formatter};
+    use std::time::Duration;
+
+    const SENTINEL: &str = "private-handler-source-sentinel-7391";
+
+    struct PrivateCause;
+
+    impl Debug for PrivateCause {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_tuple("PrivateCause")
+                .field(&SENTINEL)
+                .finish()
+        }
+    }
+
+    impl Display for PrivateCause {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(SENTINEL)
+        }
+    }
+
+    impl Error for PrivateCause {}
+
+    fn assert_redacted<E: Error + Debug + 'static>(error: &E) {
+        assert!(!error.to_string().contains(SENTINEL));
+        assert!(!format!("{error:?}").contains(SENTINEL));
+        let mut cause: &dyn Error = error;
+        while let Some(source) = cause.source() {
+            cause = source;
+        }
+        assert!(cause.is::<PrivateCause>());
+        assert_eq!(cause.to_string(), SENTINEL);
+    }
+
+    #[test]
+    fn coordinator_errors_and_outcomes_redact_nested_causes() {
+        assert_redacted(&HandlerError::inbox(InboxStoreError::with_source(
+            InboxStoreErrorKind::Unavailable,
+            PrivateCause,
+        )));
+        assert_redacted(&HandlerError::settlement(ConsumeError::with_source(
+            ConsumeErrorKind::ConfirmationUnknown,
+            PrivateCause,
+        )));
+
+        let outcome = HandlingOutcome::RetryRequested {
+            attempt: 1,
+            delay: Duration::from_millis(1),
+            failure: MessageFailure::Handler(HandlerFailure::with_source(
+                HandlerFailureKind::Transient,
+                "retry",
+                PrivateCause,
+            )),
+        };
+        assert!(!format!("{outcome:?}").contains(SENTINEL));
     }
 }

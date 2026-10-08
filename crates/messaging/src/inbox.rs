@@ -182,11 +182,20 @@ impl Display for HandlerFailureKind {
 }
 
 /// Bounded service-owned failure returned from an adapter-managed transaction.
-#[derive(Debug)]
 pub struct HandlerFailure {
     kind: HandlerFailureKind,
     code: &'static str,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for HandlerFailure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("HandlerFailure")
+            .field("kind", &self.kind)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl HandlerFailure {
@@ -277,11 +286,21 @@ impl Display for InboxStoreErrorKind {
 }
 
 /// Inbound storage failure with bounded text and a preserved internal cause.
-#[derive(Debug)]
 pub struct InboxStoreError {
     kind: InboxStoreErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for InboxStoreError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("InboxStoreError")
+            .field("kind", &self.kind)
+            .field("reason", &self.reason)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl InboxStoreError {
