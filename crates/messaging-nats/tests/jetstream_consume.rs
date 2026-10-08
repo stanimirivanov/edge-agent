@@ -3,9 +3,12 @@
 use async_nats::jetstream;
 use async_nats::jetstream::consumer::{AckPolicy, pull};
 use async_nats::jetstream::stream::{Config, StorageType};
-use edgeagent_contracts::{Component, MessageDefinition, MessageEnvelope, MessageMetadata};
+use edgeagent_contracts::{
+    Component, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageEnvelope, MessageMetadata,
+};
 use edgeagent_messaging::{
-    DeliveryDisposition, MessageConsumer, MessagePublisher, PublishDisposition, RetryDelay,
+    ConsumeErrorKind, DeliveryDisposition, MessageConsumer, MessagePublisher, PublishDisposition,
+    RetryDelay,
 };
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use serde_json::json;
@@ -15,6 +18,9 @@ use std::time::Duration;
 
 const STREAM: &str = "EDGEAGENT_CONSUMER_CONFORMANCE";
 const CONSUMER: &str = "execution_simulator_v1";
+const OVERSIZE_STREAM: &str = "EDGEAGENT_OVERSIZE_CONFORMANCE";
+const OVERSIZE_CONSUMER: &str = "execution_simulator_oversize_v1";
+const OVERSIZE_SUBJECT: &str = "edgeagent.command.execution.oversized-raw.v1";
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
     "urn:edgeagent:schema:submit-dry-run-order:v1",
@@ -120,5 +126,67 @@ async fn delivery_settlement_controls_redelivery_and_acknowledgement() -> Result
     assert_eq!(info.num_ack_pending, 0);
     assert_eq!(info.num_pending, 0);
     assert!(context.delete_stream(STREAM).await?.success);
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires EDGEAGENT_NATS_URL and an isolated NATS JetStream instance"]
+async fn oversized_raw_delivery_halts_intake_without_acknowledgement() -> Result<(), Box<dyn Error>>
+{
+    let nats_url = env::var("EDGEAGENT_NATS_URL")?;
+    let client = async_nats::connect(nats_url).await?;
+    let context = jetstream::new(client);
+    let stream = context
+        .create_stream(Config {
+            name: OVERSIZE_STREAM.to_owned(),
+            subjects: vec![OVERSIZE_SUBJECT.to_owned()],
+            storage: StorageType::Memory,
+            ..Config::default()
+        })
+        .await?;
+    let durable = stream
+        .get_or_create_consumer(
+            OVERSIZE_CONSUMER,
+            pull::Config {
+                durable_name: Some(OVERSIZE_CONSUMER.to_owned()),
+                ack_policy: AckPolicy::Explicit,
+                ack_wait: Duration::from_secs(1),
+                max_deliver: 5,
+                max_ack_pending: 1,
+                max_batch: 1,
+                filter_subject: OVERSIZE_SUBJECT.to_owned(),
+                ..pull::Config::default()
+            },
+        )
+        .await?;
+    let mut consumer = JetStreamConsumer::new(durable.clone()).await?;
+
+    context
+        .publish(
+            OVERSIZE_SUBJECT.to_owned(),
+            vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1].into(),
+        )
+        .await?
+        .await?;
+
+    let first = tokio::time::timeout(Duration::from_secs(5), consumer.receive()).await?;
+    assert_eq!(
+        first.err().map(|error| error.kind()),
+        Some(ConsumeErrorKind::Protocol)
+    );
+    let second = tokio::time::timeout(Duration::from_secs(1), consumer.receive()).await?;
+    assert_eq!(
+        second.err().map(|error| error.kind()),
+        Some(ConsumeErrorKind::Protocol)
+    );
+    drop(consumer);
+    let mut replacement = JetStreamConsumer::new(durable).await?;
+    let redelivery = tokio::time::timeout(Duration::from_secs(8), replacement.receive()).await?;
+    assert_eq!(
+        redelivery.err().map(|error| error.kind()),
+        Some(ConsumeErrorKind::Protocol)
+    );
+
+    assert!(context.delete_stream(OVERSIZE_STREAM).await?.success);
     Ok(())
 }

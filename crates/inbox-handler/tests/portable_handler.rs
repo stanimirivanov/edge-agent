@@ -287,7 +287,7 @@ fn delivery_with_events(
             fail_confirmation,
             events,
         }),
-    ))
+    )?)
 }
 
 fn policy() -> Result<HandlerPolicy, Box<dyn Error>> {

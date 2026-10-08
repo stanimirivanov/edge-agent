@@ -23,7 +23,7 @@ pub enum QuarantineDisposition {
 pub struct QuarantineEvidence<'delivery> {
     delivery_key: &'delivery str,
     transport_subject: &'delivery str,
-    delivery_attempt: i32,
+    delivery_attempt: i64,
     payload: &'delivery [u8],
     failure_code: &'delivery str,
 }
@@ -73,20 +73,15 @@ impl<'delivery> QuarantineEvidence<'delivery> {
                 "quarantine payload must not exceed 256 KiB",
             ));
         }
-        let delivery_attempt = i32::try_from(delivery_attempt).map_err(|_| {
-            InboxError::invalid_quarantine_evidence(
-                "delivery_attempt must be between 1 and 2147483647",
-            )
-        })?;
         if delivery_attempt == 0 {
             return Err(InboxError::invalid_quarantine_evidence(
-                "delivery_attempt must be between 1 and 2147483647",
+                "delivery_attempt must be positive",
             ));
         }
         Ok(Self {
             delivery_key,
             transport_subject,
-            delivery_attempt,
+            delivery_attempt: i64::from(delivery_attempt),
             payload,
             failure_code,
         })

@@ -27,7 +27,7 @@ fn migration_scopes_identity_by_consumer_and_stores_exact_bytes() {
         PostgresInbox::MIGRATION_SQL
             .contains("PRIMARY KEY (consumer_name, message_source, message_id)")
     );
-    assert_eq!(PostgresInbox::MIGRATIONS.len(), 3);
+    assert_eq!(PostgresInbox::MIGRATIONS.len(), 4);
     assert!(
         PostgresInbox::QUARANTINE_MIGRATION_SQL
             .contains("PRIMARY KEY (consumer_name, delivery_key)")
@@ -35,6 +35,20 @@ fn migration_scopes_identity_by_consumer_and_stores_exact_bytes() {
     assert!(PostgresInbox::QUARANTINE_MIGRATION_SQL.contains("octet_length(payload) <= 262144"));
     assert!(
         PostgresInbox::REPLAY_MIGRATION_SQL.contains("edgeagent_message_quarantine_replay_audit")
+    );
+    assert!(
+        PostgresInbox::ATTEMPT_RANGE_MIGRATION_SQL.contains("first_delivery_attempt TYPE BIGINT")
+    );
+    assert!(
+        PostgresInbox::ATTEMPT_RANGE_MIGRATION_SQL.contains("last_delivery_attempt TYPE BIGINT")
+    );
+    assert!(
+        PostgresInbox::ATTEMPT_RANGE_MIGRATION_SQL
+            .contains("prior_first_delivery_attempt TYPE BIGINT")
+    );
+    assert!(
+        PostgresInbox::ATTEMPT_RANGE_MIGRATION_SQL
+            .contains("prior_last_delivery_attempt TYPE BIGINT")
     );
     assert!(include_str!("../queries/authorize_quarantine_replay.sql").contains("FOR UPDATE"));
 }
@@ -50,6 +64,28 @@ fn quarantine_evidence_is_bounded_before_database_work() {
             "envelope_invalid",
         )
         .is_ok()
+    );
+    assert!(
+        QuarantineEvidence::new(
+            "6:ORDERS:41",
+            "edgeagent.command.execution.submit-dry-run-order.v1",
+            u32::MAX,
+            b"not-json",
+            "envelope_invalid",
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        QuarantineEvidence::new(
+            "6:ORDERS:41",
+            "edgeagent.command.execution.submit-dry-run-order.v1",
+            0,
+            b"not-json",
+            "envelope_invalid",
+        )
+        .err()
+        .map(|error| error.kind()),
+        Some(InboxErrorKind::InvalidQuarantineEvidence)
     );
     assert_eq!(
         QuarantineEvidence::new(

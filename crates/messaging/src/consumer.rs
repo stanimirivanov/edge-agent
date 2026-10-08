@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use bytes::Bytes;
+use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
 
 use crate::metadata::DeliveryMetadata;
 
@@ -28,7 +29,7 @@ pub trait MessageConsumer: Send {
     /// as a handler failure when applying attempt-based policy.
     /// The returned delivery remains unsettled until the caller explicitly
     /// chooses one terminal disposition.
-    /// If broker metadata cannot be represented as a delivery, no
+    /// If broker metadata or payload size cannot be represented as a delivery, no
     /// `MessageDelivery` exists for handler-owned quarantine. A `Protocol`
     /// error is not a reason to acknowledge the raw message; callers must
     /// follow the adapter's documented recovery policy rather than blindly
@@ -42,7 +43,7 @@ pub trait DeliverySettlement: Send {
     fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture;
 }
 
-/// An untrusted delivery whose settlement is consumed exactly once.
+/// A size-bounded, otherwise untrusted delivery whose settlement is consumed exactly once.
 /// Dropping it before settlement emits a payload-safe warning and leaves broker
 /// redelivery to the adapter; the warning is not a durable disposition.
 pub struct MessageDelivery {
@@ -54,17 +55,28 @@ pub struct MessageDelivery {
 impl MessageDelivery {
     /// Construct a delivery from a transport adapter without copying a `Bytes`
     /// payload. Owned byte vectors remain accepted by existing callers.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns `Protocol` if raw bytes exceed the portable 256 KiB envelope
+    /// limit. The adapter must leave that raw broker message unsettled and
+    /// follow its protocol-fault recovery policy.
     pub fn new(
         payload: impl Into<Bytes>,
         metadata: DeliveryMetadata,
         settlement: Box<dyn DeliverySettlement>,
-    ) -> Self {
-        Self {
-            payload: payload.into(),
+    ) -> Result<Self, ConsumeError> {
+        let payload = payload.into();
+        if payload.len() > MAX_PORTABLE_MESSAGE_BYTES {
+            return Err(ConsumeError::protocol(
+                "delivery payload exceeds portable 256 KiB limit",
+            ));
+        }
+        Ok(Self {
+            payload,
             metadata,
             settlement: Some(settlement),
-        }
+        })
     }
 
     /// Return the untrusted structured envelope bytes.
@@ -164,7 +176,7 @@ impl RetryDelay {
 pub enum ConsumeErrorKind {
     /// The consumer stream is unavailable; retry receive under service policy.
     Unavailable,
-    /// Broker delivery metadata violates the portable contract.
+    /// Broker delivery metadata or payload size violates the portable contract.
     Protocol,
     /// A retry delay was rejected before constructing a settlement disposition.
     InvalidDisposition,
@@ -289,6 +301,7 @@ mod tests {
     };
     use crate::metadata::{DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject};
     use bytes::Bytes;
+    use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
     use std::time::Duration;
 
     struct NoopSettlement;
@@ -307,7 +320,7 @@ mod tests {
             DeliverySubject::new("events.subject")?,
             DeliveryAttempt::new(1)?,
         );
-        let delivery = MessageDelivery::new(payload.to_vec(), metadata, Box::new(NoopSettlement));
+        let delivery = MessageDelivery::new(payload.to_vec(), metadata, Box::new(NoopSettlement))?;
 
         let rendered = format!("{delivery:?}");
 
@@ -326,7 +339,7 @@ mod tests {
             DeliverySubject::new("events.subject")?,
             DeliveryAttempt::new(1)?,
         );
-        let delivery = MessageDelivery::new(payload.clone(), metadata, Box::new(NoopSettlement));
+        let delivery = MessageDelivery::new(payload.clone(), metadata, Box::new(NoopSettlement))?;
 
         assert_eq!(delivery.payload(), payload.as_ref());
         assert_eq!(delivery.payload().as_ptr(), payload.as_ptr());
@@ -349,5 +362,31 @@ mod tests {
                 Some(ConsumeErrorKind::InvalidDisposition)
             );
         }
+    }
+
+    #[test]
+    fn delivery_accepts_portable_limit_and_rejects_the_next_byte() -> Result<(), ConsumeError> {
+        let metadata = || -> Result<DeliveryMetadata, ConsumeError> {
+            Ok(DeliveryMetadata::new(
+                DeliveryMessageKey::new("orders:13")?,
+                DeliverySubject::new("events.subject")?,
+                DeliveryAttempt::new(1)?,
+            ))
+        };
+        let at_limit = Bytes::from(vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES]);
+        let delivery =
+            MessageDelivery::new(at_limit.clone(), metadata()?, Box::new(NoopSettlement))?;
+        assert_eq!(delivery.payload().as_ptr(), at_limit.as_ptr());
+        assert_eq!(delivery.payload().len(), MAX_PORTABLE_MESSAGE_BYTES);
+        drop(delivery.settle(DeliveryDisposition::Acknowledge));
+
+        let over_limit = Bytes::from(vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1]);
+        assert_eq!(
+            MessageDelivery::new(over_limit, metadata()?, Box::new(NoopSettlement))
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        Ok(())
     }
 }

@@ -41,10 +41,15 @@ impl PostgresInbox {
     pub const REPLAY_MIGRATION_SQL: &'static str =
         include_str!("../migrations/0003_message_quarantine_replay.sql");
 
+    /// Migration that widens quarantine and replay attempts for the full `u32` range.
+    pub const ATTEMPT_RANGE_MIGRATION_SQL: &'static str =
+        include_str!("../migrations/0004_message_attempt_range.sql");
+
     /// Ordered migrations required by this adapter.
-    pub const MIGRATIONS: [&'static str; 3] = [
+    pub const MIGRATIONS: [&'static str; 4] = [
         Self::MIGRATION_SQL,
         Self::QUARANTINE_MIGRATION_SQL,
         Self::REPLAY_MIGRATION_SQL,
+        Self::ATTEMPT_RANGE_MIGRATION_SQL,
     ];
 }

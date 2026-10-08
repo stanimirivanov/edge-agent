@@ -22,6 +22,11 @@
 Every consuming service applies `PostgresInbox::MIGRATIONS` in order inside its
 own PostgreSQL schema. The migrations create inbox and quarantine tables in the
 connection's current schema; they do not create shared cross-service storage.
+Migration 0004 widens quarantine and replay-audit attempt columns to `BIGINT`
+without changing existing observations. Quiesce old consumers, apply the
+migration, and then deploy code that accepts attempts above `i32::MAX`; assess
+the migration window for populated tables before rollout. Once any recorded
+attempt exceeds `i32::MAX`, a down-migration to `INTEGER` would lose data.
 
 The crate root is the stable public façade. `delivery`, `quarantine`, and
 `replay` own their respective SQL and transaction-scoped operations;
@@ -97,7 +102,8 @@ reuse its name across unrelated transport resources whose delivery-key spaces ov
 `QuarantineEvidence` validates the boundary before database work:
 
 - delivery key and transport subject contain 1–512 visible ASCII bytes;
-- delivery attempt is between 1 and PostgreSQL's signed 32-bit maximum;
+- delivery attempt is between 1 and `u32::MAX`, stored in PostgreSQL `BIGINT`
+  columns so quarantine and replay audit retain the full portable range;
 - failure code is a lowercase ASCII token of 1–64 bytes; and
 - exact untrusted payload bytes do not exceed the portable 256 KiB limit.
 

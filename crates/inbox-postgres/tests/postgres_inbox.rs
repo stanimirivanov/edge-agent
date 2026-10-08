@@ -269,7 +269,7 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
     .fetch_one(&mut client)
     .await?;
     assert_eq!(quarantine.try_get::<i64, _>(0)?, 1);
-    assert_eq!(quarantine.try_get::<Option<i32>, _>(1)?, Some(2));
+    assert_eq!(quarantine.try_get::<Option<i64>, _>(1)?, Some(2));
 
     let mut transaction = client.begin().await?;
     let quarantine_conflict = inbox
@@ -315,6 +315,56 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
         );
     }
     transaction.rollback().await?;
+
+    // A late redelivery can reach the portable u32 attempt maximum without
+    // changing the immutable evidence retained on the first observation.
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(
+                    "18:EDGEAGENT_COMMANDS:7",
+                    "edgeagent.command.execution.submit-dry-run-order.v1",
+                    u32::MAX,
+                    poison_payload,
+                    "envelope_invalid",
+                )?,
+            )
+            .await?,
+        QuarantineDisposition::AlreadyPresent
+    );
+    transaction.commit().await?;
+
+    let maximum_attempt_key = "18:EDGEAGENT_COMMANDS:max-attempt";
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .quarantine_delivery(
+                &mut transaction,
+                "execution_simulator_v1",
+                QuarantineEvidence::new(
+                    maximum_attempt_key,
+                    "edgeagent.command.execution.submit-dry-run-order.v1",
+                    u32::MAX,
+                    poison_payload,
+                    "envelope_invalid",
+                )?,
+            )
+            .await?,
+        QuarantineDisposition::Inserted
+    );
+    transaction.commit().await?;
+    let maximum_attempts = sqlx::query(
+        "SELECT first_delivery_attempt, last_delivery_attempt FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2",
+    )
+    .bind("execution_simulator_v1")
+    .bind(maximum_attempt_key)
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(maximum_attempts.try_get::<i64, _>(0)?, i64::from(u32::MAX));
+    assert_eq!(maximum_attempts.try_get::<i64, _>(1)?, i64::from(u32::MAX));
 
     let large_payload = vec![b'x'; 256 * 1024];
     let mut conflicting_large_payload = large_payload.clone();
@@ -364,7 +414,7 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
         Some(InboxErrorKind::QuarantineIdentityConflict)
     );
     transaction.commit().await?;
-    let last_attempt: i32 = sqlx::query_scalar(
+    let last_attempt: i64 = sqlx::query_scalar(
         "SELECT last_delivery_attempt FROM edgeagent_message_quarantine WHERE consumer_name = $1 AND delivery_key = $2",
     )
     .bind("execution_simulator_v1")
@@ -473,13 +523,102 @@ async fn inbox_and_quarantine_preserve_consumer_invariants() -> Result<(), Box<d
     );
     assert_eq!(audit.try_get::<String, _>(1)?, "consumer_remediated");
     assert_eq!(audit.try_get::<String, _>(2)?, "envelope_invalid");
-    assert_eq!(audit.try_get::<i32, _>(3)?, 1);
-    assert_eq!(audit.try_get::<i32, _>(4)?, 2);
+    assert_eq!(audit.try_get::<i64, _>(3)?, 1);
+    assert_eq!(audit.try_get::<i64, _>(4)?, i64::from(u32::MAX));
+    let mut transaction = client.begin().await?;
+    assert_eq!(
+        inbox
+            .authorize_quarantine_replay(
+                &mut transaction,
+                "execution_simulator_v1",
+                maximum_attempt_key,
+                ReplayRequest::new(
+                    "inbound-replay-request-max-attempt",
+                    "urn:edgeagent:operator:alice",
+                    "consumer_remediated",
+                )?,
+            )
+            .await?
+            .disposition(),
+        ReplayDisposition::Authorized
+    );
+    transaction.commit().await?;
+    let maximum_audit = sqlx::query(
+        "SELECT prior_first_delivery_attempt, prior_last_delivery_attempt FROM edgeagent_message_quarantine_replay_audit WHERE replay_request_id = $1",
+    )
+    .bind("inbound-replay-request-max-attempt")
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(maximum_audit.try_get::<i64, _>(0)?, i64::from(u32::MAX));
+    assert_eq!(maximum_audit.try_get::<i64, _>(1)?, i64::from(u32::MAX));
     let audit_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM edgeagent_message_quarantine_replay_audit")
             .fetch_one(&mut client)
             .await?;
-    assert_eq!(audit_count, 2);
+    assert_eq!(audit_count, 3);
+
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
+    )))
+    .execute(&mut client)
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
+async fn attempt_range_migration_preserves_existing_evidence() -> Result<(), Box<dyn Error>> {
+    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
+    let mut client = PgConnection::connect(&postgres_url).await?;
+    let schema = format!("edgeagent_inbox_attempt_upgrade_{}", process::id());
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
+    )))
+    .execute(&mut client)
+    .await?;
+    for migration in PostgresInbox::MIGRATIONS.iter().take(3) {
+        sqlx::raw_sql(*migration).execute(&mut client).await?;
+    }
+
+    sqlx::query(
+        "INSERT INTO edgeagent_message_quarantine (consumer_name, delivery_key, transport_subject, payload, failure_code, first_delivery_attempt, last_delivery_attempt) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    )
+    .bind("execution_simulator_v1")
+    .bind("legacy:1")
+    .bind("edgeagent.command.execution.submit-dry-run-order.v1")
+    .bind(b"legacy-invalid".as_slice())
+    .bind("envelope_invalid")
+    .bind(3_i32)
+    .bind(4_i32)
+    .execute(&mut client)
+    .await?;
+    sqlx::query(
+        "INSERT INTO edgeagent_message_quarantine_replay_audit (replay_request_id, consumer_name, delivery_key, requested_by, reason, prior_failure_code, prior_first_delivery_attempt, prior_last_delivery_attempt, prior_quarantined_at, prior_last_observed_at) SELECT 'legacy-replay', consumer_name, delivery_key, 'operator', 'remediated', failure_code, first_delivery_attempt, last_delivery_attempt, quarantined_at, last_observed_at FROM edgeagent_message_quarantine",
+    )
+    .execute(&mut client)
+    .await?;
+
+    sqlx::raw_sql(PostgresInbox::ATTEMPT_RANGE_MIGRATION_SQL)
+        .execute(&mut client)
+        .await?;
+    let quarantine = sqlx::query(
+        "SELECT first_delivery_attempt, last_delivery_attempt, pg_typeof(first_delivery_attempt)::text AS first_type, pg_typeof(last_delivery_attempt)::text AS last_type FROM edgeagent_message_quarantine WHERE delivery_key = 'legacy:1'",
+    )
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(quarantine.try_get::<i64, _>(0)?, 3);
+    assert_eq!(quarantine.try_get::<i64, _>(1)?, 4);
+    assert_eq!(quarantine.try_get::<String, _>(2)?, "bigint");
+    assert_eq!(quarantine.try_get::<String, _>(3)?, "bigint");
+    let audit = sqlx::query(
+        "SELECT prior_first_delivery_attempt, prior_last_delivery_attempt, pg_typeof(prior_first_delivery_attempt)::text AS first_type, pg_typeof(prior_last_delivery_attempt)::text AS last_type FROM edgeagent_message_quarantine_replay_audit WHERE replay_request_id = 'legacy-replay'",
+    )
+    .fetch_one(&mut client)
+    .await?;
+    assert_eq!(audit.try_get::<i64, _>(0)?, 3);
+    assert_eq!(audit.try_get::<i64, _>(1)?, 4);
+    assert_eq!(audit.try_get::<String, _>(2)?, "bigint");
+    assert_eq!(audit.try_get::<String, _>(3)?, "bigint");
 
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"

@@ -139,6 +139,10 @@ jobs:
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
         run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
+      - name: Verify oversized JetStream delivery halts intake
+        env:
+          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
+        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact oversized_raw_delivery_halts_intake_without_acknowledgement
       - name: Verify PostgreSQL outbox conformance
         env:
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent

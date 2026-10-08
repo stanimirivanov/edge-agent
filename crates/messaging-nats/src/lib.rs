@@ -76,8 +76,9 @@ impl MessagePublisher for JetStreamPublisher {
 /// be provisioned with application-compatible subject, retention, maximum
 /// delivery, acknowledgement wait, and pending limits. Provisioning remains a
 /// deployment concern. This adapter bounds client-side prefetch to one message.
-/// Invalid broker metadata leaves the raw message unsettled and halts this
-/// instance before another pull; replacement requires operator investigation.
+/// Invalid broker metadata or a payload outside portable bounds leaves the raw
+/// message unsettled and halts this instance before another pull; replacement
+/// requires operator investigation.
 pub struct JetStreamConsumer {
     messages: pull::Stream,
     protocol_gate: ConsumerProtocolGate,
@@ -92,14 +93,14 @@ impl ConsumerProtocolGate {
     fn before_pull(&self) -> Result<(), ConsumeError> {
         if self.halted {
             Err(ConsumeError::protocol(
-                "consumer halted after invalid broker delivery metadata",
+                "consumer halted after invalid broker delivery",
             ))
         } else {
             Ok(())
         }
     }
 
-    fn metadata<T>(&mut self, result: Result<T, ConsumeError>) -> Result<T, ConsumeError> {
+    fn validate<T>(&mut self, result: Result<T, ConsumeError>) -> Result<T, ConsumeError> {
         if result.is_err() {
             self.halted = true;
         }
@@ -154,7 +155,7 @@ impl MessageConsumer for JetStreamConsumer {
                 .await
                 .ok_or_else(|| ConsumeError::unavailable("consumer stream ended"))?
                 .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
-            let metadata = self.protocol_gate.metadata((|| {
+            let metadata = self.protocol_gate.validate((|| {
                 let info = message.info().map_err(|error| {
                     ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
                 })?;
@@ -175,7 +176,7 @@ impl MessageConsumer for JetStreamConsumer {
             })())?;
             let payload = message.payload.clone();
             let (_, acker) = message.split();
-            Ok(MessageDelivery::new(
+            self.protocol_gate.validate(MessageDelivery::new(
                 payload,
                 metadata,
                 Box::new(JetStreamSettlement { acker }),
@@ -302,10 +303,14 @@ mod tests {
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
     use async_nats::jetstream::context::{PublishError, PublishErrorKind as NatsPublishErrorKind};
     use async_nats::jetstream::publish::PublishAck;
-    use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRoutingError};
+    use edgeagent_contracts::{
+        Component, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageMetadata,
+        MessageRoutingError,
+    };
     use edgeagent_messaging::{
-        ConsumeError, ConsumeErrorKind, DeliveryDisposition, PublishDisposition, PublishErrorKind,
-        RetryDelay,
+        ConsumeError, ConsumeErrorKind, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
+        DeliveryMetadata, DeliverySettlement, DeliverySubject, MessageDelivery, PublishDisposition,
+        PublishErrorKind, RetryDelay, SettlementFuture,
     };
     use serde_json::json;
     use std::error::Error;
@@ -500,12 +505,12 @@ mod tests {
     fn malformed_metadata_halts_this_consumer_without_retrying_the_pull() {
         let mut gate = ConsumerProtocolGate::default();
         assert!(gate.before_pull().is_ok());
-        assert!(matches!(gate.metadata(Ok(41_u64)), Ok(41)));
+        assert!(matches!(gate.validate(Ok(41_u64)), Ok(41)));
         assert!(gate.before_pull().is_ok());
 
         let error = ConsumeError::protocol("invalid broker metadata");
         assert_eq!(
-            gate.metadata::<u64>(Err(error))
+            gate.validate::<u64>(Err(error))
                 .err()
                 .map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
@@ -514,5 +519,39 @@ mod tests {
             gate.before_pull().err().map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
         );
+    }
+
+    struct NoopSettlement;
+
+    impl DeliverySettlement for NoopSettlement {
+        fn settle(self: Box<Self>, _disposition: DeliveryDisposition) -> SettlementFuture {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    #[test]
+    fn oversized_payload_halts_this_consumer_before_another_pull() -> Result<(), Box<dyn Error>> {
+        let metadata = DeliveryMetadata::new(
+            DeliveryMessageKey::new("6:STREAM:1")?,
+            DeliverySubject::new(COMMAND.subject()?)?,
+            DeliveryAttempt::new(1)?,
+        );
+        let mut gate = ConsumerProtocolGate::default();
+
+        let result = gate.validate(MessageDelivery::new(
+            vec![0; MAX_PORTABLE_MESSAGE_BYTES + 1],
+            metadata,
+            Box::new(NoopSettlement),
+        ));
+
+        assert_eq!(
+            result.err().map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        assert_eq!(
+            gate.before_pull().err().map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
+        Ok(())
     }
 }

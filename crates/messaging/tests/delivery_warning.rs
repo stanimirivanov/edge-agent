@@ -83,11 +83,10 @@ fn unsettled_drop_warns_once_without_payload_and_settle_does_not_warn() -> Resul
             payload.to_vec(),
             metadata()?,
             Box::new(NoopSettlement),
-        ));
-        drop(
-            MessageDelivery::new(payload.to_vec(), metadata()?, Box::new(NoopSettlement))
-                .settle(DeliveryDisposition::Acknowledge),
-        );
+        )?);
+        let settled =
+            MessageDelivery::new(payload.to_vec(), metadata()?, Box::new(NoopSettlement))?;
+        drop(settled.settle(DeliveryDisposition::Acknowledge));
         Ok::<(), ConsumeError>(())
     })?;
 

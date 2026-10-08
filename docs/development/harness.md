@@ -99,8 +99,9 @@ redacted top-level message does not make its raw source chain safe to log.
 The T2 messaging contract tests exercise both inclusive retry-delay bounds and
 adjacent invalid values. A disposition must contain a validated delay, so an
 invalid caller input cannot consume a delivery before broker settlement.
-They also assert that a broker-metadata protocol fault halts the consumer's
-pre-pull gate; a caller retry loop cannot silently consume another delivery.
+They also assert that broker-metadata or oversized-payload protocol faults halt
+the consumer's pre-pull gate; a caller retry loop cannot silently consume
+another delivery.
 The portable metadata tests exercise distinct identity, route, and attempt
 mapping, the inclusive 512-byte text bound, non-ASCII and non-graphic rejection,
 and positive attempt parsing. NATS adapter tests separately reject invalid
