@@ -113,10 +113,10 @@ not a substitute for durable quarantine.
 | `Rejected` | JetStream explicitly rejected the request or no stream owns the derived subject | Remediate configuration/policy before replay |
 | `ConfirmationUnknown` | The request was sent but its acknowledgement timed out, disconnected, or could not be decoded | Retry the identical envelope and expect broker deduplication |
 
-`Display` exposes only these bounded categories. The wrapped cause remains
-available through Rust's error chain for redacted structured diagnostics. A
-receipt proves transport persistence only; consumer inbox handling still owns
-exactly-once domain effects.
+Top-level `Display` and `Debug` omit adapter cause text. The wrapped cause
+remains available through Rust's error chain for explicit diagnosis; redact it
+before structured logging. A receipt proves transport persistence only;
+consumer inbox handling still owns exactly-once domain effects.
 
 JetStream deduplication is bounded by the provisioned stream window. The
 transactional PostgreSQL outbox retains the same message identity and immutable
@@ -132,8 +132,9 @@ Consumer failures use a separate portable classification:
 | `InvalidDisposition` | `RetryDelay` construction rejected a delay outside 1 millisecond to 24 hours | Correct handler policy before consuming the delivery; no settlement was sent |
 | `ConfirmationUnknown` | Settlement was sent or attempted but confirmation failed | Do not assume success; permit redelivery and rely on inbox idempotency |
 
-Public errors remain bounded while adapter causes stay in the error chain for
-redacted diagnostics. A confirmed acknowledgement advances broker state only;
+Public error formatting remains bounded while adapter causes stay in the error
+chain for explicit diagnosis; redact them before logging. A confirmed
+acknowledgement advances broker state only;
 the committed inbox/domain transaction remains the source of business-effect
 idempotency.
 

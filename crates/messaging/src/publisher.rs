@@ -84,10 +84,19 @@ impl Display for PublishErrorKind {
 }
 
 /// Publication failure with a stable public category and preserved internal cause.
-#[derive(Debug)]
 pub struct PublishError {
     kind: PublishErrorKind,
     source: Box<dyn Error + Send + Sync>,
+}
+
+impl std::fmt::Debug for PublishError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PublishError")
+            .field("kind", &self.kind)
+            .field("source_present", &true)
+            .finish()
+    }
 }
 
 impl PublishError {

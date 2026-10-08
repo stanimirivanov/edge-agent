@@ -224,11 +224,21 @@ impl Display for OutboxStoreErrorKind {
 }
 
 /// Outbound relay storage failure with bounded text and an internal cause.
-#[derive(Debug)]
 pub struct OutboxStoreError {
     kind: OutboxStoreErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for OutboxStoreError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OutboxStoreError")
+            .field("kind", &self.kind)
+            .field("reason", &self.reason)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl OutboxStoreError {

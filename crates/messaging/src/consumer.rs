@@ -186,11 +186,20 @@ impl Display for ConsumeErrorKind {
 }
 
 /// Consumer failure with stable public text and a preserved internal cause.
-#[derive(Debug)]
 pub struct ConsumeError {
     kind: ConsumeErrorKind,
     reason: Option<&'static str>,
     source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl std::fmt::Debug for ConsumeError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ConsumeError")
+            .field("kind", &self.kind)
+            .field("source_present", &self.source.is_some())
+            .finish()
+    }
 }
 
 impl ConsumeError {

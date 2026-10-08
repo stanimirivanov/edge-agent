@@ -102,13 +102,16 @@ neither prose nor a passing compile substitutes for them.
 - Distinguish invalid input, unsupported requests, abstention, policy rejection,
   stale/conflicting evidence, unavailable dependency, timeout, cancellation,
   conflict, and internal defect.
-- Public errors MUST NOT expose provider internals, credentials, stack traces,
-  prompts, or licensed payloads.
+- Public error `Display` and `Debug` MUST NOT expose provider internals,
+  credentials, stack traces, prompts, or licensed payloads.
 - Preserve causes when wrapping failures.
-- At untrusted contract boundaries, do not retain free-form parser, serializer,
-  SDK, or mismatched-value text in a public error when it may contain payload
-  data. Retain stable categories, safe field names, and numeric coordinates;
-  test `Display`, `Debug`, and exposed error chains with synthetic sentinels.
+- At untrusted contract boundaries, do not expose free-form parser, serializer,
+  SDK, or mismatched-value text through public error formatting when it may
+  contain payload data. Retain stable categories, safe field names, and numeric
+  coordinates; test `Display` and `Debug` with synthetic sentinels.
+  `Error::source()` may preserve an unredacted cause for explicit diagnosis;
+  never log a source chain without applying the same redaction policy, and test
+  source preservation separately.
 - Bound input, output, collection size, symbols per request, lookback windows,
   concurrency, retries, model tokens, execution time, and memory-heavy work.
 - Validate fallible settlement parameters before consuming an owned delivery or
