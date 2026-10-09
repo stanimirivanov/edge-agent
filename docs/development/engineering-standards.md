@@ -116,6 +116,10 @@ neither prose nor a passing compile substitutes for them.
   concurrency, retries, model tokens, execution time, and memory-heavy work.
 - Validate fallible settlement parameters before consuming an owned delivery or
   other one-shot resource; a caller-side error MUST leave recovery possible.
+- Ownership diagnostics for a one-shot operation SHOULD follow its confirmation
+  future. Disarm on an explicit result, not merely when ownership transfers.
+  Diagnostic guards MUST NOT retain sensitive payloads or start recovery work
+  from `Drop`; cancellation does not prove whether an external effect occurred.
 - External calls remain outside database transactions.
 - Exact retry requires stable identity plus immutable-content comparison; a key
   match alone does not prove equivalent work.

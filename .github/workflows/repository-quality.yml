@@ -141,6 +141,10 @@ jobs:
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
         run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
+      - name: Verify abandoned settlement leaves JetStream delivery recoverable
+        env:
+          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
+        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact abandoned_settlement_future_leaves_delivery_eligible_for_redelivery
       - name: Verify oversized JetStream delivery halts intake
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
