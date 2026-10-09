@@ -3,7 +3,7 @@
 use edgeagent_contracts::{
     Component, EventRetention, MessageDefinition, MessageMetadata, MessageRegistry,
 };
-use edgeagent_messaging::FailureCode;
+use edgeagent_messaging::{FailureCode, LeaseDuration, OutboxRetryDelay};
 use edgeagent_outbox_postgres::{
     EnqueueDisposition, OutboxErrorKind, PostgresOutbox, ReplayDisposition, ReplayRequest,
 };
@@ -64,6 +64,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     }
 
     let outbox = PostgresOutbox;
+    let lease_duration = LeaseDuration::new(Duration::from_secs(30))?;
     let gateway_envelope = COMMAND.build(metadata(Component::Gateway), &json!({"quantity": 1}))?;
     let research_envelope =
         COMMAND.build(metadata(Component::Research), &json!({"quantity": 1}))?;
@@ -123,7 +124,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
 
     let mut transaction = client.begin().await?;
     let claimed = outbox
-        .claim_batch(&mut transaction, "relay_01", 10, Duration::from_secs(30))
+        .claim_batch(&mut transaction, "relay_01", 10, lease_duration)
         .await?;
     assert_eq!(claimed.len(), 2);
     let definitions = [COMMAND, EVENT];
@@ -155,7 +156,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             &mut transaction,
             first,
             "relay_01",
-            Duration::ZERO,
+            OutboxRetryDelay::IMMEDIATE,
             TRANSPORT_UNAVAILABLE,
         )
         .await?;
@@ -166,7 +167,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
 
     let mut transaction = client.begin().await?;
     let retried = outbox
-        .claim_batch(&mut transaction, "relay_02", 10, Duration::from_secs(30))
+        .claim_batch(&mut transaction, "relay_02", 10, lease_duration)
         .await?;
     assert_eq!(retried.len(), 1);
     assert_eq!(retried[0].attempt(), 2);
@@ -183,7 +184,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     let mut transaction = client.begin().await?;
     assert!(
         outbox
-            .claim_batch(&mut transaction, "relay_03", 10, Duration::from_secs(30))
+            .claim_batch(&mut transaction, "relay_03", 10, lease_duration)
             .await?
             .is_empty()
     );
@@ -257,7 +258,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
 
     let mut transaction = client.begin().await?;
     let replayed = outbox
-        .claim_batch(&mut transaction, "relay_03", 10, Duration::from_secs(30))
+        .claim_batch(&mut transaction, "relay_03", 10, lease_duration)
         .await?;
     assert_eq!(replayed.len(), 1);
     assert_eq!(replayed[0].attempt(), 1);
@@ -289,7 +290,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
     let mut transaction = client.begin().await?;
     assert!(
         outbox
-            .claim_batch(&mut transaction, "relay_04", 10, Duration::from_secs(30))
+            .claim_batch(&mut transaction, "relay_04", 10, lease_duration)
             .await?
             .is_empty()
     );
@@ -315,7 +316,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
 
     let mut transaction = client.begin().await?;
     let replayed_again = outbox
-        .claim_batch(&mut transaction, "relay_04", 10, Duration::from_secs(30))
+        .claim_batch(&mut transaction, "relay_04", 10, lease_duration)
         .await?;
     assert_eq!(replayed_again.len(), 1);
     assert_eq!(replayed_again[0].attempt(), 1);
@@ -387,7 +388,7 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
     transaction.commit().await?;
 
     let owner = "relay_same_owner";
-    let lease_duration = Duration::from_secs(15 * 60);
+    let lease_duration = LeaseDuration::new(LeaseDuration::MAX)?;
     let mut transaction = client.begin().await?;
     let mut first_claims = outbox
         .claim_batch(&mut transaction, owner, 1, lease_duration)
@@ -433,7 +434,7 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
             &mut transaction,
             &first_claim,
             owner,
-            Duration::ZERO,
+            OutboxRetryDelay::IMMEDIATE,
             TRANSPORT_UNAVAILABLE,
         )
         .await;

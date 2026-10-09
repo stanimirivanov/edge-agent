@@ -54,8 +54,13 @@ worker token on a later claim does not grant the earlier claim authority.
 `RelayPolicy` requires an inclusive attempt budget from 1 through 100, a base
 delay of at least one millisecond, and a maximum delay no greater than 24 hours.
 The maximum must not be shorter than the base. Construction also validates the
-stable worker token and bounds the lease from one millisecond through 15 minutes;
-the storage adapter revalidates both at its trust boundary.
+stable worker token and constructs a portable `LeaseDuration` from one
+millisecond through 15 minutes. The policy and calculated retry delay use the
+portable `OutboxRetryDelay` bound before storage calls; the storage adapter
+continues to validate the worker token. Outbound storage supports immediate
+retry, but relay policy deliberately requires nonzero backoff. The timing
+ownership and compatibility decision is recorded in
+[ADR-0019](../decisions/0019-validate-outbox-timing-at-the-port.md).
 
 | Publication outcome | Durable relay action |
 | --- | --- |
@@ -116,7 +121,9 @@ Credential-free unit tests prove configuration bounds, permanent/transient
 classification, deterministic jitter, attempt exhaustion, and complete relay
 orchestration through in-memory publisher and storage adapters. The fake store
 asserts that each published, retry, and quarantine decision forwards the exact
-generation from the committed claim. The isolated PostgreSQL conformance test
+generation from the committed claim, the configured typed lease, and the exact
+calculated typed retry delay. Bound-edge policies and capped jitter receive
+separate regression coverage. The isolated PostgreSQL conformance test
 can be run with:
 
 ```text

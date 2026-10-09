@@ -64,7 +64,8 @@ waits is visible under PostgreSQL's default `READ COMMITTED` isolation.
 
 A relay performs each state change in a short transaction:
 
-1. `claim_batch` validates the worker token, batch size, and lease duration.
+1. `claim_batch` accepts a portable, validated `LeaseDuration` and validates
+   the worker token and batch size.
 2. PostgreSQL selects eligible records in deterministic order using
    `FOR UPDATE SKIP LOCKED`.
 3. The claim sets a database-clock lease and increments both the attempt counter
@@ -75,7 +76,7 @@ A relay performs each state change in a short transaction:
 5. A confirmed `Persisted` or `Duplicate` result calls `mark_published` with
    that claim's generation in a new transaction.
 6. A retryable failure calls `release_for_retry` with the same generation,
-   policy-selected delay, and a validated, non-sensitive `FailureCode`.
+   policy-selected `OutboxRetryDelay`, and a validated, non-sensitive `FailureCode`.
    Terminal quarantine also requires the claim's generation and a validated
    code. The PostgreSQL adapter rechecks the token at its storage boundary.
 
@@ -93,8 +94,17 @@ budget, but never resets lease generation. A stale worker may still have sent
 the identical message to the broker; fencing prevents it from recording an
 outcome for a newer claim, while broker and inbox deduplication contain duplicate
 effects. Lease duration must exceed the configured publication timeout while
-remaining short enough for the recovery objective; the adapter bounds it to
-15 minutes.
+remaining short enough for the recovery objective. The portable value bounds
+it to 1 millisecond through 15 minutes before storage work.
+
+`OutboxRetryDelay` accepts zero through 24 hours, including fractional
+milliseconds; `IMMEDIATE` explicitly makes a released record eligible without
+delay. It is distinct from broker `RetryDelay`, which requires at least
+1 millisecond. Portable values preserve precision; PostgreSQL persists these
+durations by flooring to integer milliseconds, including a zero-millisecond
+retry for positive inputs below 1 millisecond. These existing semantics and the
+Rust API migration are recorded in
+[ADR-0019](../decisions/0019-validate-outbox-timing-at-the-port.md).
 
 `quarantine` retains a leased record while removing it from future claims. It
 requires the current unexpired claim, pairs timestamp with a bounded reason,

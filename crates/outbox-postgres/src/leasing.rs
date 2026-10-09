@@ -1,13 +1,12 @@
 //! Claim, publish, retry, and quarantine transitions under expiring leases.
 
 use crate::validation::{
-    MAX_BATCH_SIZE, MAX_FAILURE_CODE_BYTES, MAX_LEASE_DURATION, MAX_LEASE_OWNER_BYTES,
-    MAX_RETRY_DELAY, duration_milliseconds, validate_token,
+    MAX_BATCH_SIZE, MAX_FAILURE_CODE_BYTES, MAX_LEASE_OWNER_BYTES, duration_milliseconds,
+    validate_token,
 };
 use crate::{ClaimedMessage, OutboxError, PostgresOutbox};
-use edgeagent_messaging::{FailureCode, LeaseGeneration};
+use edgeagent_messaging::{FailureCode, LeaseDuration, LeaseGeneration, OutboxRetryDelay};
 use sqlx::{Postgres, Transaction};
-use std::time::Duration;
 
 #[derive(sqlx::FromRow)]
 struct StoredClaim {
@@ -97,6 +96,8 @@ impl PostgresOutbox {
     ///
     /// Concurrent relays receive disjoint records. Expired leases become
     /// eligible again, incrementing the attempt count on the next claim.
+    /// The lease arrives prevalidated and is persisted in whole milliseconds,
+    /// flooring any fractional millisecond.
     ///
     /// # Errors
     ///
@@ -106,7 +107,7 @@ impl PostgresOutbox {
         transaction: &mut Transaction<'_, Postgres>,
         lease_owner: &str,
         batch_size: u16,
-        lease_duration: Duration,
+        lease_duration: LeaseDuration,
     ) -> Result<Vec<ClaimedMessage>, OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
         if batch_size == 0 || batch_size > MAX_BATCH_SIZE {
@@ -114,12 +115,7 @@ impl PostgresOutbox {
                 "batch_size must be between 1 and 1000",
             ));
         }
-        let lease_milliseconds = duration_milliseconds(
-            "lease_duration",
-            lease_duration,
-            Duration::from_millis(1),
-            MAX_LEASE_DURATION,
-        )?;
+        let lease_milliseconds = duration_milliseconds(lease_duration.get())?;
         let rows = sqlx::query_as::<_, StoredClaim>(CLAIM_BATCH_SQL)
             .bind(i64::from(batch_size))
             .bind(lease_owner)
@@ -156,6 +152,9 @@ impl PostgresOutbox {
 
     /// Release a leased message after a classified failure and schedule retry.
     ///
+    /// The delay arrives prevalidated and is persisted in whole milliseconds.
+    /// Zero and submillisecond delays make the message immediately eligible.
+    ///
     /// # Errors
     ///
     /// Returns an invalid-argument, storage, or lost-lease error.
@@ -164,7 +163,7 @@ impl PostgresOutbox {
         transaction: &mut Transaction<'_, Postgres>,
         claim: &ClaimedMessage,
         lease_owner: &str,
-        retry_after: Duration,
+        retry_after: OutboxRetryDelay,
         failure_code: FailureCode,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
@@ -174,8 +173,7 @@ impl PostgresOutbox {
             MAX_FAILURE_CODE_BYTES,
         )?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
-        let retry_milliseconds =
-            duration_milliseconds("retry_after", retry_after, Duration::ZERO, MAX_RETRY_DELAY)?;
+        let retry_milliseconds = duration_milliseconds(retry_after.get())?;
         let updated = sqlx::query(RELEASE_FOR_RETRY_SQL)
             .bind(claim.message_source())
             .bind(claim.message_id())

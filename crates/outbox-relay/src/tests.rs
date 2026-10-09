@@ -3,9 +3,9 @@ use crate::{QuarantineReason, RelayErrorKind, RelayOutcome, RelayPolicy, relay_o
 
 use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRegistry};
 use edgeagent_messaging::{
-    ClaimedMessage, FailureCode, LeaseGeneration, MessagePublisher, OutboxRelayStore,
-    OutboxStoreFuture, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
-    PublishReceipt,
+    ClaimedMessage, FailureCode, LeaseDuration, LeaseGeneration, MessagePublisher,
+    OutboxRelayStore, OutboxRetryDelay, OutboxStoreFuture, PublishDisposition, PublishError,
+    PublishErrorKind, PublishFuture, PublishReceipt,
 };
 use serde_json::json;
 use std::error::Error;
@@ -21,9 +21,9 @@ const CLAIM_GENERATION: u64 = 7;
 
 #[derive(Debug, Eq, PartialEq)]
 enum Transition {
-    Claimed,
+    Claimed(LeaseDuration),
     Published(u64),
-    RetryScheduled(u64, &'static str),
+    RetryScheduled(u64, OutboxRetryDelay, &'static str),
     Quarantined(u64, &'static str),
 }
 
@@ -37,10 +37,10 @@ impl OutboxRelayStore for InMemoryStore {
     fn claim_one<'operation>(
         &'operation mut self,
         _lease_owner: &'operation str,
-        _lease_duration: Duration,
+        lease_duration: LeaseDuration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
         Box::pin(async move {
-            self.transitions.push(Transition::Claimed);
+            self.transitions.push(Transition::Claimed(lease_duration));
             Ok(self.claimed.take())
         })
     }
@@ -61,12 +61,13 @@ impl OutboxRelayStore for InMemoryStore {
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
-        _retry_after: Duration,
+        retry_after: OutboxRetryDelay,
         failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
             self.transitions.push(Transition::RetryScheduled(
                 claim.lease_generation().get(),
+                retry_after,
                 failure_code.as_str(),
             ));
             Ok(())
@@ -174,7 +175,10 @@ async fn relay_orchestration_depends_only_on_application_ports() -> Result<(), B
     ));
     assert_eq!(
         store.transitions,
-        [Transition::Claimed, Transition::Published(CLAIM_GENERATION)]
+        [
+            Transition::Claimed(LeaseDuration::new(Duration::from_secs(30))?),
+            Transition::Published(CLAIM_GENERATION)
+        ]
     );
     Ok(())
 }
@@ -202,15 +206,25 @@ async fn relay_forwards_claim_generation_for_retry_and_quarantine() -> Result<()
         &policy,
     )
     .await?;
+    let expected_delay = retry_delay(
+        &policy,
+        Component::Gateway.source_uri(),
+        "relay-port-message-01",
+        1,
+    );
     assert!(matches!(
         retry,
-        RelayOutcome::RetryScheduled { attempt: 1, .. }
+        RelayOutcome::RetryScheduled { attempt: 1, delay, .. } if delay == expected_delay
     ));
     assert_eq!(
         retry_store.transitions,
         [
-            Transition::Claimed,
-            Transition::RetryScheduled(CLAIM_GENERATION, "transport_unavailable")
+            Transition::Claimed(LeaseDuration::new(Duration::from_secs(30))?),
+            Transition::RetryScheduled(
+                CLAIM_GENERATION,
+                OutboxRetryDelay::new(expected_delay)?,
+                "transport_unavailable"
+            )
         ]
     );
 
@@ -236,8 +250,57 @@ async fn relay_forwards_claim_generation_for_retry_and_quarantine() -> Result<()
     assert_eq!(
         quarantine_store.transitions,
         [
-            Transition::Claimed,
+            Transition::Claimed(LeaseDuration::new(Duration::from_secs(30))?),
             Transition::Quarantined(CLAIM_GENERATION, "transport_rejected")
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_forwards_maximum_lease_and_bounded_retry_to_the_store() -> Result<(), Box<dyn Error>>
+{
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        "relay_port_test",
+        LeaseDuration::MAX,
+        100,
+        OutboxRetryDelay::MAX,
+        OutboxRetryDelay::MAX,
+    )?;
+    let mut store = InMemoryStore {
+        claimed: Some(claimed_message()?),
+        ..InMemoryStore::default()
+    };
+    let expected_delay = retry_delay(
+        &policy,
+        Component::Gateway.source_uri(),
+        "relay-port-message-01",
+        1,
+    );
+
+    let outcome = relay_once(
+        &mut store,
+        &registry,
+        &FailingPublisher(PublishErrorKind::Unavailable),
+        &policy,
+    )
+    .await?;
+
+    assert!(matches!(
+        outcome,
+        RelayOutcome::RetryScheduled { delay, .. } if delay == expected_delay
+    ));
+    assert_eq!(
+        store.transitions,
+        [
+            Transition::Claimed(LeaseDuration::new(LeaseDuration::MAX)?),
+            Transition::RetryScheduled(
+                CLAIM_GENERATION,
+                OutboxRetryDelay::new(expected_delay)?,
+                "transport_unavailable"
+            )
         ]
     );
     Ok(())
@@ -306,6 +369,59 @@ fn policy_bounds_attempts_and_delays() {
 }
 
 #[test]
+fn policy_uses_port_timing_bounds_and_retains_stricter_backoff_minimum() {
+    for lease_duration in [LeaseDuration::MIN, LeaseDuration::MAX] {
+        assert!(
+            RelayPolicy::new(
+                "relay_01",
+                lease_duration,
+                100,
+                Duration::from_millis(1),
+                OutboxRetryDelay::MAX,
+            )
+            .is_ok()
+        );
+    }
+
+    for (lease_duration, base_retry_delay, max_retry_delay) in [
+        (
+            LeaseDuration::MIN - Duration::from_nanos(1),
+            Duration::from_millis(1),
+            OutboxRetryDelay::MAX,
+        ),
+        (
+            LeaseDuration::MAX + Duration::from_nanos(1),
+            Duration::from_millis(1),
+            OutboxRetryDelay::MAX,
+        ),
+        (LeaseDuration::MIN, Duration::ZERO, OutboxRetryDelay::MAX),
+        (
+            LeaseDuration::MIN,
+            Duration::from_nanos(999_999),
+            OutboxRetryDelay::MAX,
+        ),
+        (
+            LeaseDuration::MIN,
+            Duration::from_millis(1),
+            OutboxRetryDelay::MAX + Duration::from_nanos(1),
+        ),
+    ] {
+        assert_eq!(
+            RelayPolicy::new(
+                "relay_01",
+                lease_duration,
+                3,
+                base_retry_delay,
+                max_retry_delay,
+            )
+            .err()
+            .map(|error| error.kind()),
+            Some(RelayErrorKind::InvalidPolicy)
+        );
+    }
+}
+
+#[test]
 fn transient_failures_back_off_deterministically_then_stop() -> Result<(), RelayErrorKind> {
     let policy = RelayPolicy::new(
         "relay_01",
@@ -345,6 +461,44 @@ fn transient_failures_back_off_deterministically_then_stop() -> Result<(), Relay
         ),
         RetryDecision::Quarantine(QuarantineReason::AttemptsExhaustedConfirmationUnknown)
     ));
+    Ok(())
+}
+
+#[test]
+fn exponential_backoff_clamps_before_jitter_and_stays_within_port_bounds()
+-> Result<(), Box<dyn Error>> {
+    let policy = RelayPolicy::new(
+        "relay_01",
+        LeaseDuration::MAX,
+        100,
+        Duration::from_secs(2),
+        Duration::from_secs(5),
+    )?;
+    for (attempt, exponential_millis) in [
+        (1, 2_000_u64),
+        (2, 4_000),
+        (3, 5_000),
+        (63, 5_000),
+        (64, 5_000),
+        (100, 5_000),
+        (u32::MAX, 5_000),
+    ] {
+        let delay = retry_delay(&policy, "urn:edgeagent:gateway", "message-01", attempt);
+        assert!(delay >= Duration::from_millis(exponential_millis.div_ceil(2)));
+        assert!(delay <= Duration::from_millis(exponential_millis));
+        assert_eq!(OutboxRetryDelay::new(delay)?.get(), delay);
+    }
+
+    for limit in [Duration::from_millis(1), OutboxRetryDelay::MAX] {
+        let policy = RelayPolicy::new("relay_01", LeaseDuration::MIN, 100, limit, limit)?;
+        let delay = retry_delay(&policy, "urn:edgeagent:gateway", "message-01", u32::MAX);
+        assert!(delay >= limit / 2);
+        assert!(delay <= limit);
+        assert_eq!(OutboxRetryDelay::new(delay)?.get(), delay);
+        if limit == Duration::from_millis(1) {
+            assert_eq!(delay, limit);
+        }
+    }
     Ok(())
 }
 

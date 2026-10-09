@@ -7,7 +7,10 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::num::NonZeroU64;
 use std::pin::Pin;
-use std::time::Duration;
+
+mod timing;
+
+pub use timing::{LeaseDuration, OutboxRetryDelay, OutboxTimingError};
 
 /// Boxed future returned by an outbound relay storage port.
 pub type OutboxStoreFuture<'operation, Output> =
@@ -21,10 +24,22 @@ pub type OutboxStoreFuture<'operation, Output> =
 /// not only its worker identity; worker tokens can be reused after lease expiry.
 pub trait OutboxRelayStore: Send {
     /// Claim at most one available message for this relay worker.
+    /// The lifetime is validated before this operation is called.
+    ///
+    /// Raw durations cannot bypass the portable lifetime bound:
+    ///
+    /// ```compile_fail,E0308
+    /// use edgeagent_messaging::OutboxRelayStore;
+    /// use std::time::Duration;
+    ///
+    /// fn claim(store: &mut dyn OutboxRelayStore) {
+    ///     let _ = store.claim_one("relay_01", Duration::from_secs(30));
+    /// }
+    /// ```
     fn claim_one<'operation>(
         &'operation mut self,
         lease_owner: &'operation str,
-        lease_duration: Duration,
+        lease_duration: LeaseDuration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>>;
 
     /// Record confirmed durable publication under the original lease.
@@ -34,12 +49,26 @@ pub trait OutboxRelayStore: Send {
         lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()>;
 
-    /// Release a leased message for a bounded delayed retry.
+    /// Release a leased message for a bounded retry, including immediate eligibility.
+    ///
+    /// Raw durations cannot bypass the portable retry bound:
+    ///
+    /// ```compile_fail,E0308
+    /// use edgeagent_messaging::{ClaimedMessage, FailureCode, OutboxRelayStore};
+    /// use std::time::Duration;
+    ///
+    /// fn retry(store: &mut dyn OutboxRelayStore, claim: &ClaimedMessage) {
+    ///     let _ = store.release_for_retry(
+    ///         claim, "relay_01", Duration::ZERO,
+    ///         FailureCode::from_static("transport_unavailable"),
+    ///     );
+    /// }
+    /// ```
     fn release_for_retry<'operation>(
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
-        retry_after: Duration,
+        retry_after: OutboxRetryDelay,
         failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()>;
 

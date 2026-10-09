@@ -4,7 +4,8 @@ use crate::retry::{RetryDecision, retry_decision};
 use crate::{QuarantineReason, RelayError, RelayMessageFailure, RelayOutcome, RelayPolicy};
 use edgeagent_contracts::MessageRegistry;
 use edgeagent_messaging::{
-    ClaimedMessage, MessagePublisher, OutboxRelayStore, PublishDisposition, PublishError,
+    ClaimedMessage, MessagePublisher, OutboxRelayStore, OutboxRetryDelay, PublishDisposition,
+    PublishError,
 };
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
@@ -140,9 +141,14 @@ async fn resolve_failure(
             delay,
             failure_code,
         } => {
+            let retry_after = OutboxRetryDelay::new(delay).map_err(|_| {
+                RelayError::invalid_policy(
+                    "calculated retry delay exceeds the outbox timing bounds",
+                )
+            })?;
             let persistence_started = Instant::now();
             let persistence_result = store
-                .release_for_retry(message, &policy.lease_owner, delay, failure_code)
+                .release_for_retry(message, &policy.lease_owner, retry_after, failure_code)
                 .await
                 .map_err(RelayError::from);
             record_event_spine_operation(
