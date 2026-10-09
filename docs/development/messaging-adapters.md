@@ -24,6 +24,13 @@ confirmed settlement. `inbox` defines atomic inbound
 processing and quarantine, while `outbox` defines relay storage. These are
 portable contracts; transport-specific behavior stays in adapter crates.
 
+The outbound storage port requires prevalidated `LeaseDuration` (1 millisecond
+through 15 minutes) and `OutboxRetryDelay` (zero through 24 hours). Its retry
+value supports immediate eligibility and is distinct from the nonzero broker
+`RetryDelay`. Constructors preserve precision; each adapter documents its
+persistence precision. See the [PostgreSQL outbox guide](postgres-outbox.md)
+for its existing whole-millisecond flooring.
+
 ## Publication boundary and control flow
 
 Application code depends on `MessagePublisher`, `PublishReceipt`, and

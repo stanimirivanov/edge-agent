@@ -1,14 +1,13 @@
 use crate::leasing::{CLAIM_BATCH_SQL, RELEASE_FOR_RETRY_SQL};
 use crate::replay::REPLAY_QUARANTINED_SQL;
-use crate::validation::{
-    MAX_BATCH_SIZE, MAX_LEASE_DURATION, duration_milliseconds, validate_token,
-};
+use crate::validation::{MAX_BATCH_SIZE, duration_milliseconds, validate_token};
 use crate::{OutboxErrorKind, PostgresOutbox, ReplayRequest};
+use edgeagent_messaging::{LeaseDuration, OutboxRetryDelay};
 
 use std::time::Duration;
 
 #[test]
-fn lease_arguments_are_bounded_before_database_work() {
+fn worker_token_and_batch_size_are_bounded_before_database_work() {
     assert!(validate_token("lease_owner", "relay_01", 128).is_ok());
     assert_eq!(
         validate_token("lease_owner", "Relay 01", 128)
@@ -17,15 +16,39 @@ fn lease_arguments_are_bounded_before_database_work() {
         Some(OutboxErrorKind::InvalidArgument)
     );
     assert_eq!(MAX_BATCH_SIZE, 1_000);
+}
+
+#[test]
+fn bounded_timing_values_preserve_integer_millisecond_conversion()
+-> Result<(), Box<dyn std::error::Error>> {
+    for duration in [LeaseDuration::MIN, LeaseDuration::MAX] {
+        let lease = LeaseDuration::new(duration)?;
+        assert_eq!(
+            duration_milliseconds(lease.get())?,
+            i64::try_from(duration.as_millis())?
+        );
+    }
+    for duration in [OutboxRetryDelay::MIN, OutboxRetryDelay::MAX] {
+        let retry = OutboxRetryDelay::new(duration)?;
+        assert_eq!(
+            duration_milliseconds(retry.get())?,
+            i64::try_from(duration.as_millis())?
+        );
+    }
+    assert_eq!(duration_milliseconds(OutboxRetryDelay::IMMEDIATE.get())?, 0);
+    let submillisecond_retry = OutboxRetryDelay::new(Duration::from_nanos(999_999))?;
+    assert_eq!(duration_milliseconds(submillisecond_retry.get())?, 0);
+    let fractional_lease = LeaseDuration::new(Duration::from_nanos(1_999_999))?;
+    assert_eq!(duration_milliseconds(fractional_lease.get())?, 1);
+    Ok(())
+}
+
+#[test]
+fn millisecond_conversion_rejects_postgres_integer_overflow() {
     assert_eq!(
-        duration_milliseconds(
-            "lease_duration",
-            MAX_LEASE_DURATION + Duration::from_millis(1),
-            Duration::from_millis(1),
-            MAX_LEASE_DURATION,
-        )
-        .err()
-        .map(|error| error.kind()),
+        duration_milliseconds(Duration::MAX)
+            .err()
+            .map(|error| error.kind()),
         Some(OutboxErrorKind::InvalidArgument)
     );
 }

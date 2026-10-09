@@ -99,7 +99,15 @@ redacted top-level message does not make its raw source chain safe to log.
 The T2 messaging contract tests exercise both inclusive retry-delay bounds and
 adjacent invalid values. A disposition must contain a validated delay, so an
 invalid caller input cannot consume a delivery before broker settlement.
-They also assert that broker-metadata or oversized-payload protocol faults halt
+Outbound timing tests separately cover `LeaseDuration` and `OutboxRetryDelay`
+inclusive bounds, adjacent invalid nanoseconds, immediate and sub-millisecond
+retry, round trips, ordering, hashing, and auto traits. Compile-fail doctests
+reject raw durations at both outbound port methods. Relay fakes assert the
+configured typed lease and calculated typed retry reaching storage, while
+adapter tests preserve explicit whole-millisecond flooring. These T2 contracts
+run in the existing workspace test and doctest gates; PostgreSQL's immediate
+retry eligibility remains a T3 conformance check.
+Consumer tests also assert that broker-metadata or oversized-payload protocol faults halt
 the consumer's pre-pull gate; a caller retry loop cannot silently consume
 another delivery.
 The `FailureCode` boundary tests cover the inclusive 1–64-byte token range and

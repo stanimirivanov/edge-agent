@@ -24,8 +24,8 @@ pub use inbox::{
 };
 pub use metadata::{DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject};
 pub use outbox::{
-    ClaimedMessage, LeaseGeneration, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
-    OutboxStoreFuture,
+    ClaimedMessage, LeaseDuration, LeaseGeneration, OutboxRelayStore, OutboxRetryDelay,
+    OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture, OutboxTimingError,
 };
 pub use publisher::{
     MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,

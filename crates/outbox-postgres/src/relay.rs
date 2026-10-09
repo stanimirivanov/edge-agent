@@ -2,11 +2,10 @@
 
 use crate::{OutboxError, OutboxErrorKind, PostgresOutbox};
 use edgeagent_messaging::{
-    ClaimedMessage, FailureCode, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
-    OutboxStoreFuture,
+    ClaimedMessage, FailureCode, LeaseDuration, OutboxRelayStore, OutboxRetryDelay,
+    OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
 };
 use sqlx::{Connection, PgConnection};
-use std::time::Duration;
 
 /// PostgreSQL-backed outbound relay storage adapter.
 pub struct PostgresOutboxRelay<'client> {
@@ -25,7 +24,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
     fn claim_one<'operation>(
         &'operation mut self,
         lease_owner: &'operation str,
-        lease_duration: Duration,
+        lease_duration: LeaseDuration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
         Box::pin(async move {
             let mut transaction = self.client.begin().await.map_err(unavailable)?;
@@ -63,7 +62,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
-        retry_after: Duration,
+        retry_after: OutboxRetryDelay,
         failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {

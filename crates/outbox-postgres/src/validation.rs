@@ -4,8 +4,6 @@ use crate::OutboxError;
 use std::time::Duration;
 
 pub(super) const MAX_BATCH_SIZE: u16 = 1_000;
-pub(super) const MAX_LEASE_DURATION: Duration = Duration::from_secs(15 * 60);
-pub(super) const MAX_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 pub(super) const MAX_LEASE_OWNER_BYTES: usize = 128;
 pub(super) const MAX_FAILURE_CODE_BYTES: usize = 64;
 pub(super) const MAX_MESSAGE_SOURCE_BYTES: usize = 512;
@@ -68,18 +66,9 @@ pub(super) fn validate_visible_ascii(
     }
 }
 
-pub(super) fn duration_milliseconds(
-    field: &'static str,
-    value: Duration,
-    minimum: Duration,
-    maximum: Duration,
-) -> Result<i64, OutboxError> {
-    if value < minimum || value > maximum {
-        return Err(OutboxError::invalid_argument(match field {
-            "lease_duration" => "lease_duration must be between 1 millisecond and 15 minutes",
-            _ => "retry_after must not exceed 24 hours",
-        }));
-    }
+pub(super) fn duration_milliseconds(value: Duration) -> Result<i64, OutboxError> {
+    // PostgreSQL interval parameters use whole milliseconds. Preserve the
+    // adapter's truncation policy, including immediate submillisecond retries.
     i64::try_from(value.as_millis())
         .map_err(|_| OutboxError::invalid_argument("duration exceeds PostgreSQL range"))
 }
