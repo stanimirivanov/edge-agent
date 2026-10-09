@@ -43,7 +43,7 @@ The crate root is the public façade. `coordinator` owns decoding, routing, and
 the atomic processing decision. `resolution` owns failure classification,
 including the store contract, identity-conflict, availability, and invariant
 branches, plus quarantine-before-settlement and the one-shot delivery actions.
-`policy` validates consumer configuration and failure codes; `retry` calculates
+`policy` validates consumer configuration; `retry` calculates
 deterministic backoff; `outcome` defines confirmed results and classified
 message failures; and `error` defines bounded coordinator failures.
 `observability` owns one private `SpineRecorder` for approved correlation
@@ -63,7 +63,9 @@ from the committed `InboxDisposition` rather than a second local enum.
 The durable rationale is recorded in
 [ADR-0006](../decisions/0006-keep-inbound-coordination-persistence-neutral.md);
 the concrete SQLx adapter choice is recorded in
-[ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md).
+[ADR-0014](../decisions/0014-use-sqlx-for-postgresql-inbox.md). Validated
+failure codes and quarantine metadata follow
+[ADR-0018](../decisions/0018-use-validated-message-failure-codes.md).
 
 ## PostgreSQL composition
 
@@ -136,9 +138,12 @@ same limit.
 | Store invariant or quarantine identity conflict | Return an error, leave delivery unsettled, and fail closed for operator investigation |
 | Settlement confirmation failure | Return `Settlement`; rely on inbox or quarantine idempotency when redelivered |
 
-Handler reason codes are static lowercase ASCII tokens of at most 64 bytes.
-Portable quarantine evidence also bounds delivery key, subject, attempt, and
-payload before adapter work.
+Handler reason codes use `FailureCode` constants: construction checks the
+1–64-byte lowercase ASCII token contract at compile time. The coordinator
+cannot receive an invalid handler code or pass one to quarantine. Portable
+quarantine evidence borrows already-validated `DeliveryMetadata` and checks
+the payload bound before adapter work; direct oversized evidence is a contract
+error, not a storage invariant.
 
 ## Crash and acknowledgement safety
 

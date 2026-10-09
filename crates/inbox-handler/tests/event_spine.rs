@@ -11,7 +11,7 @@ use edgeagent_inbox_postgres::{
     PostgresHandlerFuture, PostgresInboundMessageStore, PostgresInbox,
     PostgresTransactionalMessageHandler,
 };
-use edgeagent_messaging::{MessageConsumer, PublishDisposition};
+use edgeagent_messaging::{FailureCode, MessageConsumer, PublishDisposition};
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
 use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
@@ -94,7 +94,7 @@ impl PostgresTransactionalMessageHandler for EffectHandler {
             .map_err(|error| {
                 HandlerFailure::with_source(
                     edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                    "storage_unavailable",
+                    FailureCode::from_static("storage_unavailable"),
                     error,
                 )
             })?;

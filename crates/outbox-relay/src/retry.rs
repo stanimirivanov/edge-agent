@@ -1,13 +1,16 @@
 //! Deterministic bounded retry and terminal-failure classification.
 
 use crate::{QuarantineReason, RelayPolicy};
-use edgeagent_messaging::PublishErrorKind;
+use edgeagent_messaging::{FailureCode, PublishErrorKind};
 use std::time::Duration;
+
+const TRANSPORT_UNAVAILABLE: FailureCode = FailureCode::from_static("transport_unavailable");
+const CONFIRMATION_UNKNOWN: FailureCode = FailureCode::from_static("confirmation_unknown");
 
 pub(super) enum RetryDecision {
     Retry {
         delay: Duration,
-        failure_code: &'static str,
+        failure_code: FailureCode,
     },
     Quarantine(QuarantineReason),
 }
@@ -36,8 +39,8 @@ pub(super) fn retry_decision(
             RetryDecision::Retry {
                 delay: retry_delay(policy, message_source, message_id, attempt),
                 failure_code: match failure {
-                    PublishErrorKind::Unavailable => "transport_unavailable",
-                    _ => "confirmation_unknown",
+                    PublishErrorKind::Unavailable => TRANSPORT_UNAVAILABLE,
+                    _ => CONFIRMATION_UNKNOWN,
                 },
             }
         }

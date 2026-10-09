@@ -13,7 +13,7 @@ use edgeagent_inbox_postgres::{
 };
 use edgeagent_messaging::{
     ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
-    DeliverySettlement, DeliverySubject, MessageDelivery, SettlementFuture,
+    DeliverySettlement, DeliverySubject, FailureCode, MessageDelivery, SettlementFuture,
 };
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Postgres, Row, Transaction};
@@ -93,15 +93,19 @@ impl PostgresTransactionalMessageHandler for TestHandler {
                 .map_err(|error| {
                     HandlerFailure::with_source(
                         edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                        "storage_unavailable",
+                        FailureCode::from_static("storage_unavailable"),
                         error,
                     )
                 })?;
             if matches!(self.behavior, Behavior::FailFirstTransient) && call == 1 {
-                return Err(HandlerFailure::transient("dependency_unavailable"));
+                return Err(HandlerFailure::transient(FailureCode::from_static(
+                    "dependency_unavailable",
+                )));
             }
             if matches!(self.behavior, Behavior::Permanent) {
-                return Err(HandlerFailure::permanent("policy_rejected"));
+                return Err(HandlerFailure::permanent(FailureCode::from_static(
+                    "policy_rejected",
+                )));
             }
             Ok(())
         })

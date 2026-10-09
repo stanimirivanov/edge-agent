@@ -75,6 +75,7 @@ supply-chain:
 test:
 	$(PYTHON) -m unittest discover -s tests -p "test_*.py"
 	cargo test --locked --workspace --all-targets
+	cargo test --locked --workspace --doc
 	cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order
 
 verify: fmt check test

@@ -7,7 +7,7 @@ use edgeagent_inbox_handler::{HandlerFailure, HandlerPolicy, HandlingOutcome, ha
 use edgeagent_inbox_postgres::{
     PostgresHandlerFuture, PostgresInboundMessageStore, PostgresTransactionalMessageHandler,
 };
-use edgeagent_messaging::MessageConsumer;
+use edgeagent_messaging::{FailureCode, MessageConsumer};
 use edgeagent_messaging_nats::JetStreamConsumer;
 use sqlx::{Connection, PgConnection, Postgres, Transaction};
 use std::{env, error::Error, io, time::Duration};
@@ -18,6 +18,7 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     Component::ExecutionSimulator,
     "order",
 );
+const STORAGE_UNAVAILABLE: FailureCode = FailureCode::from_static("storage_unavailable");
 
 struct StepA;
 
@@ -34,7 +35,7 @@ impl PostgresTransactionalMessageHandler for StepA {
                 .map_err(|error| {
                     HandlerFailure::with_source(
                         edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                        "storage_unavailable",
+                        STORAGE_UNAVAILABLE,
                         error,
                     )
                 })?;

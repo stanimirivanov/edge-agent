@@ -102,6 +102,11 @@ invalid caller input cannot consume a delivery before broker settlement.
 They also assert that broker-metadata or oversized-payload protocol faults halt
 the consumer's pre-pull gate; a caller retry loop cannot silently consume
 another delivery.
+The `FailureCode` boundary tests cover the inclusive 1–64-byte token range and
+reject uppercase, whitespace, non-ASCII, and oversized codes. Its compile-fail
+doctest ensures an invalid service-owned constant cannot reach inbound or
+outbound persistence. CI runs workspace doctests explicitly because the
+`--all-targets` unit-test gate does not establish that contract.
 The portable metadata tests exercise distinct identity, route, and attempt
 mapping, the inclusive 512-byte text bound, non-ASCII and non-graphic rejection,
 and positive attempt parsing. NATS adapter tests separately reject invalid

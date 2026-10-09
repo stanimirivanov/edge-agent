@@ -1,14 +1,18 @@
 //! Final delivery actions after routing or atomic inbound processing decides an outcome.
 
 use crate::observability::SpineRecorder;
-use crate::policy::validate_failure_code;
 use crate::retry::{retry_delay, should_retry_handler};
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 use edgeagent_messaging::{
-    DeliveryDisposition as SettlementDisposition, HandlerFailure, InboundMessageStore,
+    DeliveryDisposition as SettlementDisposition, FailureCode, HandlerFailure, InboundMessageStore,
     InboundQuarantine, InboxDisposition, InboxStoreError, InboxStoreErrorKind, MessageDelivery,
     RetryDelay,
 };
+
+pub(super) const ENVELOPE_INVALID: FailureCode = FailureCode::from_static("envelope_invalid");
+pub(super) const ROUTING_INVALID: FailureCode = FailureCode::from_static("routing_invalid");
+const MESSAGE_IDENTITY_CONFLICT: FailureCode =
+    FailureCode::from_static("message_identity_conflict");
 
 pub(super) async fn acknowledge(
     delivery: MessageDelivery,
@@ -30,7 +34,6 @@ pub(super) async fn resolve_handler_failure(
     recorder: &SpineRecorder,
     failure: HandlerFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
-    validate_failure_code(failure.code())?;
     if should_retry_handler(
         policy,
         delivery.metadata().delivery_attempt(),
@@ -59,8 +62,8 @@ pub(super) async fn resolve_store_failure(
     error: InboxStoreError,
 ) -> Result<HandlingOutcome, HandlerError> {
     let failure_code = match error.kind() {
-        InboxStoreErrorKind::Contract => "routing_invalid",
-        InboxStoreErrorKind::MessageIdentityConflict => "message_identity_conflict",
+        InboxStoreErrorKind::Contract => ROUTING_INVALID,
+        InboxStoreErrorKind::MessageIdentityConflict => MESSAGE_IDENTITY_CONFLICT,
         InboxStoreErrorKind::Unavailable => {
             return retry(delivery, policy, recorder, MessageFailure::Inbox(error)).await;
         }
@@ -103,18 +106,11 @@ pub(super) async fn quarantine(
     policy: &HandlerPolicy,
     delivery: MessageDelivery,
     recorder: &SpineRecorder,
-    failure_code: &'static str,
+    failure_code: FailureCode,
     failure: MessageFailure,
 ) -> Result<HandlingOutcome, HandlerError> {
-    validate_failure_code(failure_code)?;
-    let evidence = InboundQuarantine::new(
-        delivery.metadata().message_key(),
-        delivery.metadata().subject(),
-        delivery.metadata().delivery_attempt(),
-        delivery.payload(),
-        failure_code,
-    )
-    .map_err(HandlerError::inbox)?;
+    let evidence = InboundQuarantine::new(delivery.metadata(), delivery.payload(), failure_code)
+        .map_err(HandlerError::inbox)?;
     let persistence_started = recorder.start_stage();
     let quarantine_result = store.quarantine(&policy.consumer_name, evidence).await;
     recorder.record_quarantine_result(persistence_started, &quarantine_result);
@@ -130,7 +126,7 @@ pub(super) async fn quarantine(
     Ok(HandlingOutcome::Quarantined {
         attempt,
         disposition,
-        failure_code,
+        failure_code: failure_code.as_str(),
         failure,
     })
 }

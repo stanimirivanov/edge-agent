@@ -7,7 +7,9 @@ use edgeagent_inbox_postgres::{
     PostgresHandlerFuture, PostgresInboundMessageStore, PostgresInbox,
     PostgresTransactionalMessageHandler,
 };
-use edgeagent_messaging::{InboundMessageStore, InboundProcessingError, InboxDisposition};
+use edgeagent_messaging::{
+    FailureCode, InboundMessageStore, InboundProcessingError, InboxDisposition,
+};
 use edgeagent_outbox_postgres::{EnqueueDisposition, OutboxErrorKind, PostgresOutbox};
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Postgres, Row, Transaction};
@@ -80,7 +82,7 @@ impl PostgresTransactionalMessageHandler for EmittingHandler {
                 .map_err(|error| {
                     edgeagent_inbox_handler::HandlerFailure::with_source(
                         edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                        "storage_unavailable",
+                        FailureCode::from_static("storage_unavailable"),
                         error,
                     )
                 })?;
@@ -90,13 +92,13 @@ impl PostgresTransactionalMessageHandler for EmittingHandler {
                 .map_err(|error| {
                     edgeagent_inbox_handler::HandlerFailure::with_source(
                         edgeagent_inbox_handler::HandlerFailureKind::Transient,
-                        "outbox_unavailable",
+                        FailureCode::from_static("outbox_unavailable"),
                         error,
                     )
                 })?;
             if call == 1 {
                 return Err(edgeagent_inbox_handler::HandlerFailure::transient(
-                    "injected_failure",
+                    FailureCode::from_static("injected_failure"),
                 ));
             }
             Ok(())

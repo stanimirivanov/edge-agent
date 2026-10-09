@@ -3,6 +3,7 @@
 use edgeagent_contracts::{
     Component, EventRetention, MessageDefinition, MessageMetadata, MessageRegistry,
 };
+use edgeagent_messaging::FailureCode;
 use edgeagent_outbox_postgres::{
     EnqueueDisposition, OutboxErrorKind, PostgresOutbox, ReplayDisposition, ReplayRequest,
 };
@@ -12,6 +13,9 @@ use std::env;
 use std::error::Error;
 use std::process;
 use std::time::Duration;
+
+const TRANSPORT_UNAVAILABLE: FailureCode = FailureCode::from_static("transport_unavailable");
+const TRANSPORT_REJECTED: FailureCode = FailureCode::from_static("transport_rejected");
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -152,7 +156,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             first,
             "relay_01",
             Duration::ZERO,
-            "transport_unavailable",
+            TRANSPORT_UNAVAILABLE,
         )
         .await?;
     outbox
@@ -171,7 +175,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             &mut transaction,
             &retried[0],
             "relay_02",
-            "transport_rejected",
+            TRANSPORT_REJECTED,
         )
         .await?;
     transaction.commit().await?;
@@ -263,7 +267,7 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             &mut transaction,
             &replayed[0],
             "relay_03",
-            "transport_rejected",
+            TRANSPORT_REJECTED,
         )
         .await?;
     transaction.commit().await?;
@@ -430,7 +434,7 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
             &first_claim,
             owner,
             Duration::ZERO,
-            "transport_unavailable",
+            TRANSPORT_UNAVAILABLE,
         )
         .await;
     assert_eq!(
@@ -438,7 +442,7 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
         Some(OutboxErrorKind::LeaseLost)
     );
     let stale_quarantine = outbox
-        .quarantine(&mut transaction, &first_claim, owner, "transport_rejected")
+        .quarantine(&mut transaction, &first_claim, owner, TRANSPORT_REJECTED)
         .await;
     assert_eq!(
         stale_quarantine.err().map(|error| error.kind()),
@@ -474,12 +478,7 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
 
     let mut transaction = client.begin().await?;
     outbox
-        .quarantine(
-            &mut transaction,
-            &current_claim,
-            owner,
-            "transport_rejected",
-        )
+        .quarantine(&mut transaction, &current_claim, owner, TRANSPORT_REJECTED)
         .await?;
     transaction.commit().await?;
 

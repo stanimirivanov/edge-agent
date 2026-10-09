@@ -7,8 +7,6 @@ use std::fmt::{Display, Formatter};
 pub enum HandlerErrorKind {
     /// Consumer identity or retry configuration is invalid.
     InvalidPolicy,
-    /// A domain handler returned an unsafe reason code.
-    InvalidHandlerFailure,
     /// Inbox state violates a non-retriable invariant.
     Inbox,
     /// Broker settlement failed or its confirmation is unknown.
@@ -19,9 +17,6 @@ impl Display for HandlerErrorKind {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidPolicy => formatter.write_str("message handler policy is invalid"),
-            Self::InvalidHandlerFailure => {
-                formatter.write_str("message handler failure classification is invalid")
-            }
             Self::Inbox => formatter.write_str("message handler inbox transition failed"),
             Self::Settlement => formatter.write_str("message delivery settlement failed"),
         }
@@ -56,14 +51,6 @@ impl HandlerError {
     pub(super) const fn invalid_policy(reason: &'static str) -> Self {
         Self {
             kind: HandlerErrorKind::InvalidPolicy,
-            reason: Some(reason),
-            source: None,
-        }
-    }
-
-    pub(super) const fn invalid_handler_failure(reason: &'static str) -> Self {
-        Self {
-            kind: HandlerErrorKind::InvalidHandlerFailure,
             reason: Some(reason),
             source: None,
         }
@@ -109,8 +96,8 @@ mod tests {
     use super::HandlerError;
     use crate::{HandlingOutcome, MessageFailure};
     use edgeagent_messaging::{
-        ConsumeError, ConsumeErrorKind, HandlerFailure, HandlerFailureKind, InboxStoreError,
-        InboxStoreErrorKind,
+        ConsumeError, ConsumeErrorKind, FailureCode, HandlerFailure, HandlerFailureKind,
+        InboxStoreError, InboxStoreErrorKind,
     };
     use std::error::Error;
     use std::fmt::{Debug, Display, Formatter};
@@ -164,7 +151,7 @@ mod tests {
             delay: Duration::from_millis(1),
             failure: MessageFailure::Handler(HandlerFailure::with_source(
                 HandlerFailureKind::Transient,
-                "retry",
+                FailureCode::from_static("retry"),
                 PrivateCause,
             )),
         };

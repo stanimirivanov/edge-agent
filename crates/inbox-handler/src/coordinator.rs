@@ -2,7 +2,10 @@ use edgeagent_contracts::{MessageContractError, MessageEnvelope, MessageRegistry
 use edgeagent_messaging::{InboundMessageStore, InboundProcessingError, MessageDelivery};
 
 use crate::observability::SpineRecorder;
-use crate::resolution::{acknowledge, quarantine, resolve_handler_failure, resolve_store_failure};
+use crate::resolution::{
+    ENVELOPE_INVALID, ROUTING_INVALID, acknowledge, quarantine, resolve_handler_failure,
+    resolve_store_failure,
+};
 use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 
 /// Process and settle exactly one delivery.
@@ -53,7 +56,7 @@ async fn handle_decoded_once(
                 policy,
                 delivery,
                 recorder,
-                "envelope_invalid",
+                ENVELOPE_INVALID,
                 MessageFailure::Envelope(error),
             )
             .await;
@@ -65,7 +68,7 @@ async fn handle_decoded_once(
             policy,
             delivery,
             recorder,
-            "routing_invalid",
+            ROUTING_INVALID,
             MessageFailure::Routing(error),
         )
         .await;

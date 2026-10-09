@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 17] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 18] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -106,6 +106,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 17] = [
         number: 17,
         path: "docs/decisions/0017-align-delivery-and-quarantine-bounds.md",
         title: "Align delivery and quarantine bounds",
+    },
+    PublishedIdentity {
+        number: 18,
+        path: "docs/decisions/0018-use-validated-message-failure-codes.md",
+        title: "Use validated message failure codes",
     },
 ];
 

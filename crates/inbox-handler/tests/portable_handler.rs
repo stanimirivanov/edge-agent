@@ -9,7 +9,7 @@ use edgeagent_inbox_handler::{
 };
 use edgeagent_messaging::{
     ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
-    DeliverySettlement, DeliverySubject, InboundMessageStore, InboundProcessingError,
+    DeliverySettlement, DeliverySubject, FailureCode, InboundMessageStore, InboundProcessingError,
     InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,
     MessageDelivery, SettlementFuture,
 };
@@ -142,10 +142,10 @@ impl InboundMessageStore for ScriptedStore {
                 ProcessBehavior::Applied => Ok(InboxDisposition::Applied),
                 ProcessBehavior::Duplicate => Ok(InboxDisposition::Duplicate),
                 ProcessBehavior::TransientHandlerFailure => Err(InboundProcessingError::Handler(
-                    HandlerFailure::transient("dependency_unavailable"),
+                    HandlerFailure::transient(FailureCode::from_static("dependency_unavailable")),
                 )),
                 ProcessBehavior::PermanentHandlerFailure => Err(InboundProcessingError::Handler(
-                    HandlerFailure::permanent("policy_rejected"),
+                    HandlerFailure::permanent(FailureCode::from_static("policy_rejected")),
                 )),
                 ProcessBehavior::Contract => Err(store_error(InboxStoreErrorKind::Contract)),
                 ProcessBehavior::Unavailable => Err(store_error(InboxStoreErrorKind::Unavailable)),

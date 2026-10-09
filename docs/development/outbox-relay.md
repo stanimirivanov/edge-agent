@@ -81,7 +81,8 @@ state, and excludes quarantined rows from the relay claim index. Migration 0003
 adds append-only audit evidence for outbound replay authorization.
 
 Quarantine is retained evidence, not deletion. It clears the active lease and
-records a bounded lowercase reason code without exception text or payload data.
+records a compile-time validated `FailureCode` without exception text or
+payload data.
 The relay cannot claim the record again. Direct manual table updates are not an
 operator replay mechanism because they bypass authorization and audit history.
 `PostgresOutbox::replay_quarantined` records the authorization evidence and

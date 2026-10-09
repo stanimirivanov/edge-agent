@@ -75,8 +75,9 @@ A relay performs each state change in a short transaction:
 5. A confirmed `Persisted` or `Duplicate` result calls `mark_published` with
    that claim's generation in a new transaction.
 6. A retryable failure calls `release_for_retry` with the same generation,
-   policy-selected delay, and a bounded, non-sensitive reason code. Terminal
-   quarantine also requires the claim's generation.
+   policy-selected delay, and a validated, non-sensitive `FailureCode`.
+   Terminal quarantine also requires the claim's generation and a validated
+   code. The PostgreSQL adapter rechecks the token at its storage boundary.
 
 If a relay stops after claiming, the record becomes eligible when its lease
 expires. If it stops after broker persistence but before `mark_published`, the
@@ -138,7 +139,7 @@ direct table access, and audit rows must remain append-only under deployment pol
 | --- | --- | --- |
 | `Contract` | Envelope or message definition is invalid | Do not enqueue; correct the producer defect |
 | `MessageIdentityConflict` | Existing immutable content differs | Fail closed and investigate identity reuse |
-| `InvalidArgument` | Batch, lease, worker, delay, or reason code violates a bound | Correct relay configuration or policy |
+| `InvalidArgument` | Batch, lease, worker, delay, or replay request violates a bound | Correct relay configuration or request |
 | `Storage` | PostgreSQL is unavailable or a transaction is retryable or ambiguous | Roll back and apply bounded transient-failure policy |
 | `StorageInvariant` | Stored data, schema, codec, or deterministic database rejection contradicts adapter assumptions | Quarantine and investigate corruption or unsupported mutation |
 | `LeaseLost` | Lease expired, disappeared, or its owner/generation no longer names this claim | Stop processing that record without marking it |

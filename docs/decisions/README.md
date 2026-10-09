@@ -129,3 +129,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0015](0015-allow-atomic-sqlx-outbox-enqueue.md) | Superseded | Allow atomic SQLx outbox enqueue. |
 | [ADR-0016](0016-use-sqlx-throughout-the-postgresql-outbox.md) | Accepted | Use SQLx throughout the PostgreSQL outbox. |
 | [ADR-0017](0017-align-delivery-and-quarantine-bounds.md) | Accepted | Align delivery and quarantine bounds. |
+| [ADR-0018](0018-use-validated-message-failure-codes.md) | Accepted | Use validated message failure codes. |
