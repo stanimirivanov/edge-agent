@@ -1,7 +1,7 @@
 use edgeagent_messaging::{
-    ConsumeError, ConsumeErrorKind, HandlerFailure, HandlerFailureKind, InboundProcessingError,
-    InboxStoreError, InboxStoreErrorKind, OutboxStoreError, OutboxStoreErrorKind, PublishError,
-    PublishErrorKind,
+    ConsumeError, ConsumeErrorKind, FailureCode, HandlerFailure, HandlerFailureKind,
+    InboundProcessingError, InboxStoreError, InboxStoreErrorKind, OutboxStoreError,
+    OutboxStoreErrorKind, PublishError, PublishErrorKind,
 };
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -64,8 +64,11 @@ fn public_messaging_errors_redact_causes_but_preserve_source_chains() {
         "message transport is unavailable",
         "Unavailable",
     );
-    let handler =
-        HandlerFailure::with_source(HandlerFailureKind::Permanent, CODE_SENTINEL, PrivateCause);
+    let handler = HandlerFailure::with_source(
+        HandlerFailureKind::Permanent,
+        FailureCode::from_static(CODE_SENTINEL),
+        PrivateCause,
+    );
     assert_redacted(&handler, "message handler rejected", "Permanent");
     assert!(!format!("{handler:?}").contains(CODE_SENTINEL));
     assert_redacted(
@@ -89,7 +92,7 @@ fn public_messaging_errors_redact_causes_but_preserve_source_chains() {
     assert_redacted(
         &InboundProcessingError::Handler(HandlerFailure::with_source(
             HandlerFailureKind::Transient,
-            "retry",
+            FailureCode::from_static("retry"),
             PrivateCause,
         )),
         "message handler failed transiently",

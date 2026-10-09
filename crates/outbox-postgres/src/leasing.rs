@@ -5,7 +5,7 @@ use crate::validation::{
     MAX_RETRY_DELAY, duration_milliseconds, validate_token,
 };
 use crate::{ClaimedMessage, OutboxError, PostgresOutbox};
-use edgeagent_messaging::LeaseGeneration;
+use edgeagent_messaging::{FailureCode, LeaseGeneration};
 use sqlx::{Postgres, Transaction};
 use std::time::Duration;
 
@@ -165,10 +165,14 @@ impl PostgresOutbox {
         claim: &ClaimedMessage,
         lease_owner: &str,
         retry_after: Duration,
-        failure_code: &str,
+        failure_code: FailureCode,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
-        validate_token("failure_code", failure_code, MAX_FAILURE_CODE_BYTES)?;
+        validate_token(
+            "failure_code",
+            failure_code.as_str(),
+            MAX_FAILURE_CODE_BYTES,
+        )?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let retry_milliseconds =
             duration_milliseconds("retry_after", retry_after, Duration::ZERO, MAX_RETRY_DELAY)?;
@@ -178,7 +182,7 @@ impl PostgresOutbox {
             .bind(lease_owner)
             .bind(lease_generation)
             .bind(retry_milliseconds)
-            .bind(failure_code)
+            .bind(failure_code.as_str())
             .execute(&mut **transaction)
             .await
             .map_err(OutboxError::storage)?;
@@ -198,17 +202,17 @@ impl PostgresOutbox {
         transaction: &mut Transaction<'_, Postgres>,
         claim: &ClaimedMessage,
         lease_owner: &str,
-        reason: &str,
+        reason: FailureCode,
     ) -> Result<(), OutboxError> {
         validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
-        validate_token("quarantine_reason", reason, MAX_FAILURE_CODE_BYTES)?;
+        validate_token("quarantine_reason", reason.as_str(), MAX_FAILURE_CODE_BYTES)?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let updated = sqlx::query(QUARANTINE_SQL)
             .bind(claim.message_source())
             .bind(claim.message_id())
             .bind(lease_owner)
             .bind(lease_generation)
-            .bind(reason)
+            .bind(reason.as_str())
             .execute(&mut **transaction)
             .await
             .map_err(OutboxError::storage)?;

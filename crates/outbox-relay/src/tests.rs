@@ -3,8 +3,9 @@ use crate::{QuarantineReason, RelayErrorKind, RelayOutcome, RelayPolicy, relay_o
 
 use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRegistry};
 use edgeagent_messaging::{
-    ClaimedMessage, LeaseGeneration, MessagePublisher, OutboxRelayStore, OutboxStoreFuture,
-    PublishDisposition, PublishError, PublishErrorKind, PublishFuture, PublishReceipt,
+    ClaimedMessage, FailureCode, LeaseGeneration, MessagePublisher, OutboxRelayStore,
+    OutboxStoreFuture, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
+    PublishReceipt,
 };
 use serde_json::json;
 use std::error::Error;
@@ -22,8 +23,8 @@ const CLAIM_GENERATION: u64 = 7;
 enum Transition {
     Claimed,
     Published(u64),
-    RetryScheduled(u64),
-    Quarantined(u64),
+    RetryScheduled(u64, &'static str),
+    Quarantined(u64, &'static str),
 }
 
 #[derive(Default)]
@@ -61,11 +62,13 @@ impl OutboxRelayStore for InMemoryStore {
         claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
         _retry_after: Duration,
-        _failure_code: &'operation str,
+        failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            self.transitions
-                .push(Transition::RetryScheduled(claim.lease_generation().get()));
+            self.transitions.push(Transition::RetryScheduled(
+                claim.lease_generation().get(),
+                failure_code.as_str(),
+            ));
             Ok(())
         })
     }
@@ -74,11 +77,13 @@ impl OutboxRelayStore for InMemoryStore {
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         _lease_owner: &'operation str,
-        _reason: &'operation str,
+        reason: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            self.transitions
-                .push(Transition::Quarantined(claim.lease_generation().get()));
+            self.transitions.push(Transition::Quarantined(
+                claim.lease_generation().get(),
+                reason.as_str(),
+            ));
             Ok(())
         })
     }
@@ -205,7 +210,7 @@ async fn relay_forwards_claim_generation_for_retry_and_quarantine() -> Result<()
         retry_store.transitions,
         [
             Transition::Claimed,
-            Transition::RetryScheduled(CLAIM_GENERATION)
+            Transition::RetryScheduled(CLAIM_GENERATION, "transport_unavailable")
         ]
     );
 
@@ -232,7 +237,7 @@ async fn relay_forwards_claim_generation_for_retry_and_quarantine() -> Result<()
         quarantine_store.transitions,
         [
             Transition::Claimed,
-            Transition::Quarantined(CLAIM_GENERATION)
+            Transition::Quarantined(CLAIM_GENERATION, "transport_rejected")
         ]
     );
     Ok(())
@@ -326,9 +331,9 @@ fn transient_failures_back_off_deterministically_then_stop() -> Result<(), Relay
             PublishErrorKind::Unavailable,
         ),
         RetryDecision::Retry {
-            failure_code: "transport_unavailable",
+            failure_code,
             ..
-        }
+        } if failure_code.as_str() == "transport_unavailable"
     ));
     assert!(matches!(
         retry_decision(

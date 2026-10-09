@@ -74,6 +74,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Run Rust tests
         run: cargo test --locked --workspace --all-targets
+      - name: Verify Rust API doctests
+        run: cargo test --locked --workspace --doc
       - name: Verify public messaging error redaction
         run: cargo test --locked -p edgeagent-messaging --test error_redaction
       - name: Verify canonical envelope bytes with preserve_order

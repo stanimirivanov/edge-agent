@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod consumer;
+mod failure_code;
 mod inbox;
 mod metadata;
 mod outbox;
@@ -15,6 +16,7 @@ pub use consumer::{
     ConsumeError, ConsumeErrorKind, DeliveryDisposition, DeliverySettlement, MessageConsumer,
     MessageDelivery, ReceiveFuture, RetryDelay, SettlementFuture,
 };
+pub use failure_code::FailureCode;
 pub use inbox::{
     HandlerFailure, HandlerFailureKind, InboundMessageStore, InboundProcessingError,
     InboundQuarantine, InboxDisposition, InboxFuture, InboxStoreError, InboxStoreErrorKind,

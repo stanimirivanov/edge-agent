@@ -150,8 +150,8 @@ mod tests {
     use edgeagent_contracts::MessageEnvelope;
     use edgeagent_messaging::{
         ConsumeError, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey, DeliveryMetadata,
-        DeliverySubject, HandlerFailure, InboundProcessingError, InboxDisposition, InboxStoreError,
-        InboxStoreErrorKind, QuarantineDisposition, RetryDelay,
+        DeliverySubject, FailureCode, HandlerFailure, InboundProcessingError, InboxDisposition,
+        InboxStoreError, InboxStoreErrorKind, QuarantineDisposition, RetryDelay,
     };
     use edgeagent_telemetry::EventSpineOutcome;
     use std::error::Error;
@@ -199,7 +199,9 @@ mod tests {
                 Ok(HandlingOutcome::RetryRequested {
                     attempt: 1,
                     delay: Duration::from_millis(1),
-                    failure: MessageFailure::Handler(HandlerFailure::transient("retry")),
+                    failure: MessageFailure::Handler(HandlerFailure::transient(
+                        FailureCode::from_static("retry"),
+                    )),
                 }),
                 EventSpineOutcome::RetryScheduled,
             ),
@@ -208,7 +210,9 @@ mod tests {
                     attempt: 3,
                     disposition: QuarantineDisposition::Inserted,
                     failure_code: "rejected",
-                    failure: MessageFailure::Handler(HandlerFailure::permanent("rejected")),
+                    failure: MessageFailure::Handler(HandlerFailure::permanent(
+                        FailureCode::from_static("rejected"),
+                    )),
                 }),
                 EventSpineOutcome::Quarantined,
             ),
@@ -232,7 +236,7 @@ mod tests {
             ),
             (
                 Err(InboundProcessingError::Handler(HandlerFailure::transient(
-                    "retry",
+                    FailureCode::from_static("retry"),
                 ))),
                 EventSpineOutcome::Failed,
             ),

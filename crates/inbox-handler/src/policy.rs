@@ -61,25 +61,10 @@ impl HandlerPolicy {
     }
 }
 
-pub(super) fn validate_failure_code(code: &str) -> Result<(), HandlerError> {
-    if code.is_empty()
-        || code.len() > 64
-        || !code.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
-        })
-    {
-        Err(HandlerError::invalid_handler_failure(
-            "handler failure code must be a lowercase ASCII token of 1 to 64 bytes",
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{HandlerPolicy, validate_failure_code};
-    use crate::{HandlerErrorKind, HandlerFailure};
+    use super::HandlerPolicy;
+    use crate::HandlerErrorKind;
     use std::time::Duration;
 
     #[test]
@@ -105,12 +90,6 @@ mod tests {
             .err()
             .map(|error| error.kind()),
             Some(HandlerErrorKind::InvalidPolicy)
-        );
-        assert_eq!(
-            validate_failure_code(HandlerFailure::permanent("Unsafe Reason").code())
-                .err()
-                .map(|error| error.kind()),
-            Some(HandlerErrorKind::InvalidHandlerFailure)
         );
     }
 }

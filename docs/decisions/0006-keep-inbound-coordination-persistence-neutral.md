@@ -194,6 +194,12 @@ ambiguity, quarantine, and acknowledgement-ordering tests before adoption.
 - Metrics preserve bounded stage and outcome dimensions; adapter causes use
   redacted operational logs and traces.
 
+**2026-10-08 refinement:** [ADR-0018](0018-use-validated-message-failure-codes.md)
+assigns delivery identity, subject, and attempt validation to
+`DeliveryMetadata`, and failure-code validation to `FailureCode`.
+`InboundQuarantine` still checks payload size before adapter work. The
+pre-adapter evidence bound and quarantine-before-settlement decision remain.
+
 ## Validation
 
 - Architecture checks reject PostgreSQL adapter or driver dependencies from

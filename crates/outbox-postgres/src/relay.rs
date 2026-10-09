@@ -2,7 +2,8 @@
 
 use crate::{OutboxError, OutboxErrorKind, PostgresOutbox};
 use edgeagent_messaging::{
-    ClaimedMessage, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
+    ClaimedMessage, FailureCode, OutboxRelayStore, OutboxStoreError, OutboxStoreErrorKind,
+    OutboxStoreFuture,
 };
 use sqlx::{Connection, PgConnection};
 use std::time::Duration;
@@ -63,7 +64,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         retry_after: Duration,
-        failure_code: &'operation str,
+        failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
             let mut transaction = self.client.begin().await.map_err(unavailable)?;
@@ -85,7 +86,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
-        reason: &'operation str,
+        reason: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
             let mut transaction = self.client.begin().await.map_err(unavailable)?;

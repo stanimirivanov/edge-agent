@@ -1,5 +1,6 @@
 //! Application-owned ports and values for durable outbound message relay.
 
+use crate::FailureCode;
 use edgeagent_contracts::{MessageEnvelope, MessageRegistry, MessageRoutingError};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -39,7 +40,7 @@ pub trait OutboxRelayStore: Send {
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
         retry_after: Duration,
-        failure_code: &'operation str,
+        failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()>;
 
     /// Move a leased message into terminal quarantine.
@@ -47,7 +48,7 @@ pub trait OutboxRelayStore: Send {
         &'operation mut self,
         claim: &'operation ClaimedMessage,
         lease_owner: &'operation str,
-        reason: &'operation str,
+        reason: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()>;
 }
 

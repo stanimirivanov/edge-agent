@@ -1,10 +1,18 @@
 //! Confirmed iteration outcomes and bounded quarantine reasons.
 
 use edgeagent_contracts::MessageRoutingError;
-use edgeagent_messaging::{PublishDisposition, PublishError};
+use edgeagent_messaging::{FailureCode, PublishDisposition, PublishError};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
+
+const STORED_CONTRACT_INVALID: FailureCode = FailureCode::from_static("stored_contract_invalid");
+const PUBLISH_CONTRACT: FailureCode = FailureCode::from_static("publish_contract");
+const TRANSPORT_REJECTED: FailureCode = FailureCode::from_static("transport_rejected");
+const ATTEMPTS_EXHAUSTED_UNAVAILABLE: FailureCode =
+    FailureCode::from_static("attempts_exhausted_unavailable");
+const ATTEMPTS_EXHAUSTED_CONFIRMATION_UNKNOWN: FailureCode =
+    FailureCode::from_static("attempts_exhausted_confirmation_unknown");
 
 /// Observable durable result of one bounded relay iteration.
 #[derive(Debug)]
@@ -85,13 +93,13 @@ pub enum QuarantineReason {
 impl QuarantineReason {
     /// Return the bounded code persisted for operator inspection.
     #[must_use]
-    pub const fn code(self) -> &'static str {
+    pub const fn code(self) -> FailureCode {
         match self {
-            Self::StoredContractInvalid => "stored_contract_invalid",
-            Self::PublishContract => "publish_contract",
-            Self::TransportRejected => "transport_rejected",
-            Self::AttemptsExhaustedUnavailable => "attempts_exhausted_unavailable",
-            Self::AttemptsExhaustedConfirmationUnknown => "attempts_exhausted_confirmation_unknown",
+            Self::StoredContractInvalid => STORED_CONTRACT_INVALID,
+            Self::PublishContract => PUBLISH_CONTRACT,
+            Self::TransportRejected => TRANSPORT_REJECTED,
+            Self::AttemptsExhaustedUnavailable => ATTEMPTS_EXHAUSTED_UNAVAILABLE,
+            Self::AttemptsExhaustedConfirmationUnknown => ATTEMPTS_EXHAUSTED_CONFIRMATION_UNKNOWN,
         }
     }
 }
