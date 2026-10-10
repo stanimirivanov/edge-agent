@@ -20,7 +20,7 @@ pub struct MessageDelivery {
 
 impl MessageDelivery {
     /// Construct a delivery from a transport adapter without copying a `Bytes`
-    /// payload. Owned byte vectors remain accepted by existing callers.
+    /// payload. An owned byte vector is also accepted without copying its bytes.
     ///
     /// # Errors
     ///

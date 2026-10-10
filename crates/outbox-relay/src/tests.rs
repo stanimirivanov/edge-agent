@@ -1,14 +1,20 @@
 use crate::retry::{RetryDecision, retry_decision, retry_delay};
-use crate::{QuarantineReason, RelayErrorKind, RelayOutcome, RelayPolicy, relay_once};
+use crate::{
+    QuarantineReason, RelayErrorKind, RelayMessageFailure, RelayOutcome, RelayPolicy, relay_once,
+};
 
-use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata, MessageRegistry};
+use edgeagent_contracts::{
+    Component, MessageContractError, MessageDefinition, MessageMetadata, MessageRegistry,
+    MessageRoutingError,
+};
 use edgeagent_messaging::{
     ClaimedMessage, FailureCode, LeaseDuration, LeaseGeneration, MessagePublisher,
-    OutboxRelayStore, OutboxRetryDelay, OutboxStoreFuture, PublishDisposition, PublishError,
-    PublishErrorKind, PublishFuture, PublishReceipt,
+    OutboxRelayStore, OutboxRetryDelay, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
+    PublishDisposition, PublishError, PublishErrorKind, PublishFuture, PublishReceipt,
 };
 use serde_json::json;
 use std::error::Error;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
@@ -18,6 +24,7 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     "order",
 );
 const CLAIM_GENERATION: u64 = 7;
+const STORED_SENTINEL: &str = "private-stored-envelope-sentinel-7391";
 
 #[derive(Debug, Eq, PartialEq)]
 enum Transition {
@@ -31,6 +38,8 @@ enum Transition {
 struct InMemoryStore {
     claimed: Option<ClaimedMessage>,
     transitions: Vec<Transition>,
+    quarantine_error: Option<OutboxStoreErrorKind>,
+    quarantine_request: Option<(ClaimedMessage, String)>,
 }
 
 impl OutboxRelayStore for InMemoryStore {
@@ -77,15 +86,17 @@ impl OutboxRelayStore for InMemoryStore {
     fn quarantine<'operation>(
         &'operation mut self,
         claim: &'operation ClaimedMessage,
-        _lease_owner: &'operation str,
+        lease_owner: &'operation str,
         reason: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
+            self.quarantine_request = Some((claim.clone(), lease_owner.to_owned()));
             self.transitions.push(Transition::Quarantined(
                 claim.lease_generation().get(),
                 reason.as_str(),
             ));
-            Ok(())
+            self.quarantine_error
+                .map_or(Ok(()), |kind| Err(OutboxStoreError::new(kind)))
         })
     }
 }
@@ -111,6 +122,21 @@ impl MessagePublisher for FailingPublisher {
         _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
     ) -> PublishFuture<'publisher> {
         Box::pin(async move { Err(PublishError::new(self.0)) })
+    }
+}
+
+#[derive(Default)]
+struct RecordingPublisher(AtomicUsize);
+
+impl MessagePublisher for RecordingPublisher {
+    fn publish<'publisher>(
+        &'publisher self,
+        _definition: MessageDefinition,
+        _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
+    ) -> PublishFuture<'publisher> {
+        // Count invocation, not polling, so even an unpolled publish is detected.
+        self.0.fetch_add(1, Ordering::Relaxed);
+        Box::pin(async { Ok(PublishReceipt::new(PublishDisposition::Persisted)) })
     }
 }
 
@@ -141,6 +167,176 @@ fn claimed_message() -> Result<ClaimedMessage, Box<dyn Error>> {
         1,
         LeaseGeneration::new(CLAIM_GENERATION)?,
     )?)
+}
+
+async fn assert_stored_contract_quarantined(
+    claim: ClaimedMessage,
+    expected_failure: MessageRoutingError,
+) -> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        "relay_port_test",
+        Duration::from_secs(30),
+        3,
+        Duration::from_secs(1),
+        Duration::from_secs(60),
+    )?;
+    let mut store = InMemoryStore {
+        claimed: Some(claim.clone()),
+        ..InMemoryStore::default()
+    };
+    let publisher = RecordingPublisher::default();
+
+    let outcome = relay_once(&mut store, &registry, &publisher, &policy).await?;
+
+    assert_eq!(publisher.0.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        store.quarantine_request,
+        Some((claim, "relay_port_test".to_owned()))
+    );
+    assert!(!format!("{outcome:?}").contains(STORED_SENTINEL));
+    let RelayOutcome::Quarantined {
+        reason,
+        attempt,
+        failure,
+    } = outcome
+    else {
+        return Err("invalid stored message must be quarantined".into());
+    };
+    assert_eq!(reason, QuarantineReason::StoredContractInvalid);
+    assert_eq!(attempt, 1);
+    assert!(matches!(failure, RelayMessageFailure::StoredContract(_)));
+    assert_eq!(
+        failure
+            .source()
+            .and_then(|source| source.downcast_ref::<MessageRoutingError>()),
+        Some(&expected_failure)
+    );
+    if let MessageRoutingError::Envelope(expected_contract) = &expected_failure {
+        assert_eq!(
+            failure
+                .source()
+                .and_then(Error::source)
+                .and_then(|source| { source.downcast_ref::<MessageContractError>() }),
+            Some(expected_contract)
+        );
+    }
+    assert!(!failure.to_string().contains(STORED_SENTINEL));
+    assert_eq!(
+        store.transitions,
+        [
+            Transition::Claimed(LeaseDuration::new(Duration::from_secs(30))?),
+            Transition::Quarantined(CLAIM_GENERATION, "stored_contract_invalid")
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn corrupt_stored_envelope_quarantines_before_any_publish() -> Result<(), Box<dyn Error>> {
+    let valid = claimed_message()?;
+    let claim = ClaimedMessage::new(
+        valid.message_source().to_owned(),
+        valid.message_id().to_owned(),
+        valid.message_type().to_owned(),
+        valid.transport_subject().to_owned(),
+        STORED_SENTINEL.as_bytes().to_vec(),
+        valid.attempt(),
+        valid.lease_generation(),
+    )?;
+    assert_stored_contract_quarantined(
+        claim,
+        MessageRoutingError::Envelope(MessageContractError::EnvelopeDecoding {
+            line: 1,
+            column: 1,
+        }),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn each_stored_metadata_mismatch_quarantines_before_any_publish() -> Result<(), Box<dyn Error>>
+{
+    let valid = claimed_message()?;
+    for field in ["id", "source", "type", "transport_subject"] {
+        let stored_value = |candidate, original: &str| {
+            if field == candidate {
+                STORED_SENTINEL.to_owned()
+            } else {
+                original.to_owned()
+            }
+        };
+        let claim = ClaimedMessage::new(
+            stored_value("source", valid.message_source()),
+            stored_value("id", valid.message_id()),
+            stored_value("type", valid.message_type()),
+            stored_value("transport_subject", valid.transport_subject()),
+            valid.envelope_bytes().to_vec(),
+            valid.attempt(),
+            valid.lease_generation(),
+        )?;
+        assert_stored_contract_quarantined(claim, MessageRoutingError::ContractMismatch { field })
+            .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn stored_contract_quarantine_failure_is_not_reported_as_success()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        "relay_port_test",
+        Duration::from_secs(30),
+        3,
+        Duration::from_secs(1),
+        Duration::from_secs(60),
+    )?;
+    let valid = claimed_message()?;
+    let claim = ClaimedMessage::new(
+        valid.message_source().to_owned(),
+        valid.message_id().to_owned(),
+        valid.message_type().to_owned(),
+        valid.transport_subject().to_owned(),
+        STORED_SENTINEL.as_bytes().to_vec(),
+        valid.attempt(),
+        valid.lease_generation(),
+    )?;
+    let mut store = InMemoryStore {
+        claimed: Some(claim.clone()),
+        quarantine_error: Some(OutboxStoreErrorKind::Unavailable),
+        ..InMemoryStore::default()
+    };
+    let publisher = RecordingPublisher::default();
+
+    let result = relay_once(&mut store, &registry, &publisher, &policy).await;
+
+    assert_eq!(publisher.0.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        store.quarantine_request,
+        Some((claim, "relay_port_test".to_owned()))
+    );
+    let error = result
+        .err()
+        .ok_or("failed quarantine must remain an iteration error")?;
+    assert_eq!(error.kind(), RelayErrorKind::Storage);
+    assert_eq!(
+        error
+            .source()
+            .and_then(|source| source.downcast_ref::<OutboxStoreError>())
+            .map(OutboxStoreError::kind),
+        Some(OutboxStoreErrorKind::Unavailable)
+    );
+    assert_eq!(
+        store.transitions,
+        [
+            Transition::Claimed(LeaseDuration::new(Duration::from_secs(30))?),
+            Transition::Quarantined(CLAIM_GENERATION, "stored_contract_invalid")
+        ]
+    );
+    Ok(())
 }
 
 #[tokio::test]

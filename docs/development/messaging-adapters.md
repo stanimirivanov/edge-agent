@@ -131,6 +131,37 @@ acknowledgement-wait settings before repeated restart attempts: exhaustion is
 not a substitute for durable quarantine. Neither a protocol rejection nor a
 retained raw broker message is a committed quarantine record.
 
+## Stored-envelope validation boundary
+
+An outbox claim is a persistence record, not a validated publication. Its
+constructor accepts stored text and bytes so a corrupt or obsolete record can
+still reach the relay's quarantine path. `envelope_bytes()` returns that exact
+untrusted evidence; it does not authorize publication.
+
+`ClaimedMessage::validated_envelope` applies these gates in order:
+
+1. Reject raw input over 256 KiB before JSON or CloudEvents parsing. Valid input
+   at the boundary, including insignificant whitespace, remains eligible.
+2. Decode and validate the envelope's required metadata and JSON payload shape.
+3. Resolve the exact major-version type and enforce registered schema,
+   partition namespace, event-producer authority, and encoded-size policy.
+4. Compare all four stored columns (`id`, `source`, `type`, and
+   `transport_subject`) with the decoded identity and registry-derived route.
+
+Revalidation never rewrites stored bytes, attempts, or lease generations.
+Malformed, invalid-metadata, and raw oversize failures retain a typed, payload-
+safe `MessageContractError` inside `MessageRoutingError::Envelope`. Unsupported
+types and mismatches retain their routing category or fixed field name, not
+the actual values. The raw-size error is distinct from the registry's encoded-
+size error. This is envelope/routing validation, not domain payload schema
+validation.
+
+The relay quarantines rejected records with `stored_contract_invalid` under
+the original claim fence and never invokes publication. A failed quarantine
+remains a storage error; it must not report a successful terminal outcome or
+choose a replacement transition. This ordering is an application contract;
+adapters still own atomic, lease-fenced persistence.
+
 ## Failure and retry contract
 
 | Category | Meaning | Caller action |
@@ -219,6 +250,23 @@ worker loop, lease extension, compensation service, or shutdown runtime.
 Normal `cargo test --locked --workspace --all-targets` compiles the adapter and
 runs deterministic tests for subject derivation, pre-I/O rejection, failure
 classification, and acknowledgement mapping without a broker.
+The messaging `claimed_envelope` integration executable directly tests valid
+commands and authoritative events, inclusive raw-size boundaries, malformed or
+invalid decoded input, unsupported versions, registry policy, every stored
+column comparison, and payload-safe error chains. The `auto_traits` executable
+checks sendable deliveries and future aliases with borrowed lifetimes, and
+sendable, shareable, owned errors without requiring deliveries or settlement
+adapters to be `Sync`. Relay unit tests prove rejection prevents even an
+unpolled publication invocation and retains the original fence and typed
+failure through quarantine, including a failed quarantine:
+
+```text
+cargo test --locked -p edgeagent-messaging --test claimed_envelope --test auto_traits
+cargo test --locked -p edgeagent-outbox-relay --lib stored_
+```
+
+The existing Linux/Windows workspace gate runs these tests without a broker,
+database, runtime installation, or new dependencies.
 The isolated `delivery_warning` integration test uses controlled manual polls
 to exercise unsettled drop, unpolled abandonment, pending cancellation,
 resource release, exact disposition forwarding, and explicit success/error

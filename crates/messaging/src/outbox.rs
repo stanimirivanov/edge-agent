@@ -229,7 +229,10 @@ impl ClaimedMessage {
         &self.transport_subject
     }
 
-    /// Return the exact validated envelope bytes retained by the producer.
+    /// Return the exact stored envelope bytes without validating or modifying them.
+    ///
+    /// Persistence records remain untrusted; use [`Self::validated_envelope`]
+    /// before publication.
     #[must_use]
     pub fn envelope_bytes(&self) -> &[u8] {
         &self.envelope
@@ -249,10 +252,20 @@ impl ClaimedMessage {
 
     /// Decode and revalidate the stored bytes and denormalized routing metadata.
     ///
+    /// Enforces the raw byte limit before decoding, then the registry's exact
+    /// version, schema, partition, and event-producer policy. Finally compares
+    /// stored `id`, `source`, `type`, and `transport_subject` with the validated
+    /// envelope and derived route. This borrows the claim and leaves its exact
+    /// bytes, attempt, and lease generation unchanged, including on rejection.
+    ///
     /// # Errors
     ///
-    /// Returns a contract error when storage is corrupt or the process registry
-    /// no longer supports the exact message major version.
+    /// Returns [`MessageRoutingError::Envelope`] for raw oversize, malformed,
+    /// or invalid decoded input, [`MessageRoutingError::UnsupportedMessageType`]
+    /// for an unregistered exact type, or a registry/column contract mismatch.
+    /// Diagnostics preserve safe categories and field names, not compared
+    /// values or payload bytes. The relay owns durable quarantine on rejection;
+    /// this method performs no persistence or publication.
     pub fn validated_envelope(
         &self,
         registry: &MessageRegistry<'_>,
