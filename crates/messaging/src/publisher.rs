@@ -6,7 +6,12 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 
-/// Owned future returned by a message publisher implementation.
+/// Sendable, borrowed future returned by a message publisher implementation.
+///
+/// # Cancellation
+///
+/// Dropping this future does not undo publication or establish whether the
+/// transport persisted the message. See [`MessagePublisher::publish`].
 pub type PublishFuture<'publisher> =
     Pin<Box<dyn Future<Output = Result<PublishReceipt, PublishError>> + Send + 'publisher>>;
 
@@ -21,6 +26,15 @@ pub trait MessagePublisher: Send + Sync {
     /// A caller retrying an unavailable or ambiguous publication MUST preserve
     /// the envelope identity and content. A successful return confirms broker
     /// persistence, not exactly-once domain processing.
+    ///
+    /// # Cancellation
+    ///
+    /// Without a returned receipt or classified error, publication is unknown:
+    /// cancellation may race transport acceptance or its confirmation. It is
+    /// not an `Unavailable` result and does not prove that no request was sent.
+    /// Retry only the same identity and immutable content through bounded
+    /// application policy. Broker deduplication may have a finite window;
+    /// consumer inboxes still prevent repeated committed domain effects.
     fn publish<'publisher>(
         &'publisher self,
         definition: MessageDefinition,

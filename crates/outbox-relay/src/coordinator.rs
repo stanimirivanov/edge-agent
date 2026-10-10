@@ -19,6 +19,15 @@ use std::time::Instant;
 /// Broker confirmation, retry scheduling, or quarantine is then committed in a
 /// short transaction guarded by the original lease.
 ///
+/// # Cancellation
+///
+/// Cancellation never schedules a replacement storage transition. A claim or
+/// completion may already have committed, and a publication may already have
+/// persisted without a receipt. Resolve through actual storage state and normal
+/// lease expiry/reacquisition; preserve message identity and immutable bytes.
+/// Every later completion still requires its own current claim generation.
+/// Fencing protects storage, not a publication already sent to the broker.
+///
 /// # Errors
 ///
 /// Returns a storage or outbox error when claiming or durably recording the

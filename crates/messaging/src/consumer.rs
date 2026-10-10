@@ -16,6 +16,8 @@ pub type ReceiveFuture<'consumer> =
 
 /// Future returned while confirming one delivery settlement with the broker.
 ///
+/// # Cancellation
+///
 /// Dropping an incomplete future does not undo a request or prove its outcome.
 /// Await and inspect its result; if confirmation is unknown, permit redelivery
 /// and rely on committed inbox identity rather than choosing another disposition.
@@ -26,10 +28,6 @@ pub type SettlementFuture =
 pub trait MessageConsumer: Send {
     /// Wait for the next delivery.
     ///
-    /// Cancellation drops the receive future without acknowledging a message.
-    /// If the broker already delivered it, redelivery after ack-wait can
-    /// increment `delivery_attempt`; shutdown cancellation must not be treated
-    /// as a handler failure when applying attempt-based policy.
     /// The returned delivery remains unsettled until the caller explicitly
     /// chooses one terminal disposition.
     /// If broker metadata or payload size cannot be represented as a delivery, no
@@ -37,12 +35,21 @@ pub trait MessageConsumer: Send {
     /// error is not a reason to acknowledge the raw message; callers must
     /// follow the adapter's documented recovery policy rather than blindly
     /// retrying intake.
+    ///
+    /// # Cancellation
+    ///
+    /// Cancellation drops the receive future without acknowledging a message.
+    /// If the broker already delivered it, redelivery after ack-wait can
+    /// increment `delivery_attempt`; shutdown cancellation must not be treated
+    /// as a handler failure when applying attempt-based policy.
     fn receive(&mut self) -> ReceiveFuture<'_>;
 }
 
 /// One-shot broker settlement owned by a received delivery.
 pub trait DeliverySettlement: Send {
     /// Apply and confirm exactly one terminal disposition.
+    ///
+    /// # Cancellation
     ///
     /// Construction may perform synchronous adapter work. Dropping an unpolled
     /// or pending future cannot establish whether a broker action occurred and

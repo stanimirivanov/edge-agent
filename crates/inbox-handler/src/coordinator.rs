@@ -16,6 +16,15 @@ use crate::{HandlerError, HandlerPolicy, HandlingOutcome, MessageFailure};
 /// deterministic delayed redelivery; infrastructure failures are never
 /// converted into terminal success.
 ///
+/// # Cancellation
+///
+/// Dropping an incomplete invocation never schedules an alternative disposition
+/// or converts shutdown into a handler failure. Persistence may have committed
+/// before its result arrived; leave recovery to redelivery of the same immutable
+/// message and durable inbox/quarantine identity. If settlement already started,
+/// its broker outcome remains unknown. No destructor acknowledges or retries.
+/// Adapters remain responsible for atomic persistence under cancellation.
+///
 /// # Errors
 ///
 /// Returns a configuration, invariant, quarantine, or broker-settlement failure.

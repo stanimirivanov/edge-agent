@@ -142,6 +142,21 @@ ownership and `must_use`; the existing Linux/Windows workspace and doctest
 gates own these T2 contracts. The guard never chooses a broker disposition;
 see [ADR-0020](../decisions/0020-retain-settlement-abandonment-diagnostics.md).
 
+The inbound and outbound `cancellation` integration executables are T2
+application-ordering sensors. Controlled manual polls pause before and after
+modeled persistence commits; cancellation must not start a replacement
+settlement, publication, or storage outcome. Stateful fakes prove inbox duplicate
+recovery, quarantine identity and monotonic attempts, abandoned-claim expiry,
+immutable publication retry, and recovery from each outbox outcome's lost
+result. The relay fake uses an explicit clock and replaces worker handles without
+resetting stored generations. The crate-level doctest proves commit precedes
+terminal settlement. Existing Linux/Windows workspace tests and doctests own
+these gates, with no runtime, sleeps, or services. Actual PostgreSQL atomicity,
+quarantine comparison, and same-owner fences remain T3 adapter contracts; do not
+promote fake transaction behavior into a claimed database guarantee. See
+[messaging cancellation protocols](messaging-adapters.md#cancellation-and-recovery-protocols)
+for per-operation recovery and the focused commands.
+
 The contracts crate has an ignored, opt-in throughput probe for comparing
 clone-based and borrowed typed decoding:
 

@@ -139,6 +139,11 @@ neither prose nor a passing compile substitutes for them.
 - Never create unbounded tasks, threads, workers, queues, or retries.
 - Document ordering, ownership transfer, cancellation priority, retry safety,
   delivery guarantees, deduplication, terminal failure, and operator recovery.
+- A side-effecting async port MUST distinguish confirmed results from cancelled
+  or unknown outcomes and document the stable identity and recovery path.
+  Cancellation MUST NOT imply rollback, successful confirmation, or permission
+  for an automatic compensating action. Coordinator tests SHOULD stop before
+  and after modeled commit boundaries; real adapter tests still prove atomicity.
 - Do not coordinate tests with sleeps; use controlled clocks, barriers, events,
   channels, or observable state.
 
