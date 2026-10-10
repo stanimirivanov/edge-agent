@@ -105,6 +105,9 @@ neither prose nor a passing compile substitutes for them.
 - Public error `Display` and `Debug` MUST NOT expose provider internals,
   credentials, stack traces, prompts, or licensed payloads.
 - Preserve causes when wrapping failures.
+- A classified failure without an underlying cause MUST NOT invent an error
+  solely to satisfy a wrapper constructor. Use a category-only constructor;
+  wrap and preserve the concrete cause when one actually exists.
 - At untrusted contract boundaries, do not expose free-form parser, serializer,
   SDK, or mismatched-value text through public error formatting when it may
   contain payload data. Retain stable categories, safe field names, and numeric

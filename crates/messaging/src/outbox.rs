@@ -253,7 +253,7 @@ impl Display for OutboxStoreErrorKind {
     }
 }
 
-/// Outbound relay storage failure with bounded text and an internal cause.
+/// Outbound relay storage failure with bounded text and an optional internal cause.
 pub struct OutboxStoreError {
     kind: OutboxStoreErrorKind,
     reason: Option<&'static str>,
@@ -272,7 +272,49 @@ impl std::fmt::Debug for OutboxStoreError {
 }
 
 impl OutboxStoreError {
+    /// Construct a classified failure without an underlying cause.
+    ///
+    /// Public formatting reports only the category and `source()` returns
+    /// `None`. Use [`Self::with_source`] when a concrete cause exists rather
+    /// than discarding it or inventing a placeholder error.
+    ///
+    /// ```
+    /// use edgeagent_messaging::{OutboxStoreError, OutboxStoreErrorKind};
+    /// use std::error::Error;
+    ///
+    /// let error = OutboxStoreError::new(OutboxStoreErrorKind::StateTransition);
+    /// assert_eq!(error.kind(), OutboxStoreErrorKind::StateTransition);
+    /// assert!(error.source().is_none());
+    /// ```
+    ///
+    /// A constructed failure must be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{OutboxStoreError, OutboxStoreErrorKind};
+    /// OutboxStoreError::new(OutboxStoreErrorKind::Invariant);
+    /// ```
+    #[must_use]
+    pub const fn new(kind: OutboxStoreErrorKind) -> Self {
+        Self {
+            kind,
+            reason: None,
+            source: None,
+        }
+    }
+
     /// Construct a classified adapter failure while preserving its cause.
+    ///
+    /// A wrapped failure must also be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{OutboxStoreError, OutboxStoreErrorKind};
+    /// OutboxStoreError::with_source(
+    ///     OutboxStoreErrorKind::Unavailable, std::io::Error::other("example cause"),
+    /// );
+    /// ```
+    #[must_use]
     pub fn with_source<E>(kind: OutboxStoreErrorKind, source: E) -> Self
     where
         E: Error + Send + Sync + 'static,

@@ -83,10 +83,10 @@ impl Display for PublishErrorKind {
     }
 }
 
-/// Publication failure with a stable public category and preserved internal cause.
+/// Publication failure with a stable public category and optional internal cause.
 pub struct PublishError {
     kind: PublishErrorKind,
-    source: Box<dyn Error + Send + Sync>,
+    source: Option<Box<dyn Error + Send + Sync>>,
 }
 
 impl std::fmt::Debug for PublishError {
@@ -94,12 +94,39 @@ impl std::fmt::Debug for PublishError {
         formatter
             .debug_struct("PublishError")
             .field("kind", &self.kind)
-            .field("source_present", &true)
+            .field("source_present", &self.source.is_some())
             .finish()
     }
 }
 
 impl PublishError {
+    /// Construct a classified failure without an underlying cause.
+    ///
+    /// Public formatting reports only the category and `source()` returns
+    /// `None`. Use [`Self::with_source`] when a concrete cause exists rather
+    /// than discarding it or inventing a placeholder error.
+    ///
+    /// ```
+    /// use edgeagent_messaging::{PublishError, PublishErrorKind};
+    /// use std::error::Error;
+    ///
+    /// let error = PublishError::new(PublishErrorKind::Rejected);
+    /// assert_eq!(error.kind(), PublishErrorKind::Rejected);
+    /// assert!(error.source().is_none());
+    /// ```
+    ///
+    /// A constructed failure must be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{PublishError, PublishErrorKind};
+    /// PublishError::new(PublishErrorKind::Rejected);
+    /// ```
+    #[must_use]
+    pub const fn new(kind: PublishErrorKind) -> Self {
+        Self { kind, source: None }
+    }
+
     /// Wrap an adapter or contract cause without exposing it through `Display`.
     #[must_use]
     pub fn with_source<E>(kind: PublishErrorKind, source: E) -> Self
@@ -108,7 +135,7 @@ impl PublishError {
     {
         Self {
             kind,
-            source: Box::new(source),
+            source: Some(Box::new(source)),
         }
     }
 
@@ -127,7 +154,9 @@ impl Display for PublishError {
 
 impl Error for PublishError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.source.as_ref())
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
     }
 }
 

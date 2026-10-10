@@ -93,8 +93,17 @@ error `Display` and `Debug` must retain the failure category without echoing
 that text. The messaging error-redaction integration test and downstream
 wrapper tests inject causes whose `Display` and `Debug` contain sentinels, then
 check that public error formatting hides them while `Error::source()` still
-preserves the causes. When adding a public error wrapper, test both paths: a
-redacted top-level message does not make its raw source chain safe to log.
+preserves the causes. The same integration executable covers every publication,
+consumption, inbox-store, and outbox-store category with and without a source.
+It checks exact public text, accurate source-presence diagnostics, absent
+fabricated causes, typed cause retention, and source-free errors nested in
+application wrappers.
+Source-free constructors remain usable in constant expressions. These T2 tests
+run in the existing Linux/Windows workspace and explicit error-contract CI
+gates; doctests enforce constructor use with positive and `must_use` rejection
+examples. When adding a public error wrapper,
+test both paths: a redacted top-level message does not make its raw source chain
+safe to log, and a category-only error must not claim an underlying cause.
 
 The T2 messaging contract tests exercise both inclusive retry-delay bounds and
 adjacent invalid values. A disposition must contain a validated delay, so an

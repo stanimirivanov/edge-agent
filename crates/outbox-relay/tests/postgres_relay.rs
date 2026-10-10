@@ -86,10 +86,7 @@ impl MessagePublisher for StubPublisher {
                 })?;
             match outcome {
                 StubOutcome::Persisted => Ok(PublishReceipt::new(PublishDisposition::Persisted)),
-                StubOutcome::Failure(kind) => Err(PublishError::with_source(
-                    kind,
-                    io::Error::other("synthetic publication failure"),
-                )),
+                StubOutcome::Failure(kind) => Err(PublishError::new(kind)),
             }
         })
     }

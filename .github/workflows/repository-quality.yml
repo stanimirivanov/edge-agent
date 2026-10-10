@@ -76,7 +76,7 @@ jobs:
         run: cargo test --locked --workspace --all-targets
       - name: Verify Rust API doctests
         run: cargo test --locked --workspace --doc
-      - name: Verify public messaging error redaction
+      - name: Verify public messaging error contracts
         run: cargo test --locked -p edgeagent-messaging --test error_redaction
       - name: Verify canonical envelope bytes with preserve_order
         run: cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order

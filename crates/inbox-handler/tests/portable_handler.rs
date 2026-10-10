@@ -121,10 +121,7 @@ impl ScriptedStore {
             Entry::Occupied(entry) if entry.get().same_immutable_evidence(&recorded) => {
                 Ok(QuarantineDisposition::AlreadyPresent)
             }
-            Entry::Occupied(_) => Err(InboxStoreError::with_source(
-                InboxStoreErrorKind::Invariant,
-                io::Error::other("scripted quarantine identity conflict"),
-            )),
+            Entry::Occupied(_) => Err(InboxStoreError::new(InboxStoreErrorKind::Invariant)),
         }
     }
 }
@@ -173,16 +170,12 @@ impl InboundMessageStore for ScriptedStore {
             self.quarantines.push(recorded.clone());
             let result = match self.quarantine_behavior {
                 QuarantineBehavior::Available => self.retain_quarantine(consumer_name, recorded),
-                QuarantineBehavior::Unavailable => Err(InboxStoreError::with_source(
-                    InboxStoreErrorKind::Unavailable,
-                    io::Error::other("scripted quarantine outage"),
-                )),
+                QuarantineBehavior::Unavailable => {
+                    Err(InboxStoreError::new(InboxStoreErrorKind::Unavailable))
+                }
                 QuarantineBehavior::CommitThenUnavailable => {
                     match self.retain_quarantine(consumer_name, recorded) {
-                        Ok(_) => Err(InboxStoreError::with_source(
-                            InboxStoreErrorKind::Unavailable,
-                            io::Error::other("scripted commit confirmation lost"),
-                        )),
+                        Ok(_) => Err(InboxStoreError::new(InboxStoreErrorKind::Unavailable)),
                         Err(error) => Err(error),
                     }
                 }
@@ -198,10 +191,7 @@ impl InboundMessageStore for ScriptedStore {
 }
 
 fn store_error(kind: InboxStoreErrorKind) -> InboundProcessingError {
-    InboundProcessingError::Store(InboxStoreError::with_source(
-        kind,
-        io::Error::other("scripted processing failure"),
-    ))
+    InboundProcessingError::Store(InboxStoreError::new(kind))
 }
 
 struct SettlementProbe {

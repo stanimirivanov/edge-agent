@@ -129,6 +129,16 @@ remains available through Rust's error chain for explicit diagnosis; redact it
 before structured logging. A receipt proves transport persistence only;
 consumer inbox handling still owns exactly-once domain effects.
 
+`PublishError`, `ConsumeError`, `InboxStoreError`, and `OutboxStoreError` offer
+`new(kind)` for a classified failure with no underlying cause. It records only
+the existing category; `Error::source()` returns `None` and `Debug` reports
+`source_present: false`. Do not fabricate an I/O error to satisfy the port.
+Use `with_source(kind, cause)` when an adapter or contract has a concrete
+failure to preserve. That path keeps its original category and typed cause,
+with `source_present: true` and unchanged payload-safe public formatting.
+Source presence does not change retry, quarantine, or health policy: callers
+continue to match the error kind. Both constructor forms are `must_use`.
+
 JetStream deduplication is bounded by the provisioned stream window. The
 transactional PostgreSQL outbox retains the same message identity and immutable
 bytes across every retry. Neither mechanism substitutes for consumer inbox

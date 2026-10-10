@@ -197,7 +197,7 @@ impl Display for ConsumeErrorKind {
     }
 }
 
-/// Consumer failure with stable public text and a preserved internal cause.
+/// Consumer failure with stable public text and an optional internal cause.
 pub struct ConsumeError {
     kind: ConsumeErrorKind,
     reason: Option<&'static str>,
@@ -215,6 +215,37 @@ impl std::fmt::Debug for ConsumeError {
 }
 
 impl ConsumeError {
+    /// Construct a classified failure without an underlying cause.
+    ///
+    /// Public formatting reports only the category and `source()` returns
+    /// `None`. Use [`Self::with_source`] when a concrete cause exists. An
+    /// unknown confirmation remains unknown even without a diagnostic cause.
+    ///
+    /// ```
+    /// use edgeagent_messaging::{ConsumeError, ConsumeErrorKind};
+    /// use std::error::Error;
+    ///
+    /// let error = ConsumeError::new(ConsumeErrorKind::ConfirmationUnknown);
+    /// assert_eq!(error.kind(), ConsumeErrorKind::ConfirmationUnknown);
+    /// assert!(error.source().is_none());
+    /// ```
+    ///
+    /// A constructed failure must be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{ConsumeError, ConsumeErrorKind};
+    /// ConsumeError::new(ConsumeErrorKind::ConfirmationUnknown);
+    /// ```
+    #[must_use]
+    pub const fn new(kind: ConsumeErrorKind) -> Self {
+        Self {
+            kind,
+            reason: None,
+            source: None,
+        }
+    }
+
     /// Wrap an adapter cause without exposing it through `Display`.
     #[must_use]
     pub fn with_source<E>(kind: ConsumeErrorKind, source: E) -> Self
