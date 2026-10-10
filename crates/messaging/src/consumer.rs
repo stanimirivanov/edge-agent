@@ -6,16 +6,19 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use bytes::Bytes;
-use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
+mod delivery;
 
-use crate::metadata::DeliveryMetadata;
+pub use delivery::MessageDelivery;
 
 /// Future returned while waiting for one durable consumer delivery.
 pub type ReceiveFuture<'consumer> =
     Pin<Box<dyn Future<Output = Result<MessageDelivery, ConsumeError>> + Send + 'consumer>>;
 
 /// Future returned while confirming one delivery settlement with the broker.
+///
+/// Dropping an incomplete future does not undo a request or prove its outcome.
+/// Await and inspect its result; if confirmation is unknown, permit redelivery
+/// and rely on committed inbox identity rather than choosing another disposition.
 pub type SettlementFuture =
     Pin<Box<dyn Future<Output = Result<(), ConsumeError>> + Send + 'static>>;
 
@@ -40,92 +43,13 @@ pub trait MessageConsumer: Send {
 /// One-shot broker settlement owned by a received delivery.
 pub trait DeliverySettlement: Send {
     /// Apply and confirm exactly one terminal disposition.
+    ///
+    /// Construction may perform synchronous adapter work. Dropping an unpolled
+    /// or pending future cannot establish whether a broker action occurred and
+    /// must not schedule an automatic replacement disposition. Return explicit
+    /// failures through `ConsumeError`; callers retain idempotent recovery.
+    #[must_use = "settlement must be awaited and its confirmation result inspected"]
     fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture;
-}
-
-/// A size-bounded, otherwise untrusted delivery whose settlement is consumed exactly once.
-/// Dropping it before settlement emits a payload-safe warning and leaves broker
-/// redelivery to the adapter; the warning is not a durable disposition.
-pub struct MessageDelivery {
-    payload: Bytes,
-    metadata: DeliveryMetadata,
-    settlement: Option<Box<dyn DeliverySettlement>>,
-}
-
-impl MessageDelivery {
-    /// Construct a delivery from a transport adapter without copying a `Bytes`
-    /// payload. Owned byte vectors remain accepted by existing callers.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Protocol` if raw bytes exceed the portable 256 KiB envelope
-    /// limit. The adapter must leave that raw broker message unsettled and
-    /// follow its protocol-fault recovery policy.
-    pub fn new(
-        payload: impl Into<Bytes>,
-        metadata: DeliveryMetadata,
-        settlement: Box<dyn DeliverySettlement>,
-    ) -> Result<Self, ConsumeError> {
-        let payload = payload.into();
-        if payload.len() > MAX_PORTABLE_MESSAGE_BYTES {
-            return Err(ConsumeError::protocol(
-                "delivery payload exceeds portable 256 KiB limit",
-            ));
-        }
-        Ok(Self {
-            payload,
-            metadata,
-            settlement: Some(settlement),
-        })
-    }
-
-    /// Return the untrusted structured envelope bytes.
-    #[must_use]
-    pub fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
-    /// Return portable broker delivery metadata.
-    #[must_use]
-    pub const fn metadata(&self) -> &DeliveryMetadata {
-        &self.metadata
-    }
-
-    /// Consume this delivery and confirm its terminal broker disposition.
-    /// A lost confirmation permits redelivery; handlers must deduplicate by
-    /// the stable message identity even after committing their local work.
-    pub fn settle(mut self, disposition: DeliveryDisposition) -> SettlementFuture {
-        match self.settlement.take() {
-            Some(settlement) => settlement.settle(disposition),
-            None => Box::pin(async {
-                Err(ConsumeError::protocol(
-                    "delivery settlement is missing after ownership transfer",
-                ))
-            }),
-        }
-    }
-}
-
-impl Drop for MessageDelivery {
-    fn drop(&mut self) {
-        if self.settlement.is_some() {
-            tracing::warn!(
-                delivery_attempt = self.metadata.delivery_attempt(),
-                payload_bytes = self.payload.len(),
-                "message delivery dropped without settlement"
-            );
-        }
-    }
-}
-
-impl std::fmt::Debug for MessageDelivery {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("MessageDelivery")
-            .field("payload_bytes", &self.payload.len())
-            .field("metadata", &self.metadata)
-            .finish_non_exhaustive()
-    }
 }
 
 /// Terminal action applied after a handler commits or classifies a failure.
@@ -302,6 +226,7 @@ mod tests {
     use crate::metadata::{DeliveryAttempt, DeliveryMessageKey, DeliveryMetadata, DeliverySubject};
     use bytes::Bytes;
     use edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES;
+    use std::task::{Context, Poll, Waker};
     use std::time::Duration;
 
     struct NoopSettlement;
@@ -310,6 +235,15 @@ mod tests {
         fn settle(self: Box<Self>, _disposition: DeliveryDisposition) -> SettlementFuture {
             Box::pin(async { Ok(()) })
         }
+    }
+
+    fn complete_noop_settlement(delivery: MessageDelivery) {
+        let mut future = delivery.settle(DeliveryDisposition::Acknowledge);
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(matches!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(Ok(()))
+        ));
     }
 
     #[test]
@@ -343,7 +277,7 @@ mod tests {
 
         assert_eq!(delivery.payload(), payload.as_ref());
         assert_eq!(delivery.payload().as_ptr(), payload.as_ptr());
-        drop(delivery.settle(DeliveryDisposition::Acknowledge));
+        complete_noop_settlement(delivery);
         Ok(())
     }
 
@@ -378,7 +312,7 @@ mod tests {
             MessageDelivery::new(at_limit.clone(), metadata()?, Box::new(NoopSettlement))?;
         assert_eq!(delivery.payload().as_ptr(), at_limit.as_ptr());
         assert_eq!(delivery.payload().len(), MAX_PORTABLE_MESSAGE_BYTES);
-        drop(delivery.settle(DeliveryDisposition::Acknowledge));
+        complete_noop_settlement(delivery);
 
         let over_limit = Bytes::from(vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1]);
         assert_eq!(

@@ -20,7 +20,8 @@
 `edgeagent-messaging` keeps a stable public façade in `lib.rs`. `publisher`
 owns durable publication receipts and errors; `metadata` owns validated
 delivery identities and counters; `consumer` owns one-at-a-time intake and
-confirmed settlement. `inbox` defines atomic inbound
+confirmed settlement. Its private `delivery` module owns the one-shot delivery
+and its abandonment guard. `inbox` defines atomic inbound
 processing and quarantine, while `outbox` defines relay storage. These are
 portable contracts; transport-specific behavior stays in adapter crates.
 
@@ -92,12 +93,27 @@ Settlement consumes `MessageDelivery`, preventing two terminal actions through
 the safe API. Validate a retry delay before calling `settle`: a constructor
 error leaves the delivery available for a corrected disposition. Dropping an
 unsettled delivery emits one structured warning with only attempt and payload
-byte count; it sends no acknowledgement and is not durable quarantine.
+byte count; it sends no acknowledgement and is not durable quarantine. The
+delivery owns a settlement directly, so a missing-settlement state cannot be
+constructed through the safe API. `settle` transfers a private diagnostic guard
+to its future and releases the delivery's payload and metadata. The guard
+contains only attempt and byte count, never identity, route, or payload.
 Cancelling `receive` may leave an already delivered message unacknowledged,
 causing redelivery and an incremented attempt count after ack-wait. Shutdown
 policy must not misclassify that as a handler failure. Once `settle` is called,
-dropping or cancelling its future does not establish whether the broker
-confirmed the action; rely on inbox idempotency if redelivered. `Acknowledge`,
+dropping its unpolled or pending future emits one payload-safe abandonment
+warning with `settlement_state = "confirmation_unknown"`. The synchronous
+adapter method is invoked when `settle` is called, so an unpolled future does
+not universally prove no request occurred. Cancellation does not establish
+whether the broker confirmed the action; rely on inbox idempotency if
+redelivered. The guard disarms after the adapter returns either success or an
+explicit error; errors pass through unchanged and are not abandonment.
+`Drop` never acknowledges, retries, or terminally settles a delivery. The
+delivery and settlement methods are `must_use`; callers must await and inspect
+confirmation. Warnings remain best-effort and cannot cover process abort or
+deliberately forgotten values. See
+[ADR-0020](../decisions/0020-retain-settlement-abandonment-diagnostics.md).
+`Acknowledge`,
 delayed negative acknowledgement, and terminal settlement all use JetStream
 acknowledgement-sync and complete only after the server confirms receipt.
 
@@ -154,12 +170,19 @@ idempotency.
 Normal `cargo test --locked --workspace --all-targets` compiles the adapter and
 runs deterministic tests for subject derivation, pre-I/O rejection, failure
 classification, and acknowledgement mapping without a broker.
+The isolated `delivery_warning` integration test uses controlled manual polls
+to exercise unsettled drop, unpolled abandonment, pending cancellation,
+resource release, exact disposition forwarding, and explicit success/error
+completion. It needs no async runtime or sleep. Keeping all tracing scenarios
+in one executable avoids process-global callsite-cache races. Workspace
+doctests also reject repeated consumption and ignored settlement results.
 
 After starting the isolated local profile, run the broker conformance test:
 
 ```text
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_publish -- --ignored --exact persisted_message_identity_deduplicates_on_retry
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact abandoned_settlement_future_leaves_delivery_eligible_for_redelivery
 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact oversized_raw_delivery_halts_intake_without_acknowledgement
 ```
 
@@ -167,7 +190,10 @@ The publisher test verifies broker deduplication. The settlement test provisions
 an explicit-ack durable consumer with one pending delivery, verifies delayed
 redelivery and incremented attempt metadata, confirms successful acknowledgement,
 terminates a simulated durably quarantined message, and confirms no pending
-work remains. The oversized-delivery test verifies the instance halts without
+work remains. A separate abandonment regression drops an unpolled
+acknowledgement future, requires broker redelivery of the same message, then
+awaits an acknowledgement and verifies no pending work remains.
+The oversized-delivery test verifies the instance halts without
 acknowledging or terminally settling raw bytes. Run them only against an
 isolated development or CI broker.
 

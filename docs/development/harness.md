@@ -122,9 +122,16 @@ stream and consumer sequences; the infallible portable assembly signature
 prevents primitive field transposition without requiring broker-only counters.
 The delivery-ownership integration test runs in its own executable because
 tracing callsite interests are process-global and parallel unit tests can race
-its subscriber registration. It records warnings on unsettled drop, requires
-no warning after settlement ownership transfers, and rejects both textual and
-numeric-byte payload leakage from the warning fields.
+its subscriber registration. One controlled test records a single warning for
+unsettled delivery drop, unpolled future abandonment, and cancellation after a
+pending poll. Explicit success and returned errors disarm the guard without
+warnings. Manual polls prove exact disposition forwarding, adapter resource
+release, and release of delivery payload ownership without an async runtime or
+sleeps. Warning assertions reject both textual and numeric-byte payloads,
+delivery identities, and routes. Compile-fail doctests enforce consuming
+ownership and `must_use`; the existing Linux/Windows workspace and doctest
+gates own these T2 contracts. The guard never chooses a broker disposition;
+see [ADR-0020](../decisions/0020-retain-settlement-abandonment-diagnostics.md).
 
 The contracts crate has an ignored, opt-in throughput probe for comparing
 clone-based and borrowed typed decoding:
