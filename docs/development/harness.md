@@ -157,6 +157,21 @@ promote fake transaction behavior into a claimed database guarantee. See
 [messaging cancellation protocols](messaging-adapters.md#cancellation-and-recovery-protocols)
 for per-operation recovery and the focused commands.
 
+The messaging `claimed_envelope` integration executable is the T2 stored-record
+trust-boundary sensor. It directly tests decoder size and metadata failures,
+unsupported exact versions, registry schema/partition/producer policy, and all
+four denormalized column comparisons. Assertions retain typed, payload-safe
+causes and unchanged stored bytes; a padded input at the raw limit distinguishes
+raw evidence from canonical re-encoding. Relay unit tests separately prove no
+publication invocation before validation and that quarantine uses the original
+claim generation, including failure to persist quarantine. The `auto_traits`
+executable proves `MessageDelivery: Send`, every future alias is `Send` for its
+operation lifetime, and public messaging errors are `Send + Sync + 'static`.
+Do not add a `Sync` bound to one-shot deliveries or settlement adapters merely
+to satisfy a test. Existing Linux/Windows workspace tests own these gates;
+focused commands and the recovery boundary are in the
+[messaging guide](messaging-adapters.md#stored-envelope-validation-boundary).
+
 The contracts crate has an ignored, opt-in throughput probe for comparing
 clone-based and borrowed typed decoding:
 
