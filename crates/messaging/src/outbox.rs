@@ -13,6 +13,12 @@ mod timing;
 pub use timing::{LeaseDuration, OutboxRetryDelay, OutboxTimingError};
 
 /// Boxed future returned by an outbound relay storage port.
+///
+/// # Cancellation
+///
+/// Dropping an incomplete future does not confirm rollback or release a lease.
+/// Recovery follows the operation's committed state and original claim fence;
+/// see [`OutboxRelayStore`].
 pub type OutboxStoreFuture<'operation, Output> =
     Pin<Box<dyn Future<Output = Result<Output, OutboxStoreError>> + Send + 'operation>>;
 
@@ -22,9 +28,20 @@ pub type OutboxStoreFuture<'operation, Output> =
 /// before it is returned so publication never occurs inside a storage transaction.
 /// Every outcome transition must compare the generation of that exact claim,
 /// not only its worker identity; worker tokens can be reused after lease expiry.
+/// Atomically compare message identity, owner, generation, unexpired lease, and
+/// eligible record state. A rejected stale completion returns `StateTransition`
+/// without changing a newer claim. Fencing cannot undo a broker publication.
 pub trait OutboxRelayStore: Send {
     /// Claim at most one available message for this relay worker.
     /// The lifetime is validated before this operation is called.
+    ///
+    /// # Cancellation
+    ///
+    /// A lease may commit before the claim is returned. Cancellation must not
+    /// start publication or release an unknown claim. A committed, abandoned
+    /// lease remains unavailable until expiry; subsequent claim acquisition
+    /// advances its generation, even when the worker token is reused. An
+    /// unconfirmed claim is not evidence that the queue is empty.
     ///
     /// Raw durations cannot bypass the portable lifetime bound:
     ///
@@ -43,6 +60,14 @@ pub trait OutboxRelayStore: Send {
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>>;
 
     /// Record confirmed durable publication under the original lease.
+    ///
+    /// # Cancellation
+    ///
+    /// The published marker may already have committed. Do not infer either
+    /// rollback or success, or automatically schedule retry/quarantine. Resolve
+    /// through committed storage state or a later lease-controlled iteration.
+    /// If the marker is absent, broker persistence may still have occurred;
+    /// republish only the identical envelope after a valid claim is acquired.
     fn mark_published<'operation>(
         &'operation mut self,
         claim: &'operation ClaimedMessage,
@@ -50,6 +75,13 @@ pub trait OutboxRelayStore: Send {
     ) -> OutboxStoreFuture<'operation, ()>;
 
     /// Release a leased message for a bounded retry, including immediate eligibility.
+    ///
+    /// # Cancellation
+    ///
+    /// The release and retry schedule may already have committed. Cancellation
+    /// does not justify a different outcome or bypass the persisted delay. A
+    /// later iteration must acquire an eligible claim with a new generation;
+    /// an old claim must never complete a subsequently reclaimed record.
     ///
     /// Raw durations cannot bypass the portable retry bound:
     ///
@@ -73,6 +105,13 @@ pub trait OutboxRelayStore: Send {
     ) -> OutboxStoreFuture<'operation, ()>;
 
     /// Move a leased message into terminal quarantine.
+    ///
+    /// # Cancellation
+    ///
+    /// Quarantine may already have committed. Do not automatically publish,
+    /// retry, or release the record to compensate for an unknown result. Inspect
+    /// committed state; a quarantined record requires separately authorized
+    /// replay. If no outcome committed, normal lease expiry permits recovery.
     fn quarantine<'operation>(
         &'operation mut self,
         claim: &'operation ClaimedMessage,

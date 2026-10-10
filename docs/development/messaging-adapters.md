@@ -175,6 +175,45 @@ acknowledgement advances broker state only;
 the committed inbox/domain transaction remains the source of business-effect
 idempotency.
 
+## Cancellation and recovery protocols
+
+The crate-level rustdoc maps ownership and canonical flows. Every side-effecting
+port method documents cancellation separately from an explicit error. Dropping
+a future means the caller observed no result; it is not an `Unavailable`
+classification or proof of rollback. Adapters may perform synchronous work when
+constructing a future, so even an unpolled future is not universally effect-free.
+No destructor schedules a replacement publication, storage transition, or
+broker disposition.
+
+| Interrupted operation | Possible committed state | Recovery |
+| --- | --- | --- |
+| `publish` | Broker persisted the message without an observed receipt | Retry the same identity and immutable bytes under bounded policy; retain consumer inbox deduplication beyond the broker window |
+| `process` | Inbox, domain work, and transactional outbox committed atomically | Leave delivery unsettled; redelivery returns `Duplicate` if committed, otherwise applies once |
+| Inbound `quarantine` | Exact evidence retained without an observed disposition | Leave delivery unsettled; retry identical evidence until `Inserted` or `AlreadyPresent` confirms commit before terminal settlement |
+| `claim_one` | Lease committed without a returned claim | Do not publish an unknown claim; expiry permits reacquisition with a higher generation |
+| `mark_published` | Published marker committed, or lease still active despite broker persistence | Inspect committed state or recover through a later valid claim; never infer an alternative outcome |
+| `release_for_retry` | Lease release and next-eligibility delay committed | Respect committed eligibility and acquire a new generation; do not bypass the delay |
+| Outbound `quarantine` | Terminal quarantine committed | Inspect state; committed quarantine requires separately authorized replay, not automatic retry |
+| Broker settlement | Broker may have applied the disposition without confirmation | Do not choose a replacement disposition; rely on redelivery and retained inbox/quarantine identity |
+
+Processing identity is `(consumer_name, source, id)`, with exact canonical
+envelope content. Quarantine identity is `(consumer_name, delivery_key)` because
+poison bytes may lack valid CloudEvents identity. `AlreadyPresent` requires the
+same transport subject, exact payload bytes, and failure code. Attempts are
+observations: retain the first observation and monotonically increase the last
+attempt. A changed attempt alone is not conflicting evidence. Changed immutable
+quarantine evidence fails closed as portable `Invariant`, whereas changed
+processed envelope content uses `MessageIdentityConflict`. Neither result
+overwrites evidence or permits terminal settlement. Rust equality of evidence
+values is not the durable idempotency comparison.
+
+The [inbox coordinator](inbox-handler.md) and [outbox relay](outbox-relay.md)
+own recovery ordering; adapters own atomic persistence and transport behavior.
+Graceful shutdown stops intake and gives owned work a bounded completion window.
+If it must cancel, it preserves the identities and durable state above rather
+than converting shutdown into a handler failure. This contract does not add a
+worker loop, lease extension, compensation service, or shutdown runtime.
+
 ## Verification
 
 Normal `cargo test --locked --workspace --all-targets` compiles the adapter and
@@ -186,6 +225,28 @@ resource release, exact disposition forwarding, and explicit success/error
 completion. It needs no async runtime or sleep. Keeping all tracing scenarios
 in one executable avoids process-global callsite-cache races. Workspace
 doctests also reject repeated consumption and ignored settlement results.
+
+The handler and relay each have a deterministic `cancellation` integration
+executable. Manual single polls stop at modeled pre-commit and post-commit,
+pre-result boundaries. The handler proves no premature settlement or invented
+failure resolution, one domain transition on redelivery, and exact quarantine
+identity/attempt handling. The relay proves abandoned-claim expiry, immutable
+publication retry with duplicate receipts, and no replacement outcome around
+all three completion operations. An explicit clock controls eligibility; tests
+use no runtime, sleeps, broker, or database. They prove application ordering
+against fakes, not SQLx cancellation mechanics or real broker durability:
+
+```text
+cargo test --locked -p edgeagent-inbox-handler --test cancellation
+cargo test --locked -p edgeagent-outbox-relay --test cancellation
+cargo test --locked -p edgeagent-messaging --doc
+```
+
+The existing Linux/Windows workspace gate runs both executables and the
+commit-before-terminal-settlement doctest. PostgreSQL conformance separately
+proves inbox atomicity, exact quarantine equality, monotonic attempts, and
+same-owner lease fencing; JetStream conformance proves real settlement and
+redelivery. A passing fake does not qualify a new adapter.
 
 After starting the isolated local profile, run the broker conformance test:
 

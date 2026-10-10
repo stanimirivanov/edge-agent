@@ -9,6 +9,11 @@ use std::pin::Pin;
 use crate::{DeliveryMetadata, FailureCode};
 
 /// Boxed future returned by an inbound processing port.
+///
+/// # Cancellation
+///
+/// An incomplete operation has no confirmed commit or rollback outcome. See
+/// [`InboundMessageStore::process`] and [`InboundMessageStore::quarantine`].
 pub type InboxFuture<'operation, Output> =
     Pin<Box<dyn Future<Output = Output> + Send + 'operation>>;
 
@@ -25,6 +30,22 @@ pub type InboxFuture<'operation, Output> =
 /// immutable message and rely on durable identity to resolve the outcome.
 pub trait InboundMessageStore: Send {
     /// Atomically deduplicate and, for a first delivery, apply service-owned work.
+    ///
+    /// Identity is `(consumer_name, envelope.source(), envelope.id())`.
+    /// A duplicate requires the same message type and exact canonical envelope
+    /// bytes; changed content returns `MessageIdentityConflict` without domain
+    /// work. `Applied` and `Duplicate` confirm a committed transaction.
+    ///
+    /// # Cancellation
+    ///
+    /// Dropping an incomplete future does not prove rollback: the atomic inbox
+    /// and service transition may already have committed before the result was
+    /// observed. Leave the delivery unsettled; cancellation is not a handler
+    /// failure or permission to acknowledge. On redelivery, retry the same
+    /// immutable envelope and consumer identity. Committed work returns
+    /// `Duplicate`; absent work applies once. Adapters must keep inbox, domain,
+    /// and any transactional outbox effects atomic even when cancelled, and
+    /// must not perform non-transactional external effects inside this operation.
     fn process<'operation>(
         &'operation mut self,
         consumer_name: &'operation str,
@@ -36,6 +57,21 @@ pub trait InboundMessageStore: Send {
     ///
     /// Success confirms commit. An `Unavailable` error may be ambiguous and
     /// MUST NOT be treated as permission for terminal broker settlement.
+    ///
+    /// Identity is `(consumer_name, evidence.delivery_key())`. Identical
+    /// evidence means the same transport subject, exact payload bytes, and
+    /// failure code. Attempt is an observation, not identity: preserve the
+    /// first observation and update the last attempt monotonically. Changed
+    /// immutable evidence returns `Invariant` without overwriting the retained
+    /// record. This differs from `process`'s CloudEvents identity conflict.
+    ///
+    /// # Cancellation
+    ///
+    /// Cancellation may occur after retention commits but before its result
+    /// arrives. It does not authorize `Quarantined` broker settlement. Leave the
+    /// delivery unsettled and retry identical evidence on redelivery; a prior
+    /// commit returns `AlreadyPresent`. Do not delete or replace evidence to
+    /// compensate for an unconfirmed result.
     fn quarantine<'operation>(
         &'operation mut self,
         consumer_name: &'operation str,
@@ -57,7 +93,8 @@ pub enum InboxDisposition {
 pub enum QuarantineDisposition {
     /// Evidence was retained for the first time.
     Inserted,
-    /// Identical evidence already existed after a prior delivery.
+    /// The consumer and delivery key already retain identical subject, bytes,
+    /// and failure code. A different attempt remains the same evidence.
     AlreadyPresent,
 }
 
