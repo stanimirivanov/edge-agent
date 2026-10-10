@@ -258,7 +258,7 @@ impl Display for InboxStoreErrorKind {
     }
 }
 
-/// Inbound storage failure with bounded text and a preserved internal cause.
+/// Inbound storage failure with bounded text and an optional internal cause.
 pub struct InboxStoreError {
     kind: InboxStoreErrorKind,
     reason: Option<&'static str>,
@@ -277,7 +277,49 @@ impl std::fmt::Debug for InboxStoreError {
 }
 
 impl InboxStoreError {
+    /// Construct a classified failure without an underlying cause.
+    ///
+    /// Public formatting reports only the category and `source()` returns
+    /// `None`. Use [`Self::with_source`] when a concrete cause exists rather
+    /// than discarding it or inventing a placeholder error.
+    ///
+    /// ```
+    /// use edgeagent_messaging::{InboxStoreError, InboxStoreErrorKind};
+    /// use std::error::Error;
+    ///
+    /// let error = InboxStoreError::new(InboxStoreErrorKind::MessageIdentityConflict);
+    /// assert_eq!(error.kind(), InboxStoreErrorKind::MessageIdentityConflict);
+    /// assert!(error.source().is_none());
+    /// ```
+    ///
+    /// A constructed failure must be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{InboxStoreError, InboxStoreErrorKind};
+    /// InboxStoreError::new(InboxStoreErrorKind::Invariant);
+    /// ```
+    #[must_use]
+    pub const fn new(kind: InboxStoreErrorKind) -> Self {
+        Self {
+            kind,
+            reason: None,
+            source: None,
+        }
+    }
+
     /// Construct a classified adapter failure while preserving its cause.
+    ///
+    /// A wrapped failure must also be used:
+    ///
+    /// ```compile_fail
+    /// #![deny(unused_must_use)]
+    /// use edgeagent_messaging::{InboxStoreError, InboxStoreErrorKind};
+    /// InboxStoreError::with_source(
+    ///     InboxStoreErrorKind::Unavailable, std::io::Error::other("example cause"),
+    /// );
+    /// ```
+    #[must_use]
     pub fn with_source<E>(kind: InboxStoreErrorKind, source: E) -> Self
     where
         E: Error + Send + Sync + 'static,

@@ -110,12 +110,7 @@ impl MessagePublisher for FailingPublisher {
         _definition: MessageDefinition,
         _envelope: &'publisher edgeagent_contracts::MessageEnvelope,
     ) -> PublishFuture<'publisher> {
-        Box::pin(async move {
-            Err(PublishError::with_source(
-                self.0,
-                std::io::Error::other("synthetic publication failure"),
-            ))
-        })
+        Box::pin(async move { Err(PublishError::new(self.0)) })
     }
 }
 
