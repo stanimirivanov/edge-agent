@@ -166,8 +166,11 @@ fn rejects_weakened_prompts_extra_verification_rows_and_checked_review_items() {
             "",
         )
         .replace(
-            "| `make verify` | | |",
-            "| `make verify` | Passed | fabricated |\n| `cargo test --workspace` | | |",
+            &format!("| `{}` | | |", crate::verification::DEFAULT_COMMAND),
+            &format!(
+                "| `{}` | Passed | fabricated |\n| `cargo test --workspace` | | |",
+                crate::verification::DEFAULT_COMMAND
+            ),
         )
         .replace(
             "- [ ] Package ownership and dependency changes are explicit and point inward.",
@@ -291,16 +294,98 @@ fn alternate_pull_request_template_locations_are_rejected() -> Result<(), Box<dy
 fn contributor_verification_commands_cannot_drift_with_the_template() {
     let body = format!(
         "# Contributing\n\n## Verification and constrained environments\n\n```text\n{}\n```\n",
-        pull_request::CONTRIBUTOR_VERIFICATION_COMMANDS.join("\n")
+        crate::verification::DEFAULT_COMMAND
     );
     let canonical = crate::repository::markdown::parse_fragment(CONTRIBUTING, &body);
     assert!(pull_request::validate_contributor_fragment(&canonical).is_empty());
 
-    let weakened = body.replace("cargo xtask repository", "cargo check --workspace");
+    let weakened = body.replace(
+        crate::verification::DEFAULT_COMMAND,
+        "cargo check --workspace",
+    );
     let document = crate::repository::markdown::parse_fragment(CONTRIBUTING, &weakened);
     let violations = pull_request::validate_contributor_fragment(&document);
     assert_eq!(violations.len(), 1);
-    assert!(violations[0].message.contains("commands have drifted"));
+    assert!(violations[0].message.contains("command has drifted"));
+}
+
+#[test]
+fn foundation_verification_command_is_checked_against_the_same_runner() {
+    let body = format!(
+        "# EdgeAgent\n\n## Verify the current foundation\n\n```text\n{}\n```\n",
+        crate::verification::DEFAULT_COMMAND
+    );
+    let canonical = crate::repository::markdown::parse_fragment("README.md", &body);
+    assert!(pull_request::validate_foundation_fragment(&canonical).is_empty());
+
+    let weakened = body.replace(
+        crate::verification::DEFAULT_COMMAND,
+        "cargo test --workspace",
+    );
+    let document = crate::repository::markdown::parse_fragment("README.md", &weakened);
+    let violations = pull_request::validate_foundation_fragment(&document);
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].path, "README.md");
+    assert!(violations[0].message.contains("command has drifted"));
+}
+
+#[test]
+fn verification_sections_reject_missing_duplicate_or_hidden_command_blocks() {
+    for (path, heading) in pull_request::VERIFICATION_DOCUMENTS {
+        let section = format!(
+            "## {heading}\n\n```text\n{}\n```\n",
+            crate::verification::DEFAULT_COMMAND
+        );
+        let mutations = [
+            format!(
+                "# Guide\n\n## Different heading\n\n```text\n{}\n```\n",
+                crate::verification::DEFAULT_COMMAND
+            ),
+            format!("# Guide\n\n{section}\n{section}"),
+            format!("# Guide\n\n## {heading}\n\nNo command block.\n"),
+            format!(
+                "# Guide\n\n{section}\n```text\n{}\n```\n",
+                crate::verification::DEFAULT_COMMAND
+            ),
+            format!(
+                "# Guide\n\n## {heading}\n\n<!--\n```text\n{}\n```\n-->\n",
+                crate::verification::DEFAULT_COMMAND
+            ),
+        ];
+        for body in mutations {
+            let document = crate::repository::markdown::parse_fragment(path, &body);
+            let violations = if path == CONTRIBUTING {
+                pull_request::validate_contributor_fragment(&document)
+            } else {
+                pull_request::validate_foundation_fragment(&document)
+            };
+            assert_eq!(violations.len(), 1, "{path}: {body}");
+            assert_eq!(violations[0].path, path);
+            assert_eq!(violations[0].rule, "template.verification-policy");
+        }
+    }
+}
+
+#[test]
+fn missing_foundation_document_is_not_a_passing_verification_contract() -> Result<(), Box<dyn Error>>
+{
+    let fixture = Fixture::new()?;
+    fixture.write(
+        CONTRIBUTING,
+        &format!(
+            "# Contributing\n\n## Verification and constrained environments\n\n```text\n{}\n```\n",
+            crate::verification::DEFAULT_COMMAND
+        ),
+    )?;
+    fixture.write(PULL_REQUEST_TEMPLATE, &canonical_pull_request_body())?;
+    let repository =
+        crate::repository::markdown::load(fixture.path()).map_err(std::io::Error::other)?;
+
+    let violations = pull_request::check(&repository);
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].path, "README.md");
+    assert!(violations[0].message.contains("document is missing"));
+    Ok(())
 }
 
 fn canonical_pull_request_body() -> String {
@@ -332,13 +417,16 @@ fn write_canonical_issue_templates(fixture: &Fixture) -> Result<(), Box<dyn Erro
 }
 
 fn write_pull_request_policy(fixture: &Fixture) -> Result<(), std::io::Error> {
-    fixture.write(
-        CONTRIBUTING,
-        &format!(
-            "# Contributing\n\n## Verification and constrained environments\n\n```text\n{}\n```\n",
-            pull_request::CONTRIBUTOR_VERIFICATION_COMMANDS.join("\n")
-        ),
-    )
+    for (path, heading) in pull_request::VERIFICATION_DOCUMENTS {
+        fixture.write(
+            path,
+            &format!(
+                "# Guide\n\n## {heading}\n\n```text\n{}\n```\n",
+                crate::verification::DEFAULT_COMMAND
+            ),
+        )?;
+    }
+    Ok(())
 }
 
 struct Fixture {

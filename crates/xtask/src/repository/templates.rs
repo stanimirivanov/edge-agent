@@ -133,12 +133,13 @@ fn pull_request_path_violation(
 }
 
 fn verification_policy_violation(
+    path: impl Into<String>,
     line: usize,
     message: impl Into<String>,
     fix: impl Into<String>,
 ) -> Violation {
     Violation::new(
-        CONTRIBUTING,
+        path,
         line,
         "template.verification-policy",
         message,

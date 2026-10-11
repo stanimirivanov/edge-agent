@@ -41,7 +41,7 @@ short-circuits publication, consumption, settlement, or PostgreSQL transactions.
 Run the isolated conformance test with both local dependencies available:
 
 ```text
-EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-handler --test event_spine -- --ignored --exact durable_command_survives_client_restart_with_one_domain_transition
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo xtask verify --check event-spine-client
 ```
 
 Run the broker-restart case only against the repository's isolated local Compose
@@ -49,7 +49,7 @@ profile. The explicit opt-in prevents an ignored test from restarting a shared
 broker accidentally:
 
 ```text
-EDGEAGENT_NATS_COMPOSE_RESTART=1 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-handler --test event_spine -- --ignored --exact durable_command_survives_broker_restart_with_one_domain_transition
+EDGEAGENT_NATS_COMPOSE_RESTART=1 EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo xtask verify --check event-spine-broker
 ```
 
 The client-restart case creates a memory-backed stream. The broker-restart case

@@ -35,7 +35,7 @@ Lowercase wording is explanatory and does not create hidden policy.
 | Durable decisions | [Architecture decisions](docs/decisions/README.md) |
 | Intended sequencing and scope | [Milestones](docs/roadmap/milestones.md) |
 | Security reporting | [SECURITY.md](SECURITY.md) |
-| Exact local commands | [README.md](README.md), `Makefile`, and checked-in tool configuration |
+| Exact verification inventory and commands | `cargo xtask checks`, [README.md](README.md), and checked-in tool configuration |
 
 The narrower source governs its stated concern. An accepted ADR governs the
 decision it records until superseded. Contributors MUST surface unresolved
@@ -172,29 +172,27 @@ Run every applicable required repository check supported by the environment.
 The current foundation requires:
 
 ```text
-python scripts/verify_repository.py --format-check
-cargo fmt --all --check
-python scripts/verify_repository.py
-cargo xtask repository
-python scripts/verify_architecture.py
-cargo xtask architecture
-python scripts/verify_images.py
-python scripts/verify_local_stack.py
-python scripts/verify_supply_chain.py
-python scripts/verify_release.py
-cargo metadata --locked --offline --format-version 1 --no-deps
-cargo check --locked --workspace --all-targets
-cargo clippy --locked --workspace --all-targets -- -D warnings
-python -m unittest discover -s tests -p "test_*.py"
-cargo test --locked --workspace --all-targets
+cargo xtask verify
 ```
 
+`cargo xtask checks` is the executable inventory: stable check IDs, tiers,
+commands, prerequisites, and evidence boundaries. `make` targets and CI invoke
+the same runner rather than maintaining separate acceptance command lists.
 `make repository` runs both repository-policy sensors. `make architecture`
-runs both dependency-policy sensors. `make verify` runs the complete default
-gate where `make` is available. Cargo may fetch missing locked dependencies;
+runs both dependency-policy sensors. `make verify` aliases the complete default
+gate. It includes workspace doctests, contracts with `serde_json/preserve_order`,
+and discovery of the protected ignored integration-test inventory.
+Cargo may fetch missing locked dependencies;
 the checks themselves use no private service or credential. Application tooling
 may add stricter commands but must preserve a documented one-command
 verification entry point.
+
+Use `cargo xtask route PATH...` before editing to obtain the guidance and
+specialized check IDs associated with changed paths. Routing is advisory: it
+does not waive the mandatory default gate. A focused profile or `--check ID`
+reports only the selected checks, not a complete acceptance result. The runner
+derives passed, failed, and not-run outcomes from execution; missing
+prerequisites and fail-fast omissions cannot produce a passing aggregate.
 
 The Python repository verifier owns encoding, line endings, final newlines,
 required-path inventory, and a simple independent documentation baseline.
@@ -223,9 +221,11 @@ release automation, or SBOM generation MUST run
 network, or daemon is unavailable, report the affected policy or artifact stage
 as **not run**; the Ubuntu supply-chain CI job remains required before merge.
 
-The examples use `python`; contributors MAY substitute the platform's Python
-3.11+ launcher, such as `python3` on POSIX or `py -3` on Windows. This changes
-only executable discovery, not the check being run.
+The runner uses `python` by default. Contributors MAY pass `--python python3`
+or `--python` with an absolute Python 3.11+ executable path; `make` accepts the
+same executable through `PYTHON`. This changes only executable discovery, not
+the check being run. The runner accepts an executable, not a shell command or
+launcher argument string such as `py -3`.
 
 When a required check cannot run because of sandbox restrictions, missing
 network, credentials, services, fixtures, platform support, or another

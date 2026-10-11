@@ -21,32 +21,19 @@ help:
 	@echo   make verify  Run every required local check
 
 fmt:
-	$(PYTHON) scripts/verify_repository.py --format-check
-	cargo fmt --all --check
+	cargo xtask verify fmt --python "$(PYTHON)"
 
 repository:
-	$(PYTHON) scripts/verify_repository.py
-	cargo xtask repository
+	cargo xtask verify repository --python "$(PYTHON)"
 
 architecture:
-	$(PYTHON) scripts/verify_architecture.py
-	cargo xtask architecture
+	cargo xtask verify architecture --python "$(PYTHON)"
 
 check:
-	$(PYTHON) scripts/verify_repository.py
-	cargo xtask repository
-	$(PYTHON) scripts/verify_architecture.py
-	cargo xtask architecture
-	$(PYTHON) scripts/verify_images.py
-	$(PYTHON) scripts/verify_local_stack.py
-	$(PYTHON) scripts/verify_supply_chain.py
-	$(PYTHON) scripts/verify_release.py
-	cargo metadata --locked --offline --format-version 1 --no-deps
-	cargo check --locked --workspace --all-targets
-	cargo clippy --locked --workspace --all-targets -- -D warnings
+	cargo xtask verify check --python "$(PYTHON)"
 
 image-smoke:
-	$(PYTHON) scripts/verify_images.py --build
+	cargo xtask verify image-smoke --python "$(PYTHON)"
 
 local-up:
 	$(PYTHON) scripts/verify_local_stack.py
@@ -61,21 +48,16 @@ local-down:
 	$(LOCAL_COMPOSE) down
 
 sbom-rust:
-	$(PYTHON) scripts/generate_sboms.py rust --output $(SBOM_OUTPUT)
+	cargo xtask verify --check sbom-rust --python "$(PYTHON)" --sbom-output "$(SBOM_OUTPUT)"
 
 sbom-images:
-	$(PYTHON) scripts/generate_sboms.py images --output $(SBOM_OUTPUT)
+	cargo xtask verify --check sbom-images --python "$(PYTHON)" --sbom-output "$(SBOM_OUTPUT)"
 
 supply-chain:
-	cargo deny --locked check
-	$(MAKE) sbom-rust SBOM_OUTPUT=$(SBOM_OUTPUT) PYTHON=$(PYTHON)
-	$(MAKE) sbom-images SBOM_OUTPUT=$(SBOM_OUTPUT) PYTHON=$(PYTHON)
-	$(PYTHON) scripts/verify_supply_chain.py --artifacts $(SBOM_OUTPUT)
+	cargo xtask verify supply-chain --python "$(PYTHON)" --sbom-output "$(SBOM_OUTPUT)"
 
 test:
-	$(PYTHON) -m unittest discover -s tests -p "test_*.py"
-	cargo test --locked --workspace --all-targets
-	cargo test --locked --workspace --doc
-	cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order
+	cargo xtask verify test --python "$(PYTHON)"
 
-verify: fmt check test
+verify:
+	cargo xtask verify --python "$(PYTHON)"

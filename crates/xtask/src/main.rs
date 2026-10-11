@@ -2,6 +2,7 @@
 
 mod architecture;
 mod repository;
+mod verification;
 
 use std::{env, process::ExitCode};
 
@@ -9,10 +10,15 @@ fn main() -> ExitCode {
     let mut arguments = env::args().skip(1);
     let command = arguments.next();
 
-    match (command.as_deref(), arguments.next()) {
-        (Some("architecture"), None) => run_architecture_check(),
-        (Some("repository"), None) => run_repository_check(),
-        (None | Some("help" | "--help" | "-h"), None) => {
+    let remaining: Vec<_> = arguments.collect();
+    match command.as_deref() {
+        Some("verify") => verification::run(&remaining),
+        Some("sqlx-metadata") if remaining.is_empty() => verification::sqlx_metadata(),
+        Some("checks") if remaining.is_empty() => verification::print_inventory(),
+        Some("route") => verification::route(&remaining),
+        Some("architecture") if remaining.is_empty() => run_architecture_check(),
+        Some("repository") if remaining.is_empty() => run_repository_check(),
+        None | Some("help" | "--help" | "-h") if remaining.is_empty() => {
             print_usage();
             ExitCode::SUCCESS
         }
@@ -72,6 +78,9 @@ fn print_usage() {
         "EdgeAgent repository tasks\n\n\
          Usage:\n\
            cargo xtask architecture    Verify workspace dependency policy\n\
-           cargo xtask repository      Verify documentation and governance policy"
+           cargo xtask repository      Verify documentation and governance policy\n\
+           cargo xtask verify [PROFILE] [--check ID] [--python EXECUTABLE]\n\
+           cargo xtask checks          List canonical checks and evidence boundaries\n\
+           cargo xtask route PATH...   Route Git-relative paths to guides and checks"
     );
 }
