@@ -57,6 +57,14 @@ and run the same canonical Cargo command. The action launches fixed argument
 vectors and pipes migration bytes directly into Compose `psql`; no POSIX shell
 or manually maintained migration loop is required.
 
+The action probes `cargo sqlx --no-dotenv --version`, which reports
+`sqlx-cli-sqlx 0.9.0`. The standalone `sqlx --version` reports
+`sqlx-cli 0.9.0`; these are different command banners for the same pinned
+package. The probe requires a successful exit and the exact Cargo-plugin
+banner, ignores ambient `.env` files, and rejects other versions. Failure
+diagnostics distinguish an unsuccessful probe from an unexpected banner
+without printing raw command output.
+
 ## Metadata changes and evidence boundaries
 
 Review and commit every added, changed, or removed `.sqlx/query-*.json` with
