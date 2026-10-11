@@ -201,6 +201,16 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 
 ## Repository policy
 
+The paired T1 architecture sensors inspect every direct normal, development,
+and build declaration, including optional and inactive target tables. The
+Python manifest gate resolves local and workspace aliases against fixed
+canonical package allowances; the Rust gate evaluates normalized internal
+edges. TOML mutation fixtures reject hidden external declarations and invalid
+inheritance, while isolated offline Cargo fixtures prove internal alias,
+target, optional, and dependency-kind handling. Neither kind grants another
+kind's capabilities. See the [dependency rules](../architecture/dependency-rules.md#enforcement-responsibilities)
+for diagnostics, exact-union requirements, and the limits of these sensors.
+
 The two repository sensors have complementary ownership. The Python verifier
 checks bytes and required inventory. `cargo xtask repository` parses CommonMark
 and reports semantic structure violations in stable path and line order. Do not

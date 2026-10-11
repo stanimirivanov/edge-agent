@@ -8,8 +8,9 @@
   dependency between workspace packages is explicit policy.
 - Normal, development, and build dependencies are evaluated independently;
   development-only conformance composition cannot authorize a production edge.
-- `scripts/verify_architecture.py` continues to enforce manifest and repository
-  structure while the Rust check validates Cargo's normalized internal graph.
+- `scripts/verify_architecture.py` checks every direct dependency declaration,
+  including third-party build, optional, and target-specific dependencies;
+  the Rust check validates Cargo's normalized internal graph.
 - The current policy contains no temporary exceptions.
 
 ## Package roles
@@ -84,10 +85,42 @@ included even when inactive on the current host.
 
 The existing `python scripts/verify_architecture.py` check remains a separate,
 complementary gate. It verifies the exact workspace member paths, package names,
-target types, inherited metadata and lints, publication settings, and complete
-normal and development dependency keys, including third-party crates. The Rust
-check owns Cargo-normalized internal roles, edge classes, stale-policy detection,
-and production-cycle detection. Both commands run locally and in CI.
+target types, inherited metadata and lints, publication settings, and exact
+canonical dependency identities, including third-party crates. It walks normal,
+development, and build tables at the top level and under every target predicate
+or target triple. Inactive targets and optional declarations are checked without
+enabling features or compiling dependencies. Rust 2024's unsupported
+`dev_dependencies` and `build_dependencies` spellings are rejected with their
+hyphenated replacements.
+
+Each package's `PackageRule` has separate normal, development, and build
+allowances. Required identities are compared with the union of declarations
+for that kind across all targets; each individual declaration must have a
+kind-specific allowance. A normal or development allowance never authorizes a
+build dependency. The current manifest policy permits no build dependencies.
+
+Identity comes from a declaration's `package` field or dependency key. An
+inherited declaration resolves its key through `[workspace.dependencies]`
+first, including any package rename there. Reviewed identities are fixed in
+checker policy, not inferred as permissions from the workspace manifest:
+`cloudevents` resolves to the approved `cloudevents-sdk`, while disguising `sqlx`
+under an approved key remains an error. Inherited declarations may override
+only `optional`, `features`, and `default-features`; missing inheritance entries
+and malformed identity or dependency-table shapes fail closed. Diagnostics
+include the package manifest, kind/target table, alias, resolved identity, and
+optional/inheritance state for an unapproved declaration.
+
+The Rust check owns Cargo-normalized internal roles, edge classes, stale-policy
+detection, and production-cycle detection. Real, temporary Cargo workspace
+fixtures prove its treatment of renamed, inherited, optional, and inactive
+target declarations without registry packages or services. Both architecture
+commands run locally and in CI through the existing T1/T2 gates.
+
+These sensors protect declared capability boundaries, not source provenance,
+transitive capabilities, feature safety, module cohesion, or runtime access.
+Canonical identity unions do not distinguish duplicate declarations or package
+versions. Cargo validation, locked resolution, supply-chain policy, and review
+remain required for those concerns.
 
 ## Changing dependencies
 

@@ -12,12 +12,25 @@ import tomllib
 
 @dataclass(frozen=True)
 class PackageRule:
-    """Expected identity, target type, and direct dependencies for one package."""
+    """Reviewed canonical package identities, independently for each kind."""
 
     name: str
     target: str
     dependencies: frozenset[str]
     dev_dependencies: frozenset[str] = frozenset()
+    build_dependencies: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class DependencyDeclaration:
+    """A declared capability, including inactive targets and optional features."""
+
+    table: str
+    kind: str
+    alias: str
+    package: str
+    optional: bool
+    inherited: bool
 
 
 @dataclass(frozen=True, order=True)
@@ -43,7 +56,7 @@ OUTBOX_RELAY = "edgeagent-outbox-relay"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 TELEMETRY = "edgeagent-telemetry"
 XTASK = "edgeagent-xtask"
-CONTRACT_DEPENDENCIES = frozenset({"cloudevents", "serde", "serde_json", "url"})
+CONTRACT_DEPENDENCIES = frozenset({"cloudevents-sdk", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "sqlx"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 INBOX_HANDLER_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
@@ -165,6 +178,9 @@ INHERITED_PACKAGE_FIELDS = {
     "version",
 }
 
+DEPENDENCY_KINDS = ("dependencies", "dev-dependencies", "build-dependencies")
+INHERITED_DEPENDENCY_KEYS = {"workspace", "features", "optional", "default-features"}
+
 
 def _read_toml(path: Path) -> dict[str, object]:
     with path.open("rb") as source:
@@ -198,6 +214,141 @@ def check_workspace_members(members: set[str]) -> list[Problem]:
     return problems
 
 
+def _package_identity(alias: str, value: object) -> tuple[str | None, str | None]:
+    """Read identity only; Cargo and supply-chain checks still own source validity."""
+
+    if isinstance(value, str):
+        if value.strip():
+            return alias, None
+        return None, "dependency version must not be empty"
+    if not isinstance(value, dict):
+        return None, "dependency must be a version string or table"
+    if "workspace" in value:
+        return None, "workspace.dependencies entries cannot inherit workspace dependencies"
+    package = value.get("package", alias)
+    if not isinstance(package, str) or not package.strip():
+        return None, "dependency package must be a non-empty string"
+    return package, None
+
+
+def _dependency_declarations(
+    relative: str,
+    manifest: dict[str, object],
+    workspace_dependencies: dict[str, object],
+) -> tuple[list[DependencyDeclaration], list[Problem]]:
+    """Enumerate every declaration without evaluating target predicates/features."""
+
+    declarations: list[DependencyDeclaration] = []
+    problems: list[Problem] = []
+    scopes = [("", manifest)]
+    targets = manifest.get("target", {})
+    if not isinstance(targets, dict):
+        problems.append(Problem(relative, "target must be a table"))
+    else:
+        for target, scope in sorted(targets.items()):
+            if not isinstance(scope, dict):
+                problems.append(Problem(relative, f"target.{target!r} must be a table"))
+            else:
+                scopes.append((f"target.{target!r}.", scope))
+
+    for prefix, scope in scopes:
+        for legacy in ("dev_dependencies", "build_dependencies"):
+            if legacy in scope:
+                problems.append(
+                    Problem(
+                        relative,
+                        f"{prefix}{legacy} is unsupported in Rust 2024; "
+                        f"use {legacy.replace('_', '-')}",
+                    )
+                )
+        for kind in DEPENDENCY_KINDS:
+            table = f"{prefix}{kind}"
+            location = f"{relative}/Cargo.toml [{table}]"
+            dependencies = scope.get(kind, {})
+            if not isinstance(dependencies, dict):
+                problems.append(Problem(location, "dependency declarations must be a table"))
+                continue
+            for alias, value in sorted(dependencies.items()):
+                inherited = isinstance(value, dict) and "workspace" in value
+                optional = value.get("optional", False) if isinstance(value, dict) else False
+                if not isinstance(optional, bool):
+                    problems.append(Problem(location, f"{alias}: optional must be a boolean"))
+                    continue
+                identity = value
+                if inherited:
+                    if value["workspace"] is not True:
+                        problems.append(Problem(location, f"{alias}: workspace must be true"))
+                        continue
+                    overrides = set(value) - INHERITED_DEPENDENCY_KEYS
+                    if overrides:
+                        problems.append(
+                            Problem(
+                                location,
+                                f"{alias}: inherited dependency cannot override "
+                                f"{', '.join(sorted(overrides))}; only optional, features, "
+                                "and default-features may override workspace policy",
+                            )
+                        )
+                        continue
+                    if alias not in workspace_dependencies:
+                        problems.append(Problem(location, f"{alias}: missing workspace.dependencies entry"))
+                        continue
+                    identity = workspace_dependencies[alias]
+                package, error = _package_identity(alias, identity)
+                if error is not None:
+                    problems.append(Problem(location, f"{alias}: {error}"))
+                    continue
+                declarations.append(
+                    DependencyDeclaration(table, kind, alias, package, optional, inherited)
+                )
+    return declarations, problems
+
+
+def check_manifest_dependencies(
+    relative: str,
+    manifest: dict[str, object],
+    workspace_dependencies: dict[str, object],
+    rule: PackageRule,
+) -> list[Problem]:
+    """Require exact canonical identity unions, with no cross-kind authorization."""
+
+    declarations, problems = _dependency_declarations(
+        relative, manifest, workspace_dependencies
+    )
+    allowed_by_kind = {
+        "dependencies": rule.dependencies,
+        "dev-dependencies": rule.dev_dependencies,
+        "build-dependencies": rule.build_dependencies,
+    }
+    identities = {kind: set() for kind in DEPENDENCY_KINDS}
+    for declaration in declarations:
+        identities[declaration.kind].add(declaration.package)
+        if declaration.package not in allowed_by_kind[declaration.kind]:
+            problems.append(
+                Problem(
+                    f"{relative}/Cargo.toml [{declaration.table}]",
+                    f"undeclared dependency boundary: {declaration.package} "
+                    f"(alias {declaration.alias!r}, "
+                    f"optional={str(declaration.optional).lower()}, "
+                    f"workspace={str(declaration.inherited).lower()}); "
+                    "remove or move the declaration, or review an explicit kind-specific "
+                    "PackageRule change in scripts/verify_architecture.py; "
+                    "see docs/architecture/dependency-rules.md",
+                )
+            )
+    for kind, allowed in allowed_by_kind.items():
+        # Requirements apply to the union for a kind, not independently to each
+        # target table. A platform-specific declaration never gains another kind.
+        problems.extend(
+            check_dependencies(
+                f"{relative}/Cargo.toml [all {kind}]",
+                identities[kind] & allowed,
+                allowed,
+            )
+        )
+    return problems
+
+
 def verify(root: Path) -> list[Problem]:
     """Validate workspace membership, package metadata, and dependency direction."""
 
@@ -220,6 +371,11 @@ def verify(root: Path) -> list[Problem]:
     else:
         members = {member.replace("\\", "/").rstrip("/") for member in raw_members}
     problems.extend(check_workspace_members(members))
+
+    workspace_dependencies = workspace.get("dependencies", {})
+    if not isinstance(workspace_dependencies, dict):
+        problems.append(Problem("Cargo.toml", "workspace.dependencies must be a table"))
+        workspace_dependencies = {}
 
     for relative, rule in sorted(PACKAGE_RULES.items()):
         manifest_path = root / relative / "Cargo.toml"
@@ -249,26 +405,8 @@ def verify(root: Path) -> list[Problem]:
         if manifest.get("lints") != {"workspace": True}:
             problems.append(Problem(relative, "package must inherit workspace lints"))
 
-        raw_dependencies = manifest.get("dependencies", {})
-        if not isinstance(raw_dependencies, dict):
-            problems.append(Problem(relative, "dependencies must be a table"))
-            dependencies: set[str] = set()
-        else:
-            dependencies = set(raw_dependencies)
-        problems.extend(check_dependencies(relative, dependencies, rule.dependencies))
-
-        raw_dev_dependencies = manifest.get("dev-dependencies", {})
-        if not isinstance(raw_dev_dependencies, dict):
-            problems.append(Problem(relative, "dev-dependencies must be a table"))
-            dev_dependencies: set[str] = set()
-        else:
-            dev_dependencies = set(raw_dev_dependencies)
         problems.extend(
-            check_dependencies(
-                f"{relative} [dev-dependencies]",
-                dev_dependencies,
-                rule.dev_dependencies,
-            )
+            check_manifest_dependencies(relative, manifest, workspace_dependencies, rule)
         )
 
         source_name = "lib.rs" if rule.target == "lib" else "main.rs"
