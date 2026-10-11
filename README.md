@@ -262,28 +262,22 @@ Install Python 3.11 or newer and the toolchain pinned by
 `rust-toolchain.toml`, then run:
 
 ```text
-python scripts/verify_repository.py --format-check
-cargo fmt --all --check
-python scripts/verify_repository.py
-cargo xtask repository
-python scripts/verify_architecture.py
-cargo xtask architecture
-python scripts/verify_images.py
-python scripts/verify_local_stack.py
-python scripts/verify_supply_chain.py
-python scripts/verify_release.py
-cargo metadata --locked --offline --format-version 1 --no-deps
-cargo check --locked --workspace --all-targets
-cargo clippy --locked --workspace --all-targets -- -D warnings
-python -m unittest discover -s tests -p "test_*.py"
-cargo test --locked --workspace --all-targets
+cargo xtask verify
 ```
 
-Use `python3` on POSIX or `py -3` on Windows when appropriate. On systems with
-`make`, `make verify PYTHON=python3` runs the same checks. Default verification
+Use `cargo xtask verify --python python3` when Python is named `python3`, or
+pass an absolute Python executable path with `--python`. On systems with `make`,
+`make verify PYTHON=python3` invokes the same runner. Default verification
 uses no external service, credential, or paid data. Cargo may access crates.io
 to fetch missing packages from the committed lockfile; subsequent runs can use
 the local Cargo cache.
+The executable inventory in `cargo xtask checks` defines each check's stable ID,
+tier, prerequisites, command, and evidence boundary. The default gate includes
+workspace doctests, contracts with `serde_json/preserve_order`, and discovery
+of the protected ignored integration-test inventory. `cargo xtask route PATH...`
+reports guidance and specialized checks for changed paths without reducing the
+mandatory default gate. The [coding harness](docs/development/harness.md)
+explains focused profiles and their reporting limits.
 The Python repository verifier checks text formatting, required inventory, and
 an independent documentation baseline; `cargo xtask repository` parses
 rendered CommonMark and enforces navigation, ADR, milestone, and authoring

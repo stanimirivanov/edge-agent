@@ -37,7 +37,7 @@ service ownership, data meaning, deployment profiles, and ADRs.
 |---|---|---|
 | `cargo xtask repository` | | |
 | `cargo xtask architecture` | | |
-| `make verify` | | |
+| `cargo xtask verify` | | |
 
 **Checks not run and blocker:**
 

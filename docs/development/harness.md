@@ -6,8 +6,10 @@
   to the task.
 - Run `make repository` and `make architecture` for immediate structural
   feedback while editing.
-- Run `make verify` before handoff; run image, local-platform, and supply-chain
+- Run `cargo xtask verify` before handoff; run image, local-platform, and supply-chain
   checks when their boundaries change.
+- Inspect `cargo xtask checks` for the executable inventory and use
+  `cargo xtask route PATH...` for changed-path guidance.
 - Report every unavailable check as not run with its blocker and residual risk.
 - Turn recurring review findings into clearer guidance, an early deterministic
   sensor, a behavioral test, or an explicit owned exception.
@@ -22,16 +24,18 @@ checks first while preserving one documented acceptance command.
 
 This guide inventories the harness. It does not replace the canonical workflow
 in [CONTRIBUTING.md](../../CONTRIBUTING.md), implementation practice in the
-[engineering standards](engineering-standards.md), or the exact automation in
-the [repository-quality workflow](../../.github/workflows/repository-quality.yml).
+[engineering standards](engineering-standards.md). The executable contract
+in [xtask](../../crates/xtask/src/verification.rs) owns verification commands;
+the [repository-quality workflow](../../.github/workflows/repository-quality.yml)
+owns CI environments and service cleanup.
 
 ## Cost and timing tiers
 
 | Tier | Intended timing | EdgeAgent feedback |
 |:--|:--|:--|
-| T0 — route | Before editing | Read-only task routing through the [documentation map](../README.md), followed by the relevant architecture pages and ADRs. |
+| T0 — route | Before editing | `cargo xtask route PATH...` and the [documentation map](../README.md), followed by the relevant architecture pages and ADRs. |
 | T1 — structure | During editing | `make repository` and `make architecture`; deterministic checks that require no database, broker, cloud account, or network once dependencies are present. |
-| T2 — acceptance | Before handoff or pull request | `make verify`; formatting, repository and architecture policy, static contract checks, locked builds, Clippy, Python tests, and Rust tests. Cargo may fetch missing locked dependencies. |
+| T2 — acceptance | Before handoff or pull request | `cargo xtask verify` (`make verify` aliases it); formatting, repository and architecture policy, static contract checks, locked builds, Clippy, Python tests, Rust tests, doctests, feature-unification tests, and ignored-test discovery. Cargo may fetch missing locked dependencies. |
 | T3 — specialized | When an affected boundary requires it | `make image-smoke`, local Compose conformance, `make supply-chain`, release validation, and explicitly scoped security, performance, or cloud-profile checks. |
 
 A tier describes cost and timing, not permission to skip an applicable check.
@@ -59,6 +63,50 @@ Guidance states intent, boundaries, and where its claims are verified. Keep each
 normative rule in one canonical document and link to it from concise entry
 points.
 
+## Executable verification contract
+
+`cargo xtask checks` lists the checker-owned inventory: stable ID, tier,
+command arguments, prerequisites, expected test identities, and evidence
+boundary. Commands run as explicit argument vectors, never as repository
+prose or arbitrary shell text. `cargo xtask verify` runs the complete default
+T2 profile. The `fmt`, `repository`, `architecture`, `check`, and `test`
+profiles shorten the editing loop; they do not replace full acceptance.
+`--check ID` is an explicit subset, not a passing whole-repository verdict.
+
+`cargo xtask route PATH...` maps repository-relative changed paths to canonical
+guidance and specialized check IDs. It reports additive requirements; it
+cannot remove the mandatory T2 gate or authorize tools, external writes, or
+production credentials. Review remains responsible for semantic applicability
+that a path alone cannot establish.
+
+The Makefile and CI call this runner. README and CONTRIBUTING each contain a
+single checked, rendered verification section with one canonical command
+block; the pull request template obtains its aggregate command from the same
+constant. These checks prevent command-list drift without executing Markdown.
+
+The runner prints **passed**, **failed**, or **not run** for each selected
+check. Only successful execution produces passed. Missing prerequisites produce
+not run with a blocker; after a failure, remaining checks report not run rather
+than disappearing. An aggregate with a failed or not-run required check exits
+unsuccessfully. Report the selected profile and evidence boundary in a handoff;
+a discovery result is not an integration-test result.
+
+The T2 ignored-test census compiles and lists the protected suites, then
+compares their complete identities with the expected inventory. The T3 runner
+also discovers each mandatory named test before executing it with `--exact`.
+Removal, rename, duplicate, or an unregistered addition fails closed; libtest's
+successful exit when a filter selects zero tests cannot satisfy a mandatory
+proof. Listing tests proves discovery only, not database, broker, crash-
+recovery, performance, or external-effect behavior.
+
+Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`,
+and `m08-<candidate>`. Their prerequisites remain explicit in the inventory and
+focused guides. The local-platform environment and migrated test schema must
+be available before conformance executes; CI provisions them and always
+cleans up its Compose environment. An unavailable Docker daemon, service,
+pinned tool, or required environment variable is not a passing check. The
+default gate starts no service and makes no model-provider call.
+
 ## Feedback sensors
 
 Contributors may run a focused test while editing, but run every applicable
@@ -67,19 +115,21 @@ acceptance check before handoff.
 | Command or sensor | What it proves | Tier and dependencies |
 |:--|:--|:--|
 | `python scripts/verify_repository.py` | Text encoding, line endings, final newlines, required repository paths, and a simple independent documentation baseline remain valid | T1; Python 3.11+ |
-| `cargo xtask repository` | Rendered local Markdown links and anchors, TL;DR placement, ADR and milestone lifecycle/index policy, and stable GitHub authoring templates satisfy mechanical policy | T1; Rust toolchain and locked dependencies |
+| `cargo xtask repository` | Rendered local Markdown links and anchors, TL;DR placement, ADR and milestone lifecycle/index policy, stable GitHub authoring templates, and canonical verification entry points satisfy mechanical policy | T1; Rust toolchain and locked dependencies |
 | `python scripts/verify_architecture.py` | Workspace manifests use the exact reviewed package, metadata, target, and direct dependency declarations | T1; Python 3.11+ |
 | `cargo xtask architecture` | Cargo's normalized internal graph satisfies package roles, dependency classes, temporary-exception policy, and cycle rules | T1; Rust toolchain and Cargo metadata |
-| `make verify` | The complete default repository acceptance gate passes with the locked graph | T2; Python, Rust toolchain, `make`, and locally cached or downloadable locked crates |
+| `cargo xtask verify` / `make verify` | The complete default repository acceptance gate passes with the locked graph, including doctests, feature-unification tests, and ignored-test discovery | T2; Python, Rust toolchain, and locally cached or downloadable locked crates |
 | `make image-smoke` | Every deployable image builds and runs under the declared non-root, read-only, networkless contract | T3; Docker |
 | `make local-up` and focused conformance tests | PostgreSQL, NATS, object storage, telemetry, and restart behavior satisfy local integration contracts | T3; Docker with Compose |
-| `cargo sqlx prepare --workspace` plus `.sqlx/` diff check | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
+| `cargo xtask verify --check sqlx-metadata` | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated Compose PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
 | `make supply-chain` | Dependency/advisory/license policy and the complete Rust and image SBOM set pass | T3; pinned tools, network for current advisories, and Docker |
-| `cargo test --locked --manifest-path experiments/<candidate>/Cargo.toml` | Isolated M08 durable-execution decision proof for one candidate, including real worker-process restart or DBOS atomic enqueue | T3; see the [experiment guide](../../experiments/README.md) for container and cold-cache network requirements |
+| `cargo xtask verify m08-<candidate>` | Isolated M08 durable-execution decision proof for one candidate, including real worker-process restart or DBOS atomic enqueue | T3; see the [experiment guide](../../experiments/README.md) for container and cold-cache network requirements and the separate dependency-policy gate |
 
-The command order and unavailable-check protocol remain canonical in
+The executable inventory owns command order; the unavailable-check protocol
+remains canonical in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#verification-and-constrained-environments).
-CI runs repository policy before architecture and all heavier jobs.
+CI runs repository policy before architecture and all heavier jobs. Inspect
+`cargo xtask checks` for exact commands instead of copying a parallel list.
 
 The Rust workspace tests include T2 `Debug` redaction contracts for payload-
 bearing envelope, delivery, publication, outbox, quarantine, and replay values.
@@ -99,8 +149,8 @@ It checks exact public text, accurate source-presence diagnostics, absent
 fabricated causes, typed cause retention, and source-free errors nested in
 application wrappers.
 Source-free constructors remain usable in constant expressions. These T2 tests
-run in the existing Linux/Windows workspace and explicit error-contract CI
-gates; doctests enforce constructor use with positive and `must_use` rejection
+run in the existing Linux/Windows workspace-test gate; doctests enforce
+constructor use with positive and `must_use` rejection
 examples. When adding a public error wrapper,
 test both paths: a redacted top-level message does not make its raw source chain
 safe to log, and a category-only error must not claim an underlying cause.
@@ -186,7 +236,7 @@ gate and the Linux/Windows repository-quality job also run
 This catches dependency feature unification that could otherwise change
 persisted envelope bytes without changing contract source code.
 
-The local-platform CI job asserts the named test exists and runs the opt-in
+The local-platform runner discovers every mandatory test and runs the opt-in
 PostgreSQL outbox lease-fencing regression as a T3 behavioral contract. It
 forces an existing lease to expire in the test database, reclaims the message
 under the same worker token, and requires stale publish, retry, and quarantine
@@ -235,7 +285,9 @@ The Rust sensor checks these rules without network access:
   identifiers, the published high-water mark, and matching direct boundary
   headings and outcome statements; and
 - issue forms and the pull request template retain their stable fields,
-  commands, prompts, and review checklist.
+  commands, prompts, and review checklist; and
+- README and CONTRIBUTING retain exactly one canonical rendered verification
+  section and command block tied to the executable runner.
 
 Rendered structure matters. Comments, images, and fenced code cannot satisfy a
 required visible heading or summary, and raw HTML cannot appear in a required

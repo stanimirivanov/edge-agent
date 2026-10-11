@@ -48,38 +48,8 @@ jobs:
           python-version: "3.13"
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal --component clippy --component rustfmt
-      - name: Check text formatting
-        run: python scripts/verify_repository.py --format-check
-      - name: Check Rust formatting
-        run: cargo fmt --all --check
-      - name: Check repository contracts
-        run: python scripts/verify_repository.py
-      - name: Check rendered repository policy
-        run: cargo xtask repository
-      - name: Check architecture boundaries
-        run: python scripts/verify_architecture.py
-      - name: Check OCI image contracts
-        run: python scripts/verify_images.py
-      - name: Check supply-chain contracts
-        run: python scripts/verify_supply_chain.py
-      - name: Check release contracts
-        run: python scripts/verify_release.py
-      - name: Check locked dependency graph
-        run: cargo metadata --locked --offline --format-version 1 --no-deps
-      - name: Check Rust workspace
-        run: cargo check --locked --workspace --all-targets
-      - name: Lint Rust workspace
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - name: Run harness tests
-        run: python -m unittest discover -s tests -p "test_*.py"
-      - name: Run Rust tests
-        run: cargo test --locked --workspace --all-targets
-      - name: Verify Rust API doctests
-        run: cargo test --locked --workspace --doc
-      - name: Verify public messaging error contracts
-        run: cargo test --locked -p edgeagent-messaging --test error_redaction
-      - name: Verify canonical envelope bytes with preserve_order
-        run: cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order
+      - name: Run canonical acceptance contract
+        run: cargo xtask verify
 
   container-smoke:
     name: Container smoke tests
@@ -94,8 +64,10 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
       - name: Build and smoke-test service images
-        run: python scripts/verify_images.py --build
+        run: cargo xtask verify image-smoke
 
   local-platform-smoke:
     name: Local platform smoke tests
@@ -124,68 +96,14 @@ jobs:
         env:
           DATABASE_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
           SQLX_OFFLINE: "false"
-        run: |
-          cargo sqlx migrate run --source crates/outbox-postgres/migrations --no-dotenv
-          for migration in crates/inbox-postgres/migrations/*.sql; do
-            docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml exec -T postgres \
-              psql -X -v ON_ERROR_STOP=1 -U edgeagent -d edgeagent < "$migration"
-          done
-          cargo sqlx prepare --workspace --no-dotenv -- --locked --all-targets
-          git status --short -- .sqlx
-          test -z "$(git status --porcelain -- .sqlx)"
-      - name: Verify JetStream publisher conformance
-        env:
-          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
-        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_publish -- --ignored --exact persisted_message_identity_deduplicates_on_retry
-      - name: Verify JetStream consumer conformance
-        env:
-          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
-        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact delivery_settlement_controls_redelivery_and_acknowledgement
-      - name: Verify abandoned settlement leaves JetStream delivery recoverable
-        env:
-          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
-        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact abandoned_settlement_future_leaves_delivery_eligible_for_redelivery
-      - name: Verify oversized JetStream delivery halts intake
-        env:
-          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
-        run: cargo test --locked -p edgeagent-messaging-nats --test jetstream_consume -- --ignored --exact oversized_raw_delivery_halts_intake_without_acknowledgement
-      - name: Verify PostgreSQL outbox conformance
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact transaction_identity_and_lease_invariants_hold
-      - name: Verify same-owner outbox lease fencing
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: |
-          cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --list | grep -Fx 'same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence: test'
-          cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
-      - name: Verify PostgreSQL inbox conformance
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-inbox-postgres --tests -- --ignored
-      - name: Verify transactional handler conformance
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-inbox-handler --test postgres_handler -- --ignored --exact coordinator_preserves_commit_retry_and_quarantine_ordering
-      - name: Verify atomic SQLx inbox and outbox enqueue
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-inbox-handler --test sqlx_outbox_atomicity -- --ignored --exact inbox_domain_and_sqlx_outbox_commit_or_roll_back_together
-      - name: Verify bounded outbox relay conformance
-        env:
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-outbox-relay --test postgres_relay -- --ignored --exact relay_bounds_retry_and_quarantines_terminal_failures
-      - name: Verify end-to-end event spine recovery
-        env:
-          EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
-          EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
-        run: cargo test --locked -p edgeagent-inbox-handler --test event_spine -- --ignored --exact durable_command_survives_client_restart_with_one_domain_transition
-      - name: Verify end-to-end broker restart recovery
+          EDGEAGENT_SQLX_METADATA_LOCAL: "1"
+        run: cargo xtask verify sqlx-metadata
+      - name: Run discovered local-platform conformance proofs
         env:
           EDGEAGENT_NATS_URL: nats://127.0.0.1:4222
           EDGEAGENT_POSTGRES_URL: postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent
           EDGEAGENT_NATS_COMPOSE_RESTART: "1"
-        run: cargo test --locked -p edgeagent-inbox-handler --test event_spine -- --ignored --exact durable_command_survives_broker_restart_with_one_domain_transition
+        run: cargo xtask verify local-platform
       - name: Print diagnostics after failure
         if: failure()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200

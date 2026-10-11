@@ -1,5 +1,7 @@
 use std::fs;
 
+use crate::verification::DEFAULT_COMMAND;
+
 use super::{
     CONTRIBUTING, PULL_REQUEST_TEMPLATE, Repository, Violation, document_second_level_headings,
     first_second_level, heading_line, line_or_start, normalized_visible_section_text,
@@ -53,25 +55,12 @@ const VERIFICATION_HEADERS: [&str; 3] =
 const REQUIRED_VERIFICATION_COMMANDS: [&str; 3] = [
     "cargo xtask repository",
     "cargo xtask architecture",
-    "make verify",
+    DEFAULT_COMMAND,
 ];
 
-pub(super) const CONTRIBUTOR_VERIFICATION_COMMANDS: [&str; 15] = [
-    "python scripts/verify_repository.py --format-check",
-    "cargo fmt --all --check",
-    "python scripts/verify_repository.py",
-    "cargo xtask repository",
-    "python scripts/verify_architecture.py",
-    "cargo xtask architecture",
-    "python scripts/verify_images.py",
-    "python scripts/verify_local_stack.py",
-    "python scripts/verify_supply_chain.py",
-    "python scripts/verify_release.py",
-    "cargo metadata --locked --offline --format-version 1 --no-deps",
-    "cargo check --locked --workspace --all-targets",
-    "cargo clippy --locked --workspace --all-targets -- -D warnings",
-    "python -m unittest discover -s tests -p \"test_*.py\"",
-    "cargo test --locked --workspace --all-targets",
+pub(super) const VERIFICATION_DOCUMENTS: [(&str, &str); 2] = [
+    (CONTRIBUTING, "Verification and constrained environments"),
+    ("README.md", "Verify the current foundation"),
 ];
 
 pub(super) const PULL_REQUEST_CHECKLIST: [&str; 9] = [
@@ -88,14 +77,17 @@ pub(super) const PULL_REQUEST_CHECKLIST: [&str; 9] = [
 
 pub(super) fn check(repository: &Repository) -> Vec<Violation> {
     let mut violations = inventory_violations(repository);
-    violations.extend(match repository.document(CONTRIBUTING) {
-        Some(policy) => contributor_verification_violations(policy),
-        None => vec![verification_policy_violation(
-            1,
-            "canonical contributor verification policy is missing",
-            "restore the contributor guide and its checked verification command block",
-        )],
-    });
+    for (path, heading) in VERIFICATION_DOCUMENTS {
+        violations.extend(match repository.document(path) {
+            Some(policy) => verification_section_violations(policy, path, heading),
+            None => vec![verification_policy_violation(
+                path,
+                1,
+                "canonical verification entry-point document is missing",
+                "restore the document and its checked verification command block",
+            )],
+        });
+    }
     let Some(template) = repository.document(PULL_REQUEST_TEMPLATE) else {
         violations.push(pull_request_violation(
             1,
@@ -184,15 +176,32 @@ fn display_parent(parent: &str) -> &str {
     if parent.is_empty() { "." } else { parent }
 }
 
-fn contributor_verification_violations(
+fn verification_section_violations(
     document: &crate::repository::markdown::Document,
+    path: &str,
+    heading: &str,
 ) -> Vec<Violation> {
-    let Some((start, end)) = section_lines(document, "Verification and constrained environments")
-    else {
+    let heading_count = document
+        .headings()
+        .iter()
+        .filter(|candidate| candidate.level == 2 && candidate.text.trim() == heading)
+        .count();
+    if heading_count != 1 {
         return vec![verification_policy_violation(
+            path,
             1,
-            "contributor guide has no canonical verification section",
-            "restore `## Verification and constrained environments` and its `text` command block",
+            format!(
+                "verification document contains {heading_count} rendered `## {heading}` sections; expected one"
+            ),
+            "restore one canonical verification section and its fenced `text` command block",
+        )];
+    }
+    let Some((start, end)) = section_lines(document, heading) else {
+        return vec![verification_policy_violation(
+            path,
+            1,
+            "canonical verification section could not be located",
+            "restore the canonical rendered verification heading",
         )];
     };
     let blocks: Vec<_> = document
@@ -202,29 +211,27 @@ fn contributor_verification_violations(
         .collect();
     if blocks.len() != 1 {
         return vec![verification_policy_violation(
+            path,
             start,
             format!(
                 "verification section contains {} fenced `text` command blocks; expected one",
                 blocks.len()
             ),
-            "restore one fenced `text` block containing every canonical command in order",
+            "restore one fenced `text` block containing only the canonical verification runner command",
         )];
     }
     let Some(block) = blocks.first() else {
         return Vec::new();
     };
-    let commands: Vec<_> = block
-        .body
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .collect();
-    if commands == CONTRIBUTOR_VERIFICATION_COMMANDS {
+    let commands: Vec<_> = block.body.lines().collect();
+    if commands == [DEFAULT_COMMAND] {
         return Vec::new();
     }
     vec![verification_policy_violation(
+        path,
         block.line,
-        "canonical contributor verification commands have drifted from the enforced quality gate",
-        "restore every repository, architecture, static, build, lint, and test command in canonical order",
+        "canonical verification command has drifted from the executable quality gate",
+        format!("restore `{DEFAULT_COMMAND}`; inspect individual checks with `cargo xtask checks`"),
     )]
 }
 
@@ -320,7 +327,7 @@ service ownership, data meaning, deployment profiles, and ADRs.
 |---|---|---|
 | `cargo xtask repository` | | |
 | `cargo xtask architecture` | | |
-| `make verify` | | |
+| `{}` | | |
 
 **Checks not run and blocker:**
 
@@ -336,6 +343,7 @@ portability, and operational effects. Write “None” only after reviewing each
 
 {}
 "#,
+        DEFAULT_COMMAND,
         PULL_REQUEST_CHECKLIST.join("\n")
     )
 }
@@ -494,5 +502,20 @@ pub(super) fn validate_fragment(
 pub(super) fn validate_contributor_fragment(
     document: &crate::repository::markdown::Document,
 ) -> Vec<Violation> {
-    contributor_verification_violations(document)
+    verification_section_violations(
+        document,
+        VERIFICATION_DOCUMENTS[0].0,
+        VERIFICATION_DOCUMENTS[0].1,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn validate_foundation_fragment(
+    document: &crate::repository::markdown::Document,
+) -> Vec<Violation> {
+    verification_section_violations(
+        document,
+        VERIFICATION_DOCUMENTS[1].0,
+        VERIFICATION_DOCUMENTS[1].1,
+    )
 }

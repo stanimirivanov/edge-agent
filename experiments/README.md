@@ -3,7 +3,9 @@
 ## TL;DR
 
 These isolated Rust packages are decision evidence, not production workspace
-members. Each runs with `cargo test --locked` from its own directory. Tests
+members. From the repository root, run
+`cargo xtask verify m08-<package>` for one candidate's format, lint, and test
+contract; `cargo xtask checks` lists its commands and prerequisites. Tests
 start their own temporary database, broker, or local workflow server; no
 service URL, credential, CLI installation, or manually started container is
 required. Container-backed tests require a running Docker-compatible daemon.
@@ -28,17 +30,19 @@ must use provider idempotency keys or reconciliation where supported.
 
 | Package | Command | What it proves |
 | --- | --- | --- |
-| `event-spine-proof` | `cargo test --locked` | Negative control using the real inbox and JetStream adapters: Step A commits and is acknowledged, but Step B has no durable continuation after a worker crash. |
-| `durable-execution` | `cargo test --locked` | Duroxide file-backed SQLite history, child-process termination, and resumed Step B without rerunning Step A. |
-| `temporal-proof` | `cargo test --locked` | Temporal Rust SDK local server, child-process termination, and persisted workflow recovery; the harness downloads and SHA-256-verifies a pinned CLI archive. |
-| `dbos-proof` | `cargo test --locked` | Two distinct proofs: PostgreSQL app-data plus SQL enqueue rollback/commit, and native Rust SDK Step A/B crash recovery. The latter does not prove a Rust worker can consume the former's SQL-enqueued row. |
-| `flawless-proof` | `cargo test --locked` | Digest-pinned beta.3 server process crash/restart: previously recorded A HTTP effect once, safely retried B, and terminal C effect once. Pure local A code is not proven to be skipped. |
+| `event-spine-proof` | `cargo xtask verify m08-event-spine-proof` | Negative control using the real inbox and JetStream adapters: Step A commits and is acknowledged, but Step B has no durable continuation after a worker crash. |
+| `durable-execution` | `cargo xtask verify m08-durable-execution` | Duroxide file-backed SQLite history, child-process termination, and resumed Step B without rerunning Step A. |
+| `temporal-proof` | `cargo xtask verify m08-temporal-proof` | Temporal Rust SDK local server, child-process termination, and persisted workflow recovery; the harness downloads and SHA-256-verifies a pinned CLI archive. |
+| `dbos-proof` | `cargo xtask verify m08-dbos-proof` | Two distinct proofs: PostgreSQL app-data plus SQL enqueue rollback/commit, and native Rust SDK Step A/B crash recovery. The latter does not prove a Rust worker can consume the former's SQL-enqueued row. |
+| `flawless-proof` | `cargo xtask verify m08-flawless-proof` | Digest-pinned beta.3 server process crash/restart: previously recorded A HTTP effect once, safely retried B, and terminal C effect once. Pure local A code is not proven to be skipped. |
 
-Run a package's command from its listed directory, or use
-`cargo test --locked --manifest-path experiments/<package>/Cargo.toml` from the
-repository root. The [M08 CI matrix](../.github/workflows/m08-durable-execution.yml)
-runs formatting, Clippy, dependency policy, and the automated tests on Linux
-for every executable candidate. Its [experimental license policy](deny.toml)
+The [M08 CI matrix](../.github/workflows/m08-durable-execution.yml) uses the same
+executable inventory. It runs `m08-<package>-static` for formatting and Clippy,
+then the pinned dependency-policy action, then `m08-<package>-test` for the
+automated tests on Linux. This preserves the advisory/license gate before
+the expensive runtime proof. The full local `m08-<package>` profile does not
+substitute for that separate advisory check. Missing prerequisites report
+not run, not a passing crash-recovery proof. Its [experimental license policy](deny.toml)
 permits four additional permissive licenses for these proofs; it
 does not change the production workspace policy. The exact assertions,
 environment limitations, and decision
