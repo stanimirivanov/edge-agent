@@ -2,6 +2,8 @@ use std::error::Error;
 
 use super::*;
 
+mod cargo_fixtures;
+
 #[test]
 fn current_workspace_matches_the_declared_policy() -> Result<(), Box<dyn Error>> {
     let metadata = load_metadata()?;

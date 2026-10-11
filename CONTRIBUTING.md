@@ -199,8 +199,9 @@ verification entry point.
 The Python repository verifier owns encoding, line endings, final newlines,
 required-path inventory, and a simple independent documentation baseline.
 `cargo xtask repository` owns rendered CommonMark navigation and governance
-contracts. The Python architecture verifier checks manifest conventions,
-including complete direct dependency keys. `cargo xtask architecture` checks
+contracts. The Python architecture verifier checks manifest conventions and exact
+canonical direct dependency identities across normal, development, build, and all
+target tables, including inactive optional declarations. `cargo xtask architecture` checks
 Cargo's normalized internal package graph, architectural roles, dependency
 classes, stale policy, and production cycles. Run both checks in the affected
 pair; a pass from one does not replace the other.
