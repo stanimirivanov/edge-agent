@@ -12,7 +12,10 @@ use std::{
 
 const LOCAL_DATABASE_URL: &str =
     "postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent";
-const SQLX_VERSION: &str = "sqlx-cli 0.9.0";
+// The Cargo plugin's nested Clap command reports a different name than the
+// standalone `sqlx` binary. Match the actual invocation, not the package name.
+const SQLX_VERSION_BANNER: &str = "sqlx-cli-sqlx 0.9.0";
+const SQLX_VERSION_ARGS: &[&str] = &["sqlx", "--no-dotenv", "--version"];
 const COMPOSE_PSQL: &[&str] = &[
     "compose",
     "--env-file",
@@ -58,7 +61,7 @@ fn verify(root: &Path) -> Result<(), String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let version = command(root, "cargo", &["sqlx", "--version"])
+    let version = command(root, "cargo", SQLX_VERSION_ARGS)
         .output()
         .map_err(|error| format!("cannot inspect the pinned SQLx CLI: {error}"))?;
     validate_version(&version)?;
@@ -155,10 +158,13 @@ fn inbox_migrations(directory: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn validate_version(output: &Output) -> Result<(), String> {
-    if !output.status.success()
-        || std::str::from_utf8(&output.stdout).map(str::trim) != Ok(SQLX_VERSION)
-    {
-        return Err("SQLx metadata requires the pinned sqlx-cli 0.9.0; install the version documented in docs/development/sqlx-metadata.md".to_owned());
+    if !output.status.success() {
+        return Err("cargo sqlx --no-dotenv --version failed; SQLx metadata requires the pinned sqlx-cli 0.9.0 documented in docs/development/sqlx-metadata.md".to_owned());
+    }
+    if std::str::from_utf8(&output.stdout).map(str::trim) != Ok(SQLX_VERSION_BANNER) {
+        return Err(format!(
+            "cargo sqlx --no-dotenv --version returned an unexpected banner; expected exactly `{SQLX_VERSION_BANNER}` from the pinned sqlx-cli 0.9.0 documented in docs/development/sqlx-metadata.md"
+        ));
     }
     Ok(())
 }
@@ -243,6 +249,75 @@ fn report_output(output: &Output) {
 mod tests {
     use super::*;
     use std::error::Error;
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt;
+    #[cfg(windows)]
+    use std::os::windows::process::ExitStatusExt;
+
+    fn version_output(stdout: &[u8]) -> Output {
+        Output {
+            status: std::process::ExitStatus::default(),
+            stdout: stdout.to_vec(),
+            stderr: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn version_probe_uses_cargo_plugin_without_dotenv() {
+        let probe = command(Path::new("."), "cargo", SQLX_VERSION_ARGS);
+        assert_eq!(probe.get_program(), OsStr::new("cargo"));
+        assert_eq!(
+            probe.get_args().collect::<Vec<_>>(),
+            ["sqlx", "--no-dotenv", "--version"].map(OsStr::new)
+        );
+    }
+
+    #[test]
+    fn pinned_cargo_plugin_version_banner_is_accepted() {
+        for stdout in [
+            b"sqlx-cli-sqlx 0.9.0".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0\n".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0\r\n".as_slice(),
+        ] {
+            assert_eq!(validate_version(&version_output(stdout)), Ok(()));
+        }
+    }
+
+    #[test]
+    fn unexpected_version_banners_are_rejected_without_echoing_output() {
+        for stdout in [
+            b"".as_slice(),
+            b"sqlx-cli 0.9.0".as_slice(),
+            b"sqlx-cli-sqlx 0.8.6".as_slice(),
+            b"sqlx-cli-sqlx 0.9.1".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0-dev".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0+private-sentinel".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0 private-sentinel".as_slice(),
+            b"private-sentinel\nsqlx-cli-sqlx 0.9.0".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0\nprivate-sentinel".as_slice(),
+            b"sqlx-cli-sqlx 0.9.0\xffprivate-sentinel".as_slice(),
+        ] {
+            let mut output = version_output(stdout);
+            output.stderr = b"stderr-private-sentinel".to_vec();
+            assert!(validate_version(&output).is_err_and(|error| {
+                error.contains("unexpected banner")
+                    && error.contains(SQLX_VERSION_BANNER)
+                    && !error.contains("private-sentinel")
+            }));
+        }
+    }
+
+    #[test]
+    fn unsuccessful_probe_cannot_authorize_schema_assembly() {
+        let mut output = version_output(b"sqlx-cli-sqlx 0.9.0\n");
+        // This represents a nonzero exit on Windows and signal termination on
+        // Unix. Neither can authorize schema assembly, even with valid stdout.
+        output.status = std::process::ExitStatus::from_raw(1);
+        output.stderr = b"stderr-private-sentinel".to_vec();
+        assert!(validate_version(&output).is_err_and(|error| {
+            error.contains("--version failed") && !error.contains("private-sentinel")
+        }));
+    }
 
     fn environment(name: &str) -> Option<String> {
         match name {
