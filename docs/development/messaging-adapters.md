@@ -60,10 +60,15 @@ silently changing durability or authorization policy.
 
 Application handlers depend on `MessageConsumer`, `MessageDelivery`, and
 `DeliveryDisposition`. `JetStreamConsumer` accepts an already configured durable
-pull consumer, rejects ephemeral or non-explicit-ack configuration, and limits
+pull consumer, rejects ephemeral, non-explicit-ack, or header-only configuration, and limits
 each broker request to one message. Deployment owns
 stream and consumer creation, subject filters, explicit-ack policy, retention,
 acknowledgement wait, maximum deliveries, pending limits, replicas, and ACLs.
+Admission checks the supplied SDK handle's cached configuration. Provisioning
+must not change it under an active adapter: quiesce intake, apply the change,
+retrieve an updated consumer handle, and recreate the adapter. Header-only
+delivery strips valid envelope bodies and cannot enter application quarantine
+as if those bodies were malformed.
 
 One delivery follows this control flow:
 
@@ -115,7 +120,14 @@ deliberately forgotten values. See
 [ADR-0020](../decisions/0020-retain-settlement-abandonment-diagnostics.md).
 `Acknowledge`,
 delayed negative acknowledgement, and terminal settlement all use JetStream
-acknowledgement-sync and complete only after the server confirms receipt.
+acknowledgement-sync through the SDK's Core NATS request/reply transport. The
+adapter preserves the configured JetStream timeout and accepts only an empty
+reply with no status or an explicit `200` status. No responders, timeouts,
+non-success status, and nonempty replies are `ConfirmationUnknown`, not
+successful settlement. Invalid-reply causes contain only numeric status and
+byte count, never response bodies or descriptions. The pinned SDK's
+`double_ack_with` treats any received reply as success; the adapter deliberately
+does not use that unchecked confirmation path.
 
 If broker metadata fails parsing or portable validation, no trustworthy
 transport identity exists for handler-owned quarantine. If the raw payload is
@@ -175,6 +187,16 @@ Top-level `Display` and `Debug` omit adapter cause text. The wrapped cause
 remains available through Rust's error chain for explicit diagnosis; redact it
 before structured logging. A receipt proves transport persistence only;
 consumer inbox handling still owns exactly-once domain effects.
+
+Publication failure translation remains phase-aware and exhaustive over SDK
+error kinds. During the acknowledgement phase, SDK `Other` wraps both unreadable
+responses and typed server errors. Typed `STREAM_MESSAGE_EXCEEDS_MAXIMUM`
+(10054) proves a pre-persistence rejection and maps to `Rejected`; undecodable
+responses, generic storage failures, and unclassified server codes remain
+`ConfirmationUnknown`. Extend that allowlist only with a typed code and proof
+that it establishes rejection before persistence. Never classify by matching a
+server's description string. Local send-side `MaxAckPending` is backpressure
+before acceptance and remains `Unavailable`.
 
 `PublishError`, `ConsumeError`, `InboxStoreError`, and `OutboxStoreError` offer
 `new(kind)` for a classified failure with no underlying cause. It records only
@@ -315,6 +337,29 @@ awaits an acknowledgement and verifies no pending work remains.
 The oversized-delivery test verifies the instance halts without
 acknowledging or terminally settling raw bytes. Run them only against an
 isolated development or CI broker.
+
+Five additional broker-boundary regressions are protected by the canonical
+runner and execute in the existing local-platform CI job:
+
+```text
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo xtask verify --check nats-no-stream --check nats-size-rejection --check nats-header-only --check nats-publish-oversize --check nats-settlement-response
+```
+
+These prove real no-stream rejection, typed stream-size rejection with no stored
+message, header-only rejection before intake, and oversize publication without
+transport traffic. The response proof deletes real consumers after receipt and
+requires all three dispositions to report actual no-responder errors, not
+confirmation. T2 response-validation tests independently reject nonempty bodies
+and non-success status without retaining private reply text. Existing real-stream
+tests own positive settlement/redelivery.
+New stream fixtures have process-scoped owned names and bounded cleanup on
+ordinary failure and panic. Use an exclusive development broker; isolated names
+alone do not make the older fixed-subject suites parallel-safe. Disposable CI
+broker teardown covers task cancellation and process abort.
+
+The ordered [NATS adapter refactor plan](plans/messaging-nats-refactor.md) keeps
+confirmation correctness, consumer lifecycle, and capability/fixture extraction
+in independently reviewable slices.
 
 The [event-spine recovery conformance](event-spine-conformance.md) connects these
 adapters to the PostgreSQL outbox, relay, inbox, and handler. It proves that an
