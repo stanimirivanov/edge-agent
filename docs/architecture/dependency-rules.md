@@ -141,6 +141,14 @@ ADR, an exact package pair and dependency class, an owner and removal condition,
 and a diagnostic on every successful check. An exception never authorizes other
 edges between packages that happen to share the same roles.
 
+The tooling-only `edgeagent-xtask` dependency on `yaml-rust2` 0.13.0, with
+default features disabled, supports the semantic GitHub workflow security
+sensor. It provides maintained YAML 1.2 parsing instead of a line-oriented
+parser; it enters no production crate or image. Parser input bounds, unsupported
+YAML forms, payload-safe diagnostics, exact manifest policy, and mutation tests
+form its replacement boundary. A parser or feature change requires reviewing
+these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret-scanning.md).
+
 ## Related decisions
 
 - [ADR-0001: Use a Rust workspace with multiple deployables](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md)

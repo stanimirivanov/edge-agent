@@ -189,6 +189,32 @@ impl Executor for ProcessExecutor<'_> {
                     _ => Err(format!("requires executable {name}")),
                 }
             }
+            Requirement::CommandProbe(name, args) => {
+                // The checksum installer has a repository-local default too.
+                // Resolve the same artifact as the scanner wrapper so local
+                // installation does not require mutating the caller's PATH.
+                let installed = workspace_root()
+                    .join("artifacts/security-tools/gitleaks-8.30.1")
+                    .join(format!("gitleaks{}", env::consts::EXE_SUFFIX));
+                let program = if name == "gitleaks" && installed.is_file() {
+                    installed.into_os_string()
+                } else {
+                    name.into()
+                };
+                match Command::new(program)
+                    .args(args)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                {
+                    Ok(status) if status.success() => Ok(()),
+                    _ => Err(format!(
+                        "requires successful probe: {name} {}",
+                        args.join(" ")
+                    )),
+                }
+            }
         }
     }
 

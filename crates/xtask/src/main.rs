@@ -3,6 +3,7 @@
 mod architecture;
 mod repository;
 mod verification;
+mod workflow_security;
 
 use std::{env, process::ExitCode};
 
@@ -18,6 +19,7 @@ fn main() -> ExitCode {
         Some("route") => verification::route(&remaining),
         Some("architecture") if remaining.is_empty() => run_architecture_check(),
         Some("repository") if remaining.is_empty() => run_repository_check(),
+        Some("workflow-security") if remaining.is_empty() => workflow_security::run(),
         None | Some("help" | "--help" | "-h") if remaining.is_empty() => {
             print_usage();
             ExitCode::SUCCESS
@@ -79,6 +81,7 @@ fn print_usage() {
          Usage:\n\
            cargo xtask architecture    Verify workspace dependency policy\n\
            cargo xtask repository      Verify documentation and governance policy\n\
+           cargo xtask workflow-security Verify CI trust and permission boundaries\n\
            cargo xtask verify [PROFILE] [--check ID] [--python EXECUTABLE]\n\
            cargo xtask checks          List canonical checks and evidence boundaries\n\
            cargo xtask route PATH...   Route Git-relative paths to guides and checks"

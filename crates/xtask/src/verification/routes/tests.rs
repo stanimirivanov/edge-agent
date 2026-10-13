@@ -193,11 +193,31 @@ fn renamed_guide_and_missing_check_fail_closed() {
         matches!(missing_guide, Err(error) if error.contains("routing guide missing: docs/development/postgres-inbox.md"))
     );
 
-    let missing_ids = BTreeSet::new();
+    let mut missing_ids = ids.clone();
+    missing_ids.remove("image-smoke");
     let missing_check = validate_references(&missing_ids, |_| true);
     assert!(
         matches!(missing_check, Err(error) if error.contains("routing check missing from canonical inventory: image-smoke"))
     );
+}
+
+#[test]
+fn security_paths_route_actual_scanner_proofs_without_waiving_default_acceptance()
+-> Result<(), String> {
+    for path in [
+        ".github/workflows/repository-quality.yml",
+        ".gitleaks.toml",
+        "supply-chain/security-tools.toml",
+        "scripts/verify_secrets.py",
+        "scripts/install_gitleaks.py",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+        assert!(advice.guides.contains("docs/development/ci-security.md"));
+        assert!(advice.checks.contains("secret-scanner-contracts"));
+        assert!(advice.checks.contains("secret-scan"));
+    }
+    Ok(())
 }
 
 #[test]

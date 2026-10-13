@@ -1,0 +1,33 @@
+title = "EdgeAgent secret detection"
+minVersion = "v8.30.1"
+
+[extend]
+useDefault = true
+
+# The generic upstream rule intentionally ignores many low-entropy values.
+# Configuration credentials still require detection, regardless of entropy.
+[[rules]]
+id = "edgeagent-config-credential"
+description = "Literal EdgeAgent PostgreSQL or object-store credential"
+regex = '''(?i)\bEDGEAGENT_(?:POSTGRES_PASSWORD|S3_(?:ACCESS|SECRET)_KEY)[ \t]*[=:][ \t]*["']?([a-z0-9_./+=-]+)'''
+secretGroup = 1
+keywords = ["edgeagent_postgres_password", "edgeagent_s3_access_key", "edgeagent_s3_secret_key"]
+
+[[rules.allowlists]]
+description = "Exact public local-only fixtures, only in their canonical fixture file"
+condition = "AND"
+paths = ['''^(?:\.[/\\])?deploy[/\\]local[/\\]\.env\.example$''']
+regexTarget = "secret"
+regexes = ['''^edgeagent-local-(?:postgres|access|secret)$''']
+
+# This published MessageMetadata idempotency identity is not an API credential.
+# Keep the inherited rule active everywhere else, including this test file.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact public message idempotency identity in the cancellation fixture"
+condition = "AND"
+paths = ['''^(?:\.[/\\])?crates[/\\]outbox-relay[/\\]tests[/\\]cancellation\.rs$''']
+regexTarget = "secret"
+regexes = ['''^cancellation-order-01$''']

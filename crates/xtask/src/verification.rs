@@ -52,6 +52,7 @@ pub(super) enum Requirement {
     Environment(&'static str),
     EnvironmentEquals(&'static str, &'static str),
     Executable(&'static str),
+    CommandProbe(&'static str, &'static [&'static str]),
 }
 
 impl Requirement {
@@ -60,6 +61,9 @@ impl Requirement {
             Self::Environment(name) => format!("nonempty {name}"),
             Self::EnvironmentEquals(name, value) => format!("{name}={value}"),
             Self::Executable(name) => format!("executable {name}"),
+            Self::CommandProbe(name, args) => {
+                format!("successful probe: {name} {}", args.join(" "))
+            }
         }
     }
 }

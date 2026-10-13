@@ -81,6 +81,8 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "repository-bytes",
             "repository-policy",
             "architecture-declarations",
+            "workflow-security",
+            "secret-policy",
             "architecture-graph",
             "image-contracts",
             "local-stack-contracts",
@@ -108,6 +110,35 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             .iter()
             .any(|c| c.command.args.contains(&"serde_json/preserve_order"))
     );
+    Ok(())
+}
+
+#[test]
+fn security_profile_requires_actual_scanner_protocol_and_default_does_not_install_it()
+-> Result<(), String> {
+    let checks = inventory::checks();
+    let options = Options::parse(&["ci-security".to_owned()])?;
+    let selected = options.select(&checks)?;
+    assert_eq!(
+        selected.iter().map(|check| check.id).collect::<Vec<_>>(),
+        [
+            "workflow-security",
+            "secret-policy",
+            "secret-scanner-contracts",
+            "secret-scan"
+        ]
+    );
+    for check in selected.iter().filter(|check| check.tier == "T3") {
+        assert!(matches!(
+            check.prerequisites,
+            [Requirement::CommandProbe("gitleaks", ["version"])]
+        ));
+        assert_eq!(check.command.program, Program::Python);
+        assert_eq!(
+            check.command.args.first(),
+            Some(&"scripts/verify_secrets.py")
+        );
+    }
     Ok(())
 }
 

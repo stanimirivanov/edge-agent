@@ -92,6 +92,31 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix(".github/workflows/"),
+        guides: &["docs/development/ci-security.md"],
+        checks: &["secret-scanner-contracts", "secret-scan"],
+    },
+    Route {
+        matcher: Matcher::Exact(".gitleaks.toml"),
+        guides: &["docs/development/ci-security.md"],
+        checks: &["secret-scanner-contracts", "secret-scan"],
+    },
+    Route {
+        matcher: Matcher::Exact("supply-chain/security-tools.toml"),
+        guides: &["docs/development/ci-security.md"],
+        checks: &["secret-scanner-contracts", "secret-scan"],
+    },
+    Route {
+        matcher: Matcher::Exact("scripts/verify_secrets.py"),
+        guides: &["docs/development/ci-security.md"],
+        checks: &["secret-scanner-contracts", "secret-scan"],
+    },
+    Route {
+        matcher: Matcher::Exact("scripts/install_gitleaks.py"),
+        guides: &["docs/development/ci-security.md"],
+        checks: &["secret-scanner-contracts", "secret-scan"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/"),
         guides: &["docs/development/engineering-standards.md"],
         checks: &[],

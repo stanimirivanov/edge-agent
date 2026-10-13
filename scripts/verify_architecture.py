@@ -87,7 +87,7 @@ TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 XTASK_DEPENDENCIES = frozenset(
-    {"cargo_metadata", "percent-encoding", "pulldown-cmark"}
+    {"cargo_metadata", "percent-encoding", "pulldown-cmark", "yaml-rust2"}
 )
 
 PACKAGE_RULES = {

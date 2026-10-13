@@ -35,6 +35,7 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 | Local runtime dependencies or recovery tests | [Local platform](development/local-platform.md) | `make local-up`, relevant conformance guide |
 | Deployment ownership or cloud portability | [Deployment portability](architecture/deployment-portability.md) | [System architecture](architecture/system-overview.md), relevant ADRs |
 | Repository policy, CI, agent guidance, or developer experience | [Coding harness](development/harness.md) | `make repository`, `make architecture` |
+| Workflow capabilities, action pins, or credential detection | [CI security](development/ci-security.md), [security policy](../SECURITY.md) | `cargo xtask workflow-security`, `cargo xtask verify ci-security` |
 | Milestone or issue planning | [Milestones](roadmap/milestones.md), [CONTRIBUTING.md](../CONTRIBUTING.md) | Relevant product and architecture sources |
 | Vulnerability reporting or security-sensitive behavior | [Security policy](../SECURITY.md) | Relevant architecture and ADRs |
 
