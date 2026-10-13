@@ -46,6 +46,14 @@ const NATS_BOUNDARIES: Target = Target {
         "non_success_settlement_response_is_not_confirmation",
     ],
 };
+const NATS_LIFECYCLE: Target = Target {
+    package: "edgeagent-messaging-nats",
+    name: "jetstream_lifecycle",
+    identities: &[
+        "protocol_halt_stops_expiry_and_reconnect_pulls",
+        "deleted_consumer_closes_intake_while_adapter_remains_alive",
+    ],
+};
 const OUTBOX: Target = Target {
     package: "edgeagent-outbox-postgres",
     name: "postgres_outbox",
@@ -159,6 +167,20 @@ pub(super) fn checks() -> Vec<Check> {
             "non_success_settlement_response_is_not_confirmation",
             NATS,
             "Deleting real consumers proves 503/no-responder ACK/NAK/TERM replies are not confirmation.",
+        ),
+        exact(
+            "nats-halted-worker",
+            &NATS_LIFECYCLE,
+            "protocol_halt_stops_expiry_and_reconnect_pulls",
+            NATS,
+            "A live halted adapter issues no expiry/reconnect pulls; an active same-connection control responds to reconnect.",
+        ),
+        exact(
+            "nats-closed-intake",
+            &NATS_LIFECYCLE,
+            "deleted_consumer_closes_intake_while_adapter_remains_alive",
+            NATS,
+            "Broker consumer deletion closes intake; repeated calls resolve immediately without new pulls.",
         ),
         exact(
             "outbox-conformance",
@@ -280,6 +302,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         PUBLISH,
         CONSUME,
         NATS_BOUNDARIES,
+        NATS_LIFECYCLE,
         OUTBOX,
         INBOX,
         INBOX_ERRORS,
@@ -303,7 +326,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 18);
+        assert_eq!(checks.len(), 20);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -318,8 +341,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 22);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 22);
+        assert_eq!(inventory.len(), 24);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 24);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

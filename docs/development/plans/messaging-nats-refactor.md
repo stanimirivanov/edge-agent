@@ -7,8 +7,8 @@
   bounded evidence, and confirmation-before-success semantics.
 - Deliver three slices: broker-boundary correctness, stopped consumer lifecycle,
   then cohesive modules and independently verified conformance fixtures.
-- Slice 1 implements admission and confirmation changes; slices 2 and 3 remain
-  outstanding. Compilation/discovery is not evidence that a broker proof ran.
+- Slices 1 and 2 implement admission, confirmation, and stopped lifecycle;
+  slice 3 remains outstanding. Discovery is not evidence that a broker proof ran.
 - No live trading, model call, workflow framework, wire-format change, database
   migration, or new dependency belongs in these slices.
 
@@ -54,10 +54,14 @@ so this correction needs no public constructor change or vendored SDK fork.
 - Prove cessation across expiry/reconnect and document already-issued request
   uncertainty. Dropping a worker does not revoke broker-side effects.
 
-The current Boolean gate blocks application polling but retains the SDK stream.
-The SDK task can issue pulls on expiry/reconnect; merely adding Fuse does not
-stop it. This remains an explicit outstanding slice, not a claimed guarantee
-from slice 1's gate tests. No finite `max_deliver` requirement is introduced.
+The ownership state replaces the Boolean gate: only `Active` can retain an SDK
+stream. Protocol faults drop that resource synchronously. Exhaustion and the
+SDK's terminal deleted/push-consumer errors enter `Closed`; all four nonterminal
+error kinds preserve it. Receive borrows the stream across its sole await, so
+pending cancellation does not close intake. T2 drop probes protect each path;
+two registered T3 proofs keep handles alive across expiry/reconnect and broker
+consumer deletion. Merely adding Fuse would not stop the owned task. No finite
+`max_deliver` requirement is introduced and no disposition occurs on release.
 
 ### 3. Cohesive modules and isolated conformance
 
@@ -92,7 +96,7 @@ resource lifetime, not message evidence; slice 3 preserves public paths.
 
 Run `cargo xtask verify` for full default acceptance. The existing ignored-test
 census compiles and protects all named proofs without starting a broker. Run
-the nine NATS checks through `cargo xtask verify --check ID` against an exclusive
+the eleven NATS checks through `cargo xtask verify --check ID` against an exclusive
 local server; the [messaging guide](../messaging-adapters.md#verification) names
 the new boundary checks. Existing local-platform CI runs them with the pinned
 Compose server and always destroys that isolated environment afterward.
@@ -100,7 +104,10 @@ Compose server and always destroys that isolated environment afterward.
 T2 pure tests do not establish broker behavior. They reject invalid status and
 nonempty settlement bodies. Real-stream tests prove publication rejection,
 positive confirmed settlement, redelivery, and no-responder outcomes after
-consumer deletion. Missing
+consumer deletion. Lifecycle proofs independently observe pull cessation after
+the SDK renewal deadline and reconnect, and immediate closed-state returns.
+They do not retract already-issued requests or prove a sustained buffering
+bound. Missing
 services or tools must be reported as not run, never passed.
 
 ## Separate follow-ups

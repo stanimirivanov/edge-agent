@@ -176,6 +176,14 @@ retry eligibility remains a T3 conformance check.
 Consumer tests also assert that broker-metadata or oversized-payload protocol faults halt
 the consumer's pre-pull gate; a caller retry loop cannot silently consume
 another delivery.
+NATS ownership probes now require terminal states to release the SDK stream
+exactly once, preserve all nonterminal SDK errors and typed causes, and retain
+active ownership on pending cancellation. Registered T3 lifecycle proofs observe
+real pull subjects across expiry/reconnect while a halted handle stays alive,
+and terminal consumer deletion followed by immediate closed-state returns.
+These extend the existing local-platform job and ignored-test census, not a
+parallel acceptance runner. See [messaging verification](messaging-adapters.md#verification)
+for the timer-specific proof and already-issued request limits.
 The `FailureCode` boundary tests cover the inclusive 1–64-byte token range and
 reject uppercase, whitespace, non-ASCII, and oversized codes. Its compile-fail
 doctest ensures an invalid service-owned constant cannot reach inbound or

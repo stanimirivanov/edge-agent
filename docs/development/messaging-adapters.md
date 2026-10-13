@@ -143,6 +143,23 @@ acknowledgement-wait settings before repeated restart attempts: exhaustion is
 not a substitute for durable quarantine. Neither a protocol rejection nor a
 retained raw broker message is a committed quarantine record.
 
+Intake owns an explicit active, protocol-halted, or closed state. A protocol
+fault releases the SDK stream immediately, aborting its expiry/reconnect task
+even while the adapter handle stays alive. Stream exhaustion or SDK
+`ConsumerDeleted`/`PushBasedConsumer` errors also release it and close intake.
+The first terminal SDK error retains its typed cause as `Unavailable`; later
+closed calls return `Unavailable` immediately without I/O. Halted calls return
+`Protocol` immediately. Missing heartbeat, pull failure, no responder, and
+other nonterminal SDK errors preserve active intake and their typed causes.
+Cancellation while awaiting a pull preserves that ownership; receipt,
+validation, and delivery construction have no intervening await.
+
+Aborting the worker does not retract already-issued or queued NATS requests,
+clear broker-side pending work, or perform a disposition. In-flight work may
+remain unacknowledged. A halted instance cannot reopen itself; investigate
+and replace it under the policy above. Recover a deleted/reconfigured durable
+consumer through provisioning before constructing a replacement adapter.
+
 ## Stored-envelope validation boundary
 
 An outbox claim is a persistence record, not a validated publication. Its
@@ -356,6 +373,28 @@ New stream fixtures have process-scoped owned names and bounded cleanup on
 ordinary failure and panic. Use an exclusive development broker; isolated names
 alone do not make the older fixed-subject suites parallel-safe. Disposable CI
 broker teardown covers task cancellation and process abort.
+
+Two lifecycle proofs also run through the canonical local-platform inventory:
+
+```text
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo xtask verify --check nats-halted-worker --check nats-closed-intake
+```
+
+The halted-worker proof keeps the poisoned adapter alive beyond the pinned
+SDK's 30-second expiry plus five-second renewal margin, observing actual pull
+subjects rather than only the public gate. It then forces that client's
+reconnection; an active consumer on the same connection provides a positive
+pull witness while the halted worker remains stopped. Poison bytes stay in
+the stream with one pending acknowledgement. This timer-specific proof takes
+at least 38 seconds, requires an exclusive broker, and does not establish
+a sustained prefetch bound or broker-server restart durability.
+The closure proof cancels a polled receive and recovers a delivery, then waits
+for another registered pull before deleting the real durable consumer. It
+verifies the typed terminal error, requires repeated calls to resolve without
+polling, and observes no renewal pull for another 37 seconds while the closed
+handle remains alive. T2 ownership probes separately prove
+immediate, one-time stream release, all six SDK error classifications, and
+cancellation-safe borrowing; they do not substitute for the broker proofs.
 
 The ordered [NATS adapter refactor plan](plans/messaging-nats-refactor.md) keeps
 confirmation correctness, consumer lifecycle, and capability/fixture extraction
