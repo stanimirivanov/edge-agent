@@ -22,6 +22,8 @@ const NATS_CHECKS: &[&str] = &[
     "nats-header-only",
     "nats-publish-oversize",
     "nats-settlement-response",
+    "nats-halted-worker",
+    "nats-closed-intake",
     "event-spine-client",
     "event-spine-broker",
 ];

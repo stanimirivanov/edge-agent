@@ -82,30 +82,63 @@ impl MessagePublisher for JetStreamPublisher {
 /// Invalid broker metadata or a payload outside portable bounds leaves the raw
 /// message unsettled and halts this instance before another pull; replacement
 /// requires operator investigation.
+/// Terminal states release the SDK stream and abort its background pull worker.
+/// Already-issued requests are not revoked. Stream closure and terminal SDK
+/// errors close intake; transient pull errors preserve it. Cancelling a pending
+/// receive leaves the stream active and does not acknowledge any delivery.
 pub struct JetStreamConsumer {
-    messages: pull::Stream,
-    protocol_gate: ConsumerProtocolGate,
+    intake: ConsumerIntake<pull::Stream>,
 }
 
-#[derive(Default)]
-struct ConsumerProtocolGate {
-    halted: bool,
+// Terminal states cannot retain a stream: dropping the SDK stream aborts its
+// expiry/reconnect worker, even while the adapter itself remains alive.
+enum ConsumerIntake<S> {
+    Active(S),
+    Halted,
+    Closed,
 }
 
-impl ConsumerProtocolGate {
-    fn before_pull(&self) -> Result<(), ConsumeError> {
-        if self.halted {
-            Err(ConsumeError::protocol(
+impl<S> ConsumerIntake<S> {
+    fn stream(&mut self) -> Result<&mut S, ConsumeError> {
+        match self {
+            Self::Active(stream) => Ok(stream),
+            Self::Halted => Err(ConsumeError::protocol(
                 "consumer halted after invalid broker delivery",
-            ))
-        } else {
-            Ok(())
+            )),
+            Self::Closed => Err(ConsumeError::unavailable("consumer stream ended")),
+        }
+    }
+
+    fn resolve_pull<T>(
+        &mut self,
+        result: Option<Result<T, pull::MessagesError>>,
+    ) -> Result<T, ConsumeError> {
+        match result {
+            Some(Ok(message)) => Ok(message),
+            Some(Err(error)) => {
+                match error.kind() {
+                    pull::MessagesErrorKind::ConsumerDeleted
+                    | pull::MessagesErrorKind::PushBasedConsumer => *self = Self::Closed,
+                    pull::MessagesErrorKind::MissingHeartbeat
+                    | pull::MessagesErrorKind::Pull
+                    | pull::MessagesErrorKind::NoResponders
+                    | pull::MessagesErrorKind::Other => (),
+                }
+                Err(ConsumeError::with_source(
+                    ConsumeErrorKind::Unavailable,
+                    error,
+                ))
+            }
+            None => {
+                *self = Self::Closed;
+                Err(ConsumeError::unavailable("consumer stream ended"))
+            }
         }
     }
 
     fn validate<T>(&mut self, result: Result<T, ConsumeError>) -> Result<T, ConsumeError> {
         if result.is_err() {
-            self.halted = true;
+            *self = Self::Halted;
         }
         result
     }
@@ -129,8 +162,7 @@ impl JetStreamConsumer {
             .await
             .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
         Ok(Self {
-            messages,
-            protocol_gate: ConsumerProtocolGate::default(),
+            intake: ConsumerIntake::Active(messages),
         })
     }
 }
@@ -159,14 +191,12 @@ fn validate_consumer_configuration(
 impl MessageConsumer for JetStreamConsumer {
     fn receive(&mut self) -> ReceiveFuture<'_> {
         Box::pin(async move {
-            self.protocol_gate.before_pull()?;
-            let message = self
-                .messages
-                .next()
-                .await
-                .ok_or_else(|| ConsumeError::unavailable("consumer stream ended"))?
-                .map_err(|error| ConsumeError::with_source(ConsumeErrorKind::Unavailable, error))?;
-            let metadata = self.protocol_gate.validate((|| {
+            // Borrow rather than move the stream across await. Cancellation
+            // while waiting leaves intake active; after receipt validation and
+            // ownership transfer are synchronous, with no cancellation gap.
+            let result = self.intake.stream()?.next().await;
+            let message = self.intake.resolve_pull(result)?;
+            let metadata = self.intake.validate((|| {
                 let info = message.info().map_err(|error| {
                     ConsumeError::with_boxed_source(ConsumeErrorKind::Protocol, error)
                 })?;
@@ -186,10 +216,10 @@ impl MessageConsumer for JetStreamConsumer {
                 ))
             })())?;
             let jetstream::Message { message, context } = message;
-            let reply = self.protocol_gate.validate(message.reply.ok_or_else(|| {
+            let reply = self.intake.validate(message.reply.ok_or_else(|| {
                 ConsumeError::protocol("delivery must contain a settlement reply subject")
             }))?;
-            self.protocol_gate.validate(MessageDelivery::new(
+            self.intake.validate(MessageDelivery::new(
                 message.payload,
                 metadata,
                 Box::new(JetStreamSettlement {
@@ -374,7 +404,7 @@ fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConsumerProtocolGate, PreparedPublish, acknowledgement_kind, delivery_message_key,
+        ConsumerIntake, PreparedPublish, acknowledgement_kind, delivery_message_key,
         map_acknowledgement_error, map_send_error, prepare_publish, receipt,
         validate_consumer_configuration, validate_consumer_sequence,
         validate_settlement_confirmation,
@@ -730,10 +760,10 @@ mod tests {
 
     #[test]
     fn malformed_metadata_halts_this_consumer_without_retrying_the_pull() {
-        let mut gate = ConsumerProtocolGate::default();
-        assert!(gate.before_pull().is_ok());
+        let (mut gate, drops) = intake_probe();
+        assert!(gate.stream().is_ok());
         assert!(matches!(gate.validate(Ok(41_u64)), Ok(41)));
-        assert!(gate.before_pull().is_ok());
+        assert!(gate.stream().is_ok());
 
         let error = ConsumeError::protocol("invalid broker metadata");
         assert_eq!(
@@ -743,9 +773,127 @@ mod tests {
             Some(ConsumeErrorKind::Protocol)
         );
         assert_eq!(
-            gate.before_pull().err().map(|error| error.kind()),
+            gate.stream().err().map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
         );
+        assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
+        drop(gate);
+        assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    struct IntakeProbe(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+    impl Drop for IntakeProbe {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    impl futures_util::Stream for IntakeProbe {
+        type Item = ();
+
+        fn poll_next(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            std::task::Poll::Pending
+        }
+    }
+
+    fn intake_probe() -> (
+        ConsumerIntake<IntakeProbe>,
+        std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        let drops = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        (ConsumerIntake::Active(IntakeProbe(drops.clone())), drops)
+    }
+
+    #[test]
+    fn terminal_pull_results_release_the_stream_and_repeated_receive_stays_closed()
+    -> Result<(), Box<dyn Error>> {
+        use async_nats::jetstream::consumer::pull::{MessagesError, MessagesErrorKind};
+        for result in [
+            None,
+            Some(Err(MessagesError::new(MessagesErrorKind::ConsumerDeleted))),
+            Some(Err(MessagesError::new(
+                MessagesErrorKind::PushBasedConsumer,
+            ))),
+        ] {
+            let expected = result
+                .as_ref()
+                .and_then(|result: &Result<(), MessagesError>| {
+                    result.as_ref().err().map(MessagesError::kind)
+                });
+            let (mut intake, drops) = intake_probe();
+            let error = intake.resolve_pull(result).err().ok_or("terminal error")?;
+            assert_eq!(error.kind(), ConsumeErrorKind::Unavailable);
+            assert_eq!(
+                error
+                    .source()
+                    .and_then(|source| source.downcast_ref::<MessagesError>())
+                    .map(MessagesError::kind),
+                expected
+            );
+            for _ in 0..2 {
+                assert_eq!(
+                    intake.stream().err().map(|error| error.kind()),
+                    Some(ConsumeErrorKind::Unavailable)
+                );
+            }
+            assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
+            drop(intake);
+            assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transient_pull_errors_preserve_stream_and_typed_cause() -> Result<(), Box<dyn Error>> {
+        use async_nats::jetstream::consumer::pull::{MessagesError, MessagesErrorKind};
+        for kind in [
+            MessagesErrorKind::MissingHeartbeat,
+            MessagesErrorKind::Pull,
+            MessagesErrorKind::NoResponders,
+            MessagesErrorKind::Other,
+        ] {
+            let (mut intake, drops) = intake_probe();
+            let error = intake
+                .resolve_pull::<()>(Some(Err(MessagesError::with_source(
+                    kind,
+                    std::io::Error::other("private-pull-sentinel"),
+                ))))
+                .err()
+                .ok_or("transient error")?;
+            assert_eq!(error.kind(), ConsumeErrorKind::Unavailable);
+            let cause = error
+                .source()
+                .and_then(|source| source.downcast_ref::<MessagesError>())
+                .ok_or("SDK cause")?;
+            assert_eq!(cause.kind(), kind);
+            assert!(
+                cause
+                    .source()
+                    .is_some_and(|source| source.is::<std::io::Error>())
+            );
+            assert!(!error.to_string().contains("private-pull-sentinel"));
+            assert!(!format!("{error:?}").contains("private-pull-sentinel"));
+            assert!(intake.stream().is_ok());
+            assert_eq!(intake.resolve_pull(Some(Ok(42)))?, 42);
+            assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cancelling_a_pending_stream_borrow_keeps_intake_active() -> Result<(), Box<dyn Error>> {
+        use futures_util::{FutureExt, StreamExt};
+        let (mut intake, drops) = intake_probe();
+        assert!(intake.stream()?.next().now_or_never().is_none());
+        assert!(intake.stream().is_ok());
+        assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 0);
+        drop(intake);
+        assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
+        Ok(())
     }
 
     struct NoopSettlement;
@@ -763,7 +911,7 @@ mod tests {
             DeliverySubject::new(COMMAND.subject()?)?,
             DeliveryAttempt::new(1)?,
         );
-        let mut gate = ConsumerProtocolGate::default();
+        let (mut gate, drops) = intake_probe();
 
         let result = gate.validate(MessageDelivery::new(
             vec![0; MAX_PORTABLE_MESSAGE_BYTES + 1],
@@ -776,9 +924,10 @@ mod tests {
             Some(ConsumeErrorKind::Protocol)
         );
         assert_eq!(
-            gate.before_pull().err().map(|error| error.kind()),
+            gate.stream().err().map(|error| error.kind()),
             Some(ConsumeErrorKind::Protocol)
         );
+        assert_eq!(drops.load(std::sync::atomic::Ordering::Relaxed), 1);
         Ok(())
     }
 }
