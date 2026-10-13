@@ -35,6 +35,17 @@ const CONSUME: Target = Target {
         "oversized_raw_delivery_halts_intake_without_acknowledgement",
     ],
 };
+const NATS_BOUNDARIES: Target = Target {
+    package: "edgeagent-messaging-nats",
+    name: "jetstream_boundaries",
+    identities: &[
+        "publication_without_an_owning_stream_is_rejected",
+        "stream_message_limit_is_classified_as_rejected",
+        "header_only_consumer_is_rejected_without_starting_intake",
+        "oversized_publication_never_reaches_transport",
+        "non_success_settlement_response_is_not_confirmation",
+    ],
+};
 const OUTBOX: Target = Target {
     package: "edgeagent-outbox-postgres",
     name: "postgres_outbox",
@@ -113,6 +124,41 @@ pub(super) fn checks() -> Vec<Check> {
             "oversized_raw_delivery_halts_intake_without_acknowledgement",
             NATS,
             "Oversized broker payload halts intake without an implicit acknowledgement.",
+        ),
+        exact(
+            "nats-no-stream",
+            &NATS_BOUNDARIES,
+            "publication_without_an_owning_stream_is_rejected",
+            NATS,
+            "A real no-responder publication is a transport rejection.",
+        ),
+        exact(
+            "nats-size-rejection",
+            &NATS_BOUNDARIES,
+            "stream_message_limit_is_classified_as_rejected",
+            NATS,
+            "Typed server message-size rejection is not an unknown confirmation.",
+        ),
+        exact(
+            "nats-header-only",
+            &NATS_BOUNDARIES,
+            "header_only_consumer_is_rejected_without_starting_intake",
+            NATS,
+            "Header-only configuration is rejected before broker intake starts.",
+        ),
+        exact(
+            "nats-publish-oversize",
+            &NATS_BOUNDARIES,
+            "oversized_publication_never_reaches_transport",
+            NATS,
+            "Oversized publication fails contract preparation before any transport request.",
+        ),
+        exact(
+            "nats-settlement-response",
+            &NATS_BOUNDARIES,
+            "non_success_settlement_response_is_not_confirmation",
+            NATS,
+            "Deleting real consumers proves 503/no-responder ACK/NAK/TERM replies are not confirmation.",
         ),
         exact(
             "outbox-conformance",
@@ -233,6 +279,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
     for target in [
         PUBLISH,
         CONSUME,
+        NATS_BOUNDARIES,
         OUTBOX,
         INBOX,
         INBOX_ERRORS,
@@ -256,7 +303,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 13);
+        assert_eq!(checks.len(), 18);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -271,8 +318,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 17);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 17);
+        assert_eq!(inventory.len(), 22);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 22);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

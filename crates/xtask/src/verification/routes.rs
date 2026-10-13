@@ -17,6 +17,11 @@ const NATS_CHECKS: &[&str] = &[
     "nats-consume",
     "nats-abandoned-settlement",
     "nats-oversize",
+    "nats-no-stream",
+    "nats-size-rejection",
+    "nats-header-only",
+    "nats-publish-oversize",
+    "nats-settlement-response",
     "event-spine-client",
     "event-spine-broker",
 ];

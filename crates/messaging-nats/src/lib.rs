@@ -6,12 +6,13 @@ use async_nats::jetstream;
 use async_nats::jetstream::AckKind;
 use async_nats::jetstream::consumer::pull;
 use async_nats::jetstream::consumer::{AckPolicy, PullConsumer};
+use async_nats::jetstream::context::traits::TimeoutProvider;
 use async_nats::jetstream::context::{
     PublishError as NatsPublishError, PublishErrorKind as NatsPublishErrorKind,
 };
-use async_nats::jetstream::message::Acker;
 use async_nats::jetstream::message::PublishMessage;
 use async_nats::jetstream::publish::PublishAck;
+use async_nats::{Request, StatusCode};
 use edgeagent_contracts::{MessageDefinition, MessageEnvelope, MessageRoutingError};
 use edgeagent_messaging::{
     ConsumeError, ConsumeErrorKind, DeliveryAttempt, DeliveryDisposition, DeliveryMessageKey,
@@ -20,6 +21,8 @@ use edgeagent_messaging::{
     PublishReceipt, ReceiveFuture, SettlementFuture,
 };
 use futures_util::StreamExt;
+use std::error::Error;
+use std::time::Duration;
 
 /// Durable publisher backed by a configured NATS JetStream context.
 ///
@@ -72,8 +75,8 @@ impl MessagePublisher for JetStreamPublisher {
 
 /// Pull-based JetStream consumer behind the portable one-delivery port.
 ///
-/// The supplied consumer must be durable, use explicit acknowledgements, and
-/// be provisioned with application-compatible subject, retention, maximum
+/// The supplied consumer must be durable, deliver complete message bodies, and
+/// use explicit acknowledgements. Provision application-compatible subject, retention, maximum
 /// delivery, acknowledgement wait, and pending limits. Provisioning remains a
 /// deployment concern. This adapter bounds client-side prefetch to one message.
 /// Invalid broker metadata or a payload outside portable bounds leaves the raw
@@ -113,7 +116,10 @@ impl JetStreamConsumer {
     ///
     /// # Errors
     ///
-    /// Returns `Unavailable` when the initial pull stream cannot be established.
+    /// Returns `Protocol` for incompatible cached consumer configuration, or
+    /// `Unavailable` when the initial pull stream cannot be established.
+    /// Configuration must remain unchanged while this adapter is active;
+    /// quiesce and recreate the adapter after provisioning changes.
     pub async fn new(consumer: PullConsumer) -> Result<Self, ConsumeError> {
         validate_consumer_configuration(&consumer.cached_info().config)?;
         let messages = consumer
@@ -140,6 +146,11 @@ fn validate_consumer_configuration(
     if config.ack_policy != AckPolicy::Explicit {
         return Err(ConsumeError::protocol(
             "consumer must use explicit acknowledgement policy",
+        ));
+    }
+    if config.headers_only {
+        return Err(ConsumeError::protocol(
+            "consumer must deliver complete message bodies",
         ));
     }
     Ok(())
@@ -174,12 +185,18 @@ impl MessageConsumer for JetStreamConsumer {
                     delivery_attempt,
                 ))
             })())?;
-            let payload = message.payload.clone();
-            let (_, acker) = message.split();
+            let jetstream::Message { message, context } = message;
+            let reply = self.protocol_gate.validate(message.reply.ok_or_else(|| {
+                ConsumeError::protocol("delivery must contain a settlement reply subject")
+            }))?;
             self.protocol_gate.validate(MessageDelivery::new(
-                payload,
+                message.payload,
                 metadata,
-                Box::new(JetStreamSettlement { acker }),
+                Box::new(JetStreamSettlement {
+                    client: context.client(),
+                    reply,
+                    timeout: context.timeout(),
+                }),
             ))
         })
     }
@@ -205,18 +222,66 @@ fn validate_consumer_sequence(sequence: u64) -> Result<(), ConsumeError> {
 }
 
 struct JetStreamSettlement {
-    acker: Acker,
+    client: async_nats::Client,
+    reply: async_nats::Subject,
+    timeout: Duration,
 }
 
 impl DeliverySettlement for JetStreamSettlement {
     fn settle(self: Box<Self>, disposition: DeliveryDisposition) -> SettlementFuture {
         Box::pin(async move {
-            let kind = acknowledgement_kind(disposition);
-            self.acker.double_ack_with(kind).await.map_err(|error| {
-                ConsumeError::with_boxed_source(ConsumeErrorKind::ConfirmationUnknown, error)
-            })
+            // The pinned SDK's double_ack_with accepts any reply. Keep its
+            // two-way protocol, but require a successful empty confirmation.
+            let response = self
+                .client
+                .send_request(
+                    self.reply,
+                    Request::new()
+                        .payload(acknowledgement_kind(disposition).into())
+                        .timeout(Some(self.timeout)),
+                )
+                .await
+                .map_err(|error| {
+                    ConsumeError::with_source(ConsumeErrorKind::ConfirmationUnknown, error)
+                })?;
+            validate_settlement_confirmation(&response)
         })
     }
+}
+
+#[derive(Debug)]
+struct InvalidSettlementConfirmation {
+    status: Option<u16>,
+    payload_bytes: usize,
+}
+
+impl std::fmt::Display for InvalidSettlementConfirmation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "invalid JetStream settlement confirmation (status {:?}, payload bytes {})",
+            self.status, self.payload_bytes
+        )
+    }
+}
+
+impl Error for InvalidSettlementConfirmation {}
+
+fn validate_settlement_confirmation(response: &async_nats::Message) -> Result<(), ConsumeError> {
+    if response
+        .status
+        .is_some_and(|status| status != StatusCode::OK)
+        || !response.payload.is_empty()
+    {
+        return Err(ConsumeError::with_source(
+            ConsumeErrorKind::ConfirmationUnknown,
+            InvalidSettlementConfirmation {
+                status: response.status.map(|status| status.as_u16()),
+                payload_bytes: response.payload.len(),
+            },
+        ));
+    }
+    Ok(())
 }
 
 fn acknowledgement_kind(disposition: DeliveryDisposition) -> AckKind {
@@ -277,11 +342,25 @@ fn map_acknowledgement_error(error: NatsPublishError) -> PublishError {
         | NatsPublishErrorKind::WrongLastSequence
         | NatsPublishErrorKind::MaxPayloadExceeded
         | NatsPublishErrorKind::MaxAckPending => PublishErrorKind::Rejected,
+        NatsPublishErrorKind::Other if is_known_server_rejection(&error) => {
+            PublishErrorKind::Rejected
+        }
         NatsPublishErrorKind::TimedOut
         | NatsPublishErrorKind::BrokenPipe
         | NatsPublishErrorKind::Other => PublishErrorKind::ConfirmationUnknown,
     };
     PublishError::with_source(kind, error)
+}
+
+fn is_known_server_rejection(error: &NatsPublishError) -> bool {
+    // Other also wraps decoding failures and ambiguous server failures. Only
+    // a typed, known pre-persistence rejection changes the caller's policy.
+    error
+        .source()
+        .and_then(|cause| cause.downcast_ref::<jetstream::Error>())
+        .is_some_and(|cause| {
+            cause.error_code() == jetstream::ErrorCode::STREAM_MESSAGE_EXCEEDS_MAXIMUM
+        })
 }
 
 fn receipt(acknowledgement: PublishAck) -> PublishReceipt {
@@ -298,7 +377,9 @@ mod tests {
         ConsumerProtocolGate, PreparedPublish, acknowledgement_kind, delivery_message_key,
         map_acknowledgement_error, map_send_error, prepare_publish, receipt,
         validate_consumer_configuration, validate_consumer_sequence,
+        validate_settlement_confirmation,
     };
+    use async_nats::StatusCode;
     use async_nats::jetstream::AckKind;
     use async_nats::jetstream::consumer::{AckPolicy, Config as ConsumerConfig};
     use async_nats::jetstream::context::{PublishError, PublishErrorKind as NatsPublishErrorKind};
@@ -323,24 +404,25 @@ mod tests {
         "order",
     );
 
+    fn metadata() -> MessageMetadata {
+        MessageMetadata {
+            id: "message-01".to_owned(),
+            source: Component::Gateway.source_uri().to_owned(),
+            message_type: COMMAND.message_type().to_owned(),
+            subject: "order/order-01".to_owned(),
+            time: "2026-09-26T00:00:00Z".to_owned(),
+            data_schema: COMMAND.data_schema().to_owned(),
+            correlation_id: "correlation-01".to_owned(),
+            causation_id: "request-01".to_owned(),
+            idempotency_key: "order-01".to_owned(),
+            partition_key: "order/order-01".to_owned(),
+            trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
+            trace_state: None,
+        }
+    }
+
     fn envelope() -> Result<edgeagent_contracts::MessageEnvelope, MessageRoutingError> {
-        COMMAND.build(
-            MessageMetadata {
-                id: "message-01".to_owned(),
-                source: Component::Gateway.source_uri().to_owned(),
-                message_type: COMMAND.message_type().to_owned(),
-                subject: "order/order-01".to_owned(),
-                time: "2026-09-26T00:00:00Z".to_owned(),
-                data_schema: COMMAND.data_schema().to_owned(),
-                correlation_id: "correlation-01".to_owned(),
-                causation_id: "request-01".to_owned(),
-                idempotency_key: "order-01".to_owned(),
-                partition_key: "order/order-01".to_owned(),
-                trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
-                trace_state: None,
-            },
-            &json!({"mode": "dry_run"}),
-        )
+        COMMAND.build(metadata(), &json!({"mode": "dry_run"}))
     }
 
     #[test]
@@ -403,15 +485,160 @@ mod tests {
 
     #[test]
     fn send_and_acknowledgement_failures_have_distinct_retry_semantics() {
-        let send_timeout = map_send_error(PublishError::new(NatsPublishErrorKind::TimedOut));
-        let ack_timeout =
-            map_acknowledgement_error(PublishError::new(NatsPublishErrorKind::TimedOut));
-        let rejection =
-            map_acknowledgement_error(PublishError::new(NatsPublishErrorKind::StreamNotFound));
+        use NatsPublishErrorKind as Nats;
+        use PublishErrorKind::{ConfirmationUnknown, Rejected, Unavailable};
+        for (kind, send, acknowledgement) in [
+            (Nats::StreamNotFound, Rejected, Rejected),
+            (Nats::WrongLastMessageId, Rejected, Rejected),
+            (Nats::WrongLastSequence, Rejected, Rejected),
+            (Nats::MaxPayloadExceeded, Rejected, Rejected),
+            (Nats::MaxAckPending, Unavailable, Rejected),
+            (Nats::TimedOut, Unavailable, ConfirmationUnknown),
+            (Nats::BrokenPipe, Unavailable, ConfirmationUnknown),
+            (Nats::Other, Unavailable, ConfirmationUnknown),
+        ] {
+            assert_eq!(
+                map_send_error(PublishError::new(kind)).kind(),
+                send,
+                "send {kind:?}"
+            );
+            assert_eq!(
+                map_acknowledgement_error(PublishError::new(kind)).kind(),
+                acknowledgement,
+                "acknowledgement {kind:?}"
+            );
+        }
+    }
 
-        assert_eq!(send_timeout.kind(), PublishErrorKind::Unavailable);
-        assert_eq!(ack_timeout.kind(), PublishErrorKind::ConfirmationUnknown);
-        assert_eq!(rejection.kind(), PublishErrorKind::Rejected);
+    #[test]
+    fn undecodable_and_unclassified_server_replies_remain_unknown() -> Result<(), Box<dyn Error>> {
+        let decoding = serde_json::from_slice::<serde_json::Value>(b"not JSON")
+            .err()
+            .ok_or("fixture must fail decoding")?;
+        let error = map_acknowledgement_error(PublishError::with_source(
+            NatsPublishErrorKind::Other,
+            decoding,
+        ));
+        assert_eq!(error.kind(), PublishErrorKind::ConfirmationUnknown);
+        assert!(
+            error
+                .source()
+                .and_then(|source| source.source())
+                .is_some_and(|source| source.is::<serde_json::Error>())
+        );
+
+        for code in [10077, 19999] {
+            let cause: async_nats::jetstream::Error = serde_json::from_value(json!({
+                "code": 500, "err_code": code, "description": "unclassified server failure"
+            }))?;
+            let error = map_acknowledgement_error(PublishError::with_source(
+                NatsPublishErrorKind::Other,
+                cause,
+            ));
+            assert_eq!(error.kind(), PublishErrorKind::ConfirmationUnknown);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn oversized_publication_is_rejected_by_contract_preparation() -> Result<(), Box<dyn Error>> {
+        let envelope = edgeagent_contracts::MessageEnvelope::from_payload(
+            metadata(),
+            &json!({"padding": "x".repeat(MAX_PORTABLE_MESSAGE_BYTES)}),
+        )?;
+        assert!(matches!(
+            prepare_publish(COMMAND, &envelope),
+            Err(MessageRoutingError::EnvelopeTooLarge { .. })
+        ));
+        Ok(())
+    }
+
+    fn confirmation(status: Option<StatusCode>, payload: &[u8]) -> async_nats::Message {
+        async_nats::Message {
+            subject: "confirmation.inbox".into(),
+            reply: None,
+            payload: payload.to_vec().into(),
+            headers: None,
+            status,
+            description: Some("private-confirmation-description-sentinel".to_owned()),
+            length: payload.len(),
+        }
+    }
+
+    #[test]
+    fn only_successful_empty_responses_confirm_settlement() -> Result<(), Box<dyn Error>> {
+        for status in [None, Some(StatusCode::OK)] {
+            assert!(validate_settlement_confirmation(&confirmation(status, b"")).is_ok());
+        }
+        for status in [
+            StatusCode::NO_RESPONDERS,
+            StatusCode::REQUEST_TERMINATED,
+            StatusCode::IDLE_HEARTBEAT,
+        ] {
+            let result = validate_settlement_confirmation(&confirmation(Some(status), b""));
+            assert_eq!(
+                result.err().map(|error| error.kind()),
+                Some(ConsumeErrorKind::ConfirmationUnknown)
+            );
+        }
+        for status in [None, Some(StatusCode::OK)] {
+            let result = validate_settlement_confirmation(&confirmation(
+                status,
+                b"private-confirmation-body-sentinel",
+            ));
+            let error = result.err().ok_or("nonempty confirmation must fail")?;
+            assert_eq!(error.kind(), ConsumeErrorKind::ConfirmationUnknown);
+            assert!(!format!("{error} {error:?}").contains("private-confirmation"));
+            let source = error.source().map(ToString::to_string).unwrap_or_default();
+            assert!(!source.contains("private-confirmation"));
+            assert!(source.contains("payload bytes"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn typed_server_size_rejection_is_not_an_unknown_confirmation() -> Result<(), Box<dyn Error>> {
+        let cause: async_nats::jetstream::Error = serde_json::from_value(json!({
+            "code": 400,
+            "err_code": 10054,
+            "description": "private-server-rejection-sentinel"
+        }))?;
+        let error = map_acknowledgement_error(PublishError::with_source(
+            NatsPublishErrorKind::Other,
+            cause,
+        ));
+        assert_eq!(error.kind(), PublishErrorKind::Rejected);
+        assert!(
+            !error
+                .to_string()
+                .contains("private-server-rejection-sentinel")
+        );
+        assert!(!format!("{error:?}").contains("private-server-rejection-sentinel"));
+        let sdk = error
+            .source()
+            .and_then(|cause| cause.downcast_ref::<PublishError>())
+            .ok_or("SDK cause must remain available")?;
+        assert!(
+            sdk.source()
+                .is_some_and(|cause| cause.is::<async_nats::jetstream::Error>())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn header_only_consumer_is_rejected_before_intake() {
+        let config = ConsumerConfig {
+            durable_name: Some("headers_only_v1".to_owned()),
+            ack_policy: AckPolicy::Explicit,
+            headers_only: true,
+            ..ConsumerConfig::default()
+        };
+        assert_eq!(
+            validate_consumer_configuration(&config)
+                .err()
+                .map(|error| error.kind()),
+            Some(ConsumeErrorKind::Protocol)
+        );
     }
 
     #[test]
