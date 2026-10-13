@@ -91,8 +91,8 @@ review covers conventional application risk and these project-specific threats:
   modes, broker SDKs, credentials, and endpoints.
 - Redact credentials, authorization headers, personal data, private prompts,
   and licensed payloads from logs and test fixtures.
-- Pin dependencies and CI actions to reviewed release lines; use read-only CI
-  permissions unless a job documents why it needs more.
+- Pin dependencies to reviewed release lines and CI actions to reviewed full
+  commit SHAs; use read-only CI permissions except the documented release job.
 
 ## Security expectations for contributions
 
@@ -111,6 +111,23 @@ boundaries MUST document:
 Contributors MUST follow [AGENTS.md](AGENTS.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and the
 [engineering standards](docs/development/engineering-standards.md).
+
+## Repository credential detection
+
+The [CI security guide](docs/development/ci-security.md) defines mechanical
+workflow privilege checks and pinned Gitleaks detection. Default verification
+checks the policy; the specialized security gate checks recognizable credential
+patterns in current source and complete locally reachable Git history. Only
+exact public local-fixture values at their canonical path are exempted.
+Do not add baselines, broad path ignores, or inline suppressions to make a
+finding disappear.
+
+Detection is not proof that all secrets, personal data, licensed payloads, or
+private prompts are absent. Scanner evidence must not expose raw matches,
+filenames, authors, or commit messages. If a credential may have been exposed,
+revoke or rotate it and report privately. Removal from the current tree does
+not remediate exposure in Git history; maintainers review historical remediation
+without pasting credentials into public issues or rewriting history automatically.
 
 ## Triage and disclosure
 

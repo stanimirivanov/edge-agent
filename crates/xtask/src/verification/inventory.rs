@@ -13,6 +13,7 @@ pub(super) const PROFILES: &[&str] = &[
     "image-smoke",
     "supply-chain",
     "sqlx-metadata",
+    "ci-security",
     "m08-event-spine-proof",
     "m08-durable-execution",
     "m08-dbos-proof",
@@ -94,6 +95,22 @@ pub(super) fn checks() -> Vec<Check> {
             Python,
             &["scripts/verify_architecture.py"],
             "All direct manifest declarations, including inactive target and optional dependencies.",
+        ),
+        check(
+            "workflow-security",
+            "T1",
+            &["verify", "check", "architecture", "ci-security"],
+            Xtask,
+            &["workflow-security"],
+            "Parsed CI action, trigger, credential and permission policy; not remote runner isolation or branch protection.",
+        ),
+        check(
+            "secret-policy",
+            "T1",
+            &["verify", "check", "repository", "ci-security"],
+            Python,
+            &["scripts/verify_secrets.py", "--policy-only"],
+            "Pinned scanner and exact fixture exception configuration; not an executed credential scan.",
         ),
         check(
             "architecture-graph",
@@ -316,6 +333,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Complete generated artifact set matches declared deployables; not release attestation.",
         ),
     ];
+    checks.push(check(
+        "secret-scanner-contracts",
+        "T3",
+        &["ci-security"],
+        Python,
+        &["scripts/verify_secrets.py", "--self-test"],
+        "Actual pinned scanner rejects synthetic credentials and proves path-and-value fixture exceptions; not repository cleanliness.",
+    ));
+    checks.push(check(
+        "secret-scan",
+        "T3",
+        &["ci-security"],
+        Python,
+        &["scripts/verify_secrets.py"],
+        "Pinned redacted scan of source working tree and complete reachable Git history; not privacy or licensed-data certification.",
+    ));
     for entry in &mut checks {
         match entry.id {
             "ignored-inventory" => {
@@ -354,6 +387,9 @@ pub(super) fn checks() -> Vec<Check> {
                     Requirement::Executable("docker"),
                     Requirement::Executable("cargo-sqlx"),
                 ]
+            }
+            "secret-scan" | "secret-scanner-contracts" => {
+                entry.prerequisites = &[Requirement::CommandProbe("gitleaks", &["version"])]
             }
             _ => (),
         }

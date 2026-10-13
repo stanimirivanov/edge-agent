@@ -13,6 +13,8 @@
 - Report every unavailable check as not run with its blocker and residual risk.
 - Turn recurring review findings into clearer guidance, an early deterministic
   sensor, a behavioral test, or an explicit owned exception.
+- Keep CI capability and detector policy in the default gate; run the real
+  pinned scanner separately through the [CI security guide](ci-security.md).
 
 ## Purpose
 
@@ -34,7 +36,7 @@ owns CI environments and service cleanup.
 | Tier | Intended timing | EdgeAgent feedback |
 |:--|:--|:--|
 | T0 — route | Before editing | `cargo xtask route PATH...` and the [documentation map](../README.md), followed by the relevant architecture pages and ADRs. |
-| T1 — structure | During editing | `make repository` and `make architecture`; deterministic checks that require no database, broker, cloud account, or network once dependencies are present. |
+| T1 — structure | During editing | `make repository`, `make architecture`, `cargo xtask workflow-security`, and secret-detector policy; deterministic checks that require no database, broker, cloud account, or network once dependencies are present. |
 | T2 — acceptance | Before handoff or pull request | `cargo xtask verify` (`make verify` aliases it); formatting, repository and architecture policy, static contract checks, locked builds, Clippy, Python tests, Rust tests, doctests, feature-unification tests, and ignored-test discovery. Cargo may fetch missing locked dependencies. |
 | T3 — specialized | When an affected boundary requires it | `make image-smoke`, local Compose conformance, `make supply-chain`, release validation, and explicitly scoped security, performance, or cloud-profile checks. |
 
@@ -58,6 +60,7 @@ when a required check cannot run.
 | [ADR index](../decisions/README.md) | Accepted durable decisions and supersession history | Decisions relevant to the task |
 | [Milestones](../roadmap/milestones.md) | Intended outcome sequence | Planning and issue drafting |
 | [Security policy](../../SECURITY.md) | Private vulnerability reporting and security expectations | Security-sensitive work |
+| [CI security](ci-security.md) | Reviewed workflow capabilities, pinned detector installation, safe evidence, and exposure recovery | Workflow, action-pin, or secret-detector changes |
 
 Guidance states intent, boundaries, and where its claims are verified. Keep each
 normative rule in one canonical document and link to it from concise entry
@@ -99,7 +102,7 @@ successful exit when a filter selects zero tests cannot satisfy a mandatory
 proof. Listing tests proves discovery only, not database, broker, crash-
 recovery, performance, or external-effect behavior.
 
-Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`,
+Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`, `ci-security`,
 and `m08-<candidate>`. Their prerequisites remain explicit in the inventory and
 focused guides. The local-platform environment and migrated test schema must
 be available before conformance executes; CI provisions them and always
@@ -118,17 +121,21 @@ acceptance check before handoff.
 | `cargo xtask repository` | Rendered local Markdown links and anchors, TL;DR placement, ADR and milestone lifecycle/index policy, stable GitHub authoring templates, and canonical verification entry points satisfy mechanical policy | T1; Rust toolchain and locked dependencies |
 | `python scripts/verify_architecture.py` | Workspace manifests use the exact reviewed package, metadata, target, and direct dependency declarations | T1; Python 3.11+ |
 | `cargo xtask architecture` | Cargo's normalized internal graph satisfies package roles, dependency classes, temporary-exception policy, and cycle rules | T1; Rust toolchain and Cargo metadata |
+| `cargo xtask workflow-security` | Parsed YAML workflow inventory, reviewed action SHAs, privileges, checkout, credentials, and mandatory gate order satisfy capability policy | T1; locked tooling-only YAML parser |
+| `python scripts/verify_secrets.py --policy-only` | Pinned detector and exact fixture-exception policy have not drifted; no scanner execution or secret-free claim | T1; Python 3.11+ |
 | `cargo xtask verify` / `make verify` | The complete default repository acceptance gate passes with the locked graph, including doctests, feature-unification tests, and ignored-test discovery | T2; Python, Rust toolchain, and locally cached or downloadable locked crates |
 | `make image-smoke` | Every deployable image builds and runs under the declared non-root, read-only, networkless contract | T3; Docker |
 | `make local-up` and focused conformance tests | PostgreSQL, NATS, object storage, telemetry, and restart behavior satisfy local integration contracts | T3; Docker with Compose |
 | `cargo xtask verify --check sqlx-metadata` | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated Compose PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
 | `make supply-chain` | Dependency/advisory/license policy and the complete Rust and image SBOM set pass | T3; pinned tools, network for current advisories, and Docker |
+| `cargo xtask verify ci-security` | Actual scanner rejection/exception proofs, current source snapshot, and complete locally reachable Git history finish successfully | T3; explicitly installed checksum-verified Gitleaks and complete Git history; see [CI security](ci-security.md) |
 | `cargo xtask verify m08-<candidate>` | Isolated M08 durable-execution decision proof for one candidate, including real worker-process restart or DBOS atomic enqueue | T3; see the [experiment guide](../../experiments/README.md) for container and cold-cache network requirements and the separate dependency-policy gate |
 
 The executable inventory owns command order; the unavailable-check protocol
 remains canonical in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#verification-and-constrained-environments).
-CI runs repository policy before architecture and all heavier jobs. Inspect
+CI runs workflow security and repository policy before architecture and all
+heavier jobs; the real-scanner security job also gates heavier quality jobs. Inspect
 `cargo xtask checks` for exact commands instead of copying a parallel list.
 
 The Rust workspace tests include T2 `Debug` redaction contracts for payload-
@@ -260,6 +267,16 @@ inheritance, while isolated offline Cargo fixtures prove internal alias,
 target, optional, and dependency-kind handling. Neither kind grants another
 kind's capabilities. See the [dependency rules](../architecture/dependency-rules.md#enforcement-responsibilities)
 for diagnostics, exact-union requirements, and the limits of these sensors.
+
+The T1 workflow sensor evaluates semantic YAML with a maintained tooling-only
+parser and an exact reviewed action/job capability map. Mutation tests reject
+ambiguous YAML, floating or unreviewed SHAs, broadened permissions, credential
+injection, unsafe checkout or triggers, and missing or skippable mandatory
+commands. The T1 secret-policy sensor checks the pinned detector configuration,
+not secret absence. The T3 scanner contracts must exercise the real binary
+before source and historical scanning. Neither an LLM review nor a static
+configuration pass can replace those distinct proofs. See
+[CI security](ci-security.md) for exact exceptions, evidence limits, and recovery.
 
 The two repository sensors have complementary ownership. The Python verifier
 checks bytes and required inventory. `cargo xtask repository` parses CommonMark

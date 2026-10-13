@@ -132,3 +132,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0018](0018-use-validated-message-failure-codes.md) | Accepted | Use validated message failure codes. |
 | [ADR-0019](0019-validate-outbox-timing-at-the-port.md) | Accepted | Validate outbox timing at the port. |
 | [ADR-0020](0020-retain-settlement-abandonment-diagnostics.md) | Accepted | Retain settlement abandonment diagnostics. |
+| [ADR-0021](0021-enforce-ci-security-and-secret-scanning.md) | Accepted | Enforce CI security and secret scanning. |

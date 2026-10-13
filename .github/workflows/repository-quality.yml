@@ -19,31 +19,62 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Check CI security policy
+        id: workflow-policy
+        run: cargo xtask workflow-security
       - name: Check repository policy
         run: cargo xtask repository
       - name: Check capability dependency policy
         run: cargo xtask architecture
 
+  security:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    needs: architecture
+    timeout-minutes: 15
+    steps:
+      - name: Check out complete source history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Install checksum-verified Gitleaks
+        id: secret-scanner-install
+        run: python scripts/install_gitleaks.py
+      - name: Prove secret-scanner detection and fixture isolation
+        id: secret-scanner-contracts
+        run: cargo xtask verify --check secret-scanner-contracts
+      - name: Scan source tree and complete history
+        id: secret-scan
+        run: cargo xtask verify --check secret-scan
+
   verify:
     name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: architecture
+    needs: [architecture, security]
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Install pinned Rust toolchain
@@ -54,14 +85,15 @@ jobs:
   container-smoke:
     name: Container smoke tests
     runs-on: ubuntu-latest
-    needs: architecture
+    needs: [architecture, security]
+    timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Install pinned Rust toolchain
@@ -72,14 +104,15 @@ jobs:
   local-platform-smoke:
     name: Local platform smoke tests
     runs-on: ubuntu-latest
-    needs: architecture
+    needs: [architecture, security]
+    timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Install pinned Rust toolchain
@@ -114,18 +147,19 @@ jobs:
   supply-chain:
     name: Dependency policy and SBOMs
     runs-on: ubuntu-latest
-    needs: architecture
+    needs: [architecture, security]
+    timeout-minutes: 45
     env:
       CARGO_CYCLONEDX_VERSION: "0.5.9"
       SYFT_VERSION: "1.52.0"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Install pinned Rust toolchain
@@ -146,7 +180,9 @@ jobs:
         with:
           syft-version: v${{ env.SYFT_VERSION }}
       - name: Generate OCI image SBOMs
-        run: python scripts/generate_sboms.py images --output artifacts/sbom --syft "${{ steps.syft.outputs.cmd }}"
+        env:
+          SYFT_BINARY: ${{ steps.syft.outputs.cmd }}
+        run: python scripts/generate_sboms.py images --output artifacts/sbom --syft "${SYFT_BINARY}"
       - name: Validate complete CycloneDX artifact set
         run: python scripts/verify_supply_chain.py --artifacts artifacts/sbom
       - name: Upload SBOM evidence
