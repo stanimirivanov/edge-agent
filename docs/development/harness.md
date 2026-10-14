@@ -176,11 +176,16 @@ retry eligibility remains a T3 conformance check.
 Consumer tests also assert that broker-metadata or oversized-payload protocol faults halt
 the consumer's pre-pull gate; a caller retry loop cannot silently consume
 another delivery.
-NATS ownership probes now require terminal states to release the SDK stream
+NATS ownership probes now require terminal states to release intake resources
 exactly once, preserve all nonterminal SDK errors and typed causes, and retain
-active ownership on pending cancellation. Registered T3 lifecycle proofs observe
+logical intake ownership on pending cancellation. Completion and cancellation
+must drop the receive-owned worker before handoff; state-only diagnostics and
+crate-root API/auto-trait tests run offline. Registered T3 lifecycle proofs observe
 real pull subjects across expiry/reconnect while a halted handle stays alive,
 and terminal consumer deletion followed by immediate closed-state returns.
+The intake-bound proof uses permissive broker limits and an observed renewal
+window, not only a pending-count snapshot. The shared-fixture proof requires
+typed absence after error, synchronous/asynchronous panic, and timeout cleanup.
 These extend the existing local-platform job and ignored-test census, not a
 parallel acceptance runner. See [messaging verification](messaging-adapters.md#verification)
 for the timer-specific proof and already-issued request limits.

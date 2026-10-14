@@ -1,10 +1,12 @@
-//! Opt-in broker-boundary regressions against the isolated local NATS profile.
+//! Broker-boundary regressions against the exclusive local NATS profile.
+
+pub mod support;
 
 use async_nats::jetstream;
 use async_nats::jetstream::consumer::{AckPolicy, pull};
 use async_nats::jetstream::stream::{Config, StorageType};
 use edgeagent_contracts::{
-    Component, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageEnvelope, MessageMetadata,
+    Component, MAX_PORTABLE_MESSAGE_BYTES, MessageDefinition, MessageEnvelope,
 };
 use edgeagent_messaging::{
     ConsumeErrorKind, DeliveryDisposition, MessageConsumer, MessagePublisher, PublishErrorKind,
@@ -14,15 +16,12 @@ use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use futures_util::{FutureExt, StreamExt};
 use serde_json::json;
 use std::error::Error;
-use std::future::Future;
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-
-type TestError = Box<dyn Error + Send + Sync>;
-type TestResult = Result<(), TestError>;
-const DEADLINE: Duration = Duration::from_secs(10);
-static NEXT_RESOURCE: AtomicU64 = AtomicU64::new(1);
+use support::{
+    DEADLINE, TestResult, connect, envelope, metadata, resource, stream_config, with_stream,
+    with_stream_deadline,
+};
 
 const NO_STREAM: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.boundary-no-stream.v1",
@@ -55,84 +54,13 @@ const SETTLEMENT: MessageDefinition = MessageDefinition::command(
     "order",
 );
 
-fn resource(prefix: &str) -> String {
-    format!(
-        "{prefix}_{}_{}",
-        std::process::id(),
-        NEXT_RESOURCE.fetch_add(1, Ordering::Relaxed)
-    )
-}
-
-async fn connect() -> Result<jetstream::Context, TestError> {
-    let url = std::env::var("EDGEAGENT_NATS_URL")?;
-    let client = tokio::time::timeout(DEADLINE, async_nats::connect(url)).await??;
-    Ok(jetstream::ContextBuilder::new()
-        .timeout(DEADLINE)
-        .build(client))
-}
-
-fn metadata(definition: MessageDefinition) -> MessageMetadata {
-    MessageMetadata {
-        id: "boundary-message-01".to_owned(),
-        source: Component::Gateway.source_uri().to_owned(),
-        message_type: definition.message_type().to_owned(),
-        subject: "order/boundary-01".to_owned(),
-        time: "2026-10-13T00:00:00Z".to_owned(),
-        data_schema: definition.data_schema().to_owned(),
-        correlation_id: "boundary-correlation-01".to_owned(),
-        causation_id: "boundary-request-01".to_owned(),
-        idempotency_key: "boundary-order-01".to_owned(),
-        partition_key: "order/boundary-01".to_owned(),
-        trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".to_owned(),
-        trace_state: None,
-    }
-}
-
-fn envelope(definition: MessageDefinition) -> Result<MessageEnvelope, TestError> {
-    Ok(definition.build(metadata(definition), &json!({"mode": "dry_run"}))?)
-}
-
-// Own only the successfully created, process-scoped stream. Never pre-delete
-// another run's resource. CI's disposable broker covers task/process abort.
-async fn with_stream<F, Fut>(context: &jetstream::Context, config: Config, body: F) -> TestResult
-where
-    F: FnOnce(jetstream::stream::Stream) -> Fut,
-    Fut: Future<Output = TestResult>,
-{
-    let name = config.name.clone();
-    let stream = tokio::time::timeout(DEADLINE, context.create_stream(config)).await??;
-    let outcome = AssertUnwindSafe(async { tokio::time::timeout(DEADLINE, body(stream)).await? })
-        .catch_unwind()
-        .await;
-    let cleanup = async {
-        let deleted = tokio::time::timeout(DEADLINE, context.delete_stream(name)).await??;
-        if !deleted.success {
-            return Err("owned stream cleanup was not confirmed".into());
-        }
-        Ok::<(), TestError>(())
-    }
-    .await;
-    match outcome {
-        Ok(result) => {
-            cleanup?;
-            result
-        }
-        Err(panic) => {
-            if cleanup.is_err() {
-                eprintln!("owned stream cleanup failed after proof panic");
-            }
-            std::panic::resume_unwind(panic)
-        }
-    }
-}
-
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_NATS_URL and an isolated NATS JetStream instance"]
 async fn publication_without_an_owning_stream_is_rejected() -> TestResult {
     let context = connect().await?;
     let publisher = JetStreamPublisher::from_context(context);
     let error = publisher
-        .publish(NO_STREAM, &envelope(NO_STREAM)?)
+        .publish(NO_STREAM, &envelope(NO_STREAM, "boundary-message-01")?)
         .await
         .err()
         .ok_or("no-stream publication must fail")?;
@@ -157,7 +85,10 @@ async fn stream_message_limit_is_classified_as_rejected() -> TestResult {
         |stream| async move {
             let publisher = JetStreamPublisher::from_context(publication_context);
             let error = publisher
-                .publish(SIZE_REJECTION, &envelope(SIZE_REJECTION)?)
+                .publish(
+                    SIZE_REJECTION,
+                    &envelope(SIZE_REJECTION, "boundary-message-01")?,
+                )
                 .await
                 .err()
                 .ok_or("stream size limit must reject publication")?;
@@ -224,7 +155,7 @@ async fn oversized_publication_never_reaches_transport() -> TestResult {
     client.flush().await?;
     let publisher = JetStreamPublisher::from_context(context);
     let envelope = MessageEnvelope::from_payload(
-        metadata(OVERSIZE),
+        metadata(OVERSIZE, "boundary-message-01"),
         &json!({"padding": "x".repeat(MAX_PORTABLE_MESSAGE_BYTES)}),
     )?;
     let error = publisher
@@ -269,7 +200,7 @@ async fn non_success_settlement_response_is_not_confirmation() -> TestResult {
                     .await?;
                 let publisher = JetStreamPublisher::from_context(publication_context);
                 publisher
-                    .publish(SETTLEMENT, &envelope(SETTLEMENT)?)
+                    .publish(SETTLEMENT, &envelope(SETTLEMENT, "boundary-message-01")?)
                     .await?;
                 let mut consumer = JetStreamConsumer::new(durable).await?;
                 let delivery = tokio::time::timeout(DEADLINE, consumer.receive()).await??;
@@ -290,6 +221,51 @@ async fn non_success_settlement_response_is_not_confirmation() -> TestResult {
             },
         )
         .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires EDGEAGENT_NATS_URL and an isolated NATS JetStream instance"]
+#[expect(
+    clippy::panic,
+    reason = "Inject fixture panics to prove cleanup before unwind resumes"
+)]
+async fn owned_stream_cleanup_runs_after_failure_panic_and_timeout() -> TestResult {
+    let context = connect().await?;
+    for exit in 0..4 {
+        let config = stream_config(&["edgeagent.command.execution.fixture-cleanup.v1"]);
+        let name = config.name.clone();
+        let deadline = if exit == 3 { Duration::ZERO } else { DEADLINE };
+        let outcome = AssertUnwindSafe(with_stream_deadline(&context, config, deadline, |_| {
+            if exit == 1 {
+                panic!("synthetic synchronous fixture panic");
+            }
+            async move {
+                if exit == 2 {
+                    panic!("synthetic asynchronous fixture panic");
+                }
+                if exit == 3 {
+                    return std::future::pending::<TestResult>().await;
+                }
+                Err("synthetic fixture failure".into())
+            }
+        }))
+        .catch_unwind()
+        .await;
+        if matches!(exit, 1 | 2) {
+            assert!(outcome.is_err());
+        } else {
+            assert!(outcome.is_ok_and(|result| result.is_err()));
+        }
+        let error = context
+            .get_stream(name)
+            .await
+            .err()
+            .ok_or("owned stream must be deleted")?;
+        assert!(
+            matches!(error.kind(), jetstream::context::GetStreamErrorKind::JetStream(error) if error.error_code() == jetstream::ErrorCode::STREAM_NOT_FOUND)
+        );
     }
     Ok(())
 }

@@ -77,6 +77,8 @@ fn service_and_portable_contract_changes_route_related_proofs() -> Result<(), St
         "nats-settlement-response",
         "nats-halted-worker",
         "nats-closed-intake",
+        "nats-intake-bound",
+        "nats-fixture-cleanup",
         "outbox-fencing",
         "handler-ordering",
         "event-spine-broker",

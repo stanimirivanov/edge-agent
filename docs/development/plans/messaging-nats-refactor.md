@@ -7,8 +7,8 @@
   bounded evidence, and confirmation-before-success semantics.
 - Deliver three slices: broker-boundary correctness, stopped consumer lifecycle,
   then cohesive modules and independently verified conformance fixtures.
-- Slices 1 and 2 implement admission, confirmation, and stopped lifecycle;
-  slice 3 remains outstanding. Discovery is not evidence that a broker proof ran.
+- All three slices implement admission, confirmation, stopped lifecycle, and
+  cohesive receive ownership. Discovery is not evidence that a broker proof ran.
 - No live trading, model call, workflow framework, wire-format change, database
   migration, or new dependency belongs in these slices.
 
@@ -57,8 +57,9 @@ so this correction needs no public constructor change or vendored SDK fork.
 The ownership state replaces the Boolean gate: only `Active` can retain an SDK
 stream. Protocol faults drop that resource synchronously. Exhaustion and the
 SDK's terminal deleted/push-consumer errors enter `Closed`; all four nonterminal
-error kinds preserve it. Receive borrows the stream across its sole await, so
-pending cancellation does not close intake. T2 drop probes protect each path;
+error kinds preserve active intake. Slice 3 narrows activated stream ownership
+to the receive future, so cancellation releases that worker without closing
+logical intake. T2 drop probes protect each path;
 two registered T3 proofs keep handles alive across expiry/reconnect and broker
 consumer deletion. Merely adding Fuse would not stop the owned task. No finite
 `max_deliver` requirement is introduced and no disposition occurs on release.
@@ -78,6 +79,20 @@ consumer deletion. Merely adding Fuse would not stop the owned task. No finite
 
 File length is a review signal, never an extraction acceptance criterion.
 
+The implementation preserves the public facade and gives publication, intake,
+pure metadata derivation, and settlement cohesive private owners with adjacent
+tests. Consumer diagnostics expose state only. Shared broker fixtures retain
+failure evidence, bound cleanup, and separate synthetic subjects.
+
+The independent intake proof found that batch size one did not prevent the SDK
+from renewing while a caller held a delivery. Each polled receive now owns and
+releases its activated stream; later calls create a fresh stream. Cancellation
+retains configured intake but can require ack-wait redelivery. The new proof
+uses permissive broker limits, observes the renewal window, and drains the
+remaining retained work. A separate proof verifies cleanup on all failure paths.
+Neither proof claims a global pending limit or a hard buffer bound during
+uncertain network recovery.
+
 ## Compatibility, rollout, and rollback
 
 Public signatures, crate-root exports, envelope bytes, delivery identity,
@@ -89,14 +104,16 @@ Unknown outcomes preserve immutable retry and inbox deduplication policy.
 
 Rollback restores unsafe acceptance/classification behavior and is not a
 recommended recovery mechanism. Correct provisioning or isolate the affected
-service rather than treating unreadable replies as success. Slice 2 changes
-resource lifetime, not message evidence; slice 3 preserves public paths.
+service rather than treating unreadable replies as success. Resource lifetime
+changes preserve message evidence and public paths. Cancelling a receive can
+wait for broker redelivery; review ack-wait and retry budgets before rollout.
+Rollback restores background renewal while intake is idle and is not recommended.
 
 ## Verification and evidence limits
 
 Run `cargo xtask verify` for full default acceptance. The existing ignored-test
 census compiles and protects all named proofs without starting a broker. Run
-the eleven NATS checks through `cargo xtask verify --check ID` against an exclusive
+the thirteen NATS checks through `cargo xtask verify --check ID` against an exclusive
 local server; the [messaging guide](../messaging-adapters.md#verification) names
 the new boundary checks. Existing local-platform CI runs them with the pinned
 Compose server and always destroys that isolated environment afterward.
@@ -106,9 +123,9 @@ nonempty settlement bodies. Real-stream tests prove publication rejection,
 positive confirmed settlement, redelivery, and no-responder outcomes after
 consumer deletion. Lifecycle proofs independently observe pull cessation after
 the SDK renewal deadline and reconnect, and immediate closed-state returns.
-They do not retract already-issued requests or prove a sustained buffering
-bound. Missing
-services or tools must be reported as not run, never passed.
+The intake-bound proof observes idle receive behavior with permissive broker
+limits; it does not retract issued requests or prove a hard buffer bound during
+network recovery. Missing services or tools must be reported as not run, never passed.
 
 ## Separate follow-ups
 
