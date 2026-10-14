@@ -10,7 +10,8 @@
   definition, sends CloudEvents structured JSON, and awaits a persistence acknowledgement.
 - The length-prefixed CloudEvents `(source, id)` pair becomes `Nats-Msg-Id`, so
   different producers cannot suppress each other when local IDs collide.
-- Pull consumption prefetches one message. Dropping an unsettled delivery allows
+- Each pull request asks for one message; a completed or cancelled receive
+  retains no activated pull worker. Dropping an unsettled delivery allows
   redelivery; settlement is consumed once and waits for broker confirmation.
 - Default tests are offline; the local-platform CI job runs publisher and
   consumer conformance tests against the checked-in NATS profile.
@@ -143,16 +144,35 @@ acknowledgement-wait settings before repeated restart attempts: exhaustion is
 not a substitute for durable quarantine. Neither a protocol rejection nor a
 retained raw broker message is a committed quarantine record.
 
-Intake owns an explicit active, protocol-halted, or closed state. A protocol
-fault releases the SDK stream immediately, aborting its expiry/reconnect task
-even while the adapter handle stays alive. Stream exhaustion or SDK
+The adapter's crate-root facade re-exports the same two public types. Private
+`publisher` and `consumer` modules own their distinct lifecycles; consumer
+`intake`, `metadata`, and `settlement` modules own state, pure broker validation,
+and confirmation respectively. Adjacent test modules exercise each owner.
+Consumer `Debug` exposes lifecycle state only, never client configuration,
+credentials, routes, or buffered payloads.
+
+Intake owns an explicit active, protocol-halted, or closed state. Active intake
+retains its configured consumer and an unstarted initial stream. A polled
+receive takes ownership of that stream, or creates a fresh one. Completion,
+failure, and cancellation drop the activated stream and abort its renewal task
+before delivery handoff, even while the adapter stays alive. Stream exhaustion or SDK
 `ConsumerDeleted`/`PushBasedConsumer` errors also release it and close intake.
 The first terminal SDK error retains its typed cause as `Unavailable`; later
 closed calls return `Unavailable` immediately without I/O. Halted calls return
 `Protocol` immediately. Missing heartbeat, pull failure, no responder, and
 other nonterminal SDK errors preserve active intake and their typed causes.
-Cancellation while awaiting a pull preserves that ownership; receipt,
-validation, and delivery construction have no intervening await.
+Cancellation preserves logical intake ownership, not the old subscription.
+The next receive creates a fresh stream. A previously issued request may already
+have delivered work to the abandoned subscription, so recovery can wait for
+ack-wait and increment the attempt count. No destructor performs a disposition.
+Receipt, stream release, validation, and delivery construction have no
+intervening await.
+
+One message per request is not a consumer-global pending-acknowledgement limit.
+A caller may invoke receive again while retaining an earlier delivery; replicas
+and reconnects can also leave broker-side work outstanding. Deployment must
+configure compatible pending, retry, and acknowledgement budgets. This adapter
+does not claim a global one-message cap or retract uncertain in-flight pulls.
 
 Aborting the worker does not retract already-issued or queued NATS requests,
 clear broker-side pending work, or perform a disposition. In-flight work may
@@ -369,10 +389,13 @@ requires all three dispositions to report actual no-responder errors, not
 confirmation. T2 response-validation tests independently reject nonempty bodies
 and non-success status without retaining private reply text. Existing real-stream
 tests own positive settlement/redelivery.
-New stream fixtures have process-scoped owned names and bounded cleanup on
-ordinary failure and panic. Use an exclusive development broker; isolated names
-alone do not make the older fixed-subject suites parallel-safe. Disposable CI
-broker teardown covers task cancellation and process abort.
+All NATS suites share process-scoped owned resource naming and bounded cleanup
+after success, ordinary failure, synchronous/asynchronous panic, and timeout.
+No fixture pre-deletes a foreign resource. Distinct publication/consumption
+subjects avoid overlap between suites. Use an exclusive development broker;
+these fixed synthetic subjects do not authorize concurrent independent runs
+against a shared account. Disposable CI teardown covers task cancellation and
+process abort, which cannot await fixture cleanup.
 
 Two lifecycle proofs also run through the canonical local-platform inventory:
 
@@ -394,7 +417,28 @@ verifies the typed terminal error, requires repeated calls to resolve without
 polling, and observes no renewal pull for another 37 seconds while the closed
 handle remains alive. T2 ownership probes separately prove
 immediate, one-time stream release, all six SDK error classifications, and
-cancellation-safe borrowing; they do not substitute for the broker proofs.
+cancellation-safe intake and receive-worker release; they do not substitute for
+the broker proofs.
+
+Two additional checks protect receive-scoped ownership and the shared fixture:
+
+```text
+EDGEAGENT_NATS_URL=nats://127.0.0.1:4222 cargo xtask verify --check nats-intake-bound --check nats-fixture-cleanup
+```
+
+The intake proof queues four messages with broker `max_ack_pending = 8` and
+`max_batch = 8`, verifies the actual request's batch and expiry, holds the first
+unsettled delivery past the SDK renewal deadline, and observes no further pull.
+Broker state still has one delivered/pending acknowledgement and three unread
+messages. Subsequent explicit receives drain them in order. The previous
+retained-stream implementation fails this test at its 35-second renewal.
+This proves idle receive behavior, not a hard SDK-buffer bound across network
+recovery or a consumer-global concurrency limit. The cleanup proof forces all
+four failure modes and requires typed `STREAM_NOT_FOUND` lookups afterward;
+a transport failure cannot masquerade as successful deletion.
+Offline tests preserve crate-root port/auto-trait contracts and payload-safe
+consumer state formatting. The existing census and local-platform job own
+all thirteen NATS checks; no parallel verification implementation is added.
 
 The ordered [NATS adapter refactor plan](plans/messaging-nats-refactor.md) keeps
 confirmation correctness, consumer lifecycle, and capability/fixture extraction

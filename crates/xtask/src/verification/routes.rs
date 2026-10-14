@@ -24,6 +24,8 @@ const NATS_CHECKS: &[&str] = &[
     "nats-settlement-response",
     "nats-halted-worker",
     "nats-closed-intake",
+    "nats-intake-bound",
+    "nats-fixture-cleanup",
     "event-spine-client",
     "event-spine-broker",
 ];
