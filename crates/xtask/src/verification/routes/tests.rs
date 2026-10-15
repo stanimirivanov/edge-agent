@@ -246,6 +246,9 @@ fn relay_boundaries_follow_all_outbox_paths_and_fail_if_unregistered() -> Result
     for path in [
         "crates/outbox-postgres/src/relay.rs",
         "crates/outbox-postgres/tests/postgres_relay_boundaries.rs",
+        "crates/outbox-postgres/tests/support/schema.rs",
+        "crates/outbox-postgres/tests/recovery/cancellation.rs",
+        "crates/outbox-relay/tests/postgres_relay.rs",
         "crates/outbox-relay/src/lib.rs",
         "crates/messaging/src/outbox.rs",
         "deploy/local/compose.yaml",
@@ -254,6 +257,10 @@ fn relay_boundaries_follow_all_outbox_paths_and_fail_if_unregistered() -> Result
         assert!(
             advice.checks.contains("outbox-relay-boundaries"),
             "missing relay boundary route for {path}"
+        );
+        assert!(
+            advice.checks.contains("outbox-recovery"),
+            "missing recovery route for {path}"
         );
     }
     let mut ids = inventory::checks()
@@ -264,6 +271,12 @@ fn relay_boundaries_follow_all_outbox_paths_and_fail_if_unregistered() -> Result
     assert!(matches!(
         validate_references(&ids, |_| true),
         Err(error) if error.contains("routing check missing from canonical inventory: outbox-relay-boundaries")
+    ));
+    ids.insert("outbox-relay-boundaries");
+    ids.remove("outbox-recovery");
+    assert!(matches!(
+        validate_references(&ids, |_| true),
+        Err(error) if error.contains("routing check missing from canonical inventory: outbox-recovery")
     ));
     Ok(())
 }

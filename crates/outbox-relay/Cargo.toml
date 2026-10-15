@@ -15,7 +15,7 @@ edgeagent-telemetry.workspace = true
 [dev-dependencies]
 edgeagent-outbox-postgres.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 sqlx.workspace = true
 
 [lints]

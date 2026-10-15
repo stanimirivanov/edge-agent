@@ -86,6 +86,8 @@ subject, and exact envelope bytes and returns one Boolean; the adapter does not
 download the stored envelope for the comparison. The comparison runs as a
 separate statement so a conflicting transaction that commits while the insert
 waits is visible under PostgreSQL's default `READ COMMITTED` isolation.
+The concurrency proofs require that isolation explicitly; stronger isolation
+may return a serialization failure and requires whole-transaction recovery.
 
 ## Relay leasing and recovery
 
@@ -106,6 +108,11 @@ A relay performs each state change in a short transaction:
    policy-selected `OutboxRetryDelay`, and a validated, non-sensitive `FailureCode`.
    Terminal quarantine also requires the claim's generation and a validated
    code. The PostgreSQL adapter rechecks the token at its storage boundary.
+
+Deterministic candidate selection is not ordered `UPDATE RETURNING` output,
+FIFO delivery, partition ordering, or publication/completion order. A locked
+earlier candidate may be skipped, and independent workers finish independently.
+Services requiring aggregate ordering must enforce it at their owning boundary.
 
 If a relay stops after claiming, the record becomes eligible when its lease
 expires. If it stops after broker persistence but before `mark_published`, the
@@ -236,7 +243,7 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-inbox-handler --test sqlx_outbox_atomicity -- --ignored --exact inbox_domain_and_sqlx_outbox_commit_or_roll_back_together
 ```
 
-It creates a process-scoped schema and verifies transactional rollback,
+It creates a unique run-owned schema and verifies transactional rollback,
 idempotent enqueue, conflicting content, leasing, foreign-owner rejection,
 quarantine, audited replay, duplicate and conflicting replay requests, attempt
 budget reset, unchanged envelope bytes, publication, and queue exhaustion.
@@ -250,7 +257,8 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 It expires and reclaims a record with the same worker token, rejects the old
 generation for publish, retry, and quarantine without altering the new claim,
 and proves audited replay resets attempt budget without reusing the generation.
-Both tests remove their process-scoped schemas. Run them only against an
+Both tests await bounded schema cleanup after success, returned error, caught
+panic, or controlled timeout. Run them only against an
 isolated development or CI database. The local-platform CI job invokes these
 ignored tests explicitly; the default credential-free test gate does not run
 them.
@@ -269,8 +277,65 @@ preserving the caller's transaction; observes successful commits from an
 independent connection; injects a deferred commit rejection and connection
 termination to distinguish invariant faults from unavailable transport; and
 proves an invalid stored claim rolls back before connection reuse. These are
-real database-boundary proofs, not a claim of general crash recovery or
-concurrent-worker coverage. The default gate verifies their discovery only.
+real database-boundary proofs, not a claim of general crash recovery. The
+default gate verifies their discovery only.
+
+### Competing workers, cancellation, and fixture recovery
+
+```text
+cargo xtask verify --check outbox-recovery
+```
+
+This protected eight-test suite uses independent PostgreSQL connections at
+`READ COMMITTED`. It observes blocking with `pg_blocking_pids` before releasing
+a competing enqueue/replay transaction; no sleeps choose which operation wins.
+It proves disjoint `SKIP LOCKED` claims while the first transaction remains open,
+actual batch limits, identical/conflicting enqueue after commit, insertion after
+rollback, and one audit/release for competing replay requests. A persisted
+nonzero retry deadline prevents an immediate claim; advancing test-owned
+eligibility explicitly then permits recovery. Assertions compare identities and
+counts, not returned or completion order.
+
+Cancellation probes pause all six caller-owned transitions after their SQL
+statement but before commit. Another connection sees unchanged committed state;
+dropping the operation and then reusing its connection must finish rollback
+before state is checked again. A separate probe drops a blocked outcome query,
+releases its blocker, drains pending protocol/rollback work by connection reuse,
+then expires/reclaims the lease and rejects the stale fence. Dropping a query
+future alone does **not** establish immediate server cancellation. These tests
+do not cancel during commit confirmation or compensate an unknown result; the
+[portable cancellation contract](../../crates/messaging/src/outbox.rs) remains
+authoritative for that uncertainty.
+
+The outbox conformance, relay-boundary and recovery suites share the same owned
+schema fixture with the real relay proof. The relay proof retains its initial
+migration/enqueue/upgrade scenario. Schema names include process, time and
+counter identity and stay below PostgreSQL's identifier limit. Only an
+acknowledged successful schema creation authorizes deletion; creation runs in
+a transaction so interrupted unacknowledged DDL rolls back. Connections and
+session setup have a five-second deadline, statements five seconds, lock waits
+three seconds, setup ten seconds, cases thirty seconds, and cleanup ten seconds.
+A task boundary catches synchronous and asynchronous panics. Explicit awaited
+finalization preserves both case and cleanup failures and verifies namespace
+absence. The cleanup regression injects returned error, both panic forms and a
+controlled timeout; these are intentional synthetic failures caught by the test.
+
+This fixture is not a process-kill or arbitrary non-yielding-code guarantee.
+The CI job's unconditional Compose teardown remains the process-crash backstop.
+The default ignored-test census and T3 discovery protect every named proof;
+missing identities fail before execution. Existing `local-platform` CI runs the
+new suite without a second acceptance runner.
+
+## Retention and operational ownership
+
+Published rows preserve immutable retry identity; quarantine and replay audit
+rows preserve recovery evidence. This adapter does not implement pruning or a
+retention scheduler. Before adding either, the service owner must define the
+inbox/broker deduplication horizon, replay authorization/evidence retention,
+archival and legal/privacy obligations, and concurrent-claim safety. Deleting an
+identity can permit a later duplicate insert; an age-only cleanup job is not a
+safe default. See [migration and rollout](#migration-and-rollout) before changing
+stored state, and [transaction boundary](#transaction-boundary) for cancellation.
 
 ## Compile-checked queries and input boundaries
 

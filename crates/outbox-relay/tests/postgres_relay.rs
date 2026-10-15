@@ -12,12 +12,14 @@ use edgeagent_outbox_relay::{QuarantineReason, RelayError, RelayOutcome, RelayPo
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Row};
 use std::collections::VecDeque;
-use std::env;
-use std::error::Error;
 use std::io;
-use std::process;
 use std::sync::Mutex;
 use std::time::Duration;
+
+// Reuse capability-owned test cleanup without exposing a production fixture API.
+#[path = "../../outbox-postgres/tests/support/schema.rs"]
+mod support;
+use support::{Fixture, TestResult, with_schema};
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
@@ -26,7 +28,7 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     "order",
 );
 
-fn envelope(message_id: &str) -> Result<MessageEnvelope, Box<dyn Error>> {
+fn envelope(message_id: &str) -> TestResult<MessageEnvelope> {
     let metadata = MessageMetadata {
         id: message_id.to_owned(),
         source: Component::Gateway.source_uri().to_owned(),
@@ -92,7 +94,7 @@ impl MessagePublisher for StubPublisher {
     }
 }
 
-async fn enqueue(client: &mut PgConnection, message_id: &str) -> Result<(), Box<dyn Error>> {
+async fn enqueue(client: &mut PgConnection, message_id: &str) -> TestResult {
     let mut transaction = client.begin().await?;
     PostgresOutbox
         .enqueue(&mut transaction, COMMAND, &envelope(message_id)?)
@@ -113,15 +115,12 @@ async fn relay_once_with_postgres(
 
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
-async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Box<dyn Error>> {
-    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
-    let mut client = PgConnection::connect(&postgres_url).await?;
-    let schema = format!("edgeagent_relay_test_{}", process::id());
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-    )))
-    .execute(&mut client)
-    .await?;
+async fn relay_bounds_retry_and_quarantines_terminal_failures() -> TestResult {
+    with_schema(relay_retry_and_quarantine_case).await
+}
+
+async fn relay_retry_and_quarantine_case(fixture: Fixture) -> TestResult {
+    let mut client = fixture.connect().await?;
     sqlx::raw_sql(PostgresOutbox::MIGRATION_SQL)
         .execute(&mut client)
         .await?;
@@ -204,10 +203,5 @@ async fn relay_bounds_retry_and_quarantines_terminal_failures() -> Result<(), Bo
     assert_eq!(row.try_get::<i64, _>("exhausted")?, 1);
     assert_eq!(row.try_get::<i64, _>("rejected")?, 1);
 
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-    )))
-    .execute(&mut client)
-    .await?;
     Ok(())
 }

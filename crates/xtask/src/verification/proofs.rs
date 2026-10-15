@@ -75,6 +75,20 @@ const OUTBOX_RELAY_BOUNDARIES: Target = Target {
         "invalid_stored_claim_rolls_back_before_connection_reuse",
     ],
 };
+const OUTBOX_RECOVERY: Target = Target {
+    package: "edgeagent-outbox-postgres",
+    name: "postgres_recovery",
+    identities: &[
+        "concurrency::competing_claims_skip_locked_and_bound_batches",
+        "concurrency::waiting_enqueues_observe_committed_identity_decisions",
+        "concurrency::waiting_enqueue_inserts_after_competing_rollback",
+        "concurrency::competing_replays_release_and_audit_only_once",
+        "concurrency::nonzero_retry_delay_defers_claim_until_persisted_eligibility",
+        "cancellation::precommit_cancellation_rolls_back_each_transition_before_reuse",
+        "cancellation::cancelled_blocked_outcome_recovers_with_a_new_fence",
+        "fixture::owned_schema_cleanup_runs_after_error_panic_and_timeout",
+    ],
+};
 const INBOX: Target = Target {
     package: "edgeagent-inbox-postgres",
     name: "postgres_inbox",
@@ -230,6 +244,12 @@ pub(super) fn checks() -> Vec<Check> {
             "Top-level relay commits, nested-transaction rejection, permanent commit faults, connectivity classification and invalid-claim rollback against real PostgreSQL.",
         ),
         suite(
+            "outbox-recovery",
+            &OUTBOX_RECOVERY,
+            POSTGRES,
+            "Independent PostgreSQL contenders, persisted eligibility, precommit cancellation with rollback/reuse, recovered fencing, and owned-schema cleanup on error/panic/timeout; no FIFO or unknown-commit proof.",
+        ),
+        suite(
             "inbox-invariants",
             &INBOX,
             POSTGRES,
@@ -338,6 +358,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         NATS_LIFECYCLE,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
+        OUTBOX_RECOVERY,
         INBOX,
         INBOX_ERRORS,
         HANDLER,
@@ -360,7 +381,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 23);
+        assert_eq!(checks.len(), 24);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -375,8 +396,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 31);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 31);
+        assert_eq!(inventory.len(), 39);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 39);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -388,30 +409,35 @@ mod tests {
 
     #[test]
     fn relay_boundary_suite_protects_each_identity_before_execution() -> Result<(), String> {
-        let check = checks()
-            .into_iter()
-            .find(|check| check.id == "outbox-relay-boundaries")
-            .ok_or("relay boundary proof missing")?;
-        assert_eq!(check.profiles, ["local-platform"]);
-        assert!(matches!(
-            check.prerequisites,
-            [Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
-        ));
-        assert!(check.command.args.contains(&"postgres_relay_boundaries"));
-        assert!(!check.command.args.contains(&"--exact"));
-        let discovery = check.discovery.ok_or("relay boundary discovery missing")?;
-        let complete = discovery
-            .expected
-            .iter()
-            .map(|identity| format!("{identity}: test\n"))
-            .collect::<String>();
-        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
-        for identity in &discovery.expected {
-            let removed = complete.replace(&format!("{identity}: test\n"), "");
-            assert!(
-                super::super::runner::verify_discovery(&discovery, removed.as_bytes()).is_err(),
-                "missing relay boundary proof passed discovery: {identity}"
-            );
+        for (id, target) in [
+            ("outbox-relay-boundaries", "postgres_relay_boundaries"),
+            ("outbox-recovery", "postgres_recovery"),
+        ] {
+            let check = checks()
+                .into_iter()
+                .find(|check| check.id == id)
+                .ok_or("relay boundary proof missing")?;
+            assert_eq!(check.profiles, ["local-platform"]);
+            assert!(matches!(
+                check.prerequisites,
+                [Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
+            ));
+            assert!(check.command.args.contains(&target));
+            assert!(!check.command.args.contains(&"--exact"));
+            let discovery = check.discovery.ok_or("relay boundary discovery missing")?;
+            let complete = discovery
+                .expected
+                .iter()
+                .map(|identity| format!("{identity}: test\n"))
+                .collect::<String>();
+            super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+            for identity in &discovery.expected {
+                let removed = complete.replace(&format!("{identity}: test\n"), "");
+                assert!(
+                    super::super::runner::verify_discovery(&discovery, removed.as_bytes()).is_err(),
+                    "missing relay boundary proof passed discovery: {identity}"
+                );
+            }
         }
         Ok(())
     }
