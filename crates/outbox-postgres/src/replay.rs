@@ -158,7 +158,9 @@ impl PostgresOutbox {
             return Ok(ReplayDisposition::Released);
         }
         if !rows.is_empty() {
-            return Err(OutboxError::storage_invariant());
+            return Err(OutboxError::storage_invariant(
+                "quarantine replay returned more than one released record",
+            ));
         }
 
         let existing = sqlx::query_as::<_, StoredReplayRequest>(

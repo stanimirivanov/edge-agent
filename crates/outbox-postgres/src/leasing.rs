@@ -130,7 +130,9 @@ impl PostgresOutbox {
     ///
     /// # Errors
     ///
-    /// Returns `LeaseLost` if the exact claim is absent, expired, or superseded.
+    /// Returns `LeaseLost` if the exact claim is absent, expired, or superseded;
+    /// `InvalidArgument` for an invalid owner or unsupported generation range;
+    /// or a classified `Storage` or `StorageInvariant` database failure.
     pub async fn mark_published(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -157,7 +159,7 @@ impl PostgresOutbox {
     ///
     /// # Errors
     ///
-    /// Returns an invalid-argument, storage, or lost-lease error.
+    /// Returns `InvalidArgument`, `Storage`, `StorageInvariant`, or `LeaseLost`.
     pub async fn release_for_retry(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -194,7 +196,7 @@ impl PostgresOutbox {
     ///
     /// # Errors
     ///
-    /// Returns an invalid-argument, storage, or lost-lease error.
+    /// Returns `InvalidArgument`, `Storage`, `StorageInvariant`, or `LeaseLost`.
     pub async fn quarantine(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -218,20 +220,39 @@ impl PostgresOutbox {
     }
 }
 fn claimed_message(row: StoredClaim) -> Result<ClaimedMessage, OutboxError> {
-    let generation = u64::try_from(row.lease_generation)
-        .ok()
-        .and_then(|generation| LeaseGeneration::new(generation).ok())
-        .ok_or_else(OutboxError::storage_invariant)?;
+    let generation = u64::try_from(row.lease_generation).map_err(|source| {
+        OutboxError::storage_invariant_with_source(
+            "stored lease_generation is outside the unsigned integer range",
+            source,
+        )
+    })?;
+    let generation = LeaseGeneration::new(generation).map_err(|source| {
+        OutboxError::storage_invariant_with_source(
+            "stored lease_generation is not a positive claim generation",
+            source,
+        )
+    })?;
+    let attempt = u32::try_from(row.attempt_count).map_err(|source| {
+        OutboxError::storage_invariant_with_source(
+            "stored attempt_count is outside the unsigned integer range",
+            source,
+        )
+    })?;
     ClaimedMessage::new(
         row.message_source,
         row.message_id,
         row.message_type,
         row.transport_subject,
         row.envelope,
-        u32::try_from(row.attempt_count).map_err(|_| OutboxError::storage_invariant())?,
+        attempt,
         generation,
     )
-    .map_err(|_| OutboxError::storage_invariant())
+    .map_err(|source| {
+        OutboxError::storage_invariant_with_source(
+            "stored claim violates portable claim invariants",
+            source,
+        )
+    })
 }
 
 fn sql_lease_generation(generation: LeaseGeneration) -> Result<i64, OutboxError> {
@@ -247,3 +268,6 @@ fn require_updated(updated: u64) -> Result<(), OutboxError> {
         Err(OutboxError::lease_lost())
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -6,6 +6,8 @@
   caller-owned PostgreSQL transaction.
 - Inbox callbacks and standalone producers use one SQLx `enqueue` API, while
   the relay uses the same driver for short claim and outcome transactions.
+- Relay operations require an idle, SQLx-managed connection and return success
+  only after a top-level commit; an existing transaction is rejected unchanged.
 - CloudEvents identity is `(source, id)`; an identical retry is idempotent and
   different content under the same identity is rejected.
 - Relay workers claim bounded batches with `FOR UPDATE SKIP LOCKED` and expiring
@@ -39,6 +41,31 @@ cannot provide this guarantee. The relay uses SQLx for separate, short lease
 and outcome transactions. External publication never occurs inside a database
 transaction. [ADR-0016](../decisions/0016-use-sqlx-throughout-the-postgresql-outbox.md)
 records the single-driver boundary and migration from the temporary dual path.
+
+`PostgresOutboxRelay` borrows an idle connection and owns a **top-level**
+transaction for every portable storage operation. Passing a connection borrowed
+from an active SQLx transaction is unsupported: the adapter returns `Invariant`
+before beginning another transaction, rather than releasing a savepoint and
+reporting an uncommitted transition as durable. The rejection leaves the
+caller's transaction and its application writes intact. Caller-owned
+`PostgresOutbox` methods remain valid inside application transactions; this
+restriction applies to the relay adapter, not atomic producer enqueue.
+
+Use SQLx's transaction API for transaction control on a relay connection. Raw
+`BEGIN`, `COMMIT`, `ROLLBACK`, and savepoint statements can bypass SQLx's tracked
+transaction state and are unsupported. No connection may be shared with other
+work while borrowed by the relay. Claims are decoded and validated before
+commit; a Rust conversion or invariant failure cannot commit the new lease.
+
+Dropping an uncommitted SQLx transaction queues rollback; it does not establish
+that PostgreSQL has already completed it. Drive the connection before reusing
+it, or discard an unusable connection. Cancellation or connection loss during
+commit confirmation leaves the outcome uncertain: never infer rollback or
+apply compensation. Recover through persisted state, expiry and the existing
+claim generation. Re-publication retains immutable message identity and relies
+on broker/inbox deduplication as described below. See the portable
+[outbox storage contract](../../crates/messaging/src/outbox.rs) for the recovery
+responsibility of each operation.
 
 The outbox stores:
 
@@ -150,8 +177,8 @@ direct table access, and audit rows must remain append-only under deployment pol
 | `Contract` | Envelope or message definition is invalid | Do not enqueue; correct the producer defect |
 | `MessageIdentityConflict` | Existing immutable content differs | Fail closed and investigate identity reuse |
 | `InvalidArgument` | Batch, lease, worker, delay, or replay request violates a bound | Correct relay configuration or request |
-| `Storage` | PostgreSQL is unavailable or a transaction is retryable or ambiguous | Roll back and apply bounded transient-failure policy |
-| `StorageInvariant` | Stored data, schema, codec, or deterministic database rejection contradicts adapter assumptions | Quarantine and investigate corruption or unsupported mutation |
+| `Storage` | PostgreSQL is unavailable or a transaction is retryable or ambiguous | Discard failed transaction state and apply bounded recovery; uncertain confirmation does not prove rollback |
+| `StorageInvariant` | Stored data, schema, codec, or deterministic database rejection contradicts adapter assumptions | Stop outage retries and investigate; verify persisted state before explicit repair or quarantine |
 | `LeaseLost` | Lease expired, disappeared, or its owner/generation no longer names this claim | Stop processing that record without marking it |
 | `ReplayRequestConflict` | Replay request identity already names different evidence | Fail closed and investigate request-ID reuse |
 | `NotQuarantined` | Target is missing, published, or already released | Refresh operator state; do not infer success |
@@ -159,6 +186,17 @@ direct table access, and audit rows must remain append-only under deployment pol
 Public errors contain stable categories and bounded validation text. PostgreSQL
 causes remain in the Rust error chain for redacted diagnostics. Failure codes
 accept only lowercase ASCII tokens and never raw exception or payload text.
+
+The relay applies the same SQLx failure classifier during begin, statement
+execution and commit. Through `OutboxRelayStore`, retryable/ambiguous `Storage`
+becomes `Unavailable`, and only `LeaseLost` becomes `StateTransition`.
+Deterministic database faults, invalid adapter arguments, identity/replay
+conflicts, contract failures and unsupported transaction ownership become
+`Invariant`; an invalid configuration is not a stale-lease outcome. Local
+stored-row failures retain bounded field/reason context and actual conversion
+or validation causes without exposing stored values. A category-only failure
+does not fabricate an underlying cause. Raw source chains remain diagnostic
+evidence, not safe default log output.
 
 Database roles should grant each service access only to its own schema. Relay
 workers need select/update access to their service's outbox, while unrelated
@@ -216,6 +254,23 @@ Both tests remove their process-scoped schemas. Run them only against an
 isolated development or CI database. The local-platform CI job invokes these
 ignored tests explicitly; the default credential-free test gate does not run
 them.
+
+The relay transaction-boundary suite is registered in the same protected
+local-platform inventory. With `EDGEAGENT_POSTGRES_URL` pointing to the isolated
+local PostgreSQL profile, run:
+
+```text
+cargo xtask verify --check outbox-relay-boundaries
+```
+
+The runner discovers all five mandatory test identities before execution. The
+suite rejects nested execution for claim, publish, retry and quarantine while
+preserving the caller's transaction; observes successful commits from an
+independent connection; injects a deferred commit rejection and connection
+termination to distinguish invariant faults from unavailable transport; and
+proves an invalid stored claim rolls back before connection reuse. These are
+real database-boundary proofs, not a claim of general crash recovery or
+concurrent-worker coverage. The default gate verifies their discovery only.
 
 ## Compile-checked enqueue queries
 

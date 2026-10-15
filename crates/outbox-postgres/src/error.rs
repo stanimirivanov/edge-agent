@@ -11,7 +11,7 @@ pub enum OutboxErrorKind {
     Contract,
     /// One message identity was reused with different immutable content.
     MessageIdentityConflict,
-    /// A bounded lease or retry argument is invalid.
+    /// A bounded adapter argument or replay authorization value is invalid.
     InvalidArgument,
     /// PostgreSQL is unavailable or a transaction can be retried or is ambiguous.
     Storage,
@@ -102,11 +102,22 @@ impl OutboxError {
         }
     }
 
-    pub(super) const fn storage_invariant() -> Self {
+    pub(super) const fn storage_invariant(reason: &'static str) -> Self {
         Self {
             kind: OutboxErrorKind::StorageInvariant,
-            reason: None,
+            reason: Some(reason),
             source: None,
+        }
+    }
+
+    pub(super) fn storage_invariant_with_source(
+        reason: &'static str,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            kind: OutboxErrorKind::StorageInvariant,
+            reason: Some(reason),
+            source: Some(Box::new(source)),
         }
     }
 
@@ -182,48 +193,4 @@ impl From<MessageRoutingError> for OutboxError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{OutboxError, OutboxErrorKind, retryable_sqlstate};
-    use std::error::Error;
-
-    #[test]
-    fn storage_error_debug_omits_driver_cause() {
-        let error = OutboxError::storage(sqlx::Error::Io(std::io::Error::other(
-            "private-driver-sentinel-7391",
-        )));
-
-        assert_eq!(error.kind(), OutboxErrorKind::Storage);
-        assert_eq!(error.to_string(), "outbox storage operation failed");
-        assert!(!format!("{error:?}").contains("private-driver-sentinel-7391"));
-        assert!(error.source().is_some());
-    }
-
-    #[test]
-    fn sqlx_decode_fault_is_an_invariant_while_transport_loss_is_unavailable() {
-        let decode = OutboxError::storage(sqlx::Error::ColumnDecode {
-            index: "envelope".to_owned(),
-            source: Box::new(std::io::Error::other("private-decode-sentinel")),
-        });
-        assert_eq!(decode.kind(), OutboxErrorKind::StorageInvariant);
-        assert_eq!(decode.to_string(), "outbox storage invariant failed");
-        assert!(!format!("{decode:?}").contains("private-decode-sentinel"));
-
-        let unavailable = OutboxError::storage(sqlx::Error::Io(std::io::Error::other(
-            "private-connection-sentinel",
-        )));
-        assert_eq!(unavailable.kind(), OutboxErrorKind::Storage);
-        assert!(unavailable.source().is_some());
-    }
-
-    #[test]
-    fn only_known_postgresql_availability_and_transaction_states_are_retryable() {
-        for code in [
-            "08006", "40001", "40P01", "40003", "53100", "55P03", "57014",
-        ] {
-            assert!(retryable_sqlstate(code), "{code} should be retryable");
-        }
-        for code in ["22001", "23505", "42501", "42703", "42P01", "XX000"] {
-            assert!(!retryable_sqlstate(code), "{code} should be invariant");
-        }
-    }
-}
+mod tests;

@@ -53,7 +53,9 @@ impl PostgresOutbox {
     ///
     /// # Errors
     ///
-    /// Returns a contract, identity-conflict, or PostgreSQL error.
+    /// Returns `Contract` for an invalid envelope or definition,
+    /// `MessageIdentityConflict` for changed immutable content, or a classified
+    /// `Storage` or `StorageInvariant` database/identity-lookup failure.
     pub async fn enqueue(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -105,7 +107,9 @@ impl PostgresOutbox {
         .fetch_optional(&mut **transaction)
         .await
         .map_err(OutboxError::storage)?
-        .ok_or_else(OutboxError::storage_invariant)?;
+        .ok_or_else(|| {
+            OutboxError::storage_invariant("conflicting enqueue record is absent after insertion")
+        })?;
         existing_disposition(existing.identical)
     }
 }

@@ -32,6 +32,7 @@ const NATS_CHECKS: &[&str] = &[
 const OUTBOX_CHECKS: &[&str] = &[
     "outbox-conformance",
     "outbox-fencing",
+    "outbox-relay-boundaries",
     "atomic-enqueue",
     "relay-conformance",
     "event-spine-client",

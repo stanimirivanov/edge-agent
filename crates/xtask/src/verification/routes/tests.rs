@@ -80,6 +80,7 @@ fn service_and_portable_contract_changes_route_related_proofs() -> Result<(), St
         "nats-intake-bound",
         "nats-fixture-cleanup",
         "outbox-fencing",
+        "outbox-relay-boundaries",
         "handler-ordering",
         "event-spine-broker",
     ] {
@@ -158,6 +159,7 @@ fn sqlx_metadata_and_local_profile_route_their_specialized_checks() -> Result<()
         "nats-oversize",
         "outbox-conformance",
         "outbox-fencing",
+        "outbox-relay-boundaries",
         "inbox-invariants",
         "atomic-enqueue",
         "relay-conformance",
@@ -208,6 +210,33 @@ fn renamed_guide_and_missing_check_fail_closed() {
     assert!(
         matches!(missing_check, Err(error) if error.contains("routing check missing from canonical inventory: image-smoke"))
     );
+}
+
+#[test]
+fn relay_boundaries_follow_all_outbox_paths_and_fail_if_unregistered() -> Result<(), String> {
+    for path in [
+        "crates/outbox-postgres/src/relay.rs",
+        "crates/outbox-postgres/tests/postgres_relay_boundaries.rs",
+        "crates/outbox-relay/src/lib.rs",
+        "crates/messaging/src/outbox.rs",
+        "deploy/local/compose.yaml",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(
+            advice.checks.contains("outbox-relay-boundaries"),
+            "missing relay boundary route for {path}"
+        );
+    }
+    let mut ids = inventory::checks()
+        .into_iter()
+        .map(|check| check.id)
+        .collect::<BTreeSet<_>>();
+    ids.remove("outbox-relay-boundaries");
+    assert!(matches!(
+        validate_references(&ids, |_| true),
+        Err(error) if error.contains("routing check missing from canonical inventory: outbox-relay-boundaries")
+    ));
+    Ok(())
 }
 
 #[test]

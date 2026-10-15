@@ -269,6 +269,19 @@ the isolated local PostgreSQL profile:
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
 ```
 
+The registered `outbox-relay-boundaries` T3 suite additionally exercises all
+four portable relay operations against PostgreSQL. It requires nested
+transaction rejection without altering the caller's work, top-level commit
+visibility from a second connection, invariant classification of a deferred
+commit rejection, unavailable classification of a terminated connection, and
+rollback of an invalid stored claim before reuse. A protected inventory covers
+every identity; negative discovery fixtures remove each identity in turn, and
+route fixtures require this suite for outbox adapter, application, port and
+local-platform changes. Source-text checks cannot prove top-level durability.
+The default gate checks discovery, not these database effects. See
+[outbox verification](postgres-outbox.md#verification) for the scoped command
+and transaction-control limitations.
+
 ## Repository policy
 
 The paired T1 architecture sensors inspect every direct normal, development,
