@@ -114,6 +114,47 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
 }
 
 #[test]
+fn dependency_audit_covers_each_isolated_lock_without_runtime_or_sbom_work() -> Result<(), String> {
+    let checks = inventory::checks();
+    let options = Options::parse(&["dependency-audit".to_owned()])?;
+    let selected = options.select(&checks)?;
+    assert_eq!(
+        selected.iter().map(|check| check.id).collect::<Vec<_>>(),
+        [
+            "workflow-security",
+            "supply-chain-contracts",
+            "dependency-policy",
+            "m08-event-spine-dependency-policy",
+            "m08-duroxide-dependency-policy",
+            "m08-dbos-dependency-policy",
+            "m08-temporal-dependency-policy",
+            "m08-flawless-dependency-policy",
+        ]
+    );
+    let audits: Vec<_> = selected
+        .into_iter()
+        .filter(|check| check.id.ends_with("dependency-policy"))
+        .collect();
+    assert_eq!(audits.len(), 6);
+    for audit in audits {
+        assert_eq!(audit.command.program, Program::Cargo);
+        assert_eq!(audit.command.args.first(), Some(&"deny"));
+        assert!(audit.command.args.contains(&"--locked"));
+        assert!(matches!(
+            audit.prerequisites,
+            [Requirement::Executable("cargo-deny")]
+        ));
+        assert!(audit.discovery.is_none());
+        if audit.id != "dependency-policy" {
+            assert!(audit.command.args.contains(&"--workspace"));
+            assert!(audit.command.args.contains(&"experiments/deny.toml"));
+            assert!(audit.command.args.contains(&"--manifest-path"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn security_profile_requires_actual_scanner_protocol_and_default_does_not_install_it()
 -> Result<(), String> {
     let checks = inventory::checks();

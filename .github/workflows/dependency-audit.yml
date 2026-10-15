@@ -1,0 +1,71 @@
+name: Scheduled dependency audit
+
+on:
+  schedule:
+    - cron: '27 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  architecture:
+    name: Architecture policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Check CI security policy
+        id: workflow-policy
+        run: cargo xtask workflow-security
+      - name: Check repository and capability dependency policy
+        run: cargo xtask verify --check repository-policy --check architecture-graph
+
+  audit:
+    name: Dependency audit (${{ matrix.workspace }})
+    runs-on: ubuntu-latest
+    needs: architecture
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: production
+            manifest: Cargo.toml
+            policy: deny.toml
+          - workspace: event-spine-proof
+            manifest: experiments/event-spine-proof/Cargo.toml
+            policy: experiments/deny.toml
+          - workspace: durable-execution
+            manifest: experiments/durable-execution/Cargo.toml
+            policy: experiments/deny.toml
+          - workspace: dbos-proof
+            manifest: experiments/dbos-proof/Cargo.toml
+            policy: experiments/deny.toml
+          - workspace: temporal-proof
+            manifest: experiments/temporal-proof/Cargo.toml
+            policy: experiments/deny.toml
+          - workspace: flawless-proof
+            manifest: experiments/flawless-proof/Cargo.toml
+            policy: experiments/deny.toml
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit locked dependencies and licenses
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          rust-version: "1.98.1"
+          manifest-path: ${{ matrix.manifest }}
+          arguments: --locked --workspace --config ${{ matrix.policy }}
+          command: check

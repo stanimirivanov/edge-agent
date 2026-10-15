@@ -110,6 +110,9 @@ fn dangerous_context(value: &str) -> bool {
     const EXPRESSIONS: &[&str] = &[
         "matrix.os",
         "matrix.candidate",
+        "matrix.workspace",
+        "matrix.manifest",
+        "matrix.policy",
         "matrix.service",
         "matrix.binary",
         "matrix.image",

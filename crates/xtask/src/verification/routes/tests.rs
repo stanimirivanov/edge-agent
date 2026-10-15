@@ -90,7 +90,7 @@ fn service_and_portable_contract_changes_route_related_proofs() -> Result<(), St
 }
 
 #[test]
-fn each_experiment_routes_its_own_checks_not_root_dependency_policy() -> Result<(), String> {
+fn each_experiment_routes_its_own_advisory_and_proof_checks() -> Result<(), String> {
     for (package, label) in [
         ("event-spine-proof", "event-spine"),
         ("durable-execution", "duroxide"),
@@ -99,15 +99,31 @@ fn each_experiment_routes_its_own_checks_not_root_dependency_policy() -> Result<
         ("flawless-proof", "flawless"),
     ] {
         let advice = advise(&[format!("experiments/{package}/Cargo.lock")])?;
-        for kind in ["format", "clippy", "test"] {
+        for kind in ["dependency-policy", "format", "clippy", "test"] {
             assert!(
                 advice
                     .checks
                     .contains(format!("m08-{label}-{kind}").as_str())
             );
         }
-        assert_eq!(advice.checks.len(), 3);
+        assert_eq!(advice.checks.len(), 4);
         assert!(!advice.checks.contains("dependency-policy"));
+    }
+    Ok(())
+}
+
+#[test]
+fn maintenance_and_scheduled_audit_changes_route_every_resolution_root() -> Result<(), String> {
+    for path in [
+        ".github/dependabot.yml",
+        ".github/workflows/dependency-audit.yml",
+        "experiments/deny.toml",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        for check in ALL_ADVISORY_CHECKS {
+            assert!(advice.checks.contains(check), "missing {check} for {path}");
+        }
+        assert!(advice.guides.contains("docs/development/supply-chain.md"));
     }
     Ok(())
 }

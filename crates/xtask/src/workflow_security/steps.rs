@@ -145,7 +145,9 @@ fn action_allowed(name: &str, job: &str, action: &str) -> bool {
             "security" | "verify" | "container-smoke" | "local-platform-smoke",
         )
         | ("release-images.yml", "plan") => action == "actions/setup-python",
-        ("m08-durable-execution.yml", "proof") => action == "EmbarkStudios/cargo-deny-action",
+        ("m08-durable-execution.yml", "proof") | ("dependency-audit.yml", "audit") => {
+            action == "EmbarkStudios/cargo-deny-action"
+        }
         ("release-images.yml", "publish") => {
             action != "EmbarkStudios/cargo-deny-action" && action != "actions/upload-artifact"
         }

@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /experiments/event-spine-proof
+      - /experiments/durable-execution
+      - /experiments/dbos-proof
+      - /experiments/temporal-proof
+      - /experiments/flawless-proof
+    schedule:
+      interval: daily
+    allow:
+      - dependency-type: all
+    versioning-strategy: lockfile-only
+    open-pull-requests-limit: 5
+    groups:
+      rust-workspaces:
+        patterns: ["*"]
+        group-by: dependency-name

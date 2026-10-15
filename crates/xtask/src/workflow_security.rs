@@ -4,9 +4,11 @@ mod credentials;
 mod environment;
 mod gates;
 mod inputs;
+mod maintenance;
 mod parse;
 mod policy;
 mod release;
+mod scheduled;
 mod steps;
 mod supply_chain;
 
@@ -18,6 +20,7 @@ use std::{collections::BTreeSet, fs, io::Read, path::Path, process::ExitCode};
 use yaml_rust2::Yaml;
 
 const WORKFLOWS: &[&str] = &[
+    "dependency-audit.yml",
     "m08-durable-execution.yml",
     "release-images.yml",
     "repository-quality.yml",
@@ -28,7 +31,7 @@ pub(crate) fn run() -> ExitCode {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     match check(&root) {
         Ok(()) => {
-            println!("workflow security policy passed for all three reviewed workflows");
+            println!("workflow security policy passed for all reviewed workflows");
             ExitCode::SUCCESS
         }
         Err(problems) => {
@@ -97,6 +100,7 @@ fn check(root: &Path) -> Result<(), Vec<String>> {
             ));
         }
     }
+    problems.extend(maintenance::check(root));
     problems.sort();
     problems.dedup();
     if problems.is_empty() {

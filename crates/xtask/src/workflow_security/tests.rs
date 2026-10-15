@@ -8,6 +8,9 @@ use super::{WORKFLOWS, check, check_source, parse};
 
 fn source(name: &str) -> &'static str {
     match name {
+        "dependency-audit.yml" => {
+            include_str!("../../../../.github/workflows/dependency-audit.yml")
+        }
         "repository-quality.yml" => {
             include_str!("../../../../.github/workflows/repository-quality.yml")
         }
@@ -479,6 +482,240 @@ fn comments_and_quoted_strings_cannot_replace_executable_supply_chain_evidence()
 }
 
 #[test]
+fn scheduled_audit_requires_daily_detection_and_has_no_privileged_or_input_trigger() {
+    let name = "dependency-audit.yml";
+    reject(
+        name,
+        "  schedule:\n    - cron: '27 3 * * *'\n",
+        "",
+        "workflow.on",
+    );
+    reject(name, "27 3 * * *", "27 3 * * 1", "workflow.on");
+    reject(
+        name,
+        "  workflow_dispatch:\n",
+        "  workflow_dispatch:\n    inputs:\n      command:\n        type: string\n",
+        "workflow.on",
+    );
+    for trigger in [
+        "push",
+        "pull_request",
+        "pull_request_target",
+        "workflow_run",
+    ] {
+        reject(
+            name,
+            "  workflow_dispatch:\n",
+            &format!("  {trigger}:\n"),
+            "workflow.on",
+        );
+    }
+    let no_manual = source(name).replace("  workflow_dispatch:\n", "");
+    assert!(check_source(name, &no_manual).is_empty());
+}
+
+#[test]
+fn scheduled_audit_matrix_cannot_skip_duplicate_or_redirect_lock_roots() {
+    let name = "dependency-audit.yml";
+    reject(
+        name,
+        "          - workspace: flawless-proof\n            manifest: experiments/flawless-proof/Cargo.toml\n            policy: experiments/deny.toml\n",
+        "",
+        "finite OS matrix",
+    );
+    reject(
+        name,
+        "manifest: experiments/dbos-proof/Cargo.toml",
+        "manifest: experiments/temporal-proof/Cargo.toml",
+        "finite OS matrix",
+    );
+    reject(
+        name,
+        "policy: deny.toml",
+        "policy: experiments/deny.toml",
+        "finite OS matrix",
+    );
+    reject(
+        name,
+        "workspace: production",
+        "workspace: dbos-proof",
+        "finite OS matrix",
+    );
+    reject(
+        name,
+        "fail-fast: false",
+        "fail-fast: true",
+        "finite OS matrix",
+    );
+    reject(
+        name,
+        "      matrix:\n",
+        "      matrix:\n        exclude: []\n",
+        "finite OS matrix",
+    );
+}
+
+#[test]
+fn scheduled_audit_retains_readonly_permissions_credentials_pins_and_inputs() {
+    let name = "dependency-audit.yml";
+    reject(
+        name,
+        "  contents: read",
+        "  contents: write",
+        "workflow.permissions",
+    );
+    reject(
+        name,
+        "  audit:\n",
+        "  audit:\n    permissions:\n      contents: read\n      packages: write\n",
+        "jobs.audit.permissions",
+    );
+    reject(
+        name,
+        "persist-credentials: false",
+        "persist-credentials: true",
+        "checkout must disable",
+    );
+    reject(
+        name,
+        "EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25",
+        "EmbarkStudios/cargo-deny-action@v2",
+        "exact full commit SHA",
+    );
+    reject(
+        name,
+        "          command: check",
+        "          command: check\n          token: ${{ secrets.GITHUB_TOKEN }}",
+        "exact reviewed input",
+    );
+    reject(
+        name,
+        "manifest-path: ${{ matrix.manifest }}",
+        "manifest-path: Cargo.toml",
+        "exact reviewed input",
+    );
+    reject(
+        name,
+        "--locked --workspace --config ${{ matrix.policy }}",
+        "--workspace --config ${{ matrix.policy }}",
+        "actual locked policy check",
+    );
+    reject(
+        name,
+        "--locked --workspace --config ${{ matrix.policy }}",
+        "--locked --workspace --config experiments/deny.toml",
+        "actual locked policy check",
+    );
+    reject(
+        name,
+        "command: check",
+        "command: check advisories",
+        "actual locked policy check",
+    );
+}
+
+#[test]
+fn scheduled_audit_gates_cannot_be_removed_skipped_suppressed_or_reordered()
+-> Result<(), Box<dyn std::error::Error>> {
+    let name = "dependency-audit.yml";
+    reject(name, "    needs: architecture\n", "", "dependency order");
+    reject(
+        name,
+        "  audit:\n",
+        "  audit:\n    if: false\n",
+        "unreviewed keys",
+    );
+    reject(
+        name,
+        "      - name: Audit locked dependencies and licenses\n",
+        "      - name: Audit locked dependencies and licenses\n        if: false\n",
+        "must not be conditional",
+    );
+    reject(
+        name,
+        "      - name: Audit locked dependencies and licenses\n",
+        "      - name: Audit locked dependencies and licenses\n        continue-on-error: true\n",
+        "unreviewed keys",
+    );
+    reject(
+        name,
+        "run: cargo xtask workflow-security",
+        "run: echo 'cargo xtask workflow-security'",
+        "protected command",
+    );
+    reject(
+        name,
+        "run: cargo xtask verify --check repository-policy --check architecture-graph",
+        "run: cargo xtask verify --check repository-policy --check architecture-graph || true",
+        "protected command",
+    );
+    reject(
+        name,
+        "    timeout-minutes: 15",
+        "    timeout-minutes: 60",
+        "bounded, read-only bootstrap",
+    );
+
+    let original = source(name);
+    let audit_index = original
+        .find("      - name: Audit locked dependencies and licenses\n")
+        .ok_or("audit fixture missing")?;
+    let audit = &original[audit_index..];
+    let removed = original.replace(audit, "");
+    assert!(
+        check_source(name, &removed)
+            .iter()
+            .any(|problem| problem.contains("actual locked policy check"))
+    );
+    let duplicated = format!("{original}{audit}");
+    assert!(
+        check_source(name, &duplicated)
+            .iter()
+            .any(|problem| problem.contains("actual locked policy check"))
+    );
+    let checkout_index = original[..audit_index]
+        .rfind("      - name: Check out repository\n")
+        .ok_or("audit checkout fixture missing")?;
+    let checkout = &original[checkout_index..audit_index];
+    let reordered = format!("{}{audit}{checkout}", &original[..checkout_index]);
+    assert!(
+        check_source(name, &reordered)
+            .iter()
+            .any(|problem| problem.contains("checkout must precede"))
+    );
+    Ok(())
+}
+
+#[test]
+fn scheduled_audit_cannot_become_a_build_or_publication_workflow() {
+    let name = "dependency-audit.yml";
+    reject(
+        name,
+        "run: rustup toolchain install 1.98.1 --profile minimal",
+        "run: cargo build --workspace",
+        "only the reviewed security bootstrap",
+    );
+    reject(
+        name,
+        "  audit:\n",
+        "  audit:\n    outputs:\n      result: arbitrary\n",
+        "bounded, read-only bootstrap",
+    );
+    reject(
+        name,
+        "      - name: Audit locked dependencies and licenses\n",
+        "      - name: Build images\n        run: docker build .\n      - name: Audit locked dependencies and licenses\n",
+        "only the reviewed security bootstrap",
+    );
+    reject(
+        name,
+        "EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25",
+        "docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
+        "exact full commit SHA",
+    );
+}
+
+#[test]
 fn serialized_credential_contexts_cannot_hide_in_pinned_action_inputs() {
     for expression in [
         "${{ toJSON(secrets) }}",
@@ -554,6 +791,24 @@ impl Fixture {
         fs::create_dir_all(root.join(".github/workflows"))?;
         for name in WORKFLOWS {
             fs::write(root.join(".github/workflows").join(name), source(name))?;
+        }
+        fs::write(
+            root.join(".github/dependabot.yml"),
+            include_str!("../../../../.github/dependabot.yml"),
+        )?;
+        fs::write(root.join("Cargo.toml"), "[workspace]\n")?;
+        fs::write(root.join("Cargo.lock"), "version = 4\n")?;
+        for proof in [
+            "event-spine-proof",
+            "durable-execution",
+            "dbos-proof",
+            "temporal-proof",
+            "flawless-proof",
+        ] {
+            let directory = root.join("experiments").join(proof);
+            fs::create_dir_all(&directory)?;
+            fs::write(directory.join("Cargo.toml"), "[workspace]\n")?;
+            fs::write(directory.join("Cargo.lock"), "version = 4\n")?;
         }
         Ok(Self(root))
     }

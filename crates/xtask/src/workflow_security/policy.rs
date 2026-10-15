@@ -18,7 +18,7 @@ pub(super) fn check(name: &str, root: &Yaml) -> Vec<String> {
         problems.push("workflow.permissions must be exactly contents: read".to_owned());
     }
     if !triggers(name, field(root, "on")) {
-        problems.push("workflow.on must use the reviewed PR/main or tag-only trigger; privileged and manual triggers are forbidden".to_owned());
+        problems.push("workflow.on must match its reviewed PR/main, tag-only, or read-only dependency-audit triggers; unreviewed triggers and filters are forbidden".to_owned());
     }
     super::credentials::scan_except(root, "workflow", &["jobs"], &mut problems);
     super::environment::workflow(name, root, &mut problems);
@@ -32,6 +32,7 @@ pub(super) fn check(name: &str, root: &Yaml) -> Vec<String> {
             "supply-chain",
         ],
         "m08-durable-execution.yml" => &["architecture", "proof"],
+        "dependency-audit.yml" => &["architecture", "audit"],
         "release-images.yml" => &["plan", "publish"],
         _ => return vec!["workflow needs an explicit security policy".to_owned()],
     };
@@ -78,6 +79,9 @@ fn triggers(name: &str, node: Option<&Yaml>) -> bool {
     let Some(node) = node else {
         return false;
     };
+    if name == "dependency-audit.yml" {
+        return super::scheduled::triggers(node);
+    }
     let release = name == "release-images.yml";
     let expected = if release {
         &["push"][..]
@@ -170,6 +174,9 @@ fn check_job(name: &str, job_id: &str, job: &Yaml, problems: &mut Vec<String>) {
         ));
     }
     super::gates::required(name, job_id, steps, problems);
+    if name == "dependency-audit.yml" {
+        super::scheduled::job(job_id, job, steps, problems);
+    }
 }
 
 fn runner(name: &str, job_id: &str, job: &Yaml) -> bool {
@@ -201,6 +208,8 @@ fn runner(name: &str, job_id: &str, job: &Yaml) -> bool {
                             ],
                         )
                 })
+    } else if name == "dependency-audit.yml" && job_id == "audit" {
+        text(job, "runs-on") == Some("ubuntu-latest") && super::scheduled::matrix(job)
     } else {
         text(job, "runs-on") == Some("ubuntu-latest")
     }
@@ -210,10 +219,11 @@ fn check_needs(name: &str, id: &str, job: &Yaml, problems: &mut Vec<String>) {
     let expected: &[&str] = match (name, id) {
         ("repository-quality.yml", "architecture")
         | ("m08-durable-execution.yml", "architecture")
+        | ("dependency-audit.yml", "architecture")
         | ("release-images.yml", "plan") => &[],
-        ("repository-quality.yml", "security") | ("m08-durable-execution.yml", "proof") => {
-            &["architecture"]
-        }
+        ("repository-quality.yml", "security")
+        | ("m08-durable-execution.yml", "proof")
+        | ("dependency-audit.yml", "audit") => &["architecture"],
         ("repository-quality.yml", _) => &["architecture", "security"],
         ("release-images.yml", "publish") => &["plan"],
         _ => &[],

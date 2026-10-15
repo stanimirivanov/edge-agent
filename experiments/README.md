@@ -41,7 +41,13 @@ executable inventory. It runs `m08-<package>-static` for formatting and Clippy,
 then the pinned dependency-policy action, then `m08-<package>-test` for the
 automated tests on Linux. This preserves the advisory/license gate before
 the expensive runtime proof. The full local `m08-<package>` profile does not
-substitute for that separate advisory check. Missing prerequisites report
+substitute for that separate advisory check. Run `cargo xtask verify
+dependency-audit` for current locked policy across the root and all five proof
+workspaces, or select the proof's named `m08-<label>-dependency-policy` check
+from `cargo xtask checks`. The pinned `cargo-deny` tool and network are required
+for those advisory checks. Daily maintenance and scheduled audits cover these
+independent resolutions; see the [supply-chain guide](../docs/development/supply-chain.md#independent-workspaces-and-dependency-maintenance).
+Missing prerequisites report
 not run, not a passing crash-recovery proof. Its [experimental license policy](deny.toml)
 permits four additional permissive licenses for these proofs; it
 does not change the production workspace policy. The exact assertions,

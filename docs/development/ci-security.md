@@ -44,11 +44,16 @@ resolves to the same code still fails; an arbitrary 40-character SHA is not an
 approved action. Review updates to the action map together with every affected
 workflow and its negative tests.
 
-Validation workflows use read-only `contents` permissions. Checkout disables
+Validation workflows use read-only `contents` permissions. The reviewed
+`dependency-audit.yml` is the sole daily scheduled/no-input manual audit
+workflow; its exact six-workspace matrix runs current dependency policy without
+runtime proofs, SBOMs, credentials, or write permissions. Other workflows keep
+their existing PR/main or release-tag triggers. Checkout disables
 credential persistence and cannot override its token, repository, ref, SSH,
 or PR protection. The scanner checkout uses `fetch-depth: 0`; a shallow
 history cannot satisfy the historical scan. Unreviewed workflows, privileged
-triggers, reusable workflows, runners, credentials, and optional validation
+triggers, additional schedules/manual triggers, reusable workflows, runners,
+credentials, and optional validation
 steps require an explicit policy change, not a convenient bypass.
 
 Only the tag-triggered `release-images.yml` publish job grants write capability:

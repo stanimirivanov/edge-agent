@@ -47,7 +47,7 @@ pub(super) fn required(name: &str, job: &str, steps: &[Yaml], problems: &mut Vec
             "cargo xtask repository",
             "cargo xtask architecture",
         ],
-        ("m08-durable-execution.yml", "architecture") => &[
+        ("m08-durable-execution.yml" | "dependency-audit.yml", "architecture") => &[
             "cargo xtask workflow-security",
             "cargo xtask verify --check repository-policy --check architecture-graph",
         ],

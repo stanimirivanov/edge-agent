@@ -8,6 +8,7 @@ pub(super) fn check(name: &str, root: &Yaml, problems: &mut Vec<String>) {
     let job = match name {
         "repository-quality.yml" => "supply-chain",
         "m08-durable-execution.yml" => "proof",
+        "dependency-audit.yml" => "audit",
         _ => return,
     };
     let Some(steps) = field(root, "jobs")
@@ -21,10 +22,10 @@ pub(super) fn check(name: &str, root: &Yaml, problems: &mut Vec<String>) {
         .iter()
         .filter(|step| action(step) == Some("EmbarkStudios/cargo-deny-action"))
         .collect();
-    let arguments = if job == "proof" {
-        "--locked --workspace --config experiments/deny.toml"
-    } else {
-        "--locked"
+    let arguments = match job {
+        "proof" => "--locked --workspace --config experiments/deny.toml",
+        "audit" => "--locked --workspace --config ${{ matrix.policy }}",
+        _ => "--locked",
     };
     if denies.len() != 1
         || !denies.iter().all(|step| {
@@ -32,9 +33,14 @@ pub(super) fn check(name: &str, root: &Yaml, problems: &mut Vec<String>) {
                 text(config, "rust-version") == Some("1.98.1")
                     && text(config, "arguments") == Some(arguments)
                     && text(config, "command") == Some("check")
-                    && (job != "proof"
-                        || text(config, "manifest-path")
-                            == Some("experiments/${{ matrix.candidate }}/Cargo.toml"))
+                    && match job {
+                        "proof" => {
+                            text(config, "manifest-path")
+                                == Some("experiments/${{ matrix.candidate }}/Cargo.toml")
+                        }
+                        "audit" => text(config, "manifest-path") == Some("${{ matrix.manifest }}"),
+                        _ => true,
+                    }
             })
         })
     {
