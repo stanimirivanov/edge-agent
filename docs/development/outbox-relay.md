@@ -40,6 +40,8 @@ One iteration never holds a database transaction during network I/O and never
 has more than one publication in flight. A service loop can stop between
 iterations for graceful drain. Horizontal throughput comes from additional
 workers; PostgreSQL `SKIP LOCKED` gives each worker disjoint records.
+This does not promise FIFO, partition ordering, ordered returned batches, or
+completion order across workers.
 
 If the broker persists a message but the relay cannot record success, the lease
 eventually expires and another worker republishes the same `(source, id)` and
@@ -133,6 +135,12 @@ EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1
 It verifies confirmed publication, scheduled retry, ambiguous-confirmation
 exhaustion, explicit rejection, terminal quarantine, and empty-queue behavior.
 Run it only against an isolated development or CI database.
+Its shared owned-schema fixture bounds connection, case, and cleanup work and
+awaits cleanup even after errors, caught panics, and controlled timeouts. The
+initial migration/enqueue/upgrade scenario remains part of this proof. See
+[outbox recovery verification](postgres-outbox.md#competing-workers-cancellation-and-fixture-recovery)
+for the protected fixture and competing-connection/cancellation suite; CI Compose
+teardown remains the process-crash backstop.
 The [PostgreSQL outbox conformance test](postgres-outbox.md#verification) is the
 storage-boundary proof that a stale claim cannot resolve a later claim by the
 same owner token. Both are required for the lease-fencing contract in

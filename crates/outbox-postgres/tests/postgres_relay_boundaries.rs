@@ -13,18 +13,10 @@ use edgeagent_messaging::{
 use edgeagent_outbox_postgres::{OutboxError, PostgresOutbox, PostgresOutboxRelay};
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
-use std::env;
 use std::error::Error;
-use std::future::Future;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::time::timeout;
+mod support;
+use support::{TestResult, with_fixture};
 
-type TestResult = Result<(), Box<dyn Error + Send + Sync>>;
-
-const CONNECTION_DEADLINE: Duration = Duration::from_secs(5);
-const CASE_DEADLINE: Duration = Duration::from_secs(30);
-const CLEANUP_DEADLINE: Duration = Duration::from_secs(5);
 const OWNER: &str = "relay_boundary";
 const FAILURE: FailureCode = FailureCode::from_static("transport_unavailable");
 const COMMAND: MessageDefinition = MessageDefinition::command(
@@ -33,104 +25,6 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
     Component::ExecutionSimulator,
     "order",
 );
-static NEXT_SCHEMA: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Clone)]
-struct Fixture {
-    postgres_url: String,
-    schema: String,
-}
-
-impl Fixture {
-    fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
-        Ok(Self {
-            postgres_url: env::var("EDGEAGENT_POSTGRES_URL")?,
-            schema: format!(
-                "ea_outbox_boundary_{}_{}_{}",
-                std::process::id(),
-                SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
-                NEXT_SCHEMA.fetch_add(1, Ordering::Relaxed),
-            ),
-        })
-    }
-
-    async fn connect(&self) -> Result<PgConnection, Box<dyn Error + Send + Sync>> {
-        let mut connection = timeout(
-            CONNECTION_DEADLINE,
-            PgConnection::connect(&self.postgres_url),
-        )
-        .await??;
-        // Names consist solely of the fixed prefix and generated decimal digits.
-        // Scope both statement execution and locks independently of the case timer.
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "SET search_path TO {}; SET statement_timeout = '5s'; SET lock_timeout = '3s';",
-            self.schema,
-        )))
-        .execute(&mut connection)
-        .await?;
-        Ok(connection)
-    }
-
-    async fn initialize(&self) -> TestResult {
-        let mut connection = self.connect().await?;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE SCHEMA {};",
-            self.schema,
-        )))
-        .execute(&mut connection)
-        .await?;
-        for migration in PostgresOutbox::MIGRATIONS {
-            sqlx::raw_sql(migration).execute(&mut connection).await?;
-        }
-        Ok(())
-    }
-
-    async fn cleanup(&self) -> TestResult {
-        timeout(CLEANUP_DEADLINE, async {
-            let mut connection = self.connect().await?;
-            // Only this uniquely generated, test-owned schema is ever removed.
-            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "SET search_path TO public; DROP SCHEMA IF EXISTS {} CASCADE;",
-                self.schema,
-            )))
-            .execute(&mut connection)
-            .await?;
-            Ok::<_, Box<dyn Error + Send + Sync>>(())
-        })
-        .await?
-    }
-}
-
-async fn with_fixture<Case, Work>(case: Case) -> TestResult
-where
-    Case: FnOnce(Fixture) -> Work + Send + 'static,
-    Work: Future<Output = TestResult> + Send + 'static,
-{
-    let fixture = Fixture::new()?;
-    let owned = fixture.clone();
-    // A task boundary catches assertion panics without an additional dependency.
-    // Explicit finalization still runs; Drop cannot await PostgreSQL cleanup.
-    let mut task = tokio::spawn(async move {
-        owned.initialize().await?;
-        case(owned).await
-    });
-    let result: TestResult = match timeout(CASE_DEADLINE, &mut task).await {
-        Ok(Ok(result)) => result,
-        Ok(Err(error)) => Err(error.into()),
-        Err(error) => {
-            task.abort();
-            let _ = timeout(CLEANUP_DEADLINE, task).await;
-            Err(error.into())
-        }
-    };
-    match (result, fixture.cleanup().await) {
-        (Ok(()), cleanup) => cleanup,
-        (Err(error), Ok(())) => Err(error),
-        (Err(error), Err(cleanup)) => {
-            Err(format!("relay proof failed ({error}); fixture cleanup failed ({cleanup})").into())
-        }
-    }
-}
 
 async fn seed(connection: &mut PgConnection, message_id: &str) -> TestResult {
     let envelope = COMMAND.build(

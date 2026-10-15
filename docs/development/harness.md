@@ -284,6 +284,17 @@ The default gate checks discovery, not these database effects. See
 [outbox verification](postgres-outbox.md#verification) for the scoped command
 and transaction-control limitations.
 
+The `outbox-recovery` T3 suite adds independent-connection claim/enqueue/replay
+contention, actual batch bounds and persisted delayed eligibility. Controlled
+precommit cancellation must leave committed state unchanged after rollback and
+connection reuse; a blocked-query cancellation must recover with a new fence.
+The shared schema fixture must finalize after returned errors, synchronous and
+asynchronous panics, and controlled timeouts. The protected census and negative
+discovery fixtures cover all eight identities, and outbox/port/relay/local-stack
+routes require this suite. These tests prove neither immediate server-side query
+cancellation nor FIFO nor the outcome of interrupted commit confirmation. See
+[recovery proof boundaries](postgres-outbox.md#competing-workers-cancellation-and-fixture-recovery).
+
 The `sqlx-query-policy` T2 compiler fixture checks the outbox's real Clippy
 configuration, accepting a checked macro and rejecting runtime/unchecked query
 APIs even through renamed imports. Production outbox SQL remains covered by

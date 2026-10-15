@@ -50,6 +50,10 @@ impl PostgresOutbox {
     /// is idempotent. Reusing it with different content is a conflict. An
     /// inbound callback passes its existing transaction so its state and the
     /// outbound intent commit or roll back together.
+    /// Use PostgreSQL `READ COMMITTED`: the separate identity lookup must see a
+    /// conflicting insert committed while this operation was waiting. Stronger
+    /// isolation can require retrying the entire transaction after serialization
+    /// failure; it does not inherit this concurrent-idempotency result.
     ///
     /// # Errors
     ///

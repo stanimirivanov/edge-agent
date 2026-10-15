@@ -33,6 +33,7 @@ const OUTBOX_CHECKS: &[&str] = &[
     "outbox-conformance",
     "outbox-fencing",
     "outbox-relay-boundaries",
+    "outbox-recovery",
     "atomic-enqueue",
     "relay-conformance",
     "event-spine-client",

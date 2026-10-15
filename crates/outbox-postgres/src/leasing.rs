@@ -23,6 +23,9 @@ impl PostgresOutbox {
     ///
     /// Concurrent relays receive disjoint records. Expired leases become
     /// eligible again, incrementing the attempt count on the next claim.
+    /// Candidate selection is deterministic, but `UPDATE RETURNING` order and
+    /// concurrent publication/completion order are not guaranteed. This is not
+    /// FIFO or partition-ordered delivery.
     /// The lease arrives prevalidated and is persisted in whole milliseconds,
     /// flooring any fractional millisecond.
     ///

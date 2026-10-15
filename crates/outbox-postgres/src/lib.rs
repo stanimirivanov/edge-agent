@@ -24,6 +24,13 @@ pub use relay::PostgresOutboxRelay;
 pub use replay::{ReplayDisposition, ReplayRequest};
 
 /// PostgreSQL outbox operations that participate in caller-owned transactions.
+///
+/// Use PostgreSQL `READ COMMITTED` isolation for the documented competing-enqueue
+/// behavior. Selection uses `SKIP LOCKED`; neither returned batches nor publication
+/// completion promise FIFO or partition ordering. Retention, migration rollout,
+/// and cancellation/recovery responsibilities are documented in the
+/// [outbox operations guide](https://github.com/stanimirivanov/edge-agent/blob/main/docs/development/postgres-outbox.md).
+/// See [`edgeagent_messaging::OutboxRelayStore`] for portable cancellation rules.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PostgresOutbox;
 

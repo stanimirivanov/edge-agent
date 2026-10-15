@@ -13,11 +13,10 @@ use edgeagent_outbox_postgres::{
     EnqueueDisposition, OutboxErrorKind, PostgresOutbox, ReplayDisposition, ReplayRequest,
 };
 use serde_json::json;
-use sqlx::{Connection, PgConnection, Row};
-use std::env;
-use std::error::Error;
-use std::process;
+use sqlx::{Connection, Row};
+mod support;
 use std::time::Duration;
+use support::{Fixture, TestResult, with_fixture};
 
 const TRANSPORT_UNAVAILABLE: FailureCode = FailureCode::from_static("transport_unavailable");
 const TRANSPORT_REJECTED: FailureCode = FailureCode::from_static("transport_rejected");
@@ -55,18 +54,12 @@ fn metadata(source: Component) -> MessageMetadata {
 
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
-async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn Error>> {
-    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
-    let mut client = PgConnection::connect(&postgres_url).await?;
-    let schema = format!("edgeagent_outbox_test_{}", process::id());
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-    )))
-    .execute(&mut client)
-    .await?;
-    for migration in PostgresOutbox::MIGRATIONS {
-        sqlx::raw_sql(migration).execute(&mut client).await?;
-    }
+async fn transaction_identity_and_lease_invariants_hold() -> TestResult {
+    with_fixture(identity_and_lease_case).await
+}
+
+async fn identity_and_lease_case(fixture: Fixture) -> TestResult {
+    let mut client = fixture.connect().await?;
 
     let outbox = PostgresOutbox;
     let lease_duration = LeaseDuration::new(Duration::from_secs(30))?;
@@ -359,29 +352,17 @@ async fn transaction_identity_and_lease_invariants_hold() -> Result<(), Box<dyn 
             .await?;
     assert_eq!(audit_count, 2);
 
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-    )))
-    .execute(&mut client)
-    .await?;
     Ok(())
 }
 
 #[tokio::test]
 #[ignore = "requires EDGEAGENT_POSTGRES_URL and an isolated PostgreSQL database"]
-async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence()
--> Result<(), Box<dyn Error>> {
-    let postgres_url = env::var("EDGEAGENT_POSTGRES_URL")?;
-    let mut client = PgConnection::connect(&postgres_url).await?;
-    let schema = format!("edgeagent_outbox_fence_test_{}", process::id());
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "CREATE SCHEMA {schema}; SET search_path TO {schema};"
-    )))
-    .execute(&mut client)
-    .await?;
-    for migration in PostgresOutbox::MIGRATIONS {
-        sqlx::raw_sql(migration).execute(&mut client).await?;
-    }
+async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence() -> TestResult {
+    with_fixture(same_owner_fencing_case).await
+}
+
+async fn same_owner_fencing_case(fixture: Fixture) -> TestResult {
+    let mut client = fixture.connect().await?;
 
     let outbox = PostgresOutbox;
     let envelope = COMMAND.build(metadata(Component::Gateway), &json!({"quantity": 1}))?;
@@ -544,10 +525,5 @@ async fn same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
         .await?;
     transaction.commit().await?;
 
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "SET search_path TO public; DROP SCHEMA {schema} CASCADE;"
-    )))
-    .execute(&mut client)
-    .await?;
     Ok(())
 }
