@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH candidate AS (\n    SELECT message_source,\n           message_id,\n           quarantine_reason,\n           attempt_count,\n           quarantined_at\n    FROM edgeagent_message_outbox\n    WHERE message_source = $1\n      AND message_id = $2\n      AND published_at IS NULL\n      AND quarantined_at IS NOT NULL\n    FOR UPDATE\n),\naudit AS (\n    INSERT INTO edgeagent_message_outbox_replay_audit (\n        replay_request_id,\n        message_source,\n        message_id,\n        requested_by,\n        reason,\n        prior_quarantine_reason,\n        prior_attempt_count,\n        prior_quarantined_at\n    )\n    SELECT $3,\n           candidate.message_source,\n           candidate.message_id,\n           $4,\n           $5,\n           candidate.quarantine_reason,\n           candidate.attempt_count,\n           candidate.quarantined_at\n    FROM candidate\n    ON CONFLICT (replay_request_id) DO NOTHING\n    RETURNING message_source, message_id\n)\nUPDATE edgeagent_message_outbox AS outbox\nSET available_at = clock_timestamp(),\n    attempt_count = 0,\n    lease_owner = NULL,\n    lease_expires_at = NULL,\n    last_failure_code = NULL,\n    quarantined_at = NULL,\n    quarantine_reason = NULL\nFROM audit\nWHERE outbox.message_source = audit.message_source\n  AND outbox.message_id = audit.message_id\nRETURNING outbox.message_source\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "message_source"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f8701436ba1ff112a0d4b1c51383f3f6507f649af735657d81b899df325dfc21"
+}

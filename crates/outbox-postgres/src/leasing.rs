@@ -1,14 +1,13 @@
 //! Claim, publish, retry, and quarantine transitions under expiring leases.
 
 use crate::validation::{
-    MAX_BATCH_SIZE, MAX_FAILURE_CODE_BYTES, MAX_LEASE_OWNER_BYTES, duration_milliseconds,
+    MAX_FAILURE_CODE_BYTES, duration_milliseconds, validate_batch_size, validate_lease_owner,
     validate_token,
 };
 use crate::{ClaimedMessage, OutboxError, PostgresOutbox};
 use edgeagent_messaging::{FailureCode, LeaseDuration, LeaseGeneration, OutboxRetryDelay};
 use sqlx::{Postgres, Transaction};
 
-#[derive(sqlx::FromRow)]
 struct StoredClaim {
     message_source: String,
     message_id: String,
@@ -18,78 +17,6 @@ struct StoredClaim {
     attempt_count: i32,
     lease_generation: i64,
 }
-
-pub(super) const CLAIM_BATCH_SQL: &str = r#"
-WITH candidates AS (
-    SELECT message_source, message_id
-    FROM edgeagent_message_outbox
-    WHERE published_at IS NULL
-      AND quarantined_at IS NULL
-      AND available_at <= clock_timestamp()
-      AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
-    ORDER BY available_at, created_at, message_source, message_id
-    FOR UPDATE SKIP LOCKED
-    LIMIT $1
-)
-UPDATE edgeagent_message_outbox AS outbox
-SET lease_owner = $2,
-    lease_expires_at = clock_timestamp() + ($3::BIGINT * INTERVAL '1 millisecond'),
-    attempt_count = outbox.attempt_count + 1,
-    lease_generation = outbox.lease_generation + 1
-FROM candidates
-WHERE outbox.message_source = candidates.message_source
-  AND outbox.message_id = candidates.message_id
-RETURNING outbox.message_source,
-          outbox.message_id,
-          outbox.message_type,
-          outbox.transport_subject,
-          outbox.envelope,
-          outbox.attempt_count,
-          outbox.lease_generation
-"#;
-pub(super) const RELEASE_FOR_RETRY_SQL: &str = r#"
-UPDATE edgeagent_message_outbox
-SET available_at = clock_timestamp() + ($5::BIGINT * INTERVAL '1 millisecond'),
-    lease_owner = NULL,
-    lease_expires_at = NULL,
-    last_failure_code = $6
-WHERE message_source = $1
-  AND message_id = $2
-  AND published_at IS NULL
-  AND quarantined_at IS NULL
-  AND lease_owner = $3
-  AND lease_generation = $4
-  AND lease_expires_at > clock_timestamp()
-"#;
-const MARK_PUBLISHED_SQL: &str = r"
-UPDATE edgeagent_message_outbox
-SET published_at = clock_timestamp(),
-    lease_owner = NULL,
-    lease_expires_at = NULL,
-    last_failure_code = NULL
-WHERE message_source = $1
-  AND message_id = $2
-  AND published_at IS NULL
-  AND quarantined_at IS NULL
-  AND lease_owner = $3
-  AND lease_generation = $4
-  AND lease_expires_at > clock_timestamp()
-";
-const QUARANTINE_SQL: &str = r"
-UPDATE edgeagent_message_outbox
-SET quarantined_at = clock_timestamp(),
-    quarantine_reason = $5,
-    lease_owner = NULL,
-    lease_expires_at = NULL,
-    last_failure_code = $5
-WHERE message_source = $1
-  AND message_id = $2
-  AND published_at IS NULL
-  AND quarantined_at IS NULL
-  AND lease_owner = $3
-  AND lease_generation = $4
-  AND lease_expires_at > clock_timestamp()
-";
 
 impl PostgresOutbox {
     /// Lease the next available records using PostgreSQL `SKIP LOCKED`.
@@ -109,20 +36,19 @@ impl PostgresOutbox {
         batch_size: u16,
         lease_duration: LeaseDuration,
     ) -> Result<Vec<ClaimedMessage>, OutboxError> {
-        validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
-        if batch_size == 0 || batch_size > MAX_BATCH_SIZE {
-            return Err(OutboxError::invalid_argument(
-                "batch_size must be between 1 and 1000",
-            ));
-        }
+        validate_lease_owner(lease_owner)?;
+        validate_batch_size(batch_size)?;
         let lease_milliseconds = duration_milliseconds(lease_duration.get())?;
-        let rows = sqlx::query_as::<_, StoredClaim>(CLAIM_BATCH_SQL)
-            .bind(i64::from(batch_size))
-            .bind(lease_owner)
-            .bind(lease_milliseconds)
-            .fetch_all(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        let rows = sqlx::query_file_as!(
+            StoredClaim,
+            "queries/claim_batch.sql",
+            i64::from(batch_size),
+            lease_owner,
+            lease_milliseconds,
+        )
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         rows.into_iter().map(claimed_message).collect()
     }
 
@@ -139,16 +65,18 @@ impl PostgresOutbox {
         claim: &ClaimedMessage,
         lease_owner: &str,
     ) -> Result<(), OutboxError> {
-        validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
+        validate_lease_owner(lease_owner)?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
-        let updated = sqlx::query(MARK_PUBLISHED_SQL)
-            .bind(claim.message_source())
-            .bind(claim.message_id())
-            .bind(lease_owner)
-            .bind(lease_generation)
-            .execute(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        let updated = sqlx::query_file!(
+            "queries/mark_published.sql",
+            claim.message_source(),
+            claim.message_id(),
+            lease_owner,
+            lease_generation,
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         require_updated(updated.rows_affected())
     }
 
@@ -168,24 +96,26 @@ impl PostgresOutbox {
         retry_after: OutboxRetryDelay,
         failure_code: FailureCode,
     ) -> Result<(), OutboxError> {
-        validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
+        validate_lease_owner(lease_owner)?;
         validate_token(
-            "failure_code",
             failure_code.as_str(),
             MAX_FAILURE_CODE_BYTES,
+            "failure_code must contain 1 to 64 lowercase ASCII token bytes",
         )?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
         let retry_milliseconds = duration_milliseconds(retry_after.get())?;
-        let updated = sqlx::query(RELEASE_FOR_RETRY_SQL)
-            .bind(claim.message_source())
-            .bind(claim.message_id())
-            .bind(lease_owner)
-            .bind(lease_generation)
-            .bind(retry_milliseconds)
-            .bind(failure_code.as_str())
-            .execute(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        let updated = sqlx::query_file!(
+            "queries/release_for_retry.sql",
+            claim.message_source(),
+            claim.message_id(),
+            lease_owner,
+            lease_generation,
+            retry_milliseconds,
+            failure_code.as_str(),
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         require_updated(updated.rows_affected())
     }
 
@@ -204,18 +134,24 @@ impl PostgresOutbox {
         lease_owner: &str,
         reason: FailureCode,
     ) -> Result<(), OutboxError> {
-        validate_token("lease_owner", lease_owner, MAX_LEASE_OWNER_BYTES)?;
-        validate_token("quarantine_reason", reason.as_str(), MAX_FAILURE_CODE_BYTES)?;
+        validate_lease_owner(lease_owner)?;
+        validate_token(
+            reason.as_str(),
+            MAX_FAILURE_CODE_BYTES,
+            "quarantine_reason must contain 1 to 64 lowercase ASCII token bytes",
+        )?;
         let lease_generation = sql_lease_generation(claim.lease_generation())?;
-        let updated = sqlx::query(QUARANTINE_SQL)
-            .bind(claim.message_source())
-            .bind(claim.message_id())
-            .bind(lease_owner)
-            .bind(lease_generation)
-            .bind(reason.as_str())
-            .execute(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        let updated = sqlx::query_file!(
+            "queries/quarantine.sql",
+            claim.message_source(),
+            claim.message_id(),
+            lease_owner,
+            lease_generation,
+            reason.as_str(),
+        )
+        .execute(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         require_updated(updated.rows_affected())
     }
 }

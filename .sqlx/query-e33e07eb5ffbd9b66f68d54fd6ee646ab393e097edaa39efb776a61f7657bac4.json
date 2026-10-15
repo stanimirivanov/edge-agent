@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_message_outbox\nSET quarantined_at = clock_timestamp(),\n    quarantine_reason = $5,\n    lease_owner = NULL,\n    lease_expires_at = NULL,\n    last_failure_code = $5\nWHERE message_source = $1\n  AND message_id = $2\n  AND published_at IS NULL\n  AND quarantined_at IS NULL\n  AND lease_owner = $3\n  AND lease_generation = $4\n  AND lease_expires_at > clock_timestamp()\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e33e07eb5ffbd9b66f68d54fd6ee646ab393e097edaa39efb776a61f7657bac4"
+}

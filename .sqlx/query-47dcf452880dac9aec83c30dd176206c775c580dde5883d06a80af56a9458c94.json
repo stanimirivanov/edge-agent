@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH candidates AS (\n    SELECT message_source, message_id\n    FROM edgeagent_message_outbox\n    WHERE published_at IS NULL\n      AND quarantined_at IS NULL\n      AND available_at <= clock_timestamp()\n      AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())\n    ORDER BY available_at, created_at, message_source, message_id\n    FOR UPDATE SKIP LOCKED\n    LIMIT $1\n)\nUPDATE edgeagent_message_outbox AS outbox\nSET lease_owner = $2,\n    lease_expires_at = clock_timestamp() + ($3::BIGINT * INTERVAL '1 millisecond'),\n    attempt_count = outbox.attempt_count + 1,\n    lease_generation = outbox.lease_generation + 1\nFROM candidates\nWHERE outbox.message_source = candidates.message_source\n  AND outbox.message_id = candidates.message_id\nRETURNING outbox.message_source,\n          outbox.message_id,\n          outbox.message_type,\n          outbox.transport_subject,\n          outbox.envelope,\n          outbox.attempt_count,\n          outbox.lease_generation\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "message_source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "message_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "message_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "message_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "transport_subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "transport_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "envelope"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "attempt_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "attempt_count"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lease_generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "lease_generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "47dcf452880dac9aec83c30dd176206c775c580dde5883d06a80af56a9458c94"
+}

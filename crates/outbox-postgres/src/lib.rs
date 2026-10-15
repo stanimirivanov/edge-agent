@@ -5,6 +5,7 @@
 //! while each storage capability owns its SQL and transaction-scoped methods.
 
 #![forbid(unsafe_code)]
+#![deny(clippy::disallowed_methods, clippy::disallowed_macros)]
 
 mod enqueue;
 mod error;

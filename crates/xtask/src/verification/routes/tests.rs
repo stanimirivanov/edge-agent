@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn query_policy_sensor_routes_its_canonical_sqlx_guide() -> Result<(), String> {
+    for path in [
+        "scripts/verify_sqlx_query_policy.py",
+        "tests/test_verify_sqlx_query_policy.py",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(advice.guides.contains("docs/development/sqlx-metadata.md"));
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+    }
+    Ok(())
+}
+
+#[test]
 fn default_acceptance_is_mandatory_for_every_route_and_empty_input() -> Result<(), String> {
     for paths in [
         vec![],

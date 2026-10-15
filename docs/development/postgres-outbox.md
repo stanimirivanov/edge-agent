@@ -272,15 +272,23 @@ proves an invalid stored claim rolls back before connection reuse. These are
 real database-boundary proofs, not a claim of general crash recovery or
 concurrent-worker coverage. The default gate verifies their discovery only.
 
-## Compile-checked enqueue queries
+## Compile-checked queries and input boundaries
 
-The enqueue insert and identity-match statements use `sqlx::query!` and
-checked-in offline metadata. The [SQLx metadata guide](sqlx-metadata.md)
-describes the combined inbox/outbox schema, refresh commands, and CI freshness
-gate. Other outbox statements still use bound runtime SQLx queries and remain
-an [M02](../roadmap/milestones.md#m02---contracts-and-event-spine) follow-up.
+All eight production statements use checked SQLx query macros and committed
+offline metadata. Enqueue and replay identity lookups stay inline; the longer
+lease and replay statements live in capability-owned `queries/*.sql` files.
+The [SQLx metadata guide](sqlx-metadata.md) describes schema assembly, refresh,
+the CI freshness gate, and the offline Clippy bypass-rejection fixtures.
 PostgreSQL conformance tests continue to verify behavior and migration
 compatibility, including exact-byte conflicts and atomic inbox/outbox writes.
+
+Pure adapter tests exercise batch sizes 0, 1, 1000 and 1001; inclusive and
+adjacent token/replay bounds; contract/replay identity parity; and persisted
+VARCHAR widths. Enqueue relies on the validated `MessageEnvelope` rather than
+duplicating its identifier/source rules. Failure codes are still checked at
+the persistence boundary against storage bounds. Validator callers supply
+explicit safe diagnostics, not field-name dispatch with a fallback category.
+These checks do not replace database proofs of fences or audited replay.
 
 ## Current limitations
 
