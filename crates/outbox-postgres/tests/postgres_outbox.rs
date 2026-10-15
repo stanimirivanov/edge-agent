@@ -1,5 +1,10 @@
 //! Opt-in conformance test against the checked-in local PostgreSQL profile.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "Conformance fixtures administer isolated schemas and inspect stored state."
+)]
+
 use edgeagent_contracts::{
     Component, EventRetention, MessageDefinition, MessageMetadata, MessageRegistry,
 };

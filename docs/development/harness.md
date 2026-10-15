@@ -127,6 +127,7 @@ acceptance check before handoff.
 | `make image-smoke` | Every deployable image builds and runs under the declared non-root, read-only, networkless contract | T3; Docker |
 | `make local-up` and focused conformance tests | PostgreSQL, NATS, object storage, telemetry, and restart behavior satisfy local integration contracts | T3; Docker with Compose |
 | `cargo xtask verify --check sqlx-metadata` | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated Compose PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
+| `cargo xtask verify --check sqlx-query-policy` | Real Clippy fixtures reject outbox runtime/unchecked query APIs and imported aliases while accepting a checked macro | T2; pinned Rust and cached SQLx dependencies; no database |
 | `make supply-chain` | Dependency/advisory/license policy and the complete Rust and image SBOM set pass | T3; pinned tools, network for current advisories, and Docker |
 | `cargo xtask verify dependency-audit` | Structural coverage and current locked dependency policy for every independent Cargo workspace; no runtime proof or SBOM claim | T3; pinned cargo-deny and network; see [dependency maintenance](supply-chain.md#independent-workspaces-and-dependency-maintenance) |
 | `cargo xtask verify ci-security` | Actual scanner rejection/exception proofs, current source snapshot, and complete locally reachable Git history finish successfully | T3; explicitly installed checksum-verified Gitleaks and complete Git history; see [CI security](ci-security.md) |
@@ -282,6 +283,14 @@ local-platform changes. Source-text checks cannot prove top-level durability.
 The default gate checks discovery, not these database effects. See
 [outbox verification](postgres-outbox.md#verification) for the scoped command
 and transaction-control limitations.
+
+The `sqlx-query-policy` T2 compiler fixture checks the outbox's real Clippy
+configuration, accepting a checked macro and rejecting runtime/unchecked query
+APIs even through renamed imports. Production outbox SQL remains covered by
+offline metadata; test schema administration has narrow documented exemptions.
+Pure boundary tests compare contracts, replay inputs and migration widths and
+exercise actual batch validation. These sensors prove policy and input bounds,
+not database execution semantics; see [SQLx metadata](sqlx-metadata.md).
 
 ## Repository policy
 

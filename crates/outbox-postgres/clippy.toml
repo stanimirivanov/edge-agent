@@ -1,0 +1,21 @@
+# Capability-local: experimental workspaces and service-owned callback SQL are
+# not covered by the outbox's compile-checked production-query contract.
+disallowed-methods = [
+    { path = "sqlx::query", reason = "Use a checked SQLx query macro and commit its offline metadata." },
+    { path = "sqlx::query_as", reason = "Use query_as! or query_file_as! with offline metadata." },
+    { path = "sqlx::query_scalar", reason = "Use query_scalar! or query_file_scalar! with offline metadata." },
+    { path = "sqlx::query_with", reason = "Use a checked SQLx query macro." },
+    { path = "sqlx::__query_with_result", reason = "Use a checked SQLx query macro." },
+    { path = "sqlx::query_as_with", reason = "Use a checked SQLx query macro." },
+    { path = "sqlx::query_scalar_with", reason = "Use a checked SQLx query macro." },
+    { path = "sqlx::__query_scalar_with_result", reason = "Use a checked SQLx query macro." },
+    { path = "sqlx::raw_sql", reason = "Production outbox SQL must use checked query macros; raw SQL is restricted to test schema administration." },
+]
+disallowed-macros = [
+    { path = "sqlx::query_unchecked", reason = "Use checked SQLx query macros." },
+    { path = "sqlx::query_as_unchecked", reason = "Use checked SQLx query macros." },
+    { path = "sqlx::query_file_unchecked", reason = "Use checked SQLx query macros." },
+    { path = "sqlx::query_file_as_unchecked", reason = "Use checked SQLx query macros." },
+    { path = "sqlx::query_scalar_unchecked", reason = "Use checked SQLx query macros." },
+    { path = "sqlx::query_file_scalar_unchecked", reason = "Use checked SQLx query macros." },
+]

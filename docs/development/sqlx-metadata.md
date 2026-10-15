@@ -12,13 +12,25 @@
 
 ## Offline build contract
 
-Inbox adapter SQL and outbox enqueue SQL use `sqlx::query!` or
-`sqlx::query_file!`. The workspace commits their `.sqlx/` metadata, and
+All production inbox and outbox SQL uses checked SQLx query macros. Outbox
+enqueue and replay identity lookups use `sqlx::query!`; lease transitions and
+the audited replay CTE use readable capability-owned `query_file!` /
+`query_file_as!` statements. All eight outbox statements participate in the
+same metadata workflow. The workspace commits their `.sqlx/` metadata, and
 `.cargo/config.toml` defaults to `SQLX_OFFLINE=true`. Ordinary `cargo check`,
 `cargo build`, Clippy, and tests therefore need neither PostgreSQL nor a
 `.env` file. The database-backed CI gate regenerates the metadata and rejects
 any diff; runtime PostgreSQL conformance tests remain a separate behavioral
 check.
+
+The outbox's capability-local `clippy.toml` rejects runtime query constructors
+and unchecked macros in production. Isolated PostgreSQL conformance fixtures
+have explicit test-only exemptions for schema administration and fault
+injection. `cargo xtask verify --check sqlx-query-policy` runs real offline
+Clippy fixtures: a checked macro must compile, while prohibited APIs must fail
+with the expected lint, including renamed imports. This T2 check runs on both
+CI platforms; it does not connect to PostgreSQL or replace the T3 metadata
+freshness and runtime conformance proofs.
 
 ## Schema assembly and isolation
 

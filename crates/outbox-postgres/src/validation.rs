@@ -11,27 +11,37 @@ pub(super) const MAX_IDENTIFIER_BYTES: usize = 128;
 pub(super) const MAX_OPERATOR_ID_BYTES: usize = 256;
 
 pub(super) fn validate_token(
-    field: &'static str,
     value: &str,
     maximum_bytes: usize,
+    reason: &'static str,
 ) -> Result<(), OutboxError> {
-    if value.is_empty() || value.len() > maximum_bytes {
-        return Err(OutboxError::invalid_argument(match field {
-            "lease_owner" => "lease_owner must contain 1 to 128 bytes",
-            "replay_reason" => "replay reason must contain 1 to 64 bytes",
-            _ => "failure_code or quarantine_reason must contain 1 to 64 bytes",
-        }));
-    }
-    if !value.bytes().all(|byte| {
-        byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
-    }) {
-        return Err(OutboxError::invalid_argument(match field {
-            "lease_owner" => "lease_owner must be a lowercase ASCII token",
-            "replay_reason" => "replay reason must be a lowercase ASCII token",
-            _ => "failure_code or quarantine_reason must be a lowercase ASCII token",
-        }));
+    if value.is_empty()
+        || value.len() > maximum_bytes
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
+    {
+        return Err(OutboxError::invalid_argument(reason));
     }
     Ok(())
+}
+
+pub(super) fn validate_batch_size(value: u16) -> Result<(), OutboxError> {
+    if (1..=MAX_BATCH_SIZE).contains(&value) {
+        Ok(())
+    } else {
+        Err(OutboxError::invalid_argument(
+            "batch_size must be between 1 and 1000",
+        ))
+    }
+}
+
+pub(super) fn validate_lease_owner(value: &str) -> Result<(), OutboxError> {
+    validate_token(
+        value,
+        MAX_LEASE_OWNER_BYTES,
+        "lease_owner must contain 1 to 128 lowercase ASCII token bytes",
+    )
 }
 
 pub(super) fn validate_identifier(

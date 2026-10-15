@@ -199,6 +199,14 @@ pub(super) fn checks() -> Vec<Check> {
             "Workspace lint policy with warnings rejected.",
         ),
         check(
+            "sqlx-query-policy",
+            "T2",
+            &["verify", "check"],
+            Python,
+            &["scripts/verify_sqlx_query_policy.py"],
+            "Real offline Clippy fixtures accept checked SQL and reject outbox runtime/unchecked query APIs, including aliases.",
+        ),
+        check(
             "harness-tests",
             "T2",
             &["verify", "test"],

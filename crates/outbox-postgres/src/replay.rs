@@ -7,65 +7,6 @@ use crate::validation::{
 use crate::{OutboxError, PostgresOutbox};
 use sqlx::{Postgres, Transaction};
 
-#[derive(sqlx::FromRow)]
-struct StoredReplayRequest {
-    message_source: String,
-    message_id: String,
-    requested_by: String,
-    reason: String,
-}
-
-pub(super) const REPLAY_QUARANTINED_SQL: &str = r#"
-WITH candidate AS (
-    SELECT message_source,
-           message_id,
-           quarantine_reason,
-           attempt_count,
-           quarantined_at
-    FROM edgeagent_message_outbox
-    WHERE message_source = $1
-      AND message_id = $2
-      AND published_at IS NULL
-      AND quarantined_at IS NOT NULL
-    FOR UPDATE
-),
-audit AS (
-    INSERT INTO edgeagent_message_outbox_replay_audit (
-        replay_request_id,
-        message_source,
-        message_id,
-        requested_by,
-        reason,
-        prior_quarantine_reason,
-        prior_attempt_count,
-        prior_quarantined_at
-    )
-    SELECT $3,
-           candidate.message_source,
-           candidate.message_id,
-           $4,
-           $5,
-           candidate.quarantine_reason,
-           candidate.attempt_count,
-           candidate.quarantined_at
-    FROM candidate
-    ON CONFLICT (replay_request_id) DO NOTHING
-    RETURNING message_source, message_id
-)
-UPDATE edgeagent_message_outbox AS outbox
-SET available_at = clock_timestamp(),
-    attempt_count = 0,
-    lease_owner = NULL,
-    lease_expires_at = NULL,
-    last_failure_code = NULL,
-    quarantined_at = NULL,
-    quarantine_reason = NULL
-FROM audit
-WHERE outbox.message_source = audit.message_source
-  AND outbox.message_id = audit.message_id
-RETURNING outbox.message_source
-"#;
-
 /// Idempotent result of an authorized outbound replay request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplayDisposition {
@@ -107,7 +48,11 @@ impl<'request> ReplayRequest<'request> {
             MAX_OPERATOR_ID_BYTES,
             "requested_by must contain 1 to 256 visible ASCII bytes",
         )?;
-        validate_token("replay_reason", reason, MAX_FAILURE_CODE_BYTES)?;
+        validate_token(
+            reason,
+            MAX_FAILURE_CODE_BYTES,
+            "replay reason must contain 1 to 64 lowercase ASCII token bytes",
+        )?;
         Ok(Self {
             request_id,
             requested_by,
@@ -135,25 +80,18 @@ impl PostgresOutbox {
         message_id: &str,
         request: ReplayRequest<'_>,
     ) -> Result<ReplayDisposition, OutboxError> {
-        validate_visible_ascii(
+        validate_target(message_source, message_id)?;
+        let rows = sqlx::query_file!(
+            "queries/replay_quarantined.sql",
             message_source,
-            MAX_MESSAGE_SOURCE_BYTES,
-            "message_source must contain 1 to 512 visible ASCII bytes",
-        )?;
-        validate_identifier(
             message_id,
-            MAX_IDENTIFIER_BYTES,
-            "message_id must contain 1 to 128 portable identifier bytes",
-        )?;
-        let rows = sqlx::query_scalar::<_, String>(REPLAY_QUARANTINED_SQL)
-            .bind(message_source)
-            .bind(message_id)
-            .bind(request.request_id)
-            .bind(request.requested_by)
-            .bind(request.reason)
-            .fetch_all(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+            request.request_id,
+            request.requested_by,
+            request.reason,
+        )
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         if rows.len() == 1 {
             return Ok(ReplayDisposition::Released);
         }
@@ -163,13 +101,17 @@ impl PostgresOutbox {
             ));
         }
 
-        let existing = sqlx::query_as::<_, StoredReplayRequest>(
-            "SELECT message_source, message_id, requested_by, reason FROM edgeagent_message_outbox_replay_audit WHERE replay_request_id = $1",
+        let existing = sqlx::query!(
+            r"
+            SELECT message_source, message_id, requested_by, reason
+            FROM edgeagent_message_outbox_replay_audit
+            WHERE replay_request_id = $1
+            ",
+            request.request_id,
         )
-            .bind(request.request_id)
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(OutboxError::storage)?;
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(OutboxError::storage)?;
         match existing {
             Some(row)
                 if row.message_source == message_source
@@ -183,4 +125,17 @@ impl PostgresOutbox {
             None => Err(OutboxError::not_quarantined()),
         }
     }
+}
+
+pub(super) fn validate_target(message_source: &str, message_id: &str) -> Result<(), OutboxError> {
+    validate_visible_ascii(
+        message_source,
+        MAX_MESSAGE_SOURCE_BYTES,
+        "message_source must contain 1 to 512 visible ASCII bytes",
+    )?;
+    validate_identifier(
+        message_id,
+        MAX_IDENTIFIER_BYTES,
+        "message_id must contain 1 to 128 portable identifier bytes",
+    )
 }

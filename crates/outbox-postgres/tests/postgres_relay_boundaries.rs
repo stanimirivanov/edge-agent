@@ -1,5 +1,10 @@
 //! Opt-in proofs of top-level relay commits and classified database failures.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "Conformance fixtures administer isolated schemas and inject database failures."
+)]
+
 use edgeagent_contracts::{Component, MessageDefinition, MessageMetadata};
 use edgeagent_messaging::{
     ClaimedMessage, FailureCode, LeaseDuration, OutboxRelayStore, OutboxRetryDelay,

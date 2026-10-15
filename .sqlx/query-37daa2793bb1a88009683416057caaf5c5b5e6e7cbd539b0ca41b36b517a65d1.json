@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT message_source, message_id, requested_by, reason\n            FROM edgeagent_message_outbox_replay_audit\n            WHERE replay_request_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox_replay_audit",
+            "name": "message_source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "message_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox_replay_audit",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_by",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox_replay_audit",
+            "name": "requested_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox_replay_audit",
+            "name": "reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "37daa2793bb1a88009683416057caaf5c5b5e6e7cbd539b0ca41b36b517a65d1"
+}
