@@ -32,6 +32,7 @@ const NATS_CHECKS: &[&str] = &[
 const OUTBOX_CHECKS: &[&str] = &[
     "outbox-conformance",
     "outbox-fencing",
+    "outbox-relay-boundaries",
     "atomic-enqueue",
     "relay-conformance",
     "event-spine-client",
@@ -51,7 +52,16 @@ const SUPPLY_CHECKS: &[&str] = &[
     "sbom-images",
     "sbom-completeness",
 ];
+const ALL_ADVISORY_CHECKS: &[&str] = &[
+    "dependency-policy",
+    "m08-event-spine-dependency-policy",
+    "m08-duroxide-dependency-policy",
+    "m08-dbos-dependency-policy",
+    "m08-temporal-dependency-policy",
+    "m08-flawless-dependency-policy",
+];
 const EVENT_SPINE_PROOF_CHECKS: &[&str] = &[
+    "m08-event-spine-dependency-policy",
     "m08-event-spine-format",
     "m08-event-spine-clippy",
     "m08-event-spine-test",
@@ -100,6 +110,21 @@ struct Route {
 // This table points to canonical policy; it does not restate crate roles or
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
+    Route {
+        matcher: Matcher::Exact(".github/dependabot.yml"),
+        guides: &["docs/development/supply-chain.md"],
+        checks: ALL_ADVISORY_CHECKS,
+    },
+    Route {
+        matcher: Matcher::Exact(".github/workflows/dependency-audit.yml"),
+        guides: &["docs/development/supply-chain.md"],
+        checks: ALL_ADVISORY_CHECKS,
+    },
+    Route {
+        matcher: Matcher::Exact("experiments/deny.toml"),
+        guides: &["docs/development/supply-chain.md"],
+        checks: ALL_ADVISORY_CHECKS,
+    },
     Route {
         matcher: Matcher::Prefix(".github/workflows/"),
         guides: &["docs/development/ci-security.md"],
@@ -323,6 +348,7 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Prefix("experiments/durable-execution/"),
         guides: &["experiments/durable-execution/README.md"],
         checks: &[
+            "m08-duroxide-dependency-policy",
             "m08-duroxide-format",
             "m08-duroxide-clippy",
             "m08-duroxide-test",
@@ -331,12 +357,18 @@ const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("experiments/dbos-proof/"),
         guides: &["experiments/dbos-proof/README.md"],
-        checks: &["m08-dbos-format", "m08-dbos-clippy", "m08-dbos-test"],
+        checks: &[
+            "m08-dbos-dependency-policy",
+            "m08-dbos-format",
+            "m08-dbos-clippy",
+            "m08-dbos-test",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("experiments/temporal-proof/"),
         guides: &["experiments/temporal-proof/README.md"],
         checks: &[
+            "m08-temporal-dependency-policy",
             "m08-temporal-format",
             "m08-temporal-clippy",
             "m08-temporal-test",
@@ -346,6 +378,7 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Prefix("experiments/flawless-proof/"),
         guides: &["experiments/flawless-proof/README.md"],
         checks: &[
+            "m08-flawless-dependency-policy",
             "m08-flawless-format",
             "m08-flawless-clippy",
             "m08-flawless-test",

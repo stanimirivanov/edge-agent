@@ -5,18 +5,50 @@ use edgeagent_messaging::{
     ClaimedMessage, FailureCode, LeaseDuration, OutboxRelayStore, OutboxRetryDelay,
     OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
 };
-use sqlx::{Connection, PgConnection};
+use sqlx::{Connection, PgConnection, Postgres, Transaction};
 
 /// PostgreSQL-backed outbound relay storage adapter.
+///
+/// Each operation owns a top-level transaction and returns success only after
+/// commit. An active caller-owned SQLx transaction is rejected as `Invariant`
+/// before another transaction is constructed; neither its writes nor its
+/// transaction boundary are changed. Use SQLx's transaction API to control this
+/// connection: raw SQL `BEGIN`/`COMMIT` bypasses SQLx's transaction tracking and
+/// is unsupported.
+///
+/// # Cancellation
+///
+/// Once a transaction has begun, dropping an operation before commit queues
+/// SQLx rollback; it does not prove rollback has completed. Subsequent
+/// asynchronous connection use processes pending protocol work. Cancellation
+/// during commit confirmation can leave a
+/// committed transition. Recover through persisted state and the original claim
+/// fence, not automatic compensation. An abandoned committed claim becomes
+/// eligible after lease expiry. See [`OutboxRelayStore`] for each operation's
+/// recovery contract.
 pub struct PostgresOutboxRelay<'client> {
     client: &'client mut PgConnection,
 }
 
 impl<'client> PostgresOutboxRelay<'client> {
     /// Bind the adapter to one service-owned PostgreSQL client.
+    ///
+    /// Every operation rejects an active SQLx-managed transaction; passing a
+    /// connection borrowed from a producer transaction cannot make relay work
+    /// part of that transaction. Producers still use [`PostgresOutbox::enqueue`]
+    /// directly with their caller-owned transaction.
     #[must_use]
     pub const fn new(client: &'client mut PgConnection) -> Self {
         Self { client }
+    }
+}
+
+impl std::fmt::Debug for PostgresOutboxRelay<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The connection can contain credentials and driver-specific state.
+        formatter
+            .debug_struct("PostgresOutboxRelay")
+            .finish_non_exhaustive()
     }
 }
 
@@ -27,18 +59,15 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         lease_duration: LeaseDuration,
     ) -> OutboxStoreFuture<'operation, Option<ClaimedMessage>> {
         Box::pin(async move {
-            let mut transaction = self.client.begin().await.map_err(unavailable)?;
+            let mut transaction = begin_top_level(self.client).await?;
             let mut messages = PostgresOutbox
                 .claim_batch(&mut transaction, lease_owner, 1, lease_duration)
                 .await
                 .map_err(operation)?;
-            transaction.commit().await.map_err(unavailable)?;
             if messages.len() > 1 {
-                return Err(OutboxStoreError::with_source(
-                    OutboxStoreErrorKind::Invariant,
-                    AdapterInvariant("single-message claim returned more than one record"),
-                ));
+                return Err(OutboxStoreError::new(OutboxStoreErrorKind::Invariant));
             }
+            transaction.commit().await.map_err(database)?;
             Ok(messages.pop())
         })
     }
@@ -49,12 +78,12 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         lease_owner: &'operation str,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let mut transaction = self.client.begin().await.map_err(unavailable)?;
+            let mut transaction = begin_top_level(self.client).await?;
             PostgresOutbox
                 .mark_published(&mut transaction, claim, lease_owner)
                 .await
                 .map_err(operation)?;
-            transaction.commit().await.map_err(unavailable)
+            transaction.commit().await.map_err(database)
         })
     }
 
@@ -66,7 +95,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         failure_code: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let mut transaction = self.client.begin().await.map_err(unavailable)?;
+            let mut transaction = begin_top_level(self.client).await?;
             PostgresOutbox
                 .release_for_retry(
                     &mut transaction,
@@ -77,7 +106,7 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
                 )
                 .await
                 .map_err(operation)?;
-            transaction.commit().await.map_err(unavailable)
+            transaction.commit().await.map_err(database)
         })
     }
 
@@ -88,59 +117,44 @@ impl OutboxRelayStore for PostgresOutboxRelay<'_> {
         reason: FailureCode,
     ) -> OutboxStoreFuture<'operation, ()> {
         Box::pin(async move {
-            let mut transaction = self.client.begin().await.map_err(unavailable)?;
+            let mut transaction = begin_top_level(self.client).await?;
             PostgresOutbox
                 .quarantine(&mut transaction, claim, lease_owner, reason)
                 .await
                 .map_err(operation)?;
-            transaction.commit().await.map_err(unavailable)
+            transaction.commit().await.map_err(database)
         })
     }
 }
 
-fn unavailable(error: sqlx::Error) -> OutboxStoreError {
-    OutboxStoreError::with_source(OutboxStoreErrorKind::Unavailable, error)
+async fn begin_top_level(
+    client: &mut PgConnection,
+) -> Result<Transaction<'_, Postgres>, OutboxStoreError> {
+    // Reject before constructing a Transaction: begin() would create a savepoint,
+    // and a failed custom begin can itself queue rollback of the caller's work.
+    if client.is_in_transaction() {
+        return Err(OutboxStoreError::new(OutboxStoreErrorKind::Invariant));
+    }
+    client.begin().await.map_err(database)
+}
+
+fn database(error: sqlx::Error) -> OutboxStoreError {
+    operation(OutboxError::storage(error))
 }
 
 fn operation(error: OutboxError) -> OutboxStoreError {
     let kind = match error.kind() {
         OutboxErrorKind::Storage => OutboxStoreErrorKind::Unavailable,
-        OutboxErrorKind::StorageInvariant => OutboxStoreErrorKind::Invariant,
-        OutboxErrorKind::Contract
-        | OutboxErrorKind::MessageIdentityConflict
+        OutboxErrorKind::LeaseLost => OutboxStoreErrorKind::StateTransition,
+        OutboxErrorKind::StorageInvariant
         | OutboxErrorKind::InvalidArgument
-        | OutboxErrorKind::LeaseLost
+        | OutboxErrorKind::Contract
+        | OutboxErrorKind::MessageIdentityConflict
         | OutboxErrorKind::ReplayRequestConflict
-        | OutboxErrorKind::NotQuarantined => OutboxStoreErrorKind::StateTransition,
+        | OutboxErrorKind::NotQuarantined => OutboxStoreErrorKind::Invariant,
     };
     OutboxStoreError::with_source(kind, error)
 }
 
-#[derive(Debug)]
-struct AdapterInvariant(&'static str);
-
-impl std::fmt::Display for AdapterInvariant {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.0)
-    }
-}
-
-impl std::error::Error for AdapterInvariant {}
-
 #[cfg(test)]
-mod tests {
-    use super::{OutboxStoreErrorKind, operation};
-    use crate::OutboxError;
-
-    #[test]
-    fn adapter_preserves_invariant_and_state_transition_categories() {
-        assert_eq!(
-            operation(OutboxError::storage_invariant()).kind(),
-            OutboxStoreErrorKind::Invariant
-        );
-        assert_eq!(
-            operation(OutboxError::lease_lost()).kind(),
-            OutboxStoreErrorKind::StateTransition
-        );
-    }
-}
+mod tests;

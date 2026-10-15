@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tomllib
 
@@ -23,6 +25,27 @@ ALLOWED_LICENSES = {
     "Zlib",
 }
 CRATES_IO_INDEX = "https://github.com/rust-lang/crates.io-index"
+# Keep source discovery aligned with the repository-policy exclusions. Never
+# descend into generated dependency trees, where Cargo manifests are not ours.
+SOURCE_SCAN_IGNORED_PARTS = {
+    ".git",
+    ".idea",
+    ".local",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "artifacts",
+    "build",
+    "dist",
+    "node_modules",
+    "target",
+}
+SOURCE_SCAN_MAX_ENTRIES = 100_000
+SOURCE_SCAN_MAX_DEPTH = 128
+SOURCE_MANIFEST_MAX_BYTES = 1_048_576
 
 
 @dataclass(frozen=True, order=True)
@@ -80,6 +103,102 @@ class ArtifactSpec:
 def _load_toml(path: Path) -> dict[str, object]:
     with path.open("rb") as source:
         return tomllib.load(source)
+
+
+def check_workspace_locks(root: Path) -> list[Problem]:
+    """Require a lockfile for every source Cargo workspace without invoking Cargo.
+
+    Discover workspaces from manifests rather than existing locks: otherwise a
+    new independent workspace could evade dependency maintenance by omitting its
+    lockfile. Member manifests, including nested Flawless workflow crates, do
+    not declare a new resolution root merely by containing a package table.
+    """
+
+    problems: list[Problem] = []
+    manifests: dict[Path, Path] = {}
+    locks: set[Path] = set()
+    pending = [(root, 0)]
+    visited = 0
+    while pending:
+        directory, depth = pending.pop()
+        relative_directory = directory.relative_to(root).as_posix()
+        try:
+            directory_stat = directory.lstat()
+            if stat.S_ISLNK(directory_stat.st_mode) or (
+                getattr(directory_stat, "st_file_attributes", 0)
+                & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            ):
+                problems.append(
+                    Problem(relative_directory, "source symlinks and reparse points are not allowed")
+                )
+                continue
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.name in SOURCE_SCAN_IGNORED_PARTS:
+                        continue
+                    visited += 1
+                    if visited > SOURCE_SCAN_MAX_ENTRIES:
+                        return problems + [Problem(".", "source workspace discovery exceeded its entry limit")]
+                    path = directory / entry.name
+                    relative = path.relative_to(root).as_posix()
+                    entry_stat = entry.stat(follow_symlinks=False)
+                    if stat.S_ISLNK(entry_stat.st_mode) or (
+                        getattr(entry_stat, "st_file_attributes", 0)
+                        & stat.FILE_ATTRIBUTE_REPARSE_POINT
+                    ):
+                        problems.append(
+                            Problem(relative, "source symlinks and reparse points are not allowed")
+                        )
+                    elif stat.S_ISDIR(entry_stat.st_mode):
+                        if depth >= SOURCE_SCAN_MAX_DEPTH:
+                            problems.append(Problem(relative, "source workspace discovery exceeded its depth limit"))
+                        else:
+                            pending.append((path, depth + 1))
+                    elif entry.name in {"Cargo.toml", "Cargo.lock"}:
+                        if not stat.S_ISREG(entry_stat.st_mode):
+                            problems.append(Problem(relative, "Cargo source files must be regular files"))
+                        elif entry.name == "Cargo.lock":
+                            locks.add(directory)
+                        elif entry_stat.st_size > SOURCE_MANIFEST_MAX_BYTES:
+                            problems.append(Problem(relative, "Cargo manifest exceeds the source size limit"))
+                        else:
+                            manifests[directory] = path
+        except OSError as error:
+            problems.append(Problem(relative_directory, f"cannot inspect source directory: {error}"))
+
+    workspaces: set[Path] = set()
+    for directory, manifest_path in sorted(manifests.items()):
+        relative = manifest_path.relative_to(root).as_posix()
+        try:
+            # Enforce the allocation bound during the read too: the source may
+            # have changed since discovery. Parser errors may echo TOML keys.
+            with manifest_path.open("rb") as source:
+                payload = source.read(SOURCE_MANIFEST_MAX_BYTES + 1)
+            if len(payload) > SOURCE_MANIFEST_MAX_BYTES:
+                problems.append(Problem(relative, "Cargo manifest exceeds the source size limit"))
+                continue
+            manifest = tomllib.loads(payload.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            problems.append(Problem(relative, "cannot read Cargo manifest: valid UTF-8 TOML is required"))
+            continue
+        if "workspace" in manifest:
+            if not isinstance(manifest["workspace"], dict):
+                problems.append(Problem(relative, "workspace must be a TOML table"))
+            else:
+                workspaces.add(directory)
+    if root not in manifests:
+        problems.append(Problem("Cargo.toml", "root workspace manifest is missing"))
+    elif root not in workspaces:
+        problems.append(Problem("Cargo.toml", "root Cargo manifest must declare [workspace]"))
+    problems.extend(
+        Problem((directory / "Cargo.lock").relative_to(root).as_posix(), "independent workspace lockfile is missing")
+        for directory in sorted(workspaces - locks)
+    )
+    problems.extend(
+        Problem((directory / "Cargo.lock").relative_to(root).as_posix(), "orphan Cargo.lock has no adjacent [workspace] manifest")
+        for directory in sorted(locks - workspaces)
+    )
+    return sorted(set(problems))
 
 
 def load_tool_policy(path: Path) -> tuple[ToolPolicy | None, list[Problem]]:
@@ -362,6 +481,7 @@ def verify(root: Path, artifacts: Path | None = None) -> list[Problem]:
     specs, spec_problems = load_artifact_specs(root / "deploy" / "images.toml")
     problems.extend(tool_problems)
     problems.extend(spec_problems)
+    problems.extend(check_workspace_locks(root))
     problems.extend(check_deny_policy(root / "deny.toml"))
     if tools is not None:
         problems.extend(

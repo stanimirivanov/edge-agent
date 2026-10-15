@@ -12,6 +12,7 @@ pub(super) const PROFILES: &[&str] = &[
     "local-platform",
     "image-smoke",
     "supply-chain",
+    "dependency-audit",
     "sqlx-metadata",
     "ci-security",
     "m08-event-spine-proof",
@@ -99,7 +100,13 @@ pub(super) fn checks() -> Vec<Check> {
         check(
             "workflow-security",
             "T1",
-            &["verify", "check", "architecture", "ci-security"],
+            &[
+                "verify",
+                "check",
+                "architecture",
+                "ci-security",
+                "dependency-audit",
+            ],
             Xtask,
             &["workflow-security"],
             "Parsed CI action, trigger, credential and permission policy; not remote runner isolation or branch protection.",
@@ -139,7 +146,7 @@ pub(super) fn checks() -> Vec<Check> {
         check(
             "supply-chain-contracts",
             "T2",
-            &["verify", "check"],
+            &["verify", "check", "dependency-audit"],
             Python,
             &["scripts/verify_supply_chain.py"],
             "Declared dependency/SBOM policy shape; not fresh advisories or generated SBOM completeness.",
@@ -289,7 +296,7 @@ pub(super) fn checks() -> Vec<Check> {
         check(
             "dependency-policy",
             "T3",
-            &["supply-chain"],
+            &["supply-chain", "dependency-audit"],
             Cargo,
             &["deny", "--locked", "check"],
             "Current advisory/license/source/bans policy; requires network and cargo-deny.",
@@ -399,15 +406,43 @@ pub(super) fn checks() -> Vec<Check> {
     checks
 }
 
+// Expose actual registered audit targets to the coverage sensor, not a second
+// allowlist that could stay green after a new workspace was added elsewhere.
+pub(crate) fn dependency_policy_targets() -> Vec<(&'static str, &'static str)> {
+    fn argument(args: &[&'static str], flag: &str, default: &'static str) -> &'static str {
+        args.iter()
+            .position(|argument| *argument == flag)
+            .and_then(|index| args.get(index + 1))
+            .copied()
+            .unwrap_or(default)
+    }
+
+    checks()
+        .into_iter()
+        .filter(|check| {
+            check.profiles.contains(&"dependency-audit")
+                && check.command.program == Program::Cargo
+                && check.command.args.first() == Some(&"deny")
+        })
+        .map(|check| {
+            (
+                argument(&check.command.args, "--manifest-path", "Cargo.toml"),
+                argument(&check.command.args, "--config", "deny.toml"),
+            )
+        })
+        .collect()
+}
+
 fn m08_checks() -> Vec<Check> {
     let mut checks = Vec::new();
-    for (profile, manifest, fmt_id, lint_id, test_id) in [
+    for (profile, manifest, fmt_id, lint_id, test_id, audit_id) in [
         (
             "m08-event-spine-proof",
             "experiments/event-spine-proof/Cargo.toml",
             "m08-event-spine-format",
             "m08-event-spine-clippy",
             "m08-event-spine-test",
+            "m08-event-spine-dependency-policy",
         ),
         (
             "m08-durable-execution",
@@ -415,6 +450,7 @@ fn m08_checks() -> Vec<Check> {
             "m08-duroxide-format",
             "m08-duroxide-clippy",
             "m08-duroxide-test",
+            "m08-duroxide-dependency-policy",
         ),
         (
             "m08-dbos-proof",
@@ -422,6 +458,7 @@ fn m08_checks() -> Vec<Check> {
             "m08-dbos-format",
             "m08-dbos-clippy",
             "m08-dbos-test",
+            "m08-dbos-dependency-policy",
         ),
         (
             "m08-temporal-proof",
@@ -429,6 +466,7 @@ fn m08_checks() -> Vec<Check> {
             "m08-temporal-format",
             "m08-temporal-clippy",
             "m08-temporal-test",
+            "m08-temporal-dependency-policy",
         ),
         (
             "m08-flawless-proof",
@@ -436,8 +474,28 @@ fn m08_checks() -> Vec<Check> {
             "m08-flawless-format",
             "m08-flawless-clippy",
             "m08-flawless-test",
+            "m08-flawless-dependency-policy",
         ),
     ] {
+        let mut audit = check(
+            audit_id,
+            "T3",
+            &["dependency-audit"],
+            Program::Cargo,
+            &[
+                "deny",
+                "--manifest-path",
+                manifest,
+                "--locked",
+                "--workspace",
+                "--config",
+                "experiments/deny.toml",
+                "check",
+            ],
+            "Current isolated proof advisory/license/source/bans policy; requires network and cargo-deny, not a runtime proof.",
+        );
+        audit.prerequisites = &[Requirement::Executable("cargo-deny")];
+        checks.push(audit);
         // Profiles are static policy values; each generated check retains one static slice below.
         let static_profiles: &'static [&'static str] = match profile {
             "m08-event-spine-proof" => &["m08-event-spine-proof", "m08-event-spine-proof-static"],

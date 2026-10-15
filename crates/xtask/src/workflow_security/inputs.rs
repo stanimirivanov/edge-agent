@@ -29,6 +29,15 @@ pub(super) fn check(
         }
         Some("actions/checkout") => &[("persist-credentials", B(false))],
         Some("actions/setup-python") => &[("python-version", T("3.13"))],
+        Some("EmbarkStudios/cargo-deny-action") if name == "dependency-audit.yml" => &[
+            ("rust-version", T("1.98.1")),
+            ("manifest-path", T("${{ matrix.manifest }}")),
+            (
+                "arguments",
+                T("--locked --workspace --config ${{ matrix.policy }}"),
+            ),
+            ("command", T("check")),
+        ],
         Some("EmbarkStudios/cargo-deny-action") if name == "m08-durable-execution.yml" => &[
             ("rust-version", T("1.98.1")),
             (

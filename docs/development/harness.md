@@ -102,7 +102,7 @@ successful exit when a filter selects zero tests cannot satisfy a mandatory
 proof. Listing tests proves discovery only, not database, broker, crash-
 recovery, performance, or external-effect behavior.
 
-Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`, `ci-security`,
+Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`, `dependency-audit`, `ci-security`,
 and `m08-<candidate>`. Their prerequisites remain explicit in the inventory and
 focused guides. The local-platform environment and migrated test schema must
 be available before conformance executes; CI provisions them and always
@@ -128,6 +128,7 @@ acceptance check before handoff.
 | `make local-up` and focused conformance tests | PostgreSQL, NATS, object storage, telemetry, and restart behavior satisfy local integration contracts | T3; Docker with Compose |
 | `cargo xtask verify --check sqlx-metadata` | Compile-checked inbox and outbox queries match the combined checked-in PostgreSQL migrations and leave no stale metadata | T3; pinned SQLx CLI and isolated Compose PostgreSQL; see the [SQLx metadata guide](sqlx-metadata.md) |
 | `make supply-chain` | Dependency/advisory/license policy and the complete Rust and image SBOM set pass | T3; pinned tools, network for current advisories, and Docker |
+| `cargo xtask verify dependency-audit` | Structural coverage and current locked dependency policy for every independent Cargo workspace; no runtime proof or SBOM claim | T3; pinned cargo-deny and network; see [dependency maintenance](supply-chain.md#independent-workspaces-and-dependency-maintenance) |
 | `cargo xtask verify ci-security` | Actual scanner rejection/exception proofs, current source snapshot, and complete locally reachable Git history finish successfully | T3; explicitly installed checksum-verified Gitleaks and complete Git history; see [CI security](ci-security.md) |
 | `cargo xtask verify m08-<candidate>` | Isolated M08 durable-execution decision proof for one candidate, including real worker-process restart or DBOS atomic enqueue | T3; see the [experiment guide](../../experiments/README.md) for container and cold-cache network requirements and the separate dependency-policy gate |
 
@@ -269,6 +270,19 @@ the isolated local PostgreSQL profile:
 EDGEAGENT_POSTGRES_URL=postgresql://edgeagent:edgeagent-local-postgres@127.0.0.1:5432/edgeagent cargo test --locked -p edgeagent-outbox-postgres --test postgres_outbox -- --ignored --exact same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence
 ```
 
+The registered `outbox-relay-boundaries` T3 suite additionally exercises all
+four portable relay operations against PostgreSQL. It requires nested
+transaction rejection without altering the caller's work, top-level commit
+visibility from a second connection, invariant classification of a deferred
+commit rejection, unavailable classification of a terminated connection, and
+rollback of an invalid stored claim before reuse. A protected inventory covers
+every identity; negative discovery fixtures remove each identity in turn, and
+route fixtures require this suite for outbox adapter, application, port and
+local-platform changes. Source-text checks cannot prove top-level durability.
+The default gate checks discovery, not these database effects. See
+[outbox verification](postgres-outbox.md#verification) for the scoped command
+and transaction-control limitations.
+
 ## Repository policy
 
 The paired T1 architecture sensors inspect every direct normal, development,
@@ -290,6 +304,14 @@ not secret absence. The T3 scanner contracts must exercise the real binary
 before source and historical scanning. Neither an LLM review nor a static
 configuration pass can replace those distinct proofs. See
 [CI security](ci-security.md) for exact exceptions, evidence limits, and recovery.
+
+The source workspace/lock census and semantic maintenance-coverage sensor
+reject missing/orphan locks and independent roots omitted from Dependabot,
+scheduled audits, or the M08 proof matrix. Mutation tests exercise additions,
+omissions, unsafe traversal, and policy bypasses. These offline checks prove
+coverage, not dependency freshness. Daily read-only audits supply fresh advisory
+feedback; reviewed dependency updates close the maintenance loop. Neither a
+passing lock census nor a fixed lockfile promises immunity to future disclosures.
 
 The two repository sensors have complementary ownership. The Python verifier
 checks bytes and required inventory. `cargo xtask repository` parses CommonMark

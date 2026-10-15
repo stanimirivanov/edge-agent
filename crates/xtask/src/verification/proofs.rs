@@ -64,6 +64,17 @@ const OUTBOX: Target = Target {
         "same_owner_reclaim_rejects_stale_transitions_and_preserves_replay_fence",
     ],
 };
+const OUTBOX_RELAY_BOUNDARIES: Target = Target {
+    package: "edgeagent-outbox-postgres",
+    name: "postgres_relay_boundaries",
+    identities: &[
+        "nested_relay_operations_preserve_the_callers_transaction",
+        "successful_relay_operations_are_visible_after_return",
+        "deferred_commit_rejection_is_an_invariant_and_preserves_evidence",
+        "terminated_connection_is_unavailable_through_relay_port",
+        "invalid_stored_claim_rolls_back_before_connection_reuse",
+    ],
+};
 const INBOX: Target = Target {
     package: "edgeagent-inbox-postgres",
     name: "postgres_inbox",
@@ -213,6 +224,12 @@ pub(super) fn checks() -> Vec<Check> {
             "Same-owner lease reclamation rejects stale completion and preserves replay fences.",
         ),
         suite(
+            "outbox-relay-boundaries",
+            &OUTBOX_RELAY_BOUNDARIES,
+            POSTGRES,
+            "Top-level relay commits, nested-transaction rejection, permanent commit faults, connectivity classification and invalid-claim rollback against real PostgreSQL.",
+        ),
+        suite(
             "inbox-invariants",
             &INBOX,
             POSTGRES,
@@ -320,6 +337,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         NATS_BOUNDARIES,
         NATS_LIFECYCLE,
         OUTBOX,
+        OUTBOX_RELAY_BOUNDARIES,
         INBOX,
         INBOX_ERRORS,
         HANDLER,
@@ -342,7 +360,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 22);
+        assert_eq!(checks.len(), 23);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -357,14 +375,44 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 26);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 26);
+        assert_eq!(inventory.len(), 31);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 31);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
             .collect::<BTreeSet<_>>();
         assert_eq!(executed.len(), expected.len());
         assert_eq!(executed.into_iter().collect::<BTreeSet<_>>(), expected);
+        Ok(())
+    }
+
+    #[test]
+    fn relay_boundary_suite_protects_each_identity_before_execution() -> Result<(), String> {
+        let check = checks()
+            .into_iter()
+            .find(|check| check.id == "outbox-relay-boundaries")
+            .ok_or("relay boundary proof missing")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
+        ));
+        assert!(check.command.args.contains(&"postgres_relay_boundaries"));
+        assert!(!check.command.args.contains(&"--exact"));
+        let discovery = check.discovery.ok_or("relay boundary discovery missing")?;
+        let complete = discovery
+            .expected
+            .iter()
+            .map(|identity| format!("{identity}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+        for identity in &discovery.expected {
+            let removed = complete.replace(&format!("{identity}: test\n"), "");
+            assert!(
+                super::super::runner::verify_discovery(&discovery, removed.as_bytes()).is_err(),
+                "missing relay boundary proof passed discovery: {identity}"
+            );
+        }
         Ok(())
     }
 
