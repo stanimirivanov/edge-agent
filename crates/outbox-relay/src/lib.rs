@@ -1,15 +1,17 @@
 //! Bounded, persistence-neutral outbox relay orchestration.
 //!
 //! [`relay_once`] coordinates one leased message through portable publisher
-//! and store ports. Policy, retry, outcome, and error modules remain private;
+//! and store ports. Observation, resolution, policy, retry, outcome, and error modules remain private;
 //! the public relay API is re-exported here.
 
 #![forbid(unsafe_code)]
 
 mod coordinator;
 mod error;
+mod observation;
 mod outcome;
 mod policy;
+mod resolution;
 mod retry;
 
 #[cfg(test)]

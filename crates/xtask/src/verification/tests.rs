@@ -32,6 +32,35 @@ fn fixture() -> Check {
     }
 }
 
+#[test]
+fn relay_security_regression_discovery_rejects_missing_renamed_and_extra_tests()
+-> Result<(), String> {
+    let checks = inventory::checks();
+    let check = checks
+        .iter()
+        .find(|check| check.id == "relay-observation-contracts")
+        .ok_or("protected relay observation check missing")?;
+    assert!(check.profiles.contains(&"verify"));
+    let discovery = check.discovery.as_ref().ok_or("relay discovery missing")?;
+    assert_eq!(
+        discovery.expected,
+        ["relay_observations_respect_validation_and_confirmed_outcomes"]
+    );
+    runner::verify_discovery(
+        discovery,
+        b"relay_observations_respect_validation_and_confirmed_outcomes: test\n",
+    )?;
+    for stdout in [
+        "".as_bytes(),
+        b"renamed_security_regression: test\n",
+        b"relay_observations_respect_validation_and_confirmed_outcomes: test\nunregistered: test\n",
+        b"relay_observations_respect_validation_and_confirmed_outcomes: test\nrelay_observations_respect_validation_and_confirmed_outcomes: test\n",
+    ] {
+        assert!(runner::verify_discovery(discovery, stdout).is_err());
+    }
+    Ok(())
+}
+
 struct Fake {
     commands: Vec<(Vec<&'static str>, bool)>,
     outputs: VecDeque<io::Result<Execution>>,
@@ -97,6 +126,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "rust-tests",
             "rust-doctests",
             "messaging-error-contracts",
+            "relay-observation-contracts",
             "contracts-preserve-order",
         ]
     );

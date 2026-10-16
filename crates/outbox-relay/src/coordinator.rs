@@ -1,16 +1,10 @@
 //! One-record relay coordination across portable publisher and store ports.
 
-use crate::retry::{RetryDecision, retry_decision};
+use crate::observation::RelayObservation;
+use crate::resolution;
 use crate::{QuarantineReason, RelayError, RelayMessageFailure, RelayOutcome, RelayPolicy};
-use edgeagent_contracts::MessageRegistry;
-use edgeagent_messaging::{
-    ClaimedMessage, MessagePublisher, OutboxRelayStore, OutboxRetryDelay, PublishDisposition,
-    PublishError,
-};
-use edgeagent_telemetry::{
-    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
-};
-use std::time::Instant;
+use edgeagent_contracts::{MessageRegistry, MessageRoutingError};
+use edgeagent_messaging::{MessagePublisher, OutboxRelayStore};
 
 /// Claim and resolve at most one outbox record.
 ///
@@ -45,181 +39,46 @@ pub async fn relay_once(
         return Ok(RelayOutcome::Idle);
     };
 
-    let mut telemetry_context = EventSpineContext::from_stored_identity(
-        message.message_source(),
-        message.message_id(),
-        message.message_type(),
-    );
     let envelope = match message.validated_envelope(registry) {
-        Ok(envelope) => {
-            telemetry_context = EventSpineContext::from_envelope(&envelope);
-            envelope
-        }
+        Ok(envelope) => envelope,
         Err(error) => {
-            return quarantine(
+            // No persisted identity is trusted until the entire record validates.
+            let observation = RelayObservation::rejected(message.attempt());
+            return resolution::quarantine(
                 store,
                 policy,
                 &message,
-                &telemetry_context,
+                &observation,
                 QuarantineReason::StoredContractInvalid,
                 RelayMessageFailure::StoredContract(error),
             )
             .await;
         }
     };
-    let definition = match registry.validate(&envelope) {
-        Ok(definition) => *definition,
-        Err(error) => {
-            return quarantine(
-                store,
-                policy,
-                &message,
-                &telemetry_context,
-                QuarantineReason::StoredContractInvalid,
-                RelayMessageFailure::StoredContract(error),
-            )
-            .await;
-        }
+    // validated_envelope already checked this immutable registry and routing policy.
+    // Resolve metadata without repeating envelope validation; fail closed if absent.
+    let Some(&definition) = registry.resolve(envelope.message_type()) else {
+        let observation = RelayObservation::rejected(message.attempt());
+        return resolution::quarantine(
+            store,
+            policy,
+            &message,
+            &observation,
+            QuarantineReason::StoredContractInvalid,
+            RelayMessageFailure::StoredContract(MessageRoutingError::UnsupportedMessageType),
+        )
+        .await;
     };
+    let observation = RelayObservation::validated(&envelope, message.attempt());
+    let started = observation.start_stage();
+    let publication = publisher.publish(definition, &envelope).await;
+    observation.publication(started, &publication);
 
-    let publication_started = Instant::now();
-    match publisher.publish(definition, &envelope).await {
+    match publication {
         Ok(receipt) => {
-            let disposition = receipt.disposition();
-            record_event_spine_operation(
-                &telemetry_context,
-                EventSpineStage::Publication,
-                match disposition {
-                    PublishDisposition::Persisted => EventSpineOutcome::Succeeded,
-                    PublishDisposition::Duplicate => EventSpineOutcome::Duplicate,
-                },
-                message.attempt(),
-                publication_started.elapsed(),
-            );
-            let persistence_started = Instant::now();
-            let persistence_result = store
-                .mark_published(&message, &policy.lease_owner)
+            resolution::published(store, policy, &message, &observation, receipt.disposition())
                 .await
-                .map_err(RelayError::from);
-            record_event_spine_operation(
-                &telemetry_context,
-                EventSpineStage::Persistence,
-                if persistence_result.is_ok() {
-                    EventSpineOutcome::Succeeded
-                } else {
-                    EventSpineOutcome::Failed
-                },
-                message.attempt(),
-                persistence_started.elapsed(),
-            );
-            persistence_result?;
-            Ok(RelayOutcome::Published {
-                disposition,
-                attempt: message.attempt(),
-            })
         }
-        Err(error) => {
-            record_event_spine_operation(
-                &telemetry_context,
-                EventSpineStage::Publication,
-                EventSpineOutcome::Failed,
-                message.attempt(),
-                publication_started.elapsed(),
-            );
-            resolve_failure(store, policy, &message, &telemetry_context, error).await
-        }
+        Err(error) => resolution::failed(store, policy, &message, &observation, error).await,
     }
-}
-
-async fn resolve_failure(
-    store: &mut dyn OutboxRelayStore,
-    policy: &RelayPolicy,
-    message: &ClaimedMessage,
-    telemetry_context: &EventSpineContext,
-    failure: PublishError,
-) -> Result<RelayOutcome, RelayError> {
-    let failure_kind = failure.kind();
-    match retry_decision(
-        policy,
-        message.message_source(),
-        message.message_id(),
-        message.attempt(),
-        failure_kind,
-    ) {
-        RetryDecision::Retry {
-            delay,
-            failure_code,
-        } => {
-            let retry_after = OutboxRetryDelay::new(delay).map_err(|_| {
-                RelayError::invalid_policy(
-                    "calculated retry delay exceeds the outbox timing bounds",
-                )
-            })?;
-            let persistence_started = Instant::now();
-            let persistence_result = store
-                .release_for_retry(message, &policy.lease_owner, retry_after, failure_code)
-                .await
-                .map_err(RelayError::from);
-            record_event_spine_operation(
-                telemetry_context,
-                EventSpineStage::Persistence,
-                if persistence_result.is_ok() {
-                    EventSpineOutcome::RetryScheduled
-                } else {
-                    EventSpineOutcome::Failed
-                },
-                message.attempt(),
-                persistence_started.elapsed(),
-            );
-            persistence_result?;
-            Ok(RelayOutcome::RetryScheduled {
-                failure,
-                attempt: message.attempt(),
-                delay,
-            })
-        }
-        RetryDecision::Quarantine(reason) => {
-            quarantine(
-                store,
-                policy,
-                message,
-                telemetry_context,
-                reason,
-                RelayMessageFailure::Publication(failure),
-            )
-            .await
-        }
-    }
-}
-
-async fn quarantine(
-    store: &mut dyn OutboxRelayStore,
-    policy: &RelayPolicy,
-    message: &ClaimedMessage,
-    telemetry_context: &EventSpineContext,
-    reason: QuarantineReason,
-    failure: RelayMessageFailure,
-) -> Result<RelayOutcome, RelayError> {
-    let persistence_started = Instant::now();
-    let persistence_result = store
-        .quarantine(message, &policy.lease_owner, reason.code())
-        .await
-        .map_err(RelayError::from);
-    record_event_spine_operation(
-        telemetry_context,
-        EventSpineStage::Persistence,
-        if persistence_result.is_ok() {
-            EventSpineOutcome::Quarantined
-        } else {
-            EventSpineOutcome::Failed
-        },
-        message.attempt(),
-        persistence_started.elapsed(),
-    );
-    persistence_result?;
-    Ok(RelayOutcome::Quarantined {
-        reason,
-        attempt: message.attempt(),
-        failure,
-    })
 }

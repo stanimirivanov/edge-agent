@@ -30,6 +30,7 @@ const NATS_CHECKS: &[&str] = &[
     "event-spine-broker",
 ];
 const OUTBOX_CHECKS: &[&str] = &[
+    "relay-observation-contracts",
     "outbox-conformance",
     "outbox-fencing",
     "outbox-relay-boundaries",
@@ -249,6 +250,7 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Prefix("crates/outbox-relay/"),
         guides: &[
             "docs/development/outbox-relay.md",
+            "docs/development/event-spine-telemetry.md",
             "docs/development/local-platform.md",
             "docs/development/event-spine-conformance.md",
         ],
@@ -257,7 +259,7 @@ const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("crates/telemetry/"),
         guides: &["docs/development/event-spine-telemetry.md"],
-        checks: &["event-spine-client"],
+        checks: &["event-spine-client", "relay-observation-contracts"],
     },
     Route {
         matcher: Matcher::Prefix(".sqlx/"),

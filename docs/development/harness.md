@@ -229,6 +229,15 @@ promote fake transaction behavior into a claimed database guarantee. See
 [messaging cancellation protocols](messaging-adapters.md#cancellation-and-recovery-protocols)
 for per-operation recovery and the focused commands.
 
+The protected `relay-observation-contracts` T2 check
+additionally captures emitted relay events in one isolated executable: rejected
+records must have no identity fields, valid records retain correlation, and
+publication/persistence signals must match returned results. Its named census
+rejects missing or renamed regressions; route fixtures connect relay and
+telemetry changes to this check. Returned-store-failure cases assert original
+claims and owners, exact failure codes, retained causes, and no alternate
+transition. No global subscriber race, service, or sleep is required.
+
 The messaging `claimed_envelope` integration executable is the T2 stored-record
 trust-boundary sensor. It directly tests decoder size and metadata failures,
 unsupported exact versions, registry schema/partition/producer policy, and all
