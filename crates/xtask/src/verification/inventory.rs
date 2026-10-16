@@ -601,7 +601,10 @@ fn m08_checks() -> Vec<Check> {
                 "application_row_and_dbos_enqueue_commit_or_rollback_together",
             ],
             "m08-temporal-proof" => {
-                vec!["worker_crash_during_model_step_resumes_without_reexecuting_preparation"]
+                vec![
+                    "worker_crash_during_model_step_resumes_without_reexecuting_preparation",
+                    "server::tests::shutdown_reaps_unwaited_and_completed_children",
+                ]
             }
             _ => vec!["tests::recorded_effects_resume_after_server_process_crash"],
         };
