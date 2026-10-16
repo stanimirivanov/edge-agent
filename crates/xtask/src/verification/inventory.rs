@@ -271,6 +271,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Explicit payload-safe public error target retained from CI, with a protected named-test census.",
         ),
         check(
+            "relay-observation-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-outbox-relay",
+                "--test",
+                "telemetry",
+                "--",
+            ],
+            "Isolated relay telemetry trust boundary and confirmed outcome matrix; named discovery rejects missing or renamed security regressions.",
+        ),
+        check(
             "contracts-preserve-order",
             "T2",
             &["verify", "test"],
@@ -386,6 +402,15 @@ pub(super) fn checks() -> Vec<Check> {
                         "source_free_store_failure_terminates_the_inbound_processing_source_chain",
                         "public_messaging_errors_redact_causes_but_preserve_source_chains",
                     ],
+                    ignored: false,
+                });
+            }
+            "relay-observation-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec!["relay_observations_respect_validation_and_confirmed_outcomes"],
                     ignored: false,
                 });
             }
@@ -576,7 +601,10 @@ fn m08_checks() -> Vec<Check> {
                 "application_row_and_dbos_enqueue_commit_or_rollback_together",
             ],
             "m08-temporal-proof" => {
-                vec!["worker_crash_during_model_step_resumes_without_reexecuting_preparation"]
+                vec![
+                    "worker_crash_during_model_step_resumes_without_reexecuting_preparation",
+                    "server::tests::shutdown_reaps_unwaited_and_completed_children",
+                ]
             }
             _ => vec!["tests::recorded_effects_resume_after_server_process_crash"],
         };

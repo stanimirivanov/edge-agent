@@ -47,6 +47,14 @@ source, type, correlation ID, causation ID, validated `traceparent`, transport
 message key, delivery attempt, stage, outcome, and duration. Missing fields are
 empty rather than guessed.
 
+The outbox relay constructs identity-bearing context only after the stored
+envelope, registry policy, and denormalized columns have all passed validation.
+Rejected records use `EventSpineContext::without_identity`: only bounded stage
+and outcome tokens, numeric attempt, and elapsed duration remain. No raw stored
+source, ID, type, payload, or failure text enters a rejection event, even when
+the quarantine write fails. `from_stored_identity` is retained for compatibility,
+but does not validate its arguments; callers must independently establish trust.
+
 ## Security and cardinality
 
 Message payloads, subjects, idempotency keys, failure text, user identifiers,

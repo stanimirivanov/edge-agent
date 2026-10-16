@@ -20,7 +20,9 @@
 `relay_once` composes the application-owned `MessagePublisher` and
 `OutboxRelayStore` ports. It depends on neither transport nor persistence SDKs.
 The crate root remains the stable public façade: `coordinator` owns one-record
-control flow, `policy` validates worker bounds, `retry` owns deterministic
+control flow, `observation` owns validated diagnostic context and explicit stage
+timers, and `resolution` records published, retry, and quarantine outcomes.
+`policy` validates worker bounds, `retry` owns deterministic
 failure decisions and backoff, `outcome` names durable results, and `error`
 preserves bounded failure categories. The public storage port carries the
 claim's lease generation through every outcome transition.
@@ -117,7 +119,33 @@ and publication failures retain their error chain for redacted diagnostics.
 `RelayError` covers policy, storage availability, and outbox state-transition
 failures while preserving internal causes without exposing them in public text.
 
+Stored source, ID, type, subject, and bytes remain untrusted until the complete
+record passes envelope, registry, and denormalized-column validation. Rejected
+records emit only bounded stage/outcome tokens, attempt, and duration: every
+identity and correlation field stays empty, including when quarantine fails.
+The relay neither truncates rejected identities nor copies them into a fallback
+context. Valid records obtain correlation fields from the validated envelope.
+Registry metadata lookup does not repeat envelope validation.
+
+Observation occurs only after an explicit returned result, never from a
+destructor. The coordinator shows claim, validation, publication, and the chosen
+resolution in order. Resolution forwards the original claim and owner, attempts
+one durable transition, records its actual result, and propagates failure.
+Neither observation nor resolution starts compensation or an alternate
+transition after cancellation or a storage error.
+
 ## Verification
+
+The protected T2 `relay-observation-contracts` check runs one isolated tracing
+executable. It asserts emitted fields, exact operation order, all publication
+classifications, returned store failures, original claim/owner forwarding, and
+the composed relay future's `Send` contract. Discovery rejects a missing,
+renamed, duplicated, or unregistered test. This is an application and telemetry
+proof, not a database or broker proof:
+
+```text
+cargo xtask verify --check relay-observation-contracts
+```
 
 Credential-free unit tests prove configuration bounds, permanent/transient
 classification, deterministic jitter, attempt exhaustion, and complete relay
@@ -147,6 +175,10 @@ same owner token. Both are required for the lease-fencing contract in
 [ADR-0009](../decisions/0009-fence-outbox-transitions-by-claim-generation.md).
 
 ## Current limitations
+
+The [refactoring plan](plans/outbox-relay-refactor.md) sequences telemetry
+hardening, recovery-aware attempt budgets, and explicit configuration/runtime
+failure contracts. Only the first slice belongs to issue #174.
 
 This crate provides one bounded relay iteration, not a continuously running
 service. Lifecycle management, a production composition root, readiness,

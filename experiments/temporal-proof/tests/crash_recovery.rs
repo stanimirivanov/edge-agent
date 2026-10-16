@@ -11,11 +11,11 @@ use std::{
 use temporalio_client::{
     WorkflowFetchHistoryOptions, WorkflowGetResultOptions, WorkflowStartOptions,
 };
-use temporalio_sdk::{
-    testing::{EphemeralExe, LocalWorkflowEnvironmentOptions, WorkflowEnvironment},
-    workflow_replayer::{WorkflowReplayer, WorkflowReplayerOptions},
-};
+use temporalio_sdk::workflow_replayer::{WorkflowReplayer, WorkflowReplayerOptions};
 use tokio::{process::Command, time::timeout};
+
+#[path = "support/server.rs"]
+mod server;
 
 const QUEUE: &str = "synthetic-m08-evaluation";
 const CLI_VERSION: &str = "1.8.3";
@@ -117,16 +117,8 @@ async fn worker_crash_during_model_step_resumes_without_reexecuting_preparation(
     let cli_directory = tempfile::tempdir()?;
     let cli = verified_temporal_cli(cli_directory.path()).await?;
     let port = unused_port()?;
-    // The SDK owns the server lifecycle but never downloads executable bytes.
-    let environment = WorkflowEnvironment::start_local(
-        LocalWorkflowEnvironmentOptions::builder()
-            .server_executable(EphemeralExe::ExistingPath(
-                cli.to_str().ok_or("non-UTF-8 CLI path")?.to_owned(),
-            ))
-            .port(port)
-            .build(),
-    )
-    .await?;
+    // Launch only the already verified binary, without the SDK's downloader.
+    let mut environment = server::VerifiedServer::start(&cli, port).await?;
     let endpoint = format!("http://127.0.0.1:{port}");
     let input = M08Input {
         manifest_id: "synthetic-snapshot-r1".to_owned(),

@@ -81,7 +81,7 @@ OUTBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "sqlx"})
 OUTBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 OUTBOX_RELAY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
 OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(
-    {OUTBOX_POSTGRES, "serde_json", "sqlx", "tokio"}
+    {OUTBOX_POSTGRES, "serde_json", "sqlx", "tokio", "tracing"}
 )
 TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})

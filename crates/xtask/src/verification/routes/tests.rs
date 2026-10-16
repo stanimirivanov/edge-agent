@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn relay_and_telemetry_changes_route_the_protected_observation_contract() -> Result<(), String> {
+    for path in [
+        "crates/outbox-relay/src/coordinator.rs",
+        "crates/outbox-relay/src/observation.rs",
+        "crates/outbox-relay/tests/telemetry.rs",
+        "crates/telemetry/src/lib.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(
+            advice.checks.contains("relay-observation-contracts"),
+            "{path}"
+        );
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/event-spine-telemetry.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn query_policy_sensor_routes_its_canonical_sqlx_guide() -> Result<(), String> {
     for path in [
         "scripts/verify_sqlx_query_policy.py",

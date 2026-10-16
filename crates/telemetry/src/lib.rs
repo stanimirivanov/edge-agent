@@ -83,6 +83,23 @@ pub struct EventSpineContext {
 }
 
 impl EventSpineContext {
+    /// Record only bounded stage, outcome, attempt, and duration evidence.
+    ///
+    /// Use this when neither envelope nor transport identity has been validated.
+    /// No untrusted identifiers are copied, truncated, or emitted.
+    #[must_use]
+    pub const fn without_identity() -> Self {
+        Self {
+            message_id: None,
+            message_source: None,
+            message_type: None,
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+            transport_message_key: None,
+        }
+    }
+
     /// Capture approved correlation fields from a validated envelope.
     #[must_use]
     pub fn from_envelope(envelope: &MessageEnvelope) -> Self {
@@ -112,6 +129,10 @@ impl EventSpineContext {
     }
 
     /// Capture denormalized identity for an outbox record whose bytes may be invalid.
+    ///
+    /// The caller must independently validate these identifiers before recording
+    /// them. This constructor does not establish trust. Use
+    /// [`Self::without_identity`] for rejected or otherwise unvalidated records.
     #[must_use]
     pub fn from_stored_identity(source: &str, id: &str, message_type: &str) -> Self {
         Self {
@@ -298,6 +319,18 @@ mod tests {
             },
             &json!({"private_payload": "not telemetry"}),
         )?)
+    }
+
+    #[test]
+    fn rejected_record_context_contains_no_identifiers() {
+        let context = EventSpineContext::without_identity();
+        assert_eq!(context.message_id(), None);
+        assert_eq!(context.message_source(), None);
+        assert_eq!(context.message_type(), None);
+        assert_eq!(context.correlation_id(), None);
+        assert_eq!(context.causation_id(), None);
+        assert_eq!(context.trace_parent(), None);
+        assert_eq!(context.transport_message_key(), None);
     }
 
     #[test]
