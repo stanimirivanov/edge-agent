@@ -1,7 +1,7 @@
 //! Deterministic bounded retry and terminal-failure classification.
 
-use crate::{QuarantineReason, RelayPolicy};
-use edgeagent_messaging::{FailureCode, PublishErrorKind};
+use crate::{QuarantineReason, RelayError, RelayPolicy};
+use edgeagent_messaging::{FailureCode, OutboxRetryDelay, PublishErrorKind};
 use std::time::Duration;
 
 const TRANSPORT_UNAVAILABLE: FailureCode = FailureCode::from_static("transport_unavailable");
@@ -9,7 +9,7 @@ const CONFIRMATION_UNKNOWN: FailureCode = FailureCode::from_static("confirmation
 
 pub(super) enum RetryDecision {
     Retry {
-        delay: Duration,
+        delay: OutboxRetryDelay,
         failure_code: FailureCode,
     },
     Quarantine(QuarantineReason),
@@ -21,14 +21,14 @@ pub(super) fn retry_decision(
     message_id: &str,
     attempt: u32,
     failure: PublishErrorKind,
-) -> RetryDecision {
-    match failure {
+) -> Result<RetryDecision, RelayError> {
+    Ok(match failure {
         PublishErrorKind::Contract => RetryDecision::Quarantine(QuarantineReason::PublishContract),
         PublishErrorKind::Rejected => {
             RetryDecision::Quarantine(QuarantineReason::TransportRejected)
         }
         PublishErrorKind::Unavailable | PublishErrorKind::ConfirmationUnknown
-            if attempt >= policy.max_attempts =>
+            if attempt >= policy.max_attempts.get() =>
         {
             RetryDecision::Quarantine(match failure {
                 PublishErrorKind::Unavailable => QuarantineReason::AttemptsExhaustedUnavailable,
@@ -37,14 +37,14 @@ pub(super) fn retry_decision(
         }
         PublishErrorKind::Unavailable | PublishErrorKind::ConfirmationUnknown => {
             RetryDecision::Retry {
-                delay: retry_delay(policy, message_source, message_id, attempt),
+                delay: retry_delay(policy, message_source, message_id, attempt)?,
                 failure_code: match failure {
                     PublishErrorKind::Unavailable => TRANSPORT_UNAVAILABLE,
                     _ => CONFIRMATION_UNKNOWN,
                 },
             }
         }
-    }
+    })
 }
 
 pub(super) fn retry_delay(
@@ -52,18 +52,20 @@ pub(super) fn retry_delay(
     message_source: &str,
     message_id: &str,
     attempt: u32,
-) -> Duration {
+) -> Result<OutboxRetryDelay, RelayError> {
     let exponent = attempt.saturating_sub(1).min(63);
-    let base_milliseconds = policy.base_retry_delay.as_millis();
-    let exponential = base_milliseconds
-        .checked_shl(exponent)
-        .unwrap_or(u128::MAX)
-        .min(policy.max_retry_delay.as_millis());
+    let base_milliseconds = policy.backoff.base_delay().as_millis();
+    // Validated base <= 86_400_000ms and exponent <= 63 keep this product
+    // below 2^90, inside u128. Cap before jitter, without overflow sentinels.
+    let exponential =
+        (base_milliseconds * (1_u128 << exponent)).min(policy.backoff.max_delay().as_millis());
     let lower = exponential.div_ceil(2);
-    let width = exponential.saturating_sub(lower).saturating_add(1);
+    // Base >= 1ms implies 1 <= lower <= exponential, hence width >= 1.
+    let width = exponential - lower + 1;
     let jitter = u128::from(identity_hash(message_source, message_id, attempt)) % width;
-    let milliseconds = lower.saturating_add(jitter);
-    Duration::from_millis(u64::try_from(milliseconds).unwrap_or(u64::MAX))
+    let milliseconds = u64::try_from(lower + jitter).map_err(RelayError::calculation_invariant)?;
+    OutboxRetryDelay::new(Duration::from_millis(milliseconds))
+        .map_err(RelayError::calculation_invariant)
 }
 
 fn identity_hash(message_source: &str, message_id: &str, attempt: u32) -> u64 {

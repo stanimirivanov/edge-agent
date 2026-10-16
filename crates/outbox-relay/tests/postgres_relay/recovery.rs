@@ -1,8 +1,10 @@
 use super::*;
+use edgeagent_messaging::LeaseDuration;
 use edgeagent_messaging::{
     ClaimedMessage, LeaseGeneration, OutboxRelayStore, OutboxStoreErrorKind,
 };
 use edgeagent_outbox_relay::RelayMessageFailure;
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use std::future::pending;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Notify;
@@ -41,10 +43,9 @@ async fn cancelled_publication(fixture: Fixture) -> TestResult {
     let registry = MessageRegistry::new(&definitions)?;
     let policy = RelayPolicy::new(
         "relay_test",
-        Duration::from_secs(30),
-        1,
-        Duration::from_secs(1),
-        Duration::from_secs(2),
+        LeaseDuration::new(Duration::from_secs(30))?,
+        MaxAttempts::new(1)?,
+        RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(2))?,
     )?;
     let publisher = PendingPublisher::default();
     {

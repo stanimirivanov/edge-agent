@@ -230,7 +230,17 @@ promote fake transaction behavior into a claimed database guarantee. See
 for per-operation recovery and the focused commands.
 
 The protected `relay-observation-contracts` T2 check
-additionally captures emitted relay events in one isolated executable: rejected
+retains all runtime categories and independently inspectable primary/trigger
+causes for failed resolution; neither cause may leak through public formatting.
+The protected `relay-policy-contracts` T2 executable additionally requires
+typed startup budget/backoff boundaries, exact precision, safe owner failures,
+worker auto traits, and source-preserving runtime classification. Negative
+discovery fixtures reject removal, rename, duplication, and unregistered tests;
+relay/outbox/port routes include the check. Compile-fail doctests reject raw
+configuration, while unit golden vectors protect unchanged jitter and flooring.
+These are credential-free API/policy proofs, not database availability proofs.
+
+The same isolated executable captures emitted relay events: rejected
 records must have no identity fields, valid records retain correlation, and
 publication/persistence signals must match returned results. Its named census
 rejects missing or renamed regressions; route fixtures connect relay and

@@ -3,9 +3,7 @@
 use crate::observation::RelayObservation;
 use crate::retry::{RetryDecision, retry_decision};
 use crate::{QuarantineReason, RelayError, RelayMessageFailure, RelayOutcome, RelayPolicy};
-use edgeagent_messaging::{
-    ClaimedMessage, OutboxRelayStore, OutboxRetryDelay, PublishDisposition, PublishError,
-};
+use edgeagent_messaging::{ClaimedMessage, OutboxRelayStore, PublishDisposition, PublishError};
 use edgeagent_telemetry::EventSpineOutcome;
 
 pub(super) async fn published(
@@ -32,32 +30,36 @@ pub(super) async fn failed(
     observation: &RelayObservation,
     failure: PublishError,
 ) -> Result<RelayOutcome, RelayError> {
-    match retry_decision(
+    let decision = match retry_decision(
         policy,
         message.message_source(),
         message.message_id(),
         message.attempt(),
         failure.kind(),
     ) {
+        Ok(decision) => decision,
+        Err(error) => {
+            return Err(error.with_triggering_failure(RelayMessageFailure::Publication(failure)));
+        }
+    };
+    match decision {
         RetryDecision::Retry {
             delay,
             failure_code,
         } => {
-            let retry_after = OutboxRetryDelay::new(delay).map_err(|_| {
-                RelayError::invalid_policy(
-                    "calculated retry delay exceeds the outbox timing bounds",
-                )
-            })?;
             let started = observation.start_stage();
             let result = store
-                .release_for_retry(message, &policy.lease_owner, retry_after, failure_code)
+                .release_for_retry(message, &policy.lease_owner, delay, failure_code)
                 .await;
             observation.persistence(started, &result, EventSpineOutcome::RetryScheduled);
-            result?;
+            if let Err(error) = result {
+                return Err(RelayError::from(error)
+                    .with_triggering_failure(RelayMessageFailure::Publication(failure)));
+            }
             Ok(RelayOutcome::RetryScheduled {
                 failure,
                 attempt: message.attempt(),
-                delay,
+                delay: delay.get(),
             })
         }
         RetryDecision::Quarantine(reason) => {
@@ -87,7 +89,9 @@ pub(super) async fn quarantine(
         .quarantine(message, &policy.lease_owner, reason.code())
         .await;
     observation.persistence(started, &result, EventSpineOutcome::Quarantined);
-    result?;
+    if let Err(error) = result {
+        return Err(RelayError::from(error).with_triggering_failure(failure));
+    }
     Ok(RelayOutcome::Quarantined {
         reason,
         attempt: message.attempt(),

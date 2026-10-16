@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 22] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 23] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -131,6 +131,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 22] = [
         number: 22,
         path: "docs/decisions/0022-bound-relay-publication-by-acquired-claims.md",
         title: "Bound relay publication by acquired claims",
+    },
+    PublishedIdentity {
+        number: 23,
+        path: "docs/decisions/0023-type-relay-configuration-and-runtime-failures.md",
+        title: "Type relay configuration and runtime failures",
     },
 ];
 

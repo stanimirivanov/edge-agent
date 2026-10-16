@@ -287,6 +287,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Isolated relay telemetry trust boundary and confirmed outcome matrix; named discovery rejects missing or renamed security regressions.",
         ),
         check(
+            "relay-policy-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-outbox-relay",
+                "--test",
+                "policy_contracts",
+                "--",
+            ],
+            "Typed startup bounds/precision and independent runtime category/source contracts; protected named discovery is credential-free.",
+        ),
+        check(
             "contracts-preserve-order",
             "T2",
             &["verify", "test"],
@@ -416,6 +432,21 @@ pub(super) fn checks() -> Vec<Check> {
             }
             "image-smoke" | "sbom-images" => {
                 entry.prerequisites = &[Requirement::Executable("docker")]
+            }
+            "relay-policy-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "attempt_budgets_validate_inclusive_limits_and_round_trip",
+                        "backoff_validation_preserves_precision_and_rejects_invalid_intervals",
+                        "owner_errors_are_startup_only_and_payload_safe",
+                        "storage_failures_preserve_all_runtime_categories_and_real_source_presence",
+                        "configuration_and_runtime_types_preserve_worker_auto_traits",
+                    ],
+                    ignored: false,
+                });
             }
             "dependency-policy" => entry.prerequisites = &[Requirement::Executable("cargo-deny")],
             "sbom-rust" => entry.prerequisites = &[Requirement::Executable("cargo-cyclonedx")],

@@ -22,7 +22,9 @@ The [relay guide](../outbox-relay.md) describes current behavior.
 [ADR-0009](../../decisions/0009-fence-outbox-transitions-by-claim-generation.md)
 governs fencing and
 [ADR-0019](../../decisions/0019-validate-outbox-timing-at-the-port.md)
-governs timing and the current configuration API.
+records the original timing decision. Its successor
+[ADR-0023](../../decisions/0023-type-relay-configuration-and-runtime-failures.md)
+retains those portable bounds and governs typed relay configuration/runtime failures.
 
 ## Ordered slices
 
@@ -44,7 +46,8 @@ governs timing and the current configuration API.
    Holding a confirmed receipt proves application result loss, not wire ACK loss.
    [ADR-0022](../../decisions/0022-bound-relay-publication-by-acquired-claims.md)
    records the claim-count budget and exhausted-recovery tradeoff.
-3. **Make relay configuration and runtime failure contracts explicit.**
+3. **Make relay configuration and runtime failure contracts explicit**
+   ([issue #183](https://github.com/stanimirivanov/edge-agent/issues/183)).
    After the first two slices, introduce validated attempt/backoff configuration,
    accept the existing typed lease, and separate startup policy errors from
    runtime availability, state-transition, and invariant failures. Preserve the
@@ -64,9 +67,12 @@ timing remain unchanged.
 Slice two adds public failure/reason variants and the bounded
 `publication_budget_exhausted` code without event or database schema changes.
 ADR-0022 defines exhaustive-match migration, acquired-claim meaning, uncertain
-earlier effects, mixed-worker rollout, and rollback risk. Slice three may change
-configuration types and runtime error contracts; its issue and ADR must define
-compatibility before implementation. Do not tighten decoder
+earlier effects, mixed-worker rollout, and rollback risk. Slice three replaces
+the primitive constructor and coarser runtime kinds in one caller migration;
+ADR-0023 records the distinct startup type, three runtime categories, separately
+inspectable failure context, and unchanged timing/persistence contracts.
+These three slices complete the planned crate-focused refactoring; worker
+lifecycle and operator capabilities remain excluded. Do not tighten decoder
 compatibility or change the existing unknown-type quarantine policy incidentally.
 Rolling back the first slice restores the telemetry exposure; prefer a forward
 fix that preserves the trust boundary.

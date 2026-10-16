@@ -8,10 +8,9 @@ async fn publication_budget_is_checked_before_publisher_invocation() -> Result<(
     for (attempt, limit) in [(1, 3), (3, 3), (4, 3), (3, 1), (u32::MAX, 100)] {
         let policy = RelayPolicy::new(
             "relay_port_test",
-            Duration::from_secs(30),
-            limit,
-            Duration::from_secs(1),
-            Duration::from_secs(60),
+            LeaseDuration::new(Duration::from_secs(30))?,
+            MaxAttempts::new(limit)?,
+            RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(60))?,
         )?;
         let template = claimed_message()?;
         let original = ClaimedMessage::new(

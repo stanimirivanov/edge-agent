@@ -299,6 +299,12 @@ values is not the durable idempotency comparison.
 
 The [inbox coordinator](inbox-handler.md) and [outbox relay](outbox-relay.md)
 own recovery ordering; adapters own atomic persistence and transport behavior.
+The relay's startup `RelayPolicyError` is distinct from runtime `Unavailable`,
+`StateTransition`, and `Invariant` categories. Failed retry/quarantine keeps
+the actual storage error in `Error::source()` and the earlier message failure
+in `triggering_failure()`. A rejected transition need not mean lease loss.
+Neither cause is rendered publicly; explicitly traversed adapter causes still
+need redaction. A confirmed publication is not fabricated as a triggering error.
 The relay's inclusive budget counts committed claims, including abandoned
 ones, not network requests. Over-budget recovery quarantines without invoking
 publication and does not fabricate a transport error. Earlier effects may

@@ -3,6 +3,8 @@
 #[path = "telemetry/support.rs"]
 mod support;
 
+use edgeagent_messaging::LeaseDuration;
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -13,7 +15,8 @@ use edgeagent_messaging::{
     PublishErrorKind,
 };
 use edgeagent_outbox_relay::{
-    QuarantineReason, RelayMessageFailure, RelayOutcome, RelayPolicy, relay_once,
+    QuarantineReason, RelayError, RelayErrorKind, RelayMessageFailure, RelayOutcome, RelayPolicy,
+    relay_once,
 };
 use support::{
     Calls, Capture, DEFINITION, Fields, OWNER, Operation, PRIVATE, Publisher, Store, claim,
@@ -76,6 +79,33 @@ fn assert_send<T: Send>(value: T) -> T {
     value
 }
 
+fn assert_runtime_failure(
+    error: &RelayError,
+    kind: OutboxStoreErrorKind,
+) -> Result<(), Box<dyn Error>> {
+    let expected = match kind {
+        OutboxStoreErrorKind::Unavailable => RelayErrorKind::Unavailable,
+        OutboxStoreErrorKind::StateTransition => RelayErrorKind::StateTransition,
+        OutboxStoreErrorKind::Invariant => RelayErrorKind::Invariant,
+    };
+    assert_eq!(error.kind(), expected);
+    let primary = error
+        .source()
+        .and_then(|cause| cause.downcast_ref::<OutboxStoreError>())
+        .ok_or("primary storage source missing")?;
+    assert_eq!(primary.kind(), kind);
+    assert_eq!(
+        primary
+            .source()
+            .and_then(|cause| cause.downcast_ref::<std::io::Error>())
+            .map(ToString::to_string)
+            .as_deref(),
+        Some(PRIVATE)
+    );
+    assert!(!format!("{error} {error:?}").contains(PRIVATE));
+    Ok(())
+}
+
 /// A single test avoids competing subscribers and process-global interest races.
 #[tokio::test(flavor = "current_thread")]
 async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Result<(), Box<dyn Error>>
@@ -87,10 +117,9 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
     let empty_registry = MessageRegistry::new(&[])?;
     let policy = RelayPolicy::new(
         OWNER,
-        Duration::from_secs(30),
-        3,
-        Duration::from_secs(1),
-        Duration::from_secs(60),
+        LeaseDuration::new(Duration::from_secs(30))?,
+        MaxAttempts::new(3)?,
+        RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(60))?,
     )?;
 
     // Include mismatched columns, malformed bytes, and a valid-but-unsupported type.
@@ -98,6 +127,8 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
         for fault in [
             None,
             Some((Operation::Quarantine, OutboxStoreErrorKind::Unavailable)),
+            Some((Operation::Quarantine, OutboxStoreErrorKind::StateTransition)),
+            Some((Operation::Quarantine, OutboxStoreErrorKind::Invariant)),
         ] {
             let original = claim(2, Some(rejected))?;
             let calls = Calls::default();
@@ -125,8 +156,15 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
                 &policy,
             ))
             .await;
-            if fault.is_some() {
-                assert!(result.is_err());
+            if let Some((_, kind)) = fault {
+                let error = result
+                    .err()
+                    .ok_or("uncommitted contract quarantine must fail")?;
+                assert_runtime_failure(&error, kind)?;
+                assert!(matches!(
+                    error.triggering_failure(),
+                    Some(RelayMessageFailure::StoredContract(_))
+                ));
             } else {
                 assert!(matches!(
                     result?,
@@ -235,6 +273,8 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
             Some((operation, OutboxStoreErrorKind::StateTransition)),
             Some((operation, OutboxStoreErrorKind::Invariant)),
             Some((Operation::Claim, OutboxStoreErrorKind::Unavailable)),
+            Some((Operation::Claim, OutboxStoreErrorKind::StateTransition)),
+            Some((Operation::Claim, OutboxStoreErrorKind::Invariant)),
         ] {
             let original = claim(attempt, None)?;
             let calls = Calls::default();
@@ -251,7 +291,7 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
                 original,
             };
             let result = assert_send(relay_once(&mut store, &registry, &publisher, &policy)).await;
-            if let Some((_, kind)) = fault {
+            if let Some((failed_operation, kind)) = fault {
                 let error = result
                     .err()
                     .ok_or("storage failure must fail the iteration")?;
@@ -269,6 +309,25 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
                     Some(PRIVATE)
                 );
                 assert!(!format!("{error} {error:?}").contains(PRIVATE));
+                assert_runtime_failure(&error, kind)?;
+                if failed_operation == Operation::Claim || publication.is_ok() {
+                    assert!(error.triggering_failure().is_none());
+                } else {
+                    let trigger = error
+                        .triggering_failure()
+                        .and_then(Error::source)
+                        .and_then(|cause| cause.downcast_ref::<PublishError>())
+                        .ok_or("publication trigger missing")?;
+                    assert_eq!(Err(trigger.kind()), publication);
+                    assert_eq!(
+                        trigger
+                            .source()
+                            .and_then(|cause| cause.downcast_ref::<std::io::Error>())
+                            .map(ToString::to_string)
+                            .as_deref(),
+                        Some(PRIVATE)
+                    );
+                }
             } else {
                 match result? {
                     RelayOutcome::Published {
@@ -374,6 +433,19 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
             let result = relay_once(&mut store, selected_registry, &publisher, &policy).await;
             if let Some(kind) = fault {
                 let error = result.err().ok_or("uncommitted exhaustion must fail")?;
+                assert_runtime_failure(&error, kind)?;
+                if rejected.is_some() {
+                    assert!(matches!(
+                        error.triggering_failure(),
+                        Some(RelayMessageFailure::StoredContract(_))
+                    ));
+                } else {
+                    assert!(matches!(
+                        error.triggering_failure(),
+                        Some(RelayMessageFailure::PublicationBudgetExhausted)
+                    ));
+                    assert!(error.triggering_failure().and_then(Error::source).is_none());
+                }
                 assert_eq!(
                     error
                         .source()

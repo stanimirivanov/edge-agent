@@ -11,9 +11,11 @@ use edgeagent_inbox_postgres::{
     PostgresHandlerFuture, PostgresInboundMessageStore, PostgresInbox,
     PostgresTransactionalMessageHandler,
 };
+use edgeagent_messaging::LeaseDuration;
 use edgeagent_messaging::{FailureCode, MessageConsumer, PublishDisposition};
 use edgeagent_messaging_nats::{JetStreamConsumer, JetStreamPublisher};
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Postgres, Row, Transaction};
@@ -228,10 +230,9 @@ async fn verify_restart_recovery(
     let registry = MessageRegistry::new(&definitions)?;
     let relay_policy = RelayPolicy::new(
         format!("event_spine_relay_{process_id}"),
-        Duration::from_secs(10),
-        3,
-        Duration::from_millis(10),
-        Duration::from_secs(1),
+        LeaseDuration::new(Duration::from_secs(10))?,
+        MaxAttempts::new(3)?,
+        RetryBackoff::new(Duration::from_millis(10), Duration::from_secs(1))?,
     )?;
 
     let first_client = async_nats::connect(&nats_url).await?;
