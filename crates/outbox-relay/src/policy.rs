@@ -19,6 +19,12 @@ pub struct RelayPolicy {
 impl RelayPolicy {
     /// Construct a validated policy.
     ///
+    /// `max_attempts` is an inclusive budget of acquired claims (1 through 100),
+    /// not physical network requests. Cancellation consumes a committed claim.
+    /// The final permitted claim may publish; a later claim quarantines before
+    /// publication, including after a policy reduction or lost broker result.
+    /// Lease duration must exceed the composition root's publication timeout.
+    ///
     /// # Errors
     ///
     /// Returns `InvalidPolicy` when the attempt budget or delay bounds cannot

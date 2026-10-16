@@ -11,7 +11,9 @@ use edgeagent_messaging::{
     OutboxRelayStore, OutboxRetryDelay, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
     PublishDisposition, PublishError, PublishErrorKind, PublishFuture, PublishReceipt,
 };
-use edgeagent_outbox_relay::{RelayOutcome, RelayPolicy, relay_once};
+use edgeagent_outbox_relay::{
+    QuarantineReason, RelayMessageFailure, RelayOutcome, RelayPolicy, relay_once,
+};
 use serde_json::json;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
@@ -728,5 +730,116 @@ fn invocation_probes_record_unpolled_futures_without_recording_durable_effects()
     assert_eq!(publisher.invocations.load(Ordering::SeqCst), 1);
     assert!(publisher.lock()?.calls.is_empty());
     assert!(publisher.lock()?.retained.is_none());
+    Ok(())
+}
+
+#[test]
+fn exhausted_recovery_and_cancelled_quarantine_never_publish_or_compensate()
+-> Result<(), Box<dyn Error>> {
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        WORKER,
+        LEASE,
+        1,
+        Duration::from_secs(1),
+        Duration::from_secs(5),
+    )?;
+    for boundary in [Boundary::BeforeCommit, Boundary::AfterCommit] {
+        let mut store = DurableStore::new()?;
+        let publisher = DurablePublisher::new(Response::PersistThenPending);
+        cancel_pending(Box::pin(relay_once(
+            &mut store, &registry, &publisher, &policy,
+        )));
+        assert_leased(&store.snapshot()?, 1);
+        store.advance(LEASE)?;
+        store.pause = Some(Pause(Operation::Quarantine, boundary));
+        cancel_pending(Box::pin(relay_once(
+            &mut store, &registry, &publisher, &policy,
+        )));
+        assert_eq!(publisher.invocations.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            store.invocations(),
+            [Operation::Claim, Operation::Claim, Operation::Quarantine]
+        );
+        let snapshot = store.snapshot()?;
+        assert_eq!(snapshot.attempt, 2);
+        assert_eq!(snapshot.generation, 2);
+        store = store.restarted_handle();
+        if boundary == Boundary::BeforeCommit {
+            assert!(matches!(
+                snapshot.row,
+                RowState::Leased { generation: 2, .. }
+            ));
+            assert_eq!(snapshot.journal, [Committed::Claim(1), Committed::Claim(2)]);
+            store.advance(LEASE)?;
+            let mut retry = Box::pin(relay_once(&mut store, &registry, &publisher, &policy));
+            assert!(matches!(
+                poll_once(retry.as_mut()),
+                Poll::Ready(Ok(RelayOutcome::Quarantined {
+                    reason: QuarantineReason::PublicationBudgetExhausted,
+                    failure: RelayMessageFailure::PublicationBudgetExhausted,
+                    attempt: 3,
+                }))
+            ));
+        } else {
+            assert_eq!(snapshot.row, RowState::Quarantined);
+            assert_eq!(
+                snapshot.journal.last(),
+                Some(&Committed::Quarantine(
+                    2,
+                    FailureCode::from_static("publication_budget_exhausted")
+                ))
+            );
+            let mut retry = Box::pin(relay_once(&mut store, &registry, &publisher, &policy));
+            assert!(matches!(
+                poll_once(retry.as_mut()),
+                Poll::Ready(Ok(RelayOutcome::Idle))
+            ));
+        }
+        assert_eq!(publisher.invocations.load(Ordering::SeqCst), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn abandoned_committed_claim_consumes_budget_without_any_publication() -> Result<(), Box<dyn Error>>
+{
+    let definitions = [COMMAND];
+    let registry = MessageRegistry::new(&definitions)?;
+    let policy = RelayPolicy::new(
+        WORKER,
+        LEASE,
+        1,
+        Duration::from_secs(1),
+        Duration::from_secs(5),
+    )?;
+    let mut store = DurableStore::new()?;
+    store.pause = Some(Pause(Operation::Claim, Boundary::AfterCommit));
+    let publisher = DurablePublisher::new(Response::Confirm);
+    cancel_pending(Box::pin(relay_once(
+        &mut store, &registry, &publisher, &policy,
+    )));
+    assert_leased(&store.snapshot()?, 1);
+    assert_eq!(publisher.invocations.load(Ordering::SeqCst), 0);
+    store.advance(LEASE)?;
+    store = store.restarted_handle();
+    {
+        let mut recovery = Box::pin(relay_once(&mut store, &registry, &publisher, &policy));
+        assert!(matches!(
+            poll_once(recovery.as_mut()),
+            Poll::Ready(Ok(RelayOutcome::Quarantined {
+                reason: QuarantineReason::PublicationBudgetExhausted,
+                failure: RelayMessageFailure::PublicationBudgetExhausted,
+                attempt: 2,
+            }))
+        ));
+    }
+    assert_eq!(publisher.invocations.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        store.invocations(),
+        [Operation::Claim, Operation::Claim, Operation::Quarantine]
+    );
+    assert_eq!(store.snapshot()?.row, RowState::Quarantined);
     Ok(())
 }

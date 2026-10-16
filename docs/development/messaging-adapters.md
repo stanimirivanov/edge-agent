@@ -280,7 +280,7 @@ broker disposition.
 | `publish` | Broker persisted the message without an observed receipt | Retry the same identity and immutable bytes under bounded policy; retain consumer inbox deduplication beyond the broker window |
 | `process` | Inbox, domain work, and transactional outbox committed atomically | Leave delivery unsettled; redelivery returns `Duplicate` if committed, otherwise applies once |
 | Inbound `quarantine` | Exact evidence retained without an observed disposition | Leave delivery unsettled; retry identical evidence until `Inserted` or `AlreadyPresent` confirms commit before terminal settlement |
-| `claim_one` | Lease committed without a returned claim | Do not publish an unknown claim; expiry permits reacquisition with a higher generation |
+| `claim_one` | Lease committed without a returned claim | Do not publish an unknown claim; expiry permits reacquisition with a higher generation, subject to the relay's acquired-claim budget |
 | `mark_published` | Published marker committed, or lease still active despite broker persistence | Inspect committed state or recover through a later valid claim; never infer an alternative outcome |
 | `release_for_retry` | Lease release and next-eligibility delay committed | Respect committed eligibility and acquire a new generation; do not bypass the delay |
 | Outbound `quarantine` | Terminal quarantine committed | Inspect state; committed quarantine requires separately authorized replay, not automatic retry |
@@ -299,6 +299,11 @@ values is not the durable idempotency comparison.
 
 The [inbox coordinator](inbox-handler.md) and [outbox relay](outbox-relay.md)
 own recovery ordering; adapters own atomic persistence and transport behavior.
+The relay's inclusive budget counts committed claims, including abandoned
+ones, not network requests. Over-budget recovery quarantines without invoking
+publication and does not fabricate a transport error. Earlier effects may
+already exist: quarantine is not evidence of non-delivery. See
+[ADR-0022](../decisions/0022-bound-relay-publication-by-acquired-claims.md).
 Graceful shutdown stops intake and gives owned work a bounded completion window.
 If it must cancel, it preserves the identities and durable state above rather
 than converting shutdown into a handler failure. This contract does not add a

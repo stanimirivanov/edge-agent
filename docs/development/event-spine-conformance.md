@@ -2,15 +2,18 @@
 
 ## TL;DR
 
-- Two opt-in tests compose the real PostgreSQL outbox, bounded relay, JetStream
+- Two consumer-recovery opt-in tests compose the real PostgreSQL outbox, bounded relay, JetStream
   publisher and consumer, transactional inbox handler, and PostgreSQL inbox.
-- Both tests abandon the first delivery without acknowledgement. One discards
+- Both consumer tests abandon the first delivery without acknowledgement. One discards
   every client-side handle; the other restarts the isolated NATS server and
   recovers a file-backed stream and durable consumer.
 - Acceptance requires one published outbox record, one inbox identity, one
   domain effect, a stable transport delivery key, and no pending acknowledgement.
 - The local-platform CI job runs this test against isolated NATS and PostgreSQL
   services; credential-free workspace tests compile it but keep it ignored.
+- A third producer-result-loss test holds a real confirmed publisher receipt,
+  cancels the relay, then proves duplicate recovery within budget or quarantine
+  without another publisher invocation after exhaustion.
 
 ## Recovery scenario
 
@@ -35,6 +38,34 @@ The abandoned attempt models a process stopping after receipt but before local
 commit or broker acknowledgement. The stable JetStream stream/sequence key must
 survive reconnection while the delivery-attempt count increases. No test helper
 short-circuits publication, consumption, settlement, or PostgreSQL transactions.
+
+## Producer result loss and the recovery budget
+
+The protected `event-spine-producer` check runs
+`publication_recovery::producer_result_loss_recovers_within_budget_and_quarantines_after_exhaustion`
+in the same event-spine executable. Its narrow decorator delegates publication
+to the production `JetStreamPublisher`, signals only after a persisted receipt,
+then withholds that result. Cancelling the relay leaves an unresolved leased
+PostgreSQL row and exactly one broker message. The test explicitly expires only
+its owned synthetic lease, then reacquires with the same owner/new generation.
+
+With budget two, recovery returns a real `Duplicate` receipt, one stored stream
+message, and one published outbox row. With budget one, recovery invokes no
+publisher and records `publication_budget_exhausted`, preserving the earlier
+broker message and immutable database bytes/identity. Claim history reaches
+two in both cases. This is application result loss after confirmed persistence,
+not network ACK loss, non-delivery evidence, or exactly-once business execution.
+The case uses the existing owned PostgreSQL schema fixture and explicitly
+awaits broker resource cleanup after returned errors, caught panics, and bounded
+case timeouts. Disposable CI teardown remains the process-abort backstop.
+
+```text
+cargo xtask verify --check event-spine-producer
+```
+
+Both service URL prerequisites below apply. The protected
+`relay-recovery-budget` check separately proves actual relay cancellation with
+PostgreSQL and a pending fake publisher, including stale-fence rejection.
 
 ## Verification
 

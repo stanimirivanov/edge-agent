@@ -238,6 +238,19 @@ telemetry changes to this check. Returned-store-failure cases assert original
 claims and owners, exact failure codes, retained causes, and no alternate
 transition. No global subscriber race, service, or sleep is required.
 
+The same T2 matrix rejects publication events or publisher invocation for an
+over-budget claim, including returned quarantine failures. Portable boundary
+and cancellation tests protect the inclusive claim budget and no-compensation
+rule. The named `relay-recovery-budget` and `event-spine-producer` T3 checks
+extend existing PostgreSQL and event-spine executables: real cancellation must
+preserve a recoverable fenced claim; holding a confirmed real JetStream receipt
+must lead to duplicate recovery within budget or no new publication after
+exhaustion. Discovery mutation fixtures reject missing, renamed, duplicated,
+and extra identities, and routes include relay, adapter, contract, and local
+platform changes. The existing local-platform CI profile runs them; a named
+census is not broker evidence. See the
+[producer proof boundary](event-spine-conformance.md#producer-result-loss-and-the-recovery-budget).
+
 The messaging `claimed_envelope` integration executable is the T2 stored-record
 trust-boundary sensor. It directly tests decoder size and metadata failures,
 unsupported exact versions, registry schema/partition/producer policy, and all

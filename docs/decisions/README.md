@@ -133,3 +133,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0019](0019-validate-outbox-timing-at-the-port.md) | Accepted | Validate outbox timing at the port. |
 | [ADR-0020](0020-retain-settlement-abandonment-diagnostics.md) | Accepted | Retain settlement abandonment diagnostics. |
 | [ADR-0021](0021-enforce-ci-security-and-secret-scanning.md) | Accepted | Enforce CI security and secret scanning. |
+| [ADR-0022](0022-bound-relay-publication-by-acquired-claims.md) | Accepted | Bound relay publication by acquired claims. |

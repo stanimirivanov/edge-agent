@@ -33,6 +33,9 @@ const COMMAND: MessageDefinition = MessageDefinition::command(
 
 const BROKER_RESTART_OPT_IN: &str = "EDGEAGENT_NATS_COMPOSE_RESTART";
 
+#[path = "event_spine/publication_recovery.rs"]
+mod publication_recovery;
+
 #[derive(Clone, Copy)]
 enum RecoveryMode {
     Client,
