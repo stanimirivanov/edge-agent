@@ -135,3 +135,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0021](0021-enforce-ci-security-and-secret-scanning.md) | Accepted | Enforce CI security and secret scanning. |
 | [ADR-0022](0022-bound-relay-publication-by-acquired-claims.md) | Accepted | Bound relay publication by acquired claims. |
 | [ADR-0023](0023-type-relay-configuration-and-runtime-failures.md) | Accepted | Type relay configuration and runtime failures. |
+| [ADR-0024](0024-define-synthetic-event-spine-acceptance-contracts.md) | Accepted | Define synthetic event-spine acceptance contracts and local schema compatibility gates. |

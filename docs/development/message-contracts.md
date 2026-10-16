@@ -12,8 +12,9 @@
   payloads fail before a message reaches a transport or handler.
 - A validated registry owns subjects, command handlers, event producers,
   partition namespaces, portable size limits, delivery mode, and retention.
-- Generated payload schemas, service-specific domain handlers, and operator
-  replay remain separate M02 capabilities. PostgreSQL outbox, inbox, and inbound quarantine
+- Synthetic acceptance payloads have generated local schemas and compatibility
+  gates; production domain handlers and operator replay remain separate M02
+  capabilities. PostgreSQL outbox, inbox, and inbound quarantine
   persistence implement transaction boundaries, while messaging adapters
   provide durable publication, delivery, and confirmed settlement.
 
@@ -240,19 +241,64 @@ changing field encoding; see [ADR-0011](../decisions/0011-bound-untrusted-envelo
 
 ## Current limitations
 
+### Synthetic acceptance schemas
+
+`edgeagent-event-spine-conformance` supplies typed `ApplyProbe` and
+`ProbeApplied` v1 contracts under the `conformance` namespace. They request/set
+a synthetic integer at an aggregate revision; they are not research or trading
+APIs. Their registry reuses fixture Gateway/Research identities without adding
+production handlers. Constructors and Serde decoding validate private fields;
+`AcceptanceMessage::from_json` first applies the portable raw envelope bound,
+then exact registry/schema/producer rules, payload schema validation, and payload
+identity versus partition equality. No typed result implies authorization or a
+committed effect. Direct Serde/JSON-value callers must bound their own inputs.
+
+The schema URI selects compiled-in local definitions; no HTTP or file lookup
+occurs. Jsonschema's optional resolvers are disabled. Schemars derives explicit
+Draft 2020-12 schemas from the Serde wire models. Current artifacts are under
+[`schemas/v1`](../../crates/event-spine-conformance/schemas/v1/apply-probe.json)
+and golden envelopes under
+[`fixtures/v1`](../../crates/event-spine-conformance/fixtures/v1/apply-probe.json).
+Inspect or explicitly regenerate current artifacts with:
+
+```text
+cargo xtask message-schemas
+cargo xtask message-schemas --write
+cargo xtask verify --check message-schema-contracts
+```
+
+Verification requires the exact inventory and byte-for-byte regenerated output,
+independent of serde_json object-order features. Generation never updates
+retained baseline schemas. The conservative candidate checker allows only new
+optional top-level fields while preserving every prior property and root rule;
+tests also exercise old readers and missing optional fields in new readers.
+It is not arbitrary schema subsumption or proof of unchanged business meaning.
+Typed conversion remains an additional fail-closed check, including numeric
+representations accepted by JSON Schema but not by Rust's integer deserializer.
+
+Published v1 artifacts/URIs are immutable. Optional payload extensions can be
+tolerated without altering them; passing a hypothetical additive-candidate check
+does not authorize replacing a published schema. A new recognized schema revision
+requires an explicit immutable identity and registry rollout decision; mixed
+schema-revision resolution is not added here. See
+[ADR-0024](../decisions/0024-define-synthetic-event-spine-acceptance-contracts.md)
+and the [M02 completion plan](plans/m02-completion.md).
+
+### Production and operational boundaries
+
 The current contract deliberately does not register domain messages before their
 payloads exist. Each future payload change adds its `MessageDefinition` beside
 the typed contract and fixture, then composes the definitions needed by each
 process. The NATS publisher binding and PostgreSQL outbox are documented in the
 [messaging adapter guide](messaging-adapters.md) and
 [outbox guide](postgres-outbox.md). The transactional consumer boundary is
-documented in the [inbox guide](postgres-inbox.md). Generated JSON Schemas, a
-schema registry, stream provisioning, long-running relay and consumer service
+documented in the [inbox guide](postgres-inbox.md). Production payload schemas, a
+network schema registry, stream provisioning, long-running relay and consumer service
 loops, quarantine replay tooling, and telemetry export remain independently
 reviewable M02 increments built on this contract. Outbound relay mechanics are documented in the
 [relay guide](outbox-relay.md).
 
-The contract verifies that `dataschema` is an absolute URI but does not yet
-validate `data` against the referenced schema. Typed Serde decoding and golden
-fixtures provide the current payload check; generated schema validation must
-arrive with the first public domain payload.
+The shared envelope verifies that `dataschema` is an absolute URI but deliberately
+does not retrieve or validate arbitrary referenced schemas. The conformance
+consumer owns its exact local payload checks. Each future public domain payload
+must supply its own generated schema, fixtures, and validation/evolution policy.

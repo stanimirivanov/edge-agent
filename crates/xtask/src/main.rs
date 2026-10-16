@@ -16,6 +16,9 @@ fn main() -> ExitCode {
         Some("verify") => verification::run(&remaining),
         Some("sqlx-metadata") if remaining.is_empty() => verification::sqlx_metadata(),
         Some("checks") if remaining.is_empty() => verification::print_inventory(),
+        Some("message-schemas") if remaining.is_empty() || remaining == ["--write"] => {
+            run_message_schemas(&remaining)
+        }
         Some("route") => verification::route(&remaining),
         Some("architecture") if remaining.is_empty() => run_architecture_check(),
         Some("repository") if remaining.is_empty() => run_repository_check(),
@@ -27,6 +30,30 @@ fn main() -> ExitCode {
         _ => {
             eprintln!("invalid xtask command or arguments");
             print_usage();
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run_message_schemas(arguments: &[String]) -> ExitCode {
+    match std::process::Command::new("cargo")
+        .args([
+            "run",
+            "--locked",
+            "-p",
+            "edgeagent-event-spine-conformance",
+            "--example",
+            "schemas",
+            "--",
+        ])
+        .args(arguments)
+        .current_dir(verification::workspace_root())
+        .status()
+    {
+        Ok(status) if status.success() => ExitCode::SUCCESS,
+        Ok(_) => ExitCode::FAILURE,
+        Err(error) => {
+            eprintln!("cannot execute local schema tooling: {error}");
             ExitCode::FAILURE
         }
     }
@@ -82,6 +109,7 @@ fn print_usage() {
            cargo xtask architecture    Verify workspace dependency policy\n\
            cargo xtask repository      Verify documentation and governance policy\n\
            cargo xtask workflow-security Verify CI trust and permission boundaries\n\
+           cargo xtask message-schemas [--write] Verify or regenerate current acceptance schemas\n\
            cargo xtask verify [PROFILE] [--check ID] [--python EXECUTABLE]\n\
            cargo xtask checks          List canonical checks and evidence boundaries\n\
            cargo xtask route PATH...   Route Git-relative paths to guides and checks"

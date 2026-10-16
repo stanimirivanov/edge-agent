@@ -64,6 +64,13 @@ Work items:
 Completion means a durable command can survive process and broker restarts and
 produce one domain transition despite duplicate or delayed delivery.
 
+The [M02 completion plan](../development/plans/m02-completion.md) sequences
+remaining schema, topology, multi-process, admission, replay, telemetry, and
+fault-qualification slices after the completed crate refactors. Its first slice
+defines conformance-only typed acceptance contracts and the protected local
+schema/compatibility gate; product APIs and worker-process evidence are not
+claimed by that slice.
+
 **PostgreSQL SQL verification slice:** Outbox enqueue and all inbox adapter SQL
 use `sqlx::query!` or `sqlx::query_file!` with checked-in offline `.sqlx`
 metadata generated from both adapters' migrations. Database-backed CI

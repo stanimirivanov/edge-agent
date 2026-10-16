@@ -112,6 +112,17 @@ default gate starts no service and makes no model-provider call.
 
 ## Feedback sensors
 
+The protected T2 `message-schema-contracts` target checks generated conformance
+schema freshness and complete inventory, immutable baseline snapshots, golden
+envelopes, payload rejection/redaction, and conservative optional-field evolution.
+It executes with serde_json/preserve_order as well as ordinary workspace tests.
+Discovery mutation fixtures reject missing, renamed, duplicated, and unexpected
+test identities. Routes cover the conformance package and shared envelopes.
+`cargo xtask message-schemas` is read-only; `--write` regenerates current output,
+never retained baselines. These are contract checks, not executed broker,
+transaction, process-restart, or production service evidence. See
+[synthetic acceptance schemas](message-contracts.md#synthetic-acceptance-schemas).
+
 Contributors may run a focused test while editing, but run every applicable
 acceptance check before handoff.
 

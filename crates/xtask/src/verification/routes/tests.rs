@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn acceptance_schema_and_shared_envelope_changes_route_schema_contracts() -> Result<(), String> {
+    for path in [
+        "crates/event-spine-conformance/src/contracts.rs",
+        "crates/event-spine-conformance/schemas/v1/apply-probe.json",
+        "crates/event-spine-conformance/fixtures/baseline/v1/apply-probe.schema.json",
+        "crates/event-spine-conformance/tests/schema_contracts.rs",
+        "crates/contracts/src/messaging.rs",
+    ] {
+        assert!(
+            advise(&[path.to_owned()])?
+                .checks
+                .contains("message-schema-contracts"),
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn relay_configuration_and_runtime_changes_route_protected_policy_contracts() -> Result<(), String>
 {
     for path in [

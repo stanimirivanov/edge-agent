@@ -318,6 +318,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "message-schema-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-event-spine-conformance",
+                "--test",
+                "schema_contracts",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Generated local schema freshness, frozen baselines, typed payload/redaction and conservative optional-addition contracts; no broker/process-recovery claim.",
+        ),
+        check(
             "image-smoke",
             "T3",
             &["image-smoke"],
@@ -398,6 +416,26 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "message-schema-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "generated_schemas_match_the_complete_committed_inventory",
+                        "schema_inventory_rejects_stale_missing_extra_and_nonregular_artifacts",
+                        "retained_baselines_preserve_schema_identity_and_existing_field_constraints",
+                        "optional_additions_preserve_old_readers_and_default_new_reader_fields",
+                        "compatibility_policy_rejects_breaking_and_unclassified_schema_mutations",
+                        "typed_command_and_fact_round_trip_exact_golden_envelopes",
+                        "payload_fixture_matrix_rejects_invalid_shapes_and_boundary_values",
+                        "version_schema_producer_and_partition_mismatches_never_yield_typed_messages",
+                        "constructor_serde_and_raw_byte_boundaries_cannot_bypass_validation",
+                        "public_diagnostics_redact_payloads_and_rejected_metadata",
+                    ],
+                    ignored: false,
+                });
+            }
             "ignored-inventory" => {
                 entry.discovery = Some(Discovery {
                     args: entry.command.args.clone(),

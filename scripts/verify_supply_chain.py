@@ -21,6 +21,7 @@ ALLOWED_LICENSES = {
     "BSD-3-Clause",
     "ISC",
     "MIT",
+    "MIT-0",
     "Unicode-3.0",
     "Zlib",
 }

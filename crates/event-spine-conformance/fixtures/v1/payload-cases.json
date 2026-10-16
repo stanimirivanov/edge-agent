@@ -1,0 +1,40 @@
+{
+  "command": {
+    "valid": [
+      {"probe_id": "probe-01", "expected_revision": 0, "value": 0},
+      {"probe_id": "probe-01", "expected_revision": 1000000, "value": 1000000}
+    ],
+    "invalid": [
+      null,
+      [],
+      {},
+      {"probe_id": "", "expected_revision": 0, "value": 42},
+      {"probe_id": "PRIVATE-sentinel-7391", "expected_revision": 0, "value": 42},
+      {"probe_id": "probe-01", "expected_revision": -1, "value": 42},
+      {"probe_id": "probe-01", "expected_revision": 1000001, "value": 42},
+      {"probe_id": "probe-01", "expected_revision": 0, "value": 1000001},
+      {"probe_id": "probe-01", "expected_revision": 0, "value": 0.5},
+      {"probe_id": "probe-01", "expected_revision": 0, "value": "PRIVATE-sentinel-7391"},
+      {"probe_id": "probe-01", "expected_revision": null, "value": 42}
+    ]
+  },
+  "fact": {
+    "valid": [
+      {"probe_id": "probe-01", "revision": 1, "value": 0},
+      {"probe_id": "probe-01", "revision": 1000001, "value": 1000000}
+    ],
+    "invalid": [
+      null,
+      [],
+      {},
+      {"probe_id": "", "revision": 1, "value": 42},
+      {"probe_id": "PRIVATE-sentinel-7391", "revision": 1, "value": 42},
+      {"probe_id": "probe-01", "revision": 0, "value": 42},
+      {"probe_id": "probe-01", "revision": 1000002, "value": 42},
+      {"probe_id": "probe-01", "revision": 1, "value": -1},
+      {"probe_id": "probe-01", "revision": 1, "value": 1000001},
+      {"probe_id": "probe-01", "revision": 1, "value": 0.5},
+      {"probe_id": "probe-01", "revision": 1, "value": null}
+    ]
+  }
+}

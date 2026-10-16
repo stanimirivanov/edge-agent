@@ -1,0 +1,31 @@
+{
+  "$id": "urn:edgeagent:schema:conformance:probe-applied:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "probe_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "type": "string"
+    },
+    "revision": {
+      "format": "uint32",
+      "maximum": 1000001,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "value": {
+      "format": "uint32",
+      "maximum": 1000000,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "probe_id",
+    "revision",
+    "value"
+  ],
+  "title": "ProbeApplied",
+  "type": "object"
+}
