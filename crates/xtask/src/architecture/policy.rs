@@ -18,6 +18,13 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         build: NONE,
     },
     PackagePolicy {
+        name: "edgeagent-event-spine-conformance",
+        role: CrateRole::Tooling,
+        normal: &["edgeagent-contracts"],
+        development: NONE,
+        build: NONE,
+    },
+    PackagePolicy {
         name: "edgeagent-execution-simulator",
         role: CrateRole::CompositionRoot,
         normal: &["edgeagent-contracts", "edgeagent-service-runtime"],

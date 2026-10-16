@@ -38,6 +38,19 @@ class VerifySupplyChainTests(unittest.TestCase):
 
         self.assertTrue(any("approved set" in problem.message for problem in problems))
 
+    def test_reviewed_mit_zero_permission_cannot_be_removed_silently(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "deny.toml"
+            source = (Path(__file__).parents[1] / "deny.toml").read_text(encoding="utf-8")
+            policy.write_text(
+                "\n".join(line for line in source.splitlines() if '"MIT-0"' not in line) + "\n",
+                encoding="utf-8",
+            )
+
+            problems = verify_supply_chain.check_deny_policy(policy)
+
+        self.assertTrue(any("approved set" in problem.message for problem in problems))
+
     def test_artifact_set_requires_source_and_image_sboms(self) -> None:
         tools = verify_supply_chain.ToolPolicy(
             cargo_deny="0.20.2",

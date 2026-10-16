@@ -17,6 +17,12 @@
 
 ## Recovery scenario
 
+The remaining M02 work follows the
+[completion plan](plans/m02-completion.md). Its first slice adds the separate
+`edgeagent-event-spine-conformance` package with typed synthetic command/fact
+schemas and protected credential-free compatibility tests. This does not change
+the existing service-backed scenarios below or claim process-worker recovery.
+
 The conformance test exercises one synthetic `SubmitDryRunOrder` command through
 the complete M02 data and control path:
 

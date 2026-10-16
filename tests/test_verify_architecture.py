@@ -40,6 +40,15 @@ class VerifyArchitectureTests(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("edgeagent-research", problems[0].message)
 
+    def test_conformance_schema_tooling_cannot_enter_product_services(self) -> None:
+        problems = verify_architecture.check_dependencies(
+            "services/gateway",
+            {*verify_architecture.SERVICE_DEPENDENCIES, verify_architecture.CONFORMANCE},
+            verify_architecture.SERVICE_DEPENDENCIES,
+        )
+        self.assertEqual(1, len(problems))
+        self.assertIn(verify_architecture.CONFORMANCE, problems[0].message)
+
     def test_contract_dependency_outside_allowlist_is_rejected(self) -> None:
         problems = verify_architecture.check_dependencies(
             "crates/contracts",

@@ -1,0 +1,19 @@
+[package]
+name = "edgeagent-event-spine-conformance"
+version.workspace = true
+description = "Synthetic event-spine acceptance contracts and schema tooling, not product APIs"
+edition.workspace = true
+license.workspace = true
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+edgeagent-contracts.workspace = true
+jsonschema.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

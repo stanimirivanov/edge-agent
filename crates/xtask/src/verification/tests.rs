@@ -92,6 +92,38 @@ fn relay_policy_discovery_protects_each_public_contract_identity() -> Result<(),
     Ok(())
 }
 
+#[test]
+fn message_schema_discovery_protects_every_acceptance_contract() -> Result<(), String> {
+    let checks = inventory::checks();
+    let check = checks
+        .iter()
+        .find(|check| check.id == "message-schema-contracts")
+        .ok_or("schema check missing")?;
+    assert_eq!(check.profiles, ["verify", "test"]);
+    assert!(check.prerequisites.is_empty());
+    assert!(check.command.args.contains(&"schema_contracts"));
+    assert!(check.command.args.contains(&"serde_json/preserve_order"));
+    let discovery = check.discovery.as_ref().ok_or("schema discovery missing")?;
+    assert_eq!(discovery.expected.len(), 10);
+    let complete = discovery
+        .expected
+        .iter()
+        .map(|name| format!("{name}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(discovery, complete.as_bytes())?;
+    for name in &discovery.expected {
+        for mutation in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, "renamed_schema_contract"),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}unregistered_schema_contract: test\n"),
+        ] {
+            assert!(runner::verify_discovery(discovery, mutation.as_bytes()).is_err());
+        }
+    }
+    Ok(())
+}
+
 struct Fake {
     commands: Vec<(Vec<&'static str>, bool)>,
     outputs: VecDeque<io::Result<Execution>>,
@@ -160,6 +192,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "relay-observation-contracts",
             "relay-policy-contracts",
             "contracts-preserve-order",
+            "message-schema-contracts",
         ]
     );
     assert!(

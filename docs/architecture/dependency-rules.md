@@ -18,6 +18,7 @@
 | Package | Role | Responsibility |
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
+| `edgeagent-event-spine-conformance` | Tooling | Synthetic acceptance payloads, local schemas, and compatibility fixtures; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
 | `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
 | `edgeagent-inbox-handler` | Application | Persistence-neutral policy for validation, atomic processing, retry, quarantine, and settlement |
@@ -45,6 +46,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
+| `edgeagent-event-spine-conformance` | `edgeagent-contracts` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-inbox-handler` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
@@ -150,6 +152,15 @@ form its replacement boundary. A parser or feature change requires reviewing
 these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret-scanning.md).
 
 ## Related decisions
+
+The conformance-only package pins Schemars 1.2.3 (derive/std only) and Jsonschema
+0.58.6 (default features disabled). They derive/validate local schemas, enter no
+production dependency graph or image, and enable no HTTP/file schema resolver.
+Serde wire types, payload-safe errors, schema artifacts/baselines, and the
+protected `message-schema-contracts` gate form the replacement boundary.
+[ADR-0024](../decisions/0024-define-synthetic-event-spine-acceptance-contracts.md)
+records license/feature review and compatibility limits. Updating either tool
+must regenerate and review current artifacts without rewriting frozen history.
 
 - [ADR-0001: Use a Rust workspace with multiple deployables](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md)
 - [ADR-0006: Keep inbound coordination persistence-neutral](../decisions/0006-keep-inbound-coordination-persistence-neutral.md)

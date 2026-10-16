@@ -47,6 +47,7 @@ class Problem:
 
 
 CONTRACTS = "edgeagent-contracts"
+CONFORMANCE = "edgeagent-event-spine-conformance"
 INBOX_HANDLER = "edgeagent-inbox-handler"
 INBOX_POSTGRES = "edgeagent-inbox-postgres"
 MESSAGING = "edgeagent-messaging"
@@ -92,6 +93,11 @@ XTASK_DEPENDENCIES = frozenset(
 
 PACKAGE_RULES = {
     "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),
+    "crates/event-spine-conformance": PackageRule(
+        CONFORMANCE,
+        "lib",
+        frozenset({CONTRACTS, "jsonschema", "schemars", "serde", "serde_json"}),
+    ),
     "crates/inbox-handler": PackageRule(
         INBOX_HANDLER,
         "lib",

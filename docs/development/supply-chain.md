@@ -33,6 +33,14 @@ the package, exact version, current use, license or advisory analysis,
 replacement path, owner, and removal condition. Suppressing a check only in CI
 is not an accepted exception mechanism.
 
+The approved global SPDX allowlist also includes MIT-0 (MIT No Attribution).
+The maintainer explicitly approved this global permission for the conformance
+schema validator's transitive `borrow-or-share` 0.2.4 dependency; it also permits
+future MIT-0 dependencies. [ADR-0024](../decisions/0024-define-synthetic-event-spine-acceptance-contracts.md)
+records the license review. The independent policy sensor requires the same
+approved set; advisory checks, source restrictions, and package exceptions remain
+unchanged. This is a license permission, not a package-specific exception.
+
 ## Independent workspaces and dependency maintenance
 
 The root workspace and five M08 proof workspaces intentionally have separate
