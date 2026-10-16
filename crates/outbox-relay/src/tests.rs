@@ -17,6 +17,8 @@ use std::error::Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+mod budget;
+
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
     "urn:edgeagent:schema:submit-dry-run-order:v1",

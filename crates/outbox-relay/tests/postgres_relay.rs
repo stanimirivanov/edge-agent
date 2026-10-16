@@ -21,6 +21,9 @@ use std::time::Duration;
 mod support;
 use support::{Fixture, TestResult, with_schema};
 
+#[path = "postgres_relay/recovery.rs"]
+mod recovery;
+
 const COMMAND: MessageDefinition = MessageDefinition::command(
     "com.edgeagent.execution.submit-dry-run-order.v1",
     "urn:edgeagent:schema:submit-dry-run-order:v1",

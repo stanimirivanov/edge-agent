@@ -12,6 +12,8 @@ use edgeagent_messaging::{MessagePublisher, OutboxRelayStore};
 /// one in-flight publication, providing an explicit backpressure boundary.
 /// Broker confirmation, retry scheduling, or quarantine is then committed in a
 /// short transaction guarded by the original lease.
+/// A valid claim beyond the policy's acquired-claim budget quarantines before
+/// invoking the publisher. The final allowed claim can still publish.
 ///
 /// # Cancellation
 ///
@@ -21,6 +23,8 @@ use edgeagent_messaging::{MessagePublisher, OutboxRelayStore};
 /// lease expiry/reacquisition; preserve message identity and immutable bytes.
 /// Every later completion still requires its own current claim generation.
 /// Fencing protects storage, not a publication already sent to the broker.
+/// Recovery remains subject to the current budget: exhaustion may quarantine
+/// even if an earlier unobserved publication persisted at the broker.
 ///
 /// # Errors
 ///
@@ -70,6 +74,19 @@ pub async fn relay_once(
         .await;
     };
     let observation = RelayObservation::validated(&envelope, message.attempt());
+    // Claims consume budget even when their publication result was never observed.
+    // Validate first so rejected records keep identity-free, fail-closed handling.
+    if message.attempt() > policy.max_attempts {
+        return resolution::quarantine(
+            store,
+            policy,
+            &message,
+            &observation,
+            QuarantineReason::PublicationBudgetExhausted,
+            RelayMessageFailure::PublicationBudgetExhausted,
+        )
+        .await;
+    }
     let started = observation.start_stage();
     let publication = publisher.publish(definition, &envelope).await;
     observation.publication(started, &publication);

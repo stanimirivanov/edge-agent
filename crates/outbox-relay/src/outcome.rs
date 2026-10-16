@@ -9,6 +9,8 @@ use std::time::Duration;
 const STORED_CONTRACT_INVALID: FailureCode = FailureCode::from_static("stored_contract_invalid");
 const PUBLISH_CONTRACT: FailureCode = FailureCode::from_static("publish_contract");
 const TRANSPORT_REJECTED: FailureCode = FailureCode::from_static("transport_rejected");
+const PUBLICATION_BUDGET_EXHAUSTED: FailureCode =
+    FailureCode::from_static("publication_budget_exhausted");
 const ATTEMPTS_EXHAUSTED_UNAVAILABLE: FailureCode =
     FailureCode::from_static("attempts_exhausted_unavailable");
 const ATTEMPTS_EXHAUSTED_CONFIRMATION_UNKNOWN: FailureCode =
@@ -23,14 +25,14 @@ pub enum RelayOutcome {
     Published {
         /// Broker acknowledgement disposition.
         disposition: PublishDisposition,
-        /// One-based lease/publication attempt.
+        /// One-based acquired claim count, not the number of network requests.
         attempt: u32,
     },
     /// A transient or ambiguous failure was durably scheduled for retry.
     RetryScheduled {
         /// Publication failure retained for safe diagnostics and cause inspection.
         failure: PublishError,
-        /// One-based lease/publication attempt.
+        /// One-based acquired claim count, not the number of network requests.
         attempt: u32,
         /// Deterministic jittered delay before the next claim.
         delay: Duration,
@@ -39,9 +41,9 @@ pub enum RelayOutcome {
     Quarantined {
         /// Stable, bounded operator reason.
         reason: QuarantineReason,
-        /// One-based lease/publication attempt.
+        /// One-based acquired claim count, not the number of network requests.
         attempt: u32,
-        /// Contract or publication failure retained for diagnostics.
+        /// Contract, publication, or pre-publication policy failure.
         failure: RelayMessageFailure,
     },
 }
@@ -53,6 +55,9 @@ pub enum RelayMessageFailure {
     StoredContract(MessageRoutingError),
     /// The portable publisher returned a classified failure.
     Publication(PublishError),
+    /// The acquired claim exceeded policy; the publisher was not invoked.
+    /// Earlier claims may have persisted without an observed result.
+    PublicationBudgetExhausted,
 }
 
 impl Display for RelayMessageFailure {
@@ -62,6 +67,9 @@ impl Display for RelayMessageFailure {
                 formatter.write_str("stored outbox message contract is invalid")
             }
             Self::Publication(error) => Display::fmt(error, formatter),
+            Self::PublicationBudgetExhausted => {
+                formatter.write_str("relay publication claim budget is exhausted")
+            }
         }
     }
 }
@@ -71,6 +79,7 @@ impl Error for RelayMessageFailure {
         match self {
             Self::StoredContract(error) => Some(error),
             Self::Publication(error) => Some(error),
+            Self::PublicationBudgetExhausted => None,
         }
     }
 }
@@ -84,9 +93,11 @@ pub enum QuarantineReason {
     PublishContract,
     /// The transport explicitly rejected the publication.
     TransportRejected,
-    /// Repeated transport unavailability exhausted the attempt budget.
+    /// An acquired claim exceeded policy before publication on that claim.
+    PublicationBudgetExhausted,
+    /// Transport unavailability on the final permitted claim exhausted policy.
     AttemptsExhaustedUnavailable,
-    /// Repeated ambiguous confirmations exhausted the attempt budget.
+    /// An ambiguous confirmation on the final permitted claim exhausted policy.
     AttemptsExhaustedConfirmationUnknown,
 }
 
@@ -98,6 +109,7 @@ impl QuarantineReason {
             Self::StoredContractInvalid => STORED_CONTRACT_INVALID,
             Self::PublishContract => PUBLISH_CONTRACT,
             Self::TransportRejected => TRANSPORT_REJECTED,
+            Self::PublicationBudgetExhausted => PUBLICATION_BUDGET_EXHAUSTED,
             Self::AttemptsExhaustedUnavailable => ATTEMPTS_EXHAUSTED_UNAVAILABLE,
             Self::AttemptsExhaustedConfirmationUnknown => ATTEMPTS_EXHAUSTED_CONFIRMATION_UNKNOWN,
         }

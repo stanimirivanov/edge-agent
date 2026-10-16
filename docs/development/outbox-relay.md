@@ -32,7 +32,9 @@ root:
 1. Open a short transaction and claim one eligible record with an expiring lease.
 2. Commit the claim before external I/O.
 3. Decode the exact stored bytes and validate them against the process registry.
-4. Publish the unchanged identity and content outside a database transaction.
+4. If the acquired claim exceeds the current attempt budget, quarantine without
+   invoking the publisher. Otherwise publish the unchanged identity and content
+   outside a database transaction, including on the final permitted claim.
 5. Open a new short transaction and present the original `ClaimedMessage`
    (which carries its opaque `LeaseGeneration`) with the worker token. Mark the
    record published, release it for retry, or move it into quarantine only
@@ -46,7 +48,7 @@ This does not promise FIFO, partition ordering, ordered returned batches, or
 completion order across workers.
 
 If the broker persists a message but the relay cannot record success, the lease
-eventually expires and another worker republishes the same `(source, id)` and
+eventually expires and another worker, if still within budget, republishes the same `(source, id)` and
 canonical bytes. Broker deduplication may recognize the retry, and consumer
 inboxes still prevent duplicate committed domain effects after that window.
 The storage fence cannot retract a message already sent by a stale worker; it
@@ -75,6 +77,17 @@ ownership and compatibility decision is recorded in
 | `Rejected` | Quarantine as `transport_rejected` pending configuration remediation |
 | Transient or ambiguous failure at the attempt limit | Quarantine with an exhausted-attempt reason |
 | Stored bytes fail registry validation | Quarantine as `stored_contract_invalid` before publication |
+| Valid acquired claim exceeds the current attempt limit | Quarantine as `publication_budget_exhausted` without invoking the publisher |
+
+Attempts count acquired claims, not physical network requests. Cancellation
+does not refund them, even when publication never starts. A recovered claim
+equal to the limit may publish; one above it must not. Reducing policy does
+not reset history. Exhausted recovery can quarantine an already persisted
+broker message whose result was lost; quarantine does not prove non-delivery.
+Reconcile effects or use audited operator replay, preserving identity/content.
+[ADR-0022](../decisions/0022-bound-relay-publication-by-acquired-claims.md)
+records this availability/resource tradeoff. Returned failures on the final
+allowed publication retain their existing classified exhaustion reasons.
 
 The delay grows exponentially from the base and is capped before jitter. Stable
 FNV-1a hashing of source, ID, and attempt selects a deterministic value from the
@@ -108,7 +121,7 @@ authorize the operator before invoking that storage boundary.
 | Worker stops after claim | Lease expiry makes the record eligible again |
 | Registry validation fails | Retain and quarantine without transport I/O |
 | Publish fails transiently | Persist the classified retry time and bounded code |
-| Worker stops after broker persistence | Republish after lease expiry using identical identity and bytes |
+| Worker stops after broker persistence | Recover after expiry with identical identity and bytes; republish only within budget, otherwise quarantine for reconciliation |
 | Lease expires or is reclaimed before outcome persistence, including by the same owner token | State update returns `LeaseLost`; the current claim decides the record |
 | Outcome transaction fails | Do not report success; lease expiry provides recovery |
 
@@ -116,6 +129,8 @@ authorize the operator before invoking that storage boundary.
 The relay emits bounded publication and committed-persistence signals through
 the [event-spine telemetry contract](event-spine-telemetry.md). Handled contract
 and publication failures retain their error chain for redacted diagnostics.
+Skipped publication has a distinct policy failure with no invented publisher
+cause and no publication event; only quarantine persistence is observed.
 `RelayError` covers policy, storage availability, and outbox state-transition
 failures while preserving internal causes without exposing them in public text.
 
@@ -174,11 +189,21 @@ storage-boundary proof that a stale claim cannot resolve a later claim by the
 same owner token. Both are required for the lease-fencing contract in
 [ADR-0009](../decisions/0009-fence-outbox-transitions-by-claim-generation.md).
 
+`cargo xtask verify --check relay-recovery-budget` cancels the actual relay
+while a controlled publisher is pending against real PostgreSQL. It asserts
+the durable lease, same-owner recovery with a new generation, over-budget
+quarantine, unchanged bytes, no second publisher invocation, and stale-fence
+rejection. `cargo xtask verify --check event-spine-producer` adds the real
+JetStream held-confirmation proof described in the
+[event-spine conformance guide](event-spine-conformance.md#producer-result-loss-and-the-recovery-budget).
+Both join the existing local-platform profile; discovery alone is not execution.
+
 ## Current limitations
 
 The [refactoring plan](plans/outbox-relay-refactor.md) sequences telemetry
 hardening, recovery-aware attempt budgets, and explicit configuration/runtime
-failure contracts. Only the first slice belongs to issue #174.
+failure contracts. The first slice belongs to issue #174; the second belongs to
+[issue #176](https://github.com/stanimirivanov/edge-agent/issues/176).
 
 This crate provides one bounded relay iteration, not a continuously running
 service. Lifecycle management, a production composition root, readiness,

@@ -27,6 +27,7 @@ const NATS_CHECKS: &[&str] = &[
     "nats-intake-bound",
     "nats-fixture-cleanup",
     "event-spine-client",
+    "event-spine-producer",
     "event-spine-broker",
 ];
 const OUTBOX_CHECKS: &[&str] = &[
@@ -37,10 +38,13 @@ const OUTBOX_CHECKS: &[&str] = &[
     "outbox-recovery",
     "atomic-enqueue",
     "relay-conformance",
+    "relay-recovery-budget",
+    "event-spine-producer",
     "event-spine-client",
     "event-spine-broker",
 ];
 const INBOX_CHECKS: &[&str] = &[
+    "event-spine-producer",
     "inbox-invariants",
     "inbox-errors",
     "handler-ordering",
@@ -181,7 +185,11 @@ const ROUTES: &[Route] = &[
             "docs/development/message-contracts.md",
             "docs/development/event-spine-conformance.md",
         ],
-        checks: &["event-spine-client", "event-spine-broker"],
+        checks: &[
+            "event-spine-client",
+            "event-spine-broker",
+            "event-spine-producer",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("crates/messaging/"),

@@ -119,7 +119,10 @@ const ATOMIC_ENQUEUE: Target = Target {
 const RELAY: Target = Target {
     package: "edgeagent-outbox-relay",
     name: "postgres_relay",
-    identities: &["relay_bounds_retry_and_quarantines_terminal_failures"],
+    identities: &[
+        "relay_bounds_retry_and_quarantines_terminal_failures",
+        "recovery::cancelled_publication_recovers_over_budget_without_another_publish",
+    ],
 };
 const SPINE: Target = Target {
     package: "edgeagent-inbox-handler",
@@ -127,6 +130,7 @@ const SPINE: Target = Target {
     identities: &[
         "durable_command_survives_client_restart_with_one_domain_transition",
         "durable_command_survives_broker_restart_with_one_domain_transition",
+        "publication_recovery::producer_result_loss_recovers_within_budget_and_quarantines_after_exhaustion",
     ],
 };
 
@@ -283,6 +287,20 @@ pub(super) fn checks() -> Vec<Check> {
             "Persisted relay retry bounds and terminal quarantine; publication uses a controlled fake.",
         ),
         exact(
+            "relay-recovery-budget",
+            &RELAY,
+            "recovery::cancelled_publication_recovers_over_budget_without_another_publish",
+            POSTGRES,
+            "Cancelling the relay during a pending publisher leaves a durable PostgreSQL claim; same-owner recovery quarantines over budget without new publication, preserving bytes and rejecting stale completion.",
+        ),
+        exact(
+            "event-spine-producer",
+            &SPINE,
+            "publication_recovery::producer_result_loss_recovers_within_budget_and_quarantines_after_exhaustion",
+            EVENT_SPINE,
+            "Real JetStream persistence with a held confirmed receipt proves application result loss (not wire ACK loss): recovery deduplicates within budget or quarantines without new I/O after exhaustion.",
+        ),
+        exact(
             "event-spine-client",
             &SPINE,
             "durable_command_survives_client_restart_with_one_domain_transition",
@@ -381,7 +399,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 24);
+        assert_eq!(checks.len(), 26);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -396,8 +414,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 39);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 39);
+        assert_eq!(inventory.len(), 41);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 41);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -437,6 +455,51 @@ mod tests {
                     super::super::runner::verify_discovery(&discovery, removed.as_bytes()).is_err(),
                     "missing relay boundary proof passed discovery: {identity}"
                 );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_budget_proofs_reject_missing_renamed_duplicate_and_extra_identities()
+    -> Result<(), String> {
+        for id in ["relay-recovery-budget", "event-spine-producer"] {
+            let check = checks()
+                .into_iter()
+                .find(|check| check.id == id)
+                .ok_or("recovery proof missing")?;
+            assert_eq!(check.profiles, ["local-platform"]);
+            assert!(check.command.args.contains(&"--exact"));
+            assert!(check.prerequisites.iter().any(|requirement| matches!(
+                requirement,
+                Requirement::Environment("EDGEAGENT_POSTGRES_URL")
+            )));
+            assert_eq!(
+                check.prerequisites.iter().any(|requirement| matches!(
+                    requirement,
+                    Requirement::Environment("EDGEAGENT_NATS_URL")
+                )),
+                id == "event-spine-producer"
+            );
+            let discovery = check.discovery.ok_or("recovery discovery missing")?;
+            let complete = discovery
+                .expected
+                .iter()
+                .map(|identity| format!("{identity}: test\n"))
+                .collect::<String>();
+            super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+            for identity in &discovery.expected {
+                for mutation in [
+                    complete.replace(&format!("{identity}: test\n"), ""),
+                    complete.replace(identity, "renamed_recovery"),
+                    format!("{complete}{identity}: test\n"),
+                    format!("{complete}unregistered_recovery: test\n"),
+                ] {
+                    assert!(
+                        super::super::runner::verify_discovery(&discovery, mutation.as_bytes())
+                            .is_err()
+                    );
+                }
             }
         }
         Ok(())

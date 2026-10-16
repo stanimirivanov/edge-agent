@@ -33,7 +33,8 @@ governs timing and the current configuration API.
    resolution modules, remove repeated registry validation, and protect an
    isolated emitted-event and returned-storage-failure matrix through the
    existing T2 runner, discovery, and routes. Preserve retry and error semantics.
-2. **Enforce a recovery-aware publication-attempt budget.**
+2. **Enforce a recovery-aware publication-attempt budget**
+   ([issue #176](https://github.com/stanimirivanov/edge-agent/issues/176)).
    Gate publication before external I/O: the final allowed attempt may publish,
    while a recovered claim beyond the budget may not. Record an ADR distinguishing
    claims from physical publication requests and introduce truthful policy
@@ -41,6 +42,8 @@ governs timing and the current configuration API.
    current-claim quarantine, real PostgreSQL cancellation, and producer-result
    loss using the existing event-spine suite and real JetStream publisher.
    Holding a confirmed receipt proves application result loss, not wire ACK loss.
+   [ADR-0022](../../decisions/0022-bound-relay-publication-by-acquired-claims.md)
+   records the claim-count budget and exhausted-recovery tradeoff.
 3. **Make relay configuration and runtime failure contracts explicit.**
    After the first two slices, introduce validated attempt/backoff configuration,
    accept the existing typed lease, and separate startup policy errors from
@@ -58,9 +61,12 @@ from rejected records. Retained quarantine evidence remains the authorized
 inspection path. Event bytes, database schemas, reason codes, and accepted retry
 timing remain unchanged.
 
-Later slices may add public outcome variants, reason codes, and configuration
-types. Their individual issues and ADRs must define exhaustive-match migration,
-operational meaning, and rollback before implementation. Do not tighten decoder
+Slice two adds public failure/reason variants and the bounded
+`publication_budget_exhausted` code without event or database schema changes.
+ADR-0022 defines exhaustive-match migration, acquired-claim meaning, uncertain
+earlier effects, mixed-worker rollout, and rollback risk. Slice three may change
+configuration types and runtime error contracts; its issue and ADR must define
+compatibility before implementation. Do not tighten decoder
 compatibility or change the existing unknown-type quarantine policy incidentally.
 Rolling back the first slice restores the telemetry exposure; prefer a forward
 fix that preserves the trust boundary.

@@ -12,7 +12,9 @@ use edgeagent_messaging::{
     FailureCode, OutboxStoreError, OutboxStoreErrorKind, PublishDisposition, PublishError,
     PublishErrorKind,
 };
-use edgeagent_outbox_relay::{QuarantineReason, RelayOutcome, RelayPolicy, relay_once};
+use edgeagent_outbox_relay::{
+    QuarantineReason, RelayMessageFailure, RelayOutcome, RelayPolicy, relay_once,
+};
 use support::{
     Calls, Capture, DEFINITION, Fields, OWNER, Operation, PRIVATE, Publisher, Store, claim,
 };
@@ -339,6 +341,106 @@ async fn relay_observations_respect_validation_and_confirmed_outcomes() -> Resul
                 ]
             };
             assert_events(&captured, &expected, true, attempt);
+        }
+    }
+    // Exhaustion has no publication event: no publisher operation occurred.
+    // Invalid records still take the identity-free contract path when over budget.
+    for rejected in [None, Some("bytes"), Some("unsupported")] {
+        for fault in [
+            None,
+            Some(OutboxStoreErrorKind::Unavailable),
+            Some(OutboxStoreErrorKind::StateTransition),
+            Some(OutboxStoreErrorKind::Invariant),
+        ] {
+            let original = claim(4, rejected)?;
+            let calls = Calls::default();
+            let mut store = Store {
+                claim: Some(original.clone()),
+                original: original.clone(),
+                calls: Arc::clone(&calls),
+                fault: fault.map(|kind| (Operation::Quarantine, kind)),
+                code: None,
+            };
+            let publisher = Publisher {
+                result: Ok(PublishDisposition::Persisted),
+                calls: Arc::clone(&calls),
+                original,
+            };
+            let selected_registry = if rejected == Some("unsupported") {
+                &empty_registry
+            } else {
+                &registry
+            };
+            let result = relay_once(&mut store, selected_registry, &publisher, &policy).await;
+            if let Some(kind) = fault {
+                let error = result.err().ok_or("uncommitted exhaustion must fail")?;
+                assert_eq!(
+                    error
+                        .source()
+                        .and_then(|cause| cause.downcast_ref::<OutboxStoreError>())
+                        .map(OutboxStoreError::kind),
+                    Some(kind)
+                );
+            } else if rejected.is_none() {
+                let RelayOutcome::Quarantined {
+                    reason,
+                    failure,
+                    attempt: 4,
+                } = result?
+                else {
+                    return Err("expected policy exhaustion".into());
+                };
+                assert_eq!(reason, QuarantineReason::PublicationBudgetExhausted);
+                assert!(matches!(
+                    failure,
+                    RelayMessageFailure::PublicationBudgetExhausted
+                ));
+                assert!(failure.source().is_none());
+                assert_eq!(
+                    failure.to_string(),
+                    "relay publication claim budget is exhausted"
+                );
+            } else {
+                assert!(matches!(
+                    result?,
+                    RelayOutcome::Quarantined {
+                        reason: QuarantineReason::StoredContractInvalid,
+                        ..
+                    }
+                ));
+            }
+            assert_eq!(
+                *calls
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+                [Operation::Claim, Operation::Quarantine]
+            );
+            assert_eq!(
+                store.code.map(FailureCode::as_str),
+                Some(if rejected.is_some() {
+                    "stored_contract_invalid"
+                } else {
+                    "publication_budget_exhausted"
+                })
+            );
+            let captured = std::mem::take(
+                &mut *events
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+            );
+            assert_events(
+                &captured,
+                &[(
+                    "persistence",
+                    if fault.is_some() {
+                        "failed"
+                    } else {
+                        "quarantined"
+                    },
+                )],
+                rejected.is_none(),
+                4,
+            );
         }
     }
     Ok(())

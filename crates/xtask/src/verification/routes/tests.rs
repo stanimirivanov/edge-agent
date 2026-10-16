@@ -1,6 +1,33 @@
 use super::*;
 
 #[test]
+fn relay_recovery_changes_route_the_budget_and_real_producer_proofs() -> Result<(), String> {
+    for path in [
+        "crates/outbox-relay/src/coordinator.rs",
+        "crates/outbox-relay/tests/postgres_relay/recovery.rs",
+        "crates/outbox-postgres/src/relay.rs",
+        "deploy/local/compose.yaml",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(advice.checks.contains("relay-recovery-budget"), "{path}");
+        assert!(advice.checks.contains("event-spine-producer"), "{path}");
+    }
+    for path in [
+        "crates/messaging-nats/src/publisher.rs",
+        "crates/inbox-handler/tests/event_spine/publication_recovery.rs",
+        "crates/contracts/src/lib.rs",
+    ] {
+        assert!(
+            advise(&[path.to_owned()])?
+                .checks
+                .contains("event-spine-producer"),
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn relay_and_telemetry_changes_route_the_protected_observation_contract() -> Result<(), String> {
     for path in [
         "crates/outbox-relay/src/coordinator.rs",
@@ -214,6 +241,8 @@ fn sqlx_metadata_and_local_profile_route_their_specialized_checks() -> Result<()
         "inbox-invariants",
         "atomic-enqueue",
         "relay-conformance",
+        "relay-recovery-budget",
+        "event-spine-producer",
         "event-spine-client",
         "event-spine-broker",
     ] {
