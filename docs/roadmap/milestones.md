@@ -71,6 +71,11 @@ defines conformance-only typed acceptance contracts and the protected local
 schema/compatibility gate; product APIs and worker-process evidence are not
 claimed by that slice.
 
+The second slice adds explicit registry-derived JetStream provisioning and
+runtime-permission contracts with isolated authenticated broker proofs. See the
+[topology guide](../development/jetstream-topology.md); no application worker,
+transaction, production deployment, or completed M02 claim follows from it.
+
 **PostgreSQL SQL verification slice:** Outbox enqueue and all inbox adapter SQL
 use `sqlx::query!` or `sqlx::query_file!` with checked-in offline `.sqlx`
 metadata generated from both adapters' migrations. Database-backed CI

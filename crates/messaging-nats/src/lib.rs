@@ -7,6 +7,7 @@
 
 mod consumer;
 mod publisher;
+pub mod topology;
 
 pub use consumer::JetStreamConsumer;
 pub use publisher::JetStreamPublisher;

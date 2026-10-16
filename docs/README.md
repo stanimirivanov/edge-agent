@@ -31,6 +31,7 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 | Capability ownership, crate roles, or dependency direction | [System architecture](architecture/system-overview.md), [dependency rules](architecture/dependency-rules.md) | [Engineering standards](development/engineering-standards.md), `make architecture` |
 | Rust implementation, API design, or tests | [Engineering standards](development/engineering-standards.md) | Relevant capability guide, `make repository`, then `make verify` |
 | Event contracts, routing, consumers, outbox, or inbox | [Message contracts](development/message-contracts.md), [messaging adapters](development/messaging-adapters.md) | [Event-spine conformance](development/event-spine-conformance.md), relevant persistence guide |
+| Registry-derived broker topology, drift, or runtime permissions | [JetStream topology](development/jetstream-topology.md) | [M02 completion plan](development/plans/m02-completion.md), `cargo xtask verify --check nats-topology` |
 | Images, dependencies, releases, or artifact provenance | [Supply chain](development/supply-chain.md), [release guide](development/releases.md) | `make supply-chain`, `make image-smoke` when applicable |
 | Local runtime dependencies or recovery tests | [Local platform](development/local-platform.md) | `make local-up`, relevant conformance guide |
 | Deployment ownership or cloud portability | [Deployment portability](architecture/deployment-portability.md) | [System architecture](architecture/system-overview.md), relevant ADRs |

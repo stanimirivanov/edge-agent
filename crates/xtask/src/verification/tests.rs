@@ -5,6 +5,35 @@ use super::{
     runner::{self, Execution, Executor, Options, Status},
 };
 
+#[test]
+fn executable_choices_fail_closed_for_invalid_explicit_overrides()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        runner::resolve_executable_choice("docker", "EDGEAGENT_NATS_SERVER", None)?,
+        std::ffi::OsString::from("docker")
+    );
+    for invalid in ["", "relative.exe", "private-sentinel-missing"] {
+        let error = runner::resolve_executable_choice(
+            "docker",
+            "EDGEAGENT_NATS_SERVER",
+            Some(invalid.into()),
+        )
+        .err()
+        .ok_or("invalid override accepted")?;
+        assert!(!error.contains("private-sentinel-missing"));
+    }
+    let current = std::env::current_exe()?.into_os_string();
+    assert_eq!(
+        runner::resolve_executable_choice(
+            "docker",
+            "EDGEAGENT_NATS_SERVER",
+            Some(current.clone())
+        )?,
+        current
+    );
+    Ok(())
+}
+
 fn fixture() -> Check {
     Check {
         id: "fixture",

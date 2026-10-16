@@ -52,7 +52,11 @@ One publish attempt performs these steps:
 6. Return `Persisted` or `Duplicate` without leaking stream names or sequence
    numbers into application policy.
 
-The adapter does not create streams. Deployment configuration must provision
+The runtime publisher does not create streams. The separate deployment-time
+[`topology` module](jetstream-topology.md) derives bounded streams, durable
+consumers, and permission objects from a validated registry. Its explicit
+provisioning entry point rejects drift and never updates or deletes resources.
+Runtime users receive no topology mutation grants. Deployment configuration must provision
 subjects, retention, storage, replicas, limits, and ACLs from the validated
 message registry. This separation prevents an application process from
 silently changing durability or authorization policy.

@@ -97,6 +97,7 @@ PACKAGE_RULES = {
         CONFORMANCE,
         "lib",
         frozenset({CONTRACTS, "jsonschema", "schemars", "serde", "serde_json"}),
+        frozenset({"async-nats", MESSAGING, MESSAGING_NATS, "futures-util", "tokio"}),
     ),
     "crates/inbox-handler": PackageRule(
         INBOX_HANDLER,

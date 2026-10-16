@@ -58,13 +58,16 @@ dependencies between workspace packages:
 | Each service composition root | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |
 
-Two development-only compositions support adapter and recovery conformance:
+Three development-only compositions support adapter and recovery conformance:
 
 - `edgeagent-inbox-handler` may use `edgeagent-inbox-postgres`,
   `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, and
   `edgeagent-outbox-relay` as development dependencies; and
 - `edgeagent-outbox-relay` may use `edgeagent-outbox-postgres` as a development
-  dependency.
+  dependency; and
+- `edgeagent-event-spine-conformance` may compose `edgeagent-messaging` and
+  `edgeagent-messaging-nats` in broker proofs only. Normal conformance dependencies
+  remain contracts/schema tooling; no service imports conformance tooling.
 
 These edges assemble realistic tests; they do not invert production ownership.
 There are no allowed internal build dependencies.

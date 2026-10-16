@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn registry_and_adapter_changes_route_the_isolated_topology_proof() -> Result<(), String> {
+    for path in [
+        "crates/contracts/src/routing.rs",
+        "crates/messaging-nats/src/topology.rs",
+        "crates/event-spine-conformance/tests/jetstream_topology.rs",
+    ] {
+        assert!(advise(&[path.into()])?.checks.contains("nats-topology"));
+    }
+    Ok(())
+}
+
+#[test]
 fn acceptance_schema_and_shared_envelope_changes_route_schema_contracts() -> Result<(), String> {
     for path in [
         "crates/event-spine-conformance/src/contracts.rs",

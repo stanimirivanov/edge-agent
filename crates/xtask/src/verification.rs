@@ -52,6 +52,7 @@ pub(super) enum Requirement {
     Environment(&'static str),
     EnvironmentEquals(&'static str, &'static str),
     Executable(&'static str),
+    ExecutableOrEnvironment(&'static str, &'static str),
     CommandProbe(&'static str, &'static [&'static str]),
 }
 
@@ -61,6 +62,9 @@ impl Requirement {
             Self::Environment(name) => format!("nonempty {name}"),
             Self::EnvironmentEquals(name, value) => format!("{name}={value}"),
             Self::Executable(name) => format!("executable {name}"),
+            Self::ExecutableOrEnvironment(name, variable) => {
+                format!("executable {name} or explicit {variable}")
+            }
             Self::CommandProbe(name, args) => {
                 format!("successful probe: {name} {}", args.join(" "))
             }

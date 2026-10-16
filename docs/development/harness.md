@@ -112,6 +112,14 @@ default gate starts no service and makes no model-provider call.
 
 ## Feedback sensors
 
+The protected T3 `nats-topology` suite belongs to `local-platform` and provisions
+its own authenticated broker using the pinned Docker image or an explicit pinned
+native server. Both paths run the same Rust proofs. The default ignored-test
+census and T3 mutation tests protect the complete topology test inventory. Real
+permission events, not timeouts, establish authorization denial. Invalid explicit
+native paths fail closed without falling back to Docker. See the
+[topology guide](jetstream-topology.md#verification) for evidence and prerequisites.
+
 The protected T2 `message-schema-contracts` target checks generated conformance
 schema freshness and complete inventory, immutable baseline snapshots, golden
 envelopes, payload rejection/redaction, and conservative optional-field evolution.
