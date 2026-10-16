@@ -57,16 +57,23 @@ worker token on a later claim does not grant the earlier claim authority.
 
 ## Retry and terminal-failure policy
 
-`RelayPolicy` requires an inclusive attempt budget from 1 through 100, a base
+`RelayPolicy::new` accepts typed `LeaseDuration`, `MaxAttempts`, and
+`RetryBackoff` values plus the worker token. `MaxAttempts` requires an inclusive
+budget from 1 through 100; `RetryBackoff` requires a base
 delay of at least one millisecond, and a maximum delay no greater than 24 hours.
 The maximum must not be shorter than the base. Construction also validates the
-stable worker token and constructs a portable `LeaseDuration` from one
-millisecond through 15 minutes. The policy and calculated retry delay use the
+stable worker token. Construct the portable `LeaseDuration` from one
+millisecond through 15 minutes before assembling policy. Calculated delays use the
 portable `OutboxRetryDelay` bound before storage calls; the storage adapter
 continues to validate the worker token. Outbound storage supports immediate
 retry, but relay policy deliberately requires nonzero backoff. The timing
 ownership and compatibility decision is recorded in
-[ADR-0019](../decisions/0019-validate-outbox-timing-at-the-port.md).
+[ADR-0023](../decisions/0023-type-relay-configuration-and-runtime-failures.md),
+which supersedes ADR-0019's primitive constructor while retaining its portable
+timing contract. No legacy primitive constructor remains. Startup validation
+uses `RelayPolicyError`; portable lease construction retains `OutboxTimingError`.
+Neither is an iteration error. Exact fractional configuration precision is
+preserved; scheduling retains its existing whole-millisecond flooring.
 
 | Publication outcome | Durable relay action |
 | --- | --- |
@@ -94,6 +101,13 @@ FNV-1a hashing of source, ID, and attempt selects a deterministic value from the
 upper half of the capped interval. This prevents synchronized retries without a
 random dependency and makes policy tests reproducible. The original identity,
 envelope, and attempt history never change.
+
+Internal retry decisions carry `OutboxRetryDelay` all the way into storage;
+successful public retry outcomes retain their existing `Duration` projection.
+The validated base/cap and bounded exponent make exponential multiplication
+safe in `u128`. Checked integer/timing conversion failures propagate as runtime
+`Invariant` with their actual cause and publication trigger, before storage I/O.
+No overflow sentinel or fallback delay silently changes the schedule.
 
 ## Quarantine persistence and migration
 
@@ -131,8 +145,24 @@ the [event-spine telemetry contract](event-spine-telemetry.md). Handled contract
 and publication failures retain their error chain for redacted diagnostics.
 Skipped publication has a distinct policy failure with no invented publisher
 cause and no publication event; only quarantine persistence is observed.
-`RelayError` covers policy, storage availability, and outbox state-transition
-failures while preserving internal causes without exposing them in public text.
+`RelayError` covers runtime `Unavailable`, `StateTransition`, and `Invariant`
+failures, mapping storage categories without conflating invariants with
+transition rejection. A rejected transition is not necessarily lease loss.
+Its primary `Error::source()` preserves the original store/calculation error.
+If retry or quarantine fails, `triggering_failure()` independently retains the
+earlier contract, publication, or budget failure. Claims and failed markers
+after confirmed publication have no message failure to invent. Public formatting
+renders neither chain; explicit inspection must redact underlying adapter text.
+An error still confirms neither rollback nor non-delivery and starts no
+alternate outcome. Startup policy failures use a separate type and require
+configuration remediation, not a runtime retry.
+
+| Failure contract | Caller response |
+| --- | --- |
+| Startup `RelayPolicyError` or lease `OutboxTimingError` | Correct configuration before starting relay work; do not treat it as dependency unavailability |
+| Runtime `Unavailable` | Apply composition-root dependency backoff; inspect actual state after unknown commit rather than choosing an alternate record outcome |
+| Runtime `StateTransition` | Inspect the primary cause and current fenced state; do not assume every rejection means lease loss or report durable success |
+| Runtime `Invariant` | Fail closed and surface the defect/schema problem for remediation; do not hide it with a fallback delay or automatic compensation |
 
 Stored source, ID, type, subject, and bytes remain untrusted until the complete
 record passes envelope, registry, and denormalized-column validation. Rejected
@@ -151,6 +181,17 @@ transition after cancellation or a storage error.
 
 ## Verification
 
+The protected T2 `relay-policy-contracts` check covers public startup bounds,
+precision, owner diagnostics, auto traits, and all runtime storage categories
+with and without actual adapter causes. Its full named census rejects missing,
+renamed, duplicate, or extra tests. Focused compile-fail doctests reject raw
+lease, attempt, and backoff values; frozen unit vectors preserve exact legacy
+jitter, fractional-input flooring, capped history, and overflow-sized attempts.
+
+```text
+cargo xtask verify --check relay-policy-contracts
+```
+
 The protected T2 `relay-observation-contracts` check runs one isolated tracing
 executable. It asserts emitted fields, exact operation order, all publication
 classifications, returned store failures, original claim/owner forwarding, and
@@ -162,7 +203,7 @@ proof, not a database or broker proof:
 cargo xtask verify --check relay-observation-contracts
 ```
 
-Credential-free unit tests prove configuration bounds, permanent/transient
+Credential-free crate tests prove configuration bounds, permanent/transient
 classification, deterministic jitter, attempt exhaustion, and complete relay
 orchestration through in-memory publisher and storage adapters. The fake store
 asserts that each published, retry, and quarantine decision forwards the exact
@@ -204,6 +245,10 @@ The [refactoring plan](plans/outbox-relay-refactor.md) sequences telemetry
 hardening, recovery-aware attempt budgets, and explicit configuration/runtime
 failure contracts. The first slice belongs to issue #174; the second belongs to
 [issue #176](https://github.com/stanimirivanov/edge-agent/issues/176).
+The third slice, [issue #183](https://github.com/stanimirivanov/edge-agent/issues/183),
+completes the planned configuration/runtime contract migration. The planned
+crate-focused refactoring scope is complete; the operational capabilities below
+remain explicitly separate work, not incomplete portions of these slices.
 
 This crate provides one bounded relay iteration, not a continuously running
 service. Lifecycle management, a production composition root, readiness,

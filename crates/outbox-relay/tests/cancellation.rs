@@ -11,6 +11,7 @@ use edgeagent_messaging::{
     OutboxRelayStore, OutboxRetryDelay, OutboxStoreError, OutboxStoreErrorKind, OutboxStoreFuture,
     PublishDisposition, PublishError, PublishErrorKind, PublishFuture, PublishReceipt,
 };
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use edgeagent_outbox_relay::{
     QuarantineReason, RelayMessageFailure, RelayOutcome, RelayPolicy, relay_once,
 };
@@ -430,10 +431,9 @@ impl MessagePublisher for DurablePublisher {
 fn policy() -> Result<RelayPolicy, Box<dyn Error>> {
     Ok(RelayPolicy::new(
         WORKER,
-        LEASE,
-        5,
-        Duration::from_secs(1),
-        Duration::from_secs(1),
+        LeaseDuration::new(LEASE)?,
+        MaxAttempts::new(5)?,
+        RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(1))?,
     )?)
 }
 
@@ -740,10 +740,9 @@ fn exhausted_recovery_and_cancelled_quarantine_never_publish_or_compensate()
     let registry = MessageRegistry::new(&definitions)?;
     let policy = RelayPolicy::new(
         WORKER,
-        LEASE,
-        1,
-        Duration::from_secs(1),
-        Duration::from_secs(5),
+        LeaseDuration::new(LEASE)?,
+        MaxAttempts::new(1)?,
+        RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(5))?,
     )?;
     for boundary in [Boundary::BeforeCommit, Boundary::AfterCommit] {
         let mut store = DurableStore::new()?;
@@ -809,10 +808,9 @@ fn abandoned_committed_claim_consumes_budget_without_any_publication() -> Result
     let registry = MessageRegistry::new(&definitions)?;
     let policy = RelayPolicy::new(
         WORKER,
-        LEASE,
-        1,
-        Duration::from_secs(1),
-        Duration::from_secs(5),
+        LeaseDuration::new(LEASE)?,
+        MaxAttempts::new(1)?,
+        RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(5))?,
     )?;
     let mut store = DurableStore::new()?;
     store.pause = Some(Pause(Operation::Claim, Boundary::AfterCommit));

@@ -76,7 +76,7 @@ pub async fn relay_once(
     let observation = RelayObservation::validated(&envelope, message.attempt());
     // Claims consume budget even when their publication result was never observed.
     // Validate first so rejected records keep identity-free, fail-closed handling.
-    if message.attempt() > policy.max_attempts {
+    if message.attempt() > policy.max_attempts.get() {
         return resolution::quarantine(
             store,
             policy,

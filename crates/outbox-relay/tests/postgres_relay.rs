@@ -3,11 +3,13 @@
 use edgeagent_contracts::{
     Component, MessageDefinition, MessageEnvelope, MessageMetadata, MessageRegistry,
 };
+use edgeagent_messaging::LeaseDuration;
 use edgeagent_messaging::{
     MessagePublisher, PublishDisposition, PublishError, PublishErrorKind, PublishFuture,
     PublishReceipt,
 };
 use edgeagent_outbox_postgres::{PostgresOutbox, PostgresOutboxRelay};
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use edgeagent_outbox_relay::{QuarantineReason, RelayError, RelayOutcome, RelayPolicy, relay_once};
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Row};
@@ -136,10 +138,9 @@ async fn relay_retry_and_quarantine_case(fixture: Fixture) -> TestResult {
     let registry = MessageRegistry::new(&definitions)?;
     let policy = RelayPolicy::new(
         "relay_test",
-        Duration::from_secs(30),
-        2,
-        Duration::from_secs(2),
-        Duration::from_secs(30),
+        LeaseDuration::new(Duration::from_secs(30))?,
+        MaxAttempts::new(2)?,
+        RetryBackoff::new(Duration::from_secs(2), Duration::from_secs(30))?,
     )?;
     let publisher = StubPublisher::new([
         StubOutcome::Persisted,

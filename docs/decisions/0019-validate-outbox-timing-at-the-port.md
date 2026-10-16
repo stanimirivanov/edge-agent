@@ -1,11 +1,11 @@
 # ADR-0019: Validate outbox timing at the port
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-10-09
 - Milestone: M02 - Contracts and event spine
 - Deciders: EdgeAgent maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: ADR-0023
 
 ## TL;DR
 

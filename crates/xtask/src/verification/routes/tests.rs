@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn relay_configuration_and_runtime_changes_route_protected_policy_contracts() -> Result<(), String>
+{
+    for path in [
+        "crates/outbox-relay/src/policy.rs",
+        "crates/outbox-relay/src/error.rs",
+        "crates/outbox-relay/src/retry.rs",
+        "crates/outbox-relay/src/resolution.rs",
+        "crates/outbox-relay/tests/policy_contracts.rs",
+        "crates/outbox-postgres/src/relay.rs",
+        "crates/messaging/src/outbox.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(advice.checks.contains("relay-policy-contracts"), "{path}");
+    }
+    Ok(())
+}
+
+#[test]
 fn relay_recovery_changes_route_the_budget_and_real_producer_proofs() -> Result<(), String> {
     for path in [
         "crates/outbox-relay/src/coordinator.rs",

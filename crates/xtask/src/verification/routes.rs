@@ -32,6 +32,7 @@ const NATS_CHECKS: &[&str] = &[
 ];
 const OUTBOX_CHECKS: &[&str] = &[
     "relay-observation-contracts",
+    "relay-policy-contracts",
     "outbox-conformance",
     "outbox-fencing",
     "outbox-relay-boundaries",

@@ -20,4 +20,4 @@ mod tests;
 pub use coordinator::relay_once;
 pub use error::{RelayError, RelayErrorKind};
 pub use outcome::{QuarantineReason, RelayMessageFailure, RelayOutcome};
-pub use policy::RelayPolicy;
+pub use policy::{MaxAttempts, RelayPolicy, RelayPolicyError, RetryBackoff};

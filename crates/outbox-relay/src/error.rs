@@ -1,154 +1,103 @@
-//! Redacted relay errors with preserved storage causes.
+//! Runtime classifications with independent primary and triggering failures.
 
+use crate::RelayMessageFailure;
 use edgeagent_messaging::{OutboxStoreError, OutboxStoreErrorKind};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-/// Stable relay-orchestration failure categories.
+/// Observed runtime failure categories, never startup configuration errors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RelayErrorKind {
-    /// Retry or attempt configuration is outside supported bounds.
-    InvalidPolicy,
-    /// The outbox store was unavailable or could not commit an operation.
-    Storage,
-    /// The outbox rejected a state transition or returned invalid state.
-    Outbox,
+    /// Storage was unavailable or its commit could not be confirmed.
+    Unavailable,
+    /// Storage rejected the transition; not necessarily lease loss.
+    StateTransition,
+    /// Storage returned invalid state, or a calculation violated bounds.
+    Invariant,
 }
-
 impl Display for RelayErrorKind {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidPolicy => formatter.write_str("outbox relay policy is invalid"),
-            Self::Storage => formatter.write_str("outbox relay storage operation failed"),
-            Self::Outbox => formatter.write_str("outbox relay state transition failed"),
-        }
+        formatter.write_str(match self {
+            Self::Unavailable => "outbox relay storage is unavailable",
+            Self::StateTransition => "outbox relay state transition was rejected",
+            Self::Invariant => "outbox relay invariant failed",
+        })
     }
 }
 
-/// Relay failure with bounded public text and a preserved internal cause.
+/// Runtime failure with a primary cause and optional earlier message failure.
+///
+/// [`Error::source`] preserves the primary storage/calculation cause. A failed
+/// retry/quarantine additionally retains its trigger through
+/// [`Self::triggering_failure`], never by replacing the primary source chain.
+/// Formatting reveals neither chain; explicit inspection must redact sensitive
+/// causes before logging. Confirmed publication is not a failure, so a failed
+/// published-marker transition has no triggering message failure.
 pub struct RelayError {
     kind: RelayErrorKind,
-    reason: Option<&'static str>,
-    source: Option<Box<dyn Error + Send + Sync>>,
+    source: Box<dyn Error + Send + Sync>,
+    triggering_failure: Option<RelayMessageFailure>,
 }
-
 impl std::fmt::Debug for RelayError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("RelayError")
             .field("kind", &self.kind)
-            .field("reason", &self.reason)
-            .field("source_present", &self.source.is_some())
-            .finish()
+            .field(
+                "triggering_failure_present",
+                &self.triggering_failure.is_some(),
+            )
+            .finish_non_exhaustive()
     }
 }
-
 impl RelayError {
-    /// Return the stable category used by worker health and restart policy.
+    /// Return the observed category for worker health and recovery policy.
     #[must_use]
     pub const fn kind(&self) -> RelayErrorKind {
         self.kind
     }
-
-    pub(super) const fn invalid_policy(reason: &'static str) -> Self {
+    /// Inspect the earlier failure whose retry/quarantine could not complete.
+    ///
+    /// Absent for claim or confirmed-publication marker errors. This context's
+    /// source may contain private adapter diagnostics; redact before logging.
+    #[must_use]
+    pub const fn triggering_failure(&self) -> Option<&RelayMessageFailure> {
+        self.triggering_failure.as_ref()
+    }
+    pub(super) fn with_triggering_failure(mut self, failure: RelayMessageFailure) -> Self {
+        self.triggering_failure = Some(failure);
+        self
+    }
+    pub(super) fn calculation_invariant(source: impl Error + Send + Sync + 'static) -> Self {
         Self {
-            kind: RelayErrorKind::InvalidPolicy,
-            reason: Some(reason),
-            source: None,
+            kind: RelayErrorKind::Invariant,
+            source: Box::new(source),
+            triggering_failure: None,
         }
     }
 }
-
 impl Display for RelayError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.kind, formatter)?;
-        if let Some(reason) = self.reason {
-            write!(formatter, ": {reason}")?;
-        }
-        Ok(())
+        Display::fmt(&self.kind, formatter)
     }
 }
-
 impl Error for RelayError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|source| source as &(dyn Error + 'static))
+        Some(self.source.as_ref())
     }
 }
-
 impl From<OutboxStoreError> for RelayError {
     fn from(error: OutboxStoreError) -> Self {
         Self {
             kind: match error.kind() {
-                OutboxStoreErrorKind::Unavailable => RelayErrorKind::Storage,
-                OutboxStoreErrorKind::StateTransition | OutboxStoreErrorKind::Invariant => {
-                    RelayErrorKind::Outbox
-                }
+                OutboxStoreErrorKind::Unavailable => RelayErrorKind::Unavailable,
+                OutboxStoreErrorKind::StateTransition => RelayErrorKind::StateTransition,
+                OutboxStoreErrorKind::Invariant => RelayErrorKind::Invariant,
             },
-            reason: None,
-            source: Some(Box::new(error)),
+            source: Box::new(error),
+            triggering_failure: None,
         }
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::RelayError;
-    use crate::{RelayMessageFailure, RelayOutcome};
-    use edgeagent_messaging::{
-        OutboxStoreError, OutboxStoreErrorKind, PublishError, PublishErrorKind,
-    };
-    use std::error::Error;
-    use std::fmt::{Debug, Display, Formatter};
-    use std::time::Duration;
-
-    const SENTINEL: &str = "private-relay-source-sentinel-7391";
-
-    struct PrivateCause;
-
-    impl Debug for PrivateCause {
-        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-            formatter
-                .debug_tuple("PrivateCause")
-                .field(&SENTINEL)
-                .finish()
-        }
-    }
-
-    impl Display for PrivateCause {
-        fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str(SENTINEL)
-        }
-    }
-
-    impl Error for PrivateCause {}
-
-    #[test]
-    fn relay_errors_and_outcomes_redact_nested_causes() {
-        let error = RelayError::from(OutboxStoreError::with_source(
-            OutboxStoreErrorKind::Unavailable,
-            PrivateCause,
-        ));
-        assert!(!error.to_string().contains(SENTINEL));
-        assert!(!format!("{error:?}").contains(SENTINEL));
-        let mut cause: &dyn Error = &error;
-        while let Some(source) = cause.source() {
-            cause = source;
-        }
-        assert!(cause.is::<PrivateCause>());
-        assert_eq!(cause.to_string(), SENTINEL);
-
-        let outcome = RelayOutcome::RetryScheduled {
-            failure: PublishError::with_source(PublishErrorKind::Unavailable, PrivateCause),
-            attempt: 1,
-            delay: Duration::from_millis(1),
-        };
-        assert!(!format!("{outcome:?}").contains(SENTINEL));
-        let failure = RelayMessageFailure::Publication(PublishError::with_source(
-            PublishErrorKind::Unavailable,
-            PrivateCause,
-        ));
-        assert!(!format!("{failure:?}").contains(SENTINEL));
-    }
-}
+mod tests;

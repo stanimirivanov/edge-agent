@@ -1,7 +1,9 @@
 //! Real broker persistence followed by application result loss, not wire ACK loss.
 
 use super::*;
+use edgeagent_messaging::LeaseDuration;
 use edgeagent_messaging::{MessagePublisher, PublishFuture};
+use edgeagent_outbox_relay::{MaxAttempts, RetryBackoff};
 use edgeagent_outbox_relay::{QuarantineReason, RelayMessageFailure};
 use std::future::pending;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -149,10 +151,9 @@ async fn producer_case(
     let registry = MessageRegistry::new(&definitions)?;
     let policy = RelayPolicy::new(
         "producer_recovery",
-        Duration::from_secs(30),
-        budget,
-        Duration::from_millis(10),
-        Duration::from_secs(1),
+        LeaseDuration::new(Duration::from_secs(30))?,
+        MaxAttempts::new(budget)?,
+        RetryBackoff::new(Duration::from_millis(10), Duration::from_secs(1))?,
     )?;
     let held = HoldConfirmedReceipt {
         inner: JetStreamPublisher::from_context(context.clone()),

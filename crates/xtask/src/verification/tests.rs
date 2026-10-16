@@ -61,6 +61,37 @@ fn relay_security_regression_discovery_rejects_missing_renamed_and_extra_tests()
     Ok(())
 }
 
+#[test]
+fn relay_policy_discovery_protects_each_public_contract_identity() -> Result<(), String> {
+    let checks = inventory::checks();
+    let check = checks
+        .iter()
+        .find(|check| check.id == "relay-policy-contracts")
+        .ok_or("policy check missing")?;
+    assert_eq!(check.profiles, ["verify", "test"]);
+    assert!(check.prerequisites.is_empty());
+    assert!(check.command.args.contains(&"policy_contracts"));
+    let discovery = check.discovery.as_ref().ok_or("policy discovery missing")?;
+    assert_eq!(discovery.expected.len(), 5);
+    let complete = discovery
+        .expected
+        .iter()
+        .map(|identity| format!("{identity}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(discovery, complete.as_bytes())?;
+    for identity in &discovery.expected {
+        for mutation in [
+            complete.replace(&format!("{identity}: test\n"), ""),
+            complete.replace(identity, "renamed_policy_contract"),
+            format!("{complete}{identity}: test\n"),
+            format!("{complete}unregistered_policy_contract: test\n"),
+        ] {
+            assert!(runner::verify_discovery(discovery, mutation.as_bytes()).is_err());
+        }
+    }
+    Ok(())
+}
+
 struct Fake {
     commands: Vec<(Vec<&'static str>, bool)>,
     outputs: VecDeque<io::Result<Execution>>,
@@ -127,6 +158,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "rust-doctests",
             "messaging-error-contracts",
             "relay-observation-contracts",
+            "relay-policy-contracts",
             "contracts-preserve-order",
         ]
     );
