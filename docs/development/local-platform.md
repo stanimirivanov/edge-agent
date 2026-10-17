@@ -100,6 +100,12 @@ pinned broker container and generated role permissions, not this shared profile'
 unauthenticated endpoint. It neither replaces local-stack conformance nor claims
 that the shared dependency broker has production identities installed.
 
+The `event-spine-processes` suite uses the same owned broker fixture plus fresh
+schemas and restricted logins in this profile's PostgreSQL database. It launches
+real producer, relay and consumer children. See
+[process acceptance](process-acceptance.md) for the protected transaction,
+duplicate, rollback and permission proofs and their evidence limits.
+
 - All published ports bind to loopback and must remain unreachable from another host.
 - Local credentials are public test fixtures with no value outside this profile.
 - Services enable the container `no-new-privileges` security option.

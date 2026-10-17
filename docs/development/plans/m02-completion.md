@@ -61,6 +61,12 @@ by edge-agent-gitops, not application runtime code.
 
 ### 3. Multi-process durable command acceptance
 
+[Issue #189](https://github.com/stanimirivanov/edge-agent/issues/189) adds the
+finite conformance worker and protected `event-spine-processes` suite. See the
+[process guide](../process-acceptance.md) and
+[ADR-0026](../../decisions/0026-compose-durable-acceptance-in-independent-processes.md)
+for ownership, transaction, lifecycle and evidence limits.
+
 Extend the conformance package with producer, relay, and consumer roles launched
 as independent OS processes. Producer acceptance/outbox intent share a commit;
 consumer inbox/state/outbound fact share a commit. Use separate owned schemas,
@@ -119,9 +125,10 @@ after 3; coordinate shared harness entries and unpublished ADR numbering. Slice
 7 follows all three. Each slice must leave the repository buildable and have its
 own observable result, issue, verification evidence, and rollback explanation.
 
-Current work adds synthetic types only; existing production contracts need no
-migration. Later topology and replay changes must document retained-state and
-mixed-worker compatibility with their ADRs, not silently reinterpret evidence.
+These slices add synthetic contracts, topology and process-proof tooling;
+existing production contracts need no migration. Every topology or replay change
+must document retained-state and mixed-worker compatibility with its ADR, not
+silently reinterpret evidence.
 Never rewrite frozen baseline schemas to permit a changed published identity.
 
 ## Verification and exclusions

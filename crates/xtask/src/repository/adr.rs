@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 25] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 26] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -146,6 +146,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 25] = [
         number: 25,
         path: "docs/decisions/0025-derive-bounded-jetstream-topology-from-the-registry.md",
         title: "Derive bounded JetStream topology from the registry",
+    },
+    PublishedIdentity {
+        number: 26,
+        path: "docs/decisions/0026-compose-durable-acceptance-in-independent-processes.md",
+        title: "Compose durable acceptance in independent processes",
     },
 ];
 

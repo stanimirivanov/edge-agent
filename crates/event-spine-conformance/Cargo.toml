@@ -9,18 +9,23 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+async-nats.workspace = true
 edgeagent-contracts.workspace = true
+edgeagent-inbox-handler = { path = "../inbox-handler" }
+edgeagent-inbox-postgres.workspace = true
+edgeagent-messaging.workspace = true
+edgeagent-messaging-nats.workspace = true
+edgeagent-outbox-postgres.workspace = true
+edgeagent-outbox-relay.workspace = true
 jsonschema.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "process"] }
 
 [dev-dependencies]
-async-nats.workspace = true
-edgeagent-messaging.workspace = true
-edgeagent-messaging-nats.workspace = true
 futures-util.workspace = true
-tokio = { workspace = true, features = ["process"] }
 
 [lints]
 workspace = true

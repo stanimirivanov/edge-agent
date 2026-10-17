@@ -4,6 +4,12 @@
 !Cargo.lock
 !Cargo.toml
 !rust-toolchain.toml
+!.cargo/
+.cargo/*
+!.cargo/config.toml
+!.sqlx/
+.sqlx/*
+!.sqlx/query-*.json
 !crates/
 !crates/**
 !services/

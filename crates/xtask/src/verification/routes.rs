@@ -13,6 +13,7 @@ const PLATFORM_GUIDES: &[&str] = &[
     "docs/development/event-spine-conformance.md",
 ];
 const NATS_CHECKS: &[&str] = &[
+    "event-spine-processes",
     "nats-topology",
     "nats-publish",
     "nats-consume",
@@ -32,6 +33,7 @@ const NATS_CHECKS: &[&str] = &[
     "event-spine-broker",
 ];
 const OUTBOX_CHECKS: &[&str] = &[
+    "event-spine-processes",
     "relay-observation-contracts",
     "relay-policy-contracts",
     "outbox-conformance",
@@ -46,6 +48,7 @@ const OUTBOX_CHECKS: &[&str] = &[
     "event-spine-broker",
 ];
 const INBOX_CHECKS: &[&str] = &[
+    "event-spine-processes",
     "event-spine-producer",
     "inbox-invariants",
     "inbox-errors",
@@ -133,13 +136,28 @@ const ROUTES: &[Route] = &[
         guides: &[
             "docs/development/message-contracts.md",
             "docs/development/plans/m02-completion.md",
+            "docs/development/process-acceptance.md",
         ],
-        checks: &["message-schema-contracts", "nats-topology"],
+        checks: &[
+            "message-schema-contracts",
+            "nats-topology",
+            "event-spine-processes",
+            "sqlx-metadata",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("crates/contracts/"),
         guides: &[],
-        checks: &["message-schema-contracts", "nats-topology"],
+        checks: &[
+            "message-schema-contracts",
+            "nats-topology",
+            "event-spine-processes",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/process-acceptance.md"),
+        guides: &["docs/development/process-acceptance.md"],
+        checks: &["event-spine-processes"],
     },
     Route {
         matcher: Matcher::Exact("scripts/verify_sqlx_query_policy.py"),
