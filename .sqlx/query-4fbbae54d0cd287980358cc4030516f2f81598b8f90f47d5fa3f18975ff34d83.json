@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO conformance_probe (probe_id, revision, value) VALUES ($1, 0, 0) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4fbbae54d0cd287980358cc4030516f2f81598b8f90f47d5fa3f18975ff34d83"
+}

@@ -119,6 +119,15 @@ renamed, duplicate or extra ignored proofs; default compilation/discovery is not
 runtime evidence. See [process acceptance](process-acceptance.md) for transaction,
 readiness, rollback, cleanup and qualification limits.
 
+The same protected process inventory covers semantic-key/content equality,
+aggregate revision guards, predecessor retry exhaustion, shared durable admission
+across replicas, unrelated-partition progress and targeted connection-loss recovery.
+Stdin delivery barriers, broker pending/waiting counts and PostgreSQL lock waits
+establish ordering; throughput thresholds and coordination sleeps do not. Pure
+worker policy tests separately cover historical duplicate/conflict precedence and
+exact predecessor decisions. These proofs remain synthetic, not product or load
+qualification.
+
 The protected T3 `nats-topology` suite belongs to `local-platform` and provisions
 its own authenticated broker using the pinned Docker image or an explicit pinned
 native server. Both paths run the same Rust proofs. The default ignored-test

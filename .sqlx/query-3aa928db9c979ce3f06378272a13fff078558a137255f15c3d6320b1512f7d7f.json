@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE conformance_probe SET revision = revision + 1, value = $3 WHERE probe_id = $1 AND revision = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3aa928db9c979ce3f06378272a13fff078558a137255f15c3d6320b1512f7d7f"
+}

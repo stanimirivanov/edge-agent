@@ -2,7 +2,6 @@ use std::{
     error::Error,
     future::Future,
     panic::AssertUnwindSafe,
-    process::Stdio,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
@@ -11,10 +10,9 @@ use edgeagent_inbox_postgres::PostgresInbox;
 use edgeagent_outbox_postgres::PostgresOutbox;
 use futures_util::FutureExt;
 use sqlx::{ConnectOptions, Connection, PgConnection, postgres::PgConnectOptions};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    process::Command,
-};
+#[path = "worker.rs"]
+mod worker;
+pub use worker::Worker;
 
 pub type TestError = Box<dyn Error + Send + Sync>;
 pub type TestResult = Result<(), TestError>;
@@ -107,7 +105,7 @@ impl Database {
                     let tables = if schema == self.producer {
                         "conformance_acceptance"
                     } else {
-                        "conformance_probe, edgeagent_message_inbox, edgeagent_message_quarantine"
+                        "conformance_probe, conformance_command, edgeagent_message_inbox, edgeagent_message_quarantine"
                     };
                     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
                         "GRANT SELECT, INSERT ON {tables} TO {role}"
@@ -116,7 +114,7 @@ impl Database {
                     .await?;
                     if schema == self.consumer {
                         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                            "GRANT UPDATE ON edgeagent_message_quarantine TO {role}"
+                            "GRANT UPDATE ON conformance_probe, edgeagent_message_quarantine TO {role}"
                         )))
                         .execute(&mut self.admin)
                         .await?;
@@ -144,6 +142,10 @@ impl Database {
             .password("fixture-only")
     }
 
+    pub async fn inspector(&self) -> Result<PgConnection, TestError> {
+        Ok(PgConnection::connect_with(&self.options).await?)
+    }
+
     pub async fn count(&mut self, consumer: bool, table: &str) -> Result<i64, TestError> {
         // Callers supply only literal fixture table names, never transport data.
         let schema = if consumer {
@@ -165,6 +167,12 @@ impl Database {
         url: &str,
         commit: bool,
     ) -> Result<String, TestError> {
+        let mut worker = self.spawn(role, consumer, url).await?;
+        worker.begin(if commit { b'c' } else { b'r' }, &[]).await?;
+        worker.finish().await
+    }
+
+    pub async fn spawn(&self, role: &str, consumer: bool, url: &str) -> Result<Worker, TestError> {
         let schema = if consumer {
             &self.consumer
         } else {
@@ -175,48 +183,7 @@ impl Database {
             .runtime_options(consumer, role == "relay")
             .to_url_lossy()
             .to_string();
-        let mut command = Command::new(env!("CARGO_BIN_EXE_conformance-worker"));
-        // Do not forward administrator URLs, provider keys or unrelated ambient
-        // credentials. Windows still needs its OS directory for native services.
-        command.env_clear();
-        if let Some(directory) = std::env::var_os("SystemRoot") {
-            command.env("SystemRoot", directory);
-        }
-        let mut child = command
-            .arg(role)
-            .env("EDGEAGENT_POSTGRES_URL", database_url)
-            .env("EDGEAGENT_PROOF_SCHEMA", schema)
-            .env("EDGEAGENT_PROOF_NAMESPACE", "m02-process")
-            .env("EDGEAGENT_PROOF_COMPONENT", component)
-            .env("EDGEAGENT_NATS_URL", url)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()?;
-        let result = tokio::time::timeout(Duration::from_secs(15), async {
-            let mut output = BufReader::new(child.stdout.take().ok_or("child stdout missing")?);
-            let mut ready = String::new();
-            output.read_line(&mut ready).await?;
-            if ready.trim() != "ready" {
-                return Err::<String, TestError>("worker failed before readiness".into());
-            }
-            let mut input = child.stdin.take().ok_or("child stdin missing")?;
-            input.write_all(if commit { b"c" } else { b"r" }).await?;
-            drop(input);
-            let mut outcome = String::new();
-            output.read_line(&mut outcome).await?;
-            if !child.wait().await?.success() {
-                return Err("worker returned unresolved failure".into());
-            }
-            Ok(outcome.trim().to_owned())
-        })
-        .await;
-        // Reap on every ordinary error/deadline; kill-on-drop covers cancellation.
-        if !matches!(result, Ok(Ok(_))) && child.try_wait()?.is_none() {
-            tokio::time::timeout(DEADLINE, child.kill()).await??;
-        }
-        result?
+        Worker::spawn(role, &database_url, schema, component, url).await
     }
 
     async fn close(&mut self) -> TestResult {

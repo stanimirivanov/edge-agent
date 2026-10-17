@@ -138,3 +138,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0024](0024-define-synthetic-event-spine-acceptance-contracts.md) | Accepted | Define synthetic event-spine acceptance contracts and local schema compatibility gates. |
 | [ADR-0025](0025-derive-bounded-jetstream-topology-from-the-registry.md) | Accepted | Derive bounded JetStream topology from the registry. |
 | [ADR-0026](0026-compose-durable-acceptance-in-independent-processes.md) | Accepted | Compose durable acceptance in independent processes. |
+| [ADR-0027](0027-enforce-service-owned-semantic-command-ordering.md) | Accepted | Enforce service-owned semantic command ordering. |

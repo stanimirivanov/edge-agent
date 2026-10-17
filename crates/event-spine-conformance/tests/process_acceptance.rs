@@ -4,6 +4,12 @@
 mod broker;
 #[path = "process/fixture.rs"]
 mod database;
+#[path = "process/replicas.rs"]
+mod replicas;
+#[path = "process/scenarios.rs"]
+mod scenarios;
+#[path = "process/semantics.rs"]
+mod semantics;
 
 use broker::{TestError, TestResult};
 use edgeagent_contracts::{Component, MessageEnvelope};
@@ -192,6 +198,7 @@ async fn process_rollbacks_leave_no_partial_acceptance_or_inbound_fact() -> Test
                 for table in [
                     "edgeagent_message_inbox",
                     "conformance_probe",
+                    "conformance_command",
                     "edgeagent_message_outbox",
                 ] {
                     assert_eq!(
@@ -215,6 +222,7 @@ async fn assert_counts(db: &mut database::Database) -> TestResult {
     for table in [
         "edgeagent_message_inbox",
         "conformance_probe",
+        "conformance_command",
         "edgeagent_message_outbox",
     ] {
         assert_eq!(db.count(true, table).await?, 1, "one durable {table}");
@@ -259,6 +267,10 @@ async fn assert_permissions(db: &database::Database) -> TestResult {
                 denied.push(format!(
                     "INSERT INTO {own}.edgeagent_message_quarantine_replay_audit DEFAULT VALUES"
                 ));
+                denied.push(format!(
+                    "UPDATE {own}.conformance_command SET value = 99 WHERE FALSE"
+                ));
+                denied.push(format!("DELETE FROM {own}.conformance_command WHERE FALSE"));
             }
             for sql in denied {
                 let error = sqlx::raw_sql(sqlx::AssertSqlSafe(sql))

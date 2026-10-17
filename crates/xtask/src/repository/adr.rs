@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 26] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 27] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -151,6 +151,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 26] = [
         number: 26,
         path: "docs/decisions/0026-compose-durable-acceptance-in-independent-processes.md",
         title: "Compose durable acceptance in independent processes",
+    },
+    PublishedIdentity {
+        number: 27,
+        path: "docs/decisions/0027-enforce-service-owned-semantic-command-ordering.md",
+        title: "Enforce service-owned semantic command ordering",
     },
 ];
 

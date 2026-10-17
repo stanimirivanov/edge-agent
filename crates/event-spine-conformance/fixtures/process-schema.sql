@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS conformance_acceptance (
 
 CREATE TABLE IF NOT EXISTS conformance_probe (
     probe_id VARCHAR(64) PRIMARY KEY,
-    revision BIGINT NOT NULL CHECK (revision = 1),
+    revision BIGINT NOT NULL CHECK (revision BETWEEN 0 AND 1000001),
     value BIGINT NOT NULL CHECK (value BETWEEN 0 AND 1000000)
+);
+
+-- Immutable business receipts are independent of transport message identity.
+CREATE TABLE IF NOT EXISTS conformance_command (
+    probe_id VARCHAR(64) NOT NULL REFERENCES conformance_probe(probe_id),
+    expected_revision BIGINT NOT NULL CHECK (expected_revision BETWEEN 0 AND 1000000),
+    value BIGINT NOT NULL CHECK (value BETWEEN 0 AND 1000000),
+    PRIMARY KEY (probe_id, expected_revision)
 );
