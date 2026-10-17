@@ -23,6 +23,15 @@ same metadata workflow. The workspace commits their `.sqlx/` metadata, and
 any diff; runtime PostgreSQL conformance tests remain a separate behavioral
 check.
 
+The OCI builder also copies `.cargo/config.toml` and the committed
+`.sqlx/query-*.json` files before compiling workspace binaries, and explicitly
+sets `SQLX_OFFLINE=true`. Context rules re-exclude directory children before
+allowing the exact config/cache files, so Cargo credentials and non-query siblings
+stay excluded. No `.env` file or database URL is required. The default image
+contract sensor and mutation tests protect this ordering/context contract;
+container smoke tests exercise the real build. Adding a tooling binary with
+adapter dependencies must not make image builds require a live database.
+
 The outbox's capability-local `clippy.toml` rejects runtime query constructors
 and unchecked macros in production. Isolated PostgreSQL conformance fixtures
 have explicit test-only exemptions for schema administration and fault

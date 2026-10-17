@@ -6,9 +6,13 @@ FROM ${RUST_IMAGE} AS builder
 WORKDIR /workspace
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY .cargo/config.toml ./.cargo/config.toml
+COPY .sqlx ./.sqlx
 COPY crates ./crates
 COPY services ./services
 
+# SQLx checks the committed schema descriptions, never a build-time database.
+ENV SQLX_OFFLINE=true
 RUN cargo build --locked --release --workspace --bins
 
 ARG SERVICE

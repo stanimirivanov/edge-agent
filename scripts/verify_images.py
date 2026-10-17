@@ -192,6 +192,54 @@ def check_descriptor(spec: ImageSpec, output: str) -> list[Problem]:
     return problems
 
 
+def check_sqlx_build_inputs(dockerfile: str) -> list[Problem]:
+    """Protect the canonical builder recipe, not arbitrary Dockerfile semantics.
+
+    A comment or a COPY in the final stage cannot supply a compiler input.
+    Actual Docker smoke tests remain the authority for build-context semantics.
+    """
+    instructions = []
+    pending = ""
+    for line in dockerfile.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+        else:
+            instructions.append(pending + line)
+            pending = ""
+    builder = []
+    active = False
+    for instruction in instructions:
+        if instruction.startswith("FROM "):
+            active = instruction == "FROM ${RUST_IMAGE} AS builder"
+        elif active:
+            if instruction.startswith("RUN cargo build "):
+                break
+            builder.append(instruction)
+    else:
+        builder = []  # No recognized compilation boundary: fail closed.
+    required = {
+        "COPY .cargo/config.toml ./.cargo/config.toml": "Cargo config",
+        "COPY .sqlx ./.sqlx": "SQLx query cache",
+        "ENV SQLX_OFFLINE=true": "SQLx offline mode",
+    }
+    problems = [
+        Problem("Dockerfile", f"{purpose} must be supplied in the builder before compilation: {instruction}")
+        for instruction, purpose in required.items()
+        if instruction not in builder
+    ]
+    modes = [
+        mode
+        for instruction in builder if instruction.startswith("ENV ")
+        for mode in re.findall(r"(?:^|\s)SQLX_OFFLINE(?:=|\s+)(\S*)", instruction[4:])
+    ]
+    if modes and modes[-1] != "true":
+        problems.append(Problem("Dockerfile", "SQLx offline mode must not be overridden before compilation"))
+    return problems
+
+
 def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Problem]]:
     """Verify manifest, Docker build policy, and package mappings."""
 
@@ -202,6 +250,7 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
         return contract, specs, problems + [Problem("Dockerfile", "file is missing")]
 
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
+    problems.extend(check_sqlx_build_inputs(dockerfile))
     if contract is not None:
         required_fragments = {
             f"# syntax={contract.dockerfile_frontend}": "pinned Dockerfile frontend",
@@ -243,13 +292,23 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
     if not dockerignore_path.is_file():
         problems.append(Problem(".dockerignore", "file is missing"))
     else:
-        patterns = set(dockerignore_path.read_text(encoding="utf-8").splitlines())
+        ordered_patterns = [
+            line.strip() for line in dockerignore_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        patterns = set(ordered_patterns)
         required_patterns = {
             "*",
             "!Cargo.lock",
             "!Cargo.toml",
             "!Dockerfile",
             "!rust-toolchain.toml",
+            "!.cargo/",
+            ".cargo/*",
+            "!.cargo/config.toml",
+            "!.sqlx/",
+            ".sqlx/*",
+            "!.sqlx/query-*.json",
             "!crates/",
             "!crates/**",
             "!services/",
@@ -259,6 +318,16 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
             problems.append(
                 Problem(".dockerignore", f"required build-context pattern is missing: {pattern}")
             )
+
+        # Re-including a parent directory re-includes its children in Docker.
+        # Exclude those children again before the exact compiler-input exception.
+        for directory, filename in [(".cargo", "config.toml"), (".sqlx", "query-*.json")]:
+            rules = [f"!{directory}/", f"{directory}/*", f"!{directory}/{filename}"]
+            actual = [pattern for pattern in ordered_patterns if pattern in rules]
+            if actual != rules:
+                problems.append(Problem(".dockerignore", f"{directory} compiler-input exclusions must appear once in parent/exclude/allow order"))
+            if any(pattern.startswith(f"!{directory}/") and pattern not in rules for pattern in patterns):
+                problems.append(Problem(".dockerignore", f"{directory} must allow only its declared compiler inputs"))
 
     for spec in specs:
         manifest_path = root / "services" / spec.service / "Cargo.toml"
