@@ -44,6 +44,13 @@ allowlist and independent supply-chain sensor must agree on that permission.
 
 ### 2. Registry-derived JetStream topology
 
+[Issue #187](https://github.com/stanimirivanov/edge-agent/issues/187) implements
+the explicit topology/ACL boundary in the NATS adapter and authenticated isolated
+conformance proofs. See the [topology guide](../jetstream-topology.md) and
+[ADR-0025](../../decisions/0025-derive-bounded-jetstream-topology-from-the-registry.md).
+The broker counts headers in its size limit, so a bounded 1 KiB transport reserve
+preserves the portable 256 KiB body ceiling; raw intake still enforces that ceiling.
+
 Derive file-backed command/event streams and durable consumers from the registry.
 Enforce retention, payload/pending/storage bounds and minimum subject permissions
 **[Prerequisite from M10]**. Separate provisioning authority from runtime roles;

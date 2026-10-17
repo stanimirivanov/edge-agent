@@ -22,6 +22,11 @@ The remaining M02 work follows the
 `edgeagent-event-spine-conformance` package with typed synthetic command/fact
 schemas and protected credential-free compatibility tests. This does not change
 the existing service-backed scenarios below or claim process-worker recovery.
+Its second slice adds the protected `nats-topology` suite with an automatically
+isolated authenticated broker, production messaging adapters, registry-derived
+file streams/consumers, drift rejection, resource bounds, and actual permission
+denials. See [JetStream topology](jetstream-topology.md); this still does not
+claim process-worker restart or application transaction evidence.
 
 The conformance test exercises one synthetic `SubmitDryRunOrder` command through
 the complete M02 data and control path:

@@ -94,6 +94,12 @@ correlation.
 
 ## Security and operational limits
 
+The `local-platform` verification profile also runs the isolated authenticated
+[`nats-topology` proof](jetstream-topology.md#verification). It uses a separate
+pinned broker container and generated role permissions, not this shared profile's
+unauthenticated endpoint. It neither replaces local-stack conformance nor claims
+that the shared dependency broker has production identities installed.
+
 - All published ports bind to loopback and must remain unreachable from another host.
 - Local credentials are public test fixtures with no value outside this profile.
 - Services enable the container `no-new-privileges` security option.

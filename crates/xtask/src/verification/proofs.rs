@@ -3,6 +3,10 @@
 use super::{Check, CommandSpec, Discovery, Program, Requirement};
 
 const NATS: &[Requirement] = &[Requirement::Environment("EDGEAGENT_NATS_URL")];
+const TOPOLOGY_BROKER: &[Requirement] = &[Requirement::ExecutableOrEnvironment(
+    "docker",
+    "EDGEAGENT_NATS_SERVER",
+)];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
 const EVENT_SPINE: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
@@ -54,6 +58,14 @@ const NATS_LIFECYCLE: Target = Target {
         "protocol_halt_stops_expiry_and_reconnect_pulls",
         "deleted_consumer_closes_intake_while_adapter_remains_alive",
         "completed_receive_does_not_prefetch_while_delivery_is_held",
+    ],
+};
+const REGISTRY_TOPOLOGY: Target = Target {
+    package: "edgeagent-event-spine-conformance",
+    name: "jetstream_topology",
+    identities: &[
+        "provisioning_preserves_evidence_and_rejects_drift_before_writes",
+        "runtime_permissions_enforce_delivery_retention_and_admission_bounds",
     ],
 };
 const OUTBOX: Target = Target {
@@ -136,6 +148,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "nats-topology",
+            &REGISTRY_TOPOLOGY,
+            TOPOLOGY_BROKER,
+            "Exclusive authenticated pinned broker proves registry-derived file topology, create-only drift rejection, exact runtime ACLs, retained replay, durable redelivery and bounded admission; no production deployment or crash-recovery claim.",
+        ),
         exact(
             "nats-publish",
             &PUBLISH,
@@ -374,6 +392,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         CONSUME,
         NATS_BOUNDARIES,
         NATS_LIFECYCLE,
+        REGISTRY_TOPOLOGY,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -399,7 +418,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 26);
+        assert_eq!(checks.len(), 27);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -414,8 +433,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 41);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 41);
+        assert_eq!(inventory.len(), 43);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 43);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -500,6 +519,46 @@ mod tests {
                             .is_err()
                     );
                 }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn topology_proofs_require_an_owned_broker_and_reject_census_drift() -> Result<(), String> {
+        let check = checks()
+            .into_iter()
+            .find(|check| check.id == "nats-topology")
+            .ok_or("topology proof missing")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [Requirement::ExecutableOrEnvironment(
+                "docker",
+                "EDGEAGENT_NATS_SERVER"
+            )]
+        ));
+        assert!(check.command.args.contains(&"jetstream_topology"));
+        assert!(!check.command.args.contains(&"--exact"));
+        let discovery = check.discovery.ok_or("topology discovery absent")?;
+        assert_eq!(discovery.expected.len(), 2);
+        let complete = discovery
+            .expected
+            .iter()
+            .map(|name| format!("{name}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+        for name in &discovery.expected {
+            for mutation in [
+                complete.replace(&format!("{name}: test\n"), ""),
+                complete.replace(name, "renamed_topology"),
+                format!("{complete}{name}: test\n"),
+                format!("{complete}unregistered_topology: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&discovery, mutation.as_bytes())
+                        .is_err()
+                );
             }
         }
         Ok(())

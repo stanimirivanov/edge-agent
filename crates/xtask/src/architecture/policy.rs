@@ -21,7 +21,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         name: "edgeagent-event-spine-conformance",
         role: CrateRole::Tooling,
         normal: &["edgeagent-contracts"],
-        development: NONE,
+        development: &["edgeagent-messaging", "edgeagent-messaging-nats"],
         build: NONE,
     },
     PackagePolicy {

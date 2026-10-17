@@ -13,6 +13,7 @@ const PLATFORM_GUIDES: &[&str] = &[
     "docs/development/event-spine-conformance.md",
 ];
 const NATS_CHECKS: &[&str] = &[
+    "nats-topology",
     "nats-publish",
     "nats-consume",
     "nats-abandoned-settlement",
@@ -118,17 +119,27 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/messaging-nats/src/topology"),
+        guides: &["docs/development/jetstream-topology.md"],
+        checks: &["nats-topology"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/jetstream-topology.md"),
+        guides: &["docs/development/jetstream-topology.md"],
+        checks: &["nats-topology"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/event-spine-conformance/"),
         guides: &[
             "docs/development/message-contracts.md",
             "docs/development/plans/m02-completion.md",
         ],
-        checks: &["message-schema-contracts"],
+        checks: &["message-schema-contracts", "nats-topology"],
     },
     Route {
         matcher: Matcher::Prefix("crates/contracts/"),
         guides: &[],
-        checks: &["message-schema-contracts"],
+        checks: &["message-schema-contracts", "nats-topology"],
     },
     Route {
         matcher: Matcher::Exact("scripts/verify_sqlx_query_policy.py"),

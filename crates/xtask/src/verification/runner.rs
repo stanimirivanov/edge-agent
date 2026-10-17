@@ -153,6 +153,25 @@ pub(super) fn subprocess(command: &CommandSpec, options: &Options) -> io::Result
     Ok(child)
 }
 
+pub(super) fn resolve_executable_choice(
+    default: &str,
+    variable: &str,
+    explicit: Option<OsString>,
+) -> Result<OsString, String> {
+    match explicit {
+        None => Ok(default.into()),
+        Some(path)
+            if std::path::Path::new(&path).is_absolute()
+                && std::path::Path::new(&path).is_file() =>
+        {
+            Ok(path)
+        }
+        Some(_) => Err(format!(
+            "{variable} must name an existing absolute executable path"
+        )),
+    }
+}
+
 impl Executor for ProcessExecutor<'_> {
     fn prerequisite(&mut self, requirement: Requirement) -> Result<(), String> {
         match requirement {
@@ -187,6 +206,20 @@ impl Executor for ProcessExecutor<'_> {
                 {
                     Ok(status) if status.success() => Ok(()),
                     _ => Err(format!("requires executable {name}")),
+                }
+            }
+            Requirement::ExecutableOrEnvironment(default, variable) => {
+                let executable =
+                    resolve_executable_choice(default, variable, env::var_os(variable))?;
+                match Command::new(executable)
+                    .arg("--version")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                {
+                    Ok(status) if status.success() => Ok(()),
+                    _ => Err(format!("requires executable {default} or valid {variable}")),
                 }
             }
             Requirement::CommandProbe(name, args) => {
