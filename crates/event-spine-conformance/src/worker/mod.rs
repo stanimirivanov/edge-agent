@@ -1,10 +1,13 @@
+mod ordering;
 mod persistence;
 
 use std::{error::Error, io::Write, time::Duration};
 
 use async_nats::jetstream;
-use edgeagent_contracts::{Component, MessageMetadata};
-use edgeagent_event_spine_conformance::{ApplyProbe, definitions, registry};
+use edgeagent_contracts::{
+    Component, MAX_PORTABLE_MESSAGE_BYTES, MessageEnvelope, MessageMetadata,
+};
+use edgeagent_event_spine_conformance::{AcceptanceMessage, ApplyProbe, definitions, registry};
 use edgeagent_inbox_handler::{HandlerPolicy, HandlingOutcome, MessageFailure, handle_once};
 use edgeagent_inbox_postgres::PostgresInboundMessageStore;
 use edgeagent_messaging::{LeaseDuration, MessageConsumer};
@@ -70,11 +73,13 @@ pub(super) async fn run() -> Result<(), WorkerError> {
         TopologyLimits::default(),
     )?;
     let options: PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
-    let options = options.options([
-        ("search_path", schema.as_str()),
-        ("statement_timeout", "5000"),
-        ("lock_timeout", "2000"),
-    ]);
+    let options = options
+        .options([
+            ("search_path", schema.as_str()),
+            ("statement_timeout", "5000"),
+            ("lock_timeout", "2000"),
+        ])
+        .application_name(&format!("m02_worker_{}", std::process::id()));
     let mut database = PgConnection::connect_with(&options).await?;
     let context = if matches!(role, Role::Producer) {
         None
@@ -108,16 +113,36 @@ pub(super) async fn run() -> Result<(), WorkerError> {
     println!("ready");
     std::io::stdout().flush()?;
     let mut action = [0];
-    tokio::io::stdin().read_exact(&mut action).await?;
+    let mut input = tokio::io::stdin();
+    input.read_exact(&mut action).await?;
+    let hold_delivery = action[0] == b'h' && matches!(role, Role::Consumer);
     let rollback = match action[0] {
         b'c' => false,
         b'r' => true,
+        b'h' if hold_delivery => false,
         _ => return Err("invalid action".into()),
     };
     match role {
         Role::Producer => {
-            let command = ApplyProbe::new("probe-01", 0, 42)?;
-            let envelope = command.envelope(metadata(false))?;
+            // EOF keeps the original default fixture convenient. Explicit bytes
+            // use the same bounded contract decoder as every other producer.
+            let mut bytes = Vec::new();
+            input
+                .take(u64::try_from(MAX_PORTABLE_MESSAGE_BYTES)? + 1)
+                .read_to_end(&mut bytes)
+                .await?;
+            let envelope = if bytes.is_empty() {
+                ApplyProbe::new("probe-01", 0, 42)?.envelope(metadata(false))?
+            } else {
+                let envelope = MessageEnvelope::from_json(&bytes)?;
+                if !matches!(
+                    AcceptanceMessage::from_envelope(&envelope)?,
+                    AcceptanceMessage::Command(_)
+                ) {
+                    return Err("producer requires a command".into());
+                }
+                envelope
+            };
             persistence::accept(&mut database, &envelope, rollback).await?;
             println!("{}", if rollback { "rolled_back" } else { "accepted" });
         }
@@ -165,6 +190,16 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                 .await?;
             let mut consumer = JetStreamConsumer::new(durable).await?;
             let delivery = tokio::time::timeout(IO_DEADLINE, consumer.receive()).await??;
+            if hold_delivery {
+                // Fixture-only intake barrier: no transaction is open. This
+                // exposes broker admission without production adapter hooks.
+                println!("delivered");
+                std::io::stdout().flush()?;
+                input.read_exact(&mut action).await?;
+                if action[0] != b'c' {
+                    return Err("invalid delivery release".into());
+                }
+            }
             let handler = persistence::ProbeHandler { rollback };
             let mut store = PostgresInboundMessageStore::new(&mut database, &handler);
             let policy =
@@ -180,6 +215,17 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                         ..
                     },
                 ) if failure.code().as_str() == "fixture_rollback" => println!("rolled_back"),
+                (
+                    false,
+                    HandlingOutcome::RetryRequested {
+                        failure: MessageFailure::Handler(failure),
+                        ..
+                    },
+                ) if failure.code().as_str() == "missing_predecessor" => println!("deferred"),
+                (false, HandlingOutcome::RetryRequested { .. }) => println!("retry"),
+                (false, HandlingOutcome::Quarantined { failure_code, .. }) => {
+                    println!("quarantined:{failure_code}")
+                }
                 _ => return Err("unexpected handling outcome".into()),
             }
         }

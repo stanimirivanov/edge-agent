@@ -78,6 +78,10 @@ const PROCESS_ACCEPTANCE: Target = Target {
     identities: &[
         "independent_processes_commit_acceptance_transition_and_fact_once",
         "process_rollbacks_leave_no_partial_acceptance_or_inbound_fact",
+        "semantics::competing_semantic_commands_commit_one_transition_and_retain_conflicts",
+        "semantics::missing_predecessors_recover_in_order_or_exhaust_into_quarantine",
+        "replicas::competing_replicas_respect_shared_inflight_high_water",
+        "replicas::locked_partition_and_connection_loss_preserve_other_progress_and_recovery",
     ],
 };
 const OUTBOX: Target = Target {
@@ -164,7 +168,7 @@ pub(super) fn checks() -> Vec<Check> {
             "event-spine-processes",
             &PROCESS_ACCEPTANCE,
             PROCESS_DEPENDENCIES,
-            "Independent producer/relay/consumer OS processes prove atomic acceptance, inbox/state/fact intent, duplicate suppression, rollback/redelivery, typed causal publication and schema isolation; not full crash or wire-ACK loss qualification.",
+            "Independent OS processes prove atomic acceptance, transport and semantic idempotency, revision ordering, bounded replica admission, partition progress, connection-loss recovery, causal fact intent and schema isolation; not full crash or wire-ACK loss qualification.",
         ),
         suite(
             "nats-topology",
@@ -452,8 +456,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 45);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 45);
+        assert_eq!(inventory.len(), 49);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 49);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -600,7 +604,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"process_acceptance"));
         let discovery = check.discovery.ok_or("process discovery absent")?;
-        assert_eq!(discovery.expected.len(), 2);
+        assert_eq!(discovery.expected.len(), 6);
         let complete = discovery
             .expected
             .iter()

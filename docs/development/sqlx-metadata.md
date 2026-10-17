@@ -54,7 +54,8 @@ migrations and schema ownership.
 
 The action also applies the tooling-only
 `crates/event-spine-conformance/fixtures/process-schema.sql` before preparing
-all targets. This describes the two checked synthetic process-worker inserts;
+all targets. This describes the checked synthetic acceptance, aggregate-lock,
+semantic-receipt and revision-update statements;
 it does not add conformance tables to any product service migration. Runtime
 process proofs create only the table owned by each isolated service schema.
 

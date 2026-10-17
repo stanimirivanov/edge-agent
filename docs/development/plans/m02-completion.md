@@ -77,6 +77,12 @@ Register a protected T3 process proof.
 
 ### 4. Semantic idempotency, ordering, and replica admission
 
+[Issue #191](https://github.com/stanimirivanov/edge-agent/issues/191) extends the
+protected process suite with service-owned semantic receipts, aggregate-local
+revision guards, bounded competing replicas, partition progress and connection-loss
+recovery. [ADR-0027](../../decisions/0027-enforce-service-owned-semantic-command-ordering.md)
+records semantic identity, content comparison and disposable-schema compatibility.
+
 Use service-owned semantic-key/content checks and aggregate revision guards;
 the portable inbox continues to deduplicate message identity, not business
 policy. Prove identical semantic commands with different IDs produce one
