@@ -112,6 +112,13 @@ default gate starts no service and makes no model-provider call.
 
 ## Feedback sensors
 
+The protected T3 `event-spine-processes` suite also belongs to `local-platform`.
+It launches independent tooling workers with restricted per-service PostgreSQL
+logins and an owned authenticated broker. Census mutation tests reject missing,
+renamed, duplicate or extra ignored proofs; default compilation/discovery is not
+runtime evidence. See [process acceptance](process-acceptance.md) for transaction,
+readiness, rollback, cleanup and qualification limits.
+
 The protected T3 `nats-topology` suite belongs to `local-platform` and provisions
 its own authenticated broker using the pinned Docker image or an explicit pinned
 native server. Both paths run the same Rust proofs. The default ignored-test

@@ -7,6 +7,10 @@ const TOPOLOGY_BROKER: &[Requirement] = &[Requirement::ExecutableOrEnvironment(
     "docker",
     "EDGEAGENT_NATS_SERVER",
 )];
+const PROCESS_DEPENDENCIES: &[Requirement] = &[
+    Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
+    Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
+];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
 const EVENT_SPINE: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
@@ -66,6 +70,14 @@ const REGISTRY_TOPOLOGY: Target = Target {
     identities: &[
         "provisioning_preserves_evidence_and_rejects_drift_before_writes",
         "runtime_permissions_enforce_delivery_retention_and_admission_bounds",
+    ],
+};
+const PROCESS_ACCEPTANCE: Target = Target {
+    package: "edgeagent-event-spine-conformance",
+    name: "process_acceptance",
+    identities: &[
+        "independent_processes_commit_acceptance_transition_and_fact_once",
+        "process_rollbacks_leave_no_partial_acceptance_or_inbound_fact",
     ],
 };
 const OUTBOX: Target = Target {
@@ -148,6 +160,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "event-spine-processes",
+            &PROCESS_ACCEPTANCE,
+            PROCESS_DEPENDENCIES,
+            "Independent producer/relay/consumer OS processes prove atomic acceptance, inbox/state/fact intent, duplicate suppression, rollback/redelivery, typed causal publication and schema isolation; not full crash or wire-ACK loss qualification.",
+        ),
         suite(
             "nats-topology",
             &REGISTRY_TOPOLOGY,
@@ -393,6 +411,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         NATS_BOUNDARIES,
         NATS_LIFECYCLE,
         REGISTRY_TOPOLOGY,
+        PROCESS_ACCEPTANCE,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -418,7 +437,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 27);
+        assert_eq!(checks.len(), 28);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -433,8 +452,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 43);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 43);
+        assert_eq!(inventory.len(), 45);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 45);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -554,6 +573,46 @@ mod tests {
                 complete.replace(name, "renamed_topology"),
                 format!("{complete}{name}: test\n"),
                 format!("{complete}unregistered_topology: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&discovery, mutation.as_bytes())
+                        .is_err()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn process_proofs_require_database_and_owned_broker_and_reject_census_drift()
+    -> Result<(), String> {
+        let check = checks()
+            .into_iter()
+            .find(|check| check.id == "event-spine-processes")
+            .ok_or("process proof missing")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [
+                Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
+                Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER")
+            ]
+        ));
+        assert!(check.command.args.contains(&"process_acceptance"));
+        let discovery = check.discovery.ok_or("process discovery absent")?;
+        assert_eq!(discovery.expected.len(), 2);
+        let complete = discovery
+            .expected
+            .iter()
+            .map(|name| format!("{name}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+        for name in &discovery.expected {
+            for mutation in [
+                complete.replace(&format!("{name}: test\n"), ""),
+                complete.replace(name, "renamed_process"),
+                format!("{complete}{name}: test\n"),
+                format!("{complete}unregistered_process: test\n"),
             ] {
                 assert!(
                     super::super::runner::verify_discovery(&discovery, mutation.as_bytes())

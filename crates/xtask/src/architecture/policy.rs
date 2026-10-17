@@ -20,8 +20,16 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
         name: "edgeagent-event-spine-conformance",
         role: CrateRole::Tooling,
-        normal: &["edgeagent-contracts"],
-        development: &["edgeagent-messaging", "edgeagent-messaging-nats"],
+        normal: &[
+            "edgeagent-contracts",
+            "edgeagent-inbox-handler",
+            "edgeagent-inbox-postgres",
+            "edgeagent-messaging",
+            "edgeagent-messaging-nats",
+            "edgeagent-outbox-postgres",
+            "edgeagent-outbox-relay",
+        ],
+        development: NONE,
         build: NONE,
     },
     PackagePolicy {

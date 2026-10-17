@@ -43,6 +43,12 @@ order. This is a metadata-only schema assembly, not the production migration
 procedure. Service composition roots remain responsible for deployment
 migrations and schema ownership.
 
+The action also applies the tooling-only
+`crates/event-spine-conformance/fixtures/process-schema.sql` before preparing
+all targets. This describes the two checked synthetic process-worker inserts;
+it does not add conformance tables to any product service migration. Runtime
+process proofs create only the table owned by each isolated service schema.
+
 The action refuses any `DATABASE_URL` other than the exact checked-in local
 Compose URI. It also requires `SQLX_OFFLINE=false` and explicit
 `EDGEAGENT_SQLX_METADATA_LOCAL=1` authorization before changing schema or

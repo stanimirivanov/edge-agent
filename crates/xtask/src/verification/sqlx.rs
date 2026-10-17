@@ -86,6 +86,12 @@ fn verify(root: &Path) -> Result<(), String> {
         println!("Applying inbox migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
+    // The synthetic process composition also uses checked macros. This schema
+    // exists only in conformance tooling, never in a product service migration.
+    let conformance =
+        fs::read(root.join("crates/event-spine-conformance/fixtures/process-schema.sql"))
+            .map_err(|error| format!("cannot read conformance schema: {error}"))?;
+    apply_inbox_migration(root, &conformance)?;
     run_command(
         root,
         "cargo",

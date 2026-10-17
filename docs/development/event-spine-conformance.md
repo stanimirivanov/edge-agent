@@ -17,6 +17,12 @@
 
 ## Recovery scenario
 
+Independent producer/relay/consumer OS-process acceptance is covered separately
+by the protected `event-spine-processes` suite and
+[process acceptance guide](process-acceptance.md). It proves atomic command and
+fact handoffs, rollback/redelivery and private schema access; full process-kill
+and wire acknowledgement-loss qualification remains a later M02 slice.
+
 The remaining M02 work follows the
 [completion plan](plans/m02-completion.md). Its first slice adds the separate
 `edgeagent-event-spine-conformance` package with typed synthetic command/fact

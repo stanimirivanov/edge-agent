@@ -96,8 +96,12 @@ PACKAGE_RULES = {
     "crates/event-spine-conformance": PackageRule(
         CONFORMANCE,
         "lib",
-        frozenset({CONTRACTS, "jsonschema", "schemars", "serde", "serde_json"}),
-        frozenset({"async-nats", MESSAGING, MESSAGING_NATS, "futures-util", "tokio"}),
+        frozenset({
+            CONTRACTS, INBOX_HANDLER, INBOX_POSTGRES, MESSAGING, MESSAGING_NATS,
+            OUTBOX_POSTGRES, OUTBOX_RELAY, "async-nats", "jsonschema", "schemars",
+            "serde", "serde_json", "sqlx", "tokio",
+        }),
+        frozenset({"futures-util"}),
     ),
     "crates/inbox-handler": PackageRule(
         INBOX_HANDLER,

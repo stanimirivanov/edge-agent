@@ -461,13 +461,18 @@ version = "0.1.0"
 dependencies = [
  "async-nats",
  "edgeagent-contracts",
+ "edgeagent-inbox-handler",
+ "edgeagent-inbox-postgres",
  "edgeagent-messaging",
  "edgeagent-messaging-nats",
+ "edgeagent-outbox-postgres",
+ "edgeagent-outbox-relay",
  "futures-util",
  "jsonschema",
  "schemars",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
 ]
 

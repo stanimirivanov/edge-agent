@@ -404,3 +404,29 @@ fn security_paths_route_actual_scanner_proofs_without_waiving_default_acceptance
 fn every_declared_guide_and_check_exists_in_the_repository() -> Result<(), String> {
     validate()
 }
+
+#[test]
+fn process_composition_and_adapters_route_the_protected_process_proof() -> Result<(), String> {
+    for path in [
+        "crates/event-spine-conformance/src/worker/persistence.rs",
+        "crates/inbox-postgres/src/handler.rs",
+        "crates/messaging-nats/src/lib.rs",
+        "crates/outbox-relay/src/coordinator.rs",
+        "docs/development/process-acceptance.md",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+        assert!(
+            advice.checks.contains("event-spine-processes"),
+            "missing process proof for {path}"
+        );
+    }
+    let advice = advise(&["crates/event-spine-conformance/src/worker/persistence.rs".to_owned()])?;
+    assert!(
+        advice
+            .guides
+            .contains("docs/development/process-acceptance.md")
+    );
+    assert!(advice.checks.contains("sqlx-metadata"));
+    Ok(())
+}

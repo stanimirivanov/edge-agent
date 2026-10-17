@@ -18,7 +18,7 @@
 | Package | Role | Responsibility |
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
-| `edgeagent-event-spine-conformance` | Tooling | Synthetic acceptance payloads, local schemas, and compatibility fixtures; not a deployable |
+| `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
 | `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
 | `edgeagent-inbox-handler` | Application | Persistence-neutral policy for validation, atomic processing, retry, quarantine, and settlement |
@@ -46,7 +46,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
-| `edgeagent-event-spine-conformance` | `edgeagent-contracts` |
+| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-inbox-handler` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
@@ -58,16 +58,19 @@ dependencies between workspace packages:
 | Each service composition root | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |
 
-Three development-only compositions support adapter and recovery conformance:
+Two development-only compositions support adapter and recovery conformance:
 
 - `edgeagent-inbox-handler` may use `edgeagent-inbox-postgres`,
   `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, and
   `edgeagent-outbox-relay` as development dependencies; and
 - `edgeagent-outbox-relay` may use `edgeagent-outbox-postgres` as a development
-  dependency; and
-- `edgeagent-event-spine-conformance` may compose `edgeagent-messaging` and
-  `edgeagent-messaging-nats` in broker proofs only. Normal conformance dependencies
-  remain contracts/schema tooling; no service imports conformance tooling.
+  dependency.
+
+The conformance tooling binary uses the exact normal adapter/application edges
+above to launch independent proof processes. No service imports conformance
+tooling; these edges authorize no production domain dependency or OCI deployable.
+[ADR-0026](../decisions/0026-compose-durable-acceptance-in-independent-processes.md)
+records this composition boundary and restricted fixture runtime identities.
 
 These edges assemble realistic tests; they do not invert production ownership.
 There are no allowed internal build dependencies.

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO conformance_probe (probe_id, revision, value) VALUES ($1, 1, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "892c030de21197b3181ee78c63831261ebb705e2c4399b4154edbae63be85617"
+}

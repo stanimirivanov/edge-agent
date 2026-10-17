@@ -76,6 +76,12 @@ runtime-permission contracts with isolated authenticated broker proofs. See the
 [topology guide](../development/jetstream-topology.md); no application worker,
 transaction, production deployment, or completed M02 claim follows from it.
 
+The third slice adds finite independent producer, relay and consumer processes
+with private database identities and protected atomic acceptance, fact,
+duplicate and rollback proofs. See [process acceptance](../development/process-acceptance.md).
+This is tooling composition, not production worker readiness or full crash and
+wire acknowledgement-loss qualification; later M02 slices remain required.
+
 **PostgreSQL SQL verification slice:** Outbox enqueue and all inbox adapter SQL
 use `sqlx::query!` or `sqlx::query_file!` with checked-in offline `.sqlx`
 metadata generated from both adapters' migrations. Database-backed CI
