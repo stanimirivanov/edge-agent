@@ -10,6 +10,7 @@ pub(super) const PROFILES: &[&str] = &[
     "check",
     "test",
     "local-platform",
+    "m02-qualification",
     "image-smoke",
     "supply-chain",
     "dependency-audit",

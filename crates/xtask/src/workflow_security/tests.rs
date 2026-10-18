@@ -22,6 +22,41 @@ fn source(name: &str) -> &'static str {
     }
 }
 
+#[test]
+fn m02_qualification_and_retained_evidence_cannot_be_bypassed() {
+    let name = "repository-quality.yml";
+    reject(
+        name,
+        "run: cargo xtask m02-qualification",
+        "run: cargo xtask m02-qualification || true",
+        "protected command",
+    );
+    reject(
+        name,
+        "      - name: Qualify M02 with isolated owned dependencies\n",
+        "      - name: Qualify M02 with isolated owned dependencies\n        if: false\n",
+        "must not be conditional",
+    );
+    reject(
+        name,
+        "          path: artifacts/m02-qualification/*/results.tsv",
+        "          path: artifacts/**",
+        "exact reviewed input",
+    );
+    reject(
+        name,
+        "      - name: Retain M02 qualification evidence\n        if: always()",
+        "      - name: Retain M02 qualification evidence\n        if: success()",
+        "unconditional-on-result M02 evidence upload",
+    );
+    reject(
+        name,
+        "      - name: Retain M02 qualification evidence\n        if: always()",
+        "      - name: Retain M02 qualification evidence",
+        "unconditional-on-result M02 evidence upload",
+    );
+}
+
 fn reject(name: &str, before: &str, after: &str, reason: &str) {
     let original = source(name);
     assert!(
@@ -469,8 +504,8 @@ fn comments_and_quoted_strings_cannot_replace_executable_supply_chain_evidence()
     );
     reject(
         "repository-quality.yml",
-        "          if-no-files-found: error",
-        "          if-no-files-found: warn # if-no-files-found: error",
+        "          path: artifacts/sbom/*.cdx.json\n          if-no-files-found: error",
+        "          path: artifacts/sbom/*.cdx.json\n          if-no-files-found: warn # if-no-files-found: error",
         "fail-closed missing-artifact",
     );
     reject(

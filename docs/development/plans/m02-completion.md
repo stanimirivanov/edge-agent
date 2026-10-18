@@ -126,6 +126,11 @@ of exported observations.
 
 ### 7. Crash, broker-restart, and acknowledgement-loss qualification
 
+[Issue #197](https://github.com/stanimirivanov/edge-agent/issues/197) adds the
+protected failure proofs and owned dependency/reporting command. See the
+[qualification guide](../m02-qualification.md) and
+[ADR-0030](../../decisions/0030-qualify-event-spine-failure-recovery.md).
+
 Kill/restart real child processes before producer commit, after durable enqueue,
 after broker persistence/before outbox completion, and after inbox/domain
 commit/before ACK. Include duplicate delivery beyond broker deduplication,

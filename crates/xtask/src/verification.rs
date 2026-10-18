@@ -104,6 +104,10 @@ pub(super) fn sqlx_metadata() -> ExitCode {
     sqlx::run()
 }
 
+pub(crate) fn qualify(database_url: &str, report: &Path) -> ExitCode {
+    runner::qualify(database_url, report)
+}
+
 pub(super) fn print_inventory() -> ExitCode {
     match inventory::validate(&inventory::checks()).and_then(|()| routes::validate()) {
         Ok(()) => {

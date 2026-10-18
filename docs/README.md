@@ -13,6 +13,9 @@
 
 ## Purpose and authority
 
+For unattended M02 crash/restart/wire-ACK qualification, use the focused
+[qualification guide](development/m02-qualification.md).
+
 This page is the progressive-disclosure entry point for contributors and
 coding agents. It routes readers to canonical sources instead of repeating
 their policy. [CONTRIBUTING.md](../CONTRIBUTING.md) owns workflow, issue shape,

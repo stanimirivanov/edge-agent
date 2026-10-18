@@ -88,6 +88,13 @@ const PROCESS_ACCEPTANCE: Target = Target {
         "replay::outbound::outbound_replay_preserves_audit_budget_and_stale_claim_fences",
         "telemetry::exported_process_signals_preserve_context_privacy_and_bounded_dimensions",
         "telemetry::rejected_or_stalled_exporters_preserve_commits_duplicates_and_settlement",
+        "failures::killed_producers_recover_before_commit_and_after_durable_enqueue",
+        "failures::killed_relay_recovers_persisted_publication_without_second_effect",
+        "failures::killed_consumer_after_commit_recovers_as_duplicate_before_ack",
+        "failures::killed_file_broker_retains_message_and_durable_across_fresh_workers",
+        "failures::wire_ack_request_and_confirmation_loss_have_distinct_recovery",
+        "failures::inputs::duplicate_after_broker_window_preserves_one_committed_transition",
+        "failures::inputs::invalid_inputs_quarantine_or_halt_without_false_acknowledgement",
     ],
 };
 const OUTBOX: Target = Target {
@@ -174,7 +181,7 @@ pub(super) fn checks() -> Vec<Check> {
             "event-spine-processes",
             &PROCESS_ACCEPTANCE,
             PROCESS_DEPENDENCIES,
-            "Independent OS processes prove atomic acceptance, ordering/admission, partition and connection recovery, authenticated fenced replay and original-route fan-out; decoded OTLP proves linked context, bounded private observations and export-failure isolation. Not full crash or wire-ACK loss qualification.",
+            "Independent processes prove acceptance, ordering/admission, fenced replay, OTLP, actual worker death, same-store broker restart, post-dedup duplicates, invalid-input bounds and wire ACK request/confirmation loss. Single-node synthetic qualification, not HA, power-loss, PostgreSQL restart or load proof.",
         ),
         suite(
             "nats-topology",
@@ -402,7 +409,11 @@ fn suite(
     Check {
         id,
         tier: "T3",
-        profiles: &["local-platform"],
+        profiles: if matches!(id, "event-spine-processes" | "nats-topology") {
+            &["m02-qualification"]
+        } else {
+            &["local-platform"]
+        },
         command: CommandSpec {
             program: Program::Cargo,
             args,
@@ -455,9 +466,23 @@ mod tests {
             .find(|c| c.id == "event-spine-processes")
             .ok_or("process proof missing")?;
         assert!(check.command.args.contains(&"--test-threads=2"));
+        assert_eq!(
+            check.command.args,
+            [
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-event-spine-conformance",
+                "--test",
+                "process_acceptance",
+                "--",
+                "--ignored",
+                "--test-threads=2"
+            ]
+        );
         assert!(!check.command.args.contains(&"--exact"));
         let discovery = check.discovery.ok_or("process discovery missing")?;
-        assert_eq!(discovery.expected.len(), 12);
+        assert_eq!(discovery.expected.len(), 19);
         assert!(discovery.args.contains(&"--test-threads=2"));
         Ok(())
     }
@@ -482,8 +507,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 55);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 55);
+        assert_eq!(inventory.len(), 62);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 62);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -579,7 +604,7 @@ mod tests {
             .into_iter()
             .find(|check| check.id == "nats-topology")
             .ok_or("topology proof missing")?;
-        assert_eq!(check.profiles, ["local-platform"]);
+        assert_eq!(check.profiles, ["m02-qualification"]);
         assert!(matches!(
             check.prerequisites,
             [Requirement::ExecutableOrEnvironment(
@@ -620,7 +645,7 @@ mod tests {
             .into_iter()
             .find(|check| check.id == "event-spine-processes")
             .ok_or("process proof missing")?;
-        assert_eq!(check.profiles, ["local-platform"]);
+        assert_eq!(check.profiles, ["m02-qualification"]);
         assert!(matches!(
             check.prerequisites,
             [
@@ -630,7 +655,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"process_acceptance"));
         let discovery = check.discovery.ok_or("process discovery absent")?;
-        assert_eq!(discovery.expected.len(), 12);
+        assert_eq!(discovery.expected.len(), 19);
         let complete = discovery
             .expected
             .iter()

@@ -140,6 +140,16 @@ jobs:
       - name: Print diagnostics after failure
         if: failure()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml logs --no-color --tail=200
+      - name: Qualify M02 with isolated owned dependencies
+        run: cargo xtask m02-qualification
+      - name: Retain M02 qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: edgeagent-m02-${{ github.sha }}
+          path: artifacts/m02-qualification/*/results.tsv
+          if-no-files-found: error
+          retention-days: 14
       - name: Stop local platform
         if: always()
         run: docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml down --volumes

@@ -133,6 +133,9 @@ fn action_allowed(name: &str, job: &str, action: &str) -> bool {
         return true;
     }
     match (name, job) {
+        ("repository-quality.yml", "local-platform-smoke") => {
+            matches!(action, "actions/setup-python" | "actions/upload-artifact")
+        }
         ("repository-quality.yml", "supply-chain") => matches!(
             action,
             "actions/setup-python"
@@ -140,10 +143,7 @@ fn action_allowed(name: &str, job: &str, action: &str) -> bool {
                 | "anchore/sbom-action/download-syft"
                 | "actions/upload-artifact"
         ),
-        (
-            "repository-quality.yml",
-            "security" | "verify" | "container-smoke" | "local-platform-smoke",
-        )
+        ("repository-quality.yml", "security" | "verify" | "container-smoke")
         | ("release-images.yml", "plan") => action == "actions/setup-python",
         ("m08-durable-execution.yml", "proof") | ("dependency-audit.yml", "audit") => {
             action == "EmbarkStudios/cargo-deny-action"

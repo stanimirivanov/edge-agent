@@ -124,6 +124,7 @@ pub(super) struct Execution {
 
 struct ProcessExecutor<'a> {
     options: &'a Options,
+    database_url: Option<&'a str>,
 }
 
 pub(super) fn subprocess(command: &CommandSpec, options: &Options) -> io::Result<Command> {
@@ -176,7 +177,9 @@ impl Executor for ProcessExecutor<'_> {
     fn prerequisite(&mut self, requirement: Requirement) -> Result<(), String> {
         match requirement {
             Requirement::Environment(name) => {
-                if env::var_os(name).is_some_and(|v| !v.is_empty()) {
+                if (name == "EDGEAGENT_POSTGRES_URL" && self.database_url.is_some())
+                    || env::var_os(name).is_some_and(|v| !v.is_empty())
+                {
                     Ok(())
                 } else {
                     Err(format!("requires nonempty {name}"))
@@ -253,6 +256,13 @@ impl Executor for ProcessExecutor<'_> {
 
     fn execute(&mut self, command: &CommandSpec, capture: bool) -> io::Result<Execution> {
         let mut child = subprocess(command, self.options)?;
+        if let Some(database_url) = self.database_url {
+            child
+                .env("EDGEAGENT_POSTGRES_URL", database_url)
+                .env_remove("DATABASE_URL")
+                .env_remove("EDGEAGENT_NATS_URL")
+                .env_remove("EDGEAGENT_NATS_COMPOSE_RESTART");
+        }
         if capture {
             let output = child.output()?;
             Ok(Execution {
@@ -380,6 +390,30 @@ pub(super) fn execute(selected: &[&Check], executor: &mut impl Executor) -> Vec<
 }
 
 pub(super) fn run(options: &Options) -> ExitCode {
+    run_inner(options, None, None)
+}
+
+pub(super) fn qualify(database_url: &str, report: &std::path::Path) -> ExitCode {
+    let arguments = [
+        "--check",
+        "message-schema-contracts",
+        "--check",
+        "nats-topology",
+        "--check",
+        "event-spine-processes",
+    ]
+    .map(String::from);
+    match Options::parse(&arguments) {
+        Ok(options) => run_inner(&options, Some(database_url), Some(report)),
+        Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn run_inner(
+    options: &Options,
+    database_url: Option<&str>,
+    report: Option<&std::path::Path>,
+) -> ExitCode {
     let checks = inventory::checks();
     let selected = match inventory::validate(&checks)
         .and_then(|()| super::routes::validate())
@@ -399,7 +433,24 @@ pub(super) fn run(options: &Options) -> ExitCode {
     } else {
         println!("Selected check IDs: {}", options.ids.join(","));
     }
-    let outcomes = execute(&selected, &mut ProcessExecutor { options });
+    let outcomes = execute(
+        &selected,
+        &mut ProcessExecutor {
+            options,
+            database_url,
+        },
+    );
+    if let Some(report) = report {
+        use std::io::Write;
+        let written = std::fs::OpenOptions::new()
+            .append(true)
+            .open(report)
+            .and_then(|mut file| file.write_all(scenario_report(&selected, &outcomes).as_bytes()));
+        if written.is_err() {
+            eprintln!("cannot retain qualification scenario report");
+            return ExitCode::FAILURE;
+        }
+    }
     println!("\nExecution evidence (only selected checks; unselected T3 checks are not claimed):");
     for outcome in &outcomes {
         println!(
@@ -416,5 +467,61 @@ pub(super) fn run(options: &Options) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn scenario_report(selected: &[&Check], outcomes: &[Outcome]) -> String {
+    let mut report = String::new();
+    for (check, outcome) in selected.iter().zip(outcomes) {
+        report.push_str(&format!(
+            "check\t{}\t{}\t{}\n",
+            check.id,
+            outcome.status.label(),
+            outcome.elapsed_ms
+        ));
+        if let Some(discovery) = &check.discovery {
+            for identity in &discovery.expected {
+                // A failed suite may contain partial successes. Do not invent
+                // per-case results: only a fully passing, discovered suite
+                // qualifies each protected identity.
+                let result = if outcome.status == Status::Passed {
+                    "qualified-with-suite"
+                } else {
+                    "not-qualified"
+                };
+                report.push_str(&format!("scenario\t{identity}\t{result}\t-\n"));
+            }
+        }
+    }
+    report
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+
+    #[test]
+    fn failed_or_unavailable_suites_never_claim_individual_success() {
+        let checks = inventory::checks();
+        let selected: Vec<_> = checks
+            .iter()
+            .filter(|c| c.id == "event-spine-processes")
+            .collect();
+        for status in [
+            Status::Passed,
+            Status::Failed("private-sentinel".into()),
+            Status::NotRun("private-sentinel".into()),
+        ] {
+            let passed = status == Status::Passed;
+            let outcomes = [Outcome {
+                id: "event-spine-processes",
+                status,
+                elapsed_ms: 0,
+            }];
+            let report = scenario_report(&selected, &outcomes);
+            assert!(!report.contains("private-sentinel"));
+            assert_eq!(report.matches("scenario\t").count(), 19);
+            assert_eq!(report.contains("qualified-with-suite"), passed);
+        }
     }
 }

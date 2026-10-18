@@ -15,6 +15,8 @@ pub(super) async fn accept(
     database: &mut PgConnection,
     envelope: &MessageEnvelope,
     rollback: bool,
+    boundary: Option<super::faults::Boundary>,
+    input: &mut tokio::io::Stdin,
 ) -> Result<(), WorkerError> {
     let mut transaction = database.begin().await?;
     sqlx::query!(
@@ -26,10 +28,16 @@ pub(super) async fn accept(
     PostgresOutbox
         .enqueue(&mut transaction, definitions()[0], envelope)
         .await?;
+    if boundary == Some(super::faults::Boundary::BeforeCommit) {
+        super::faults::barrier("before_commit", input).await?;
+    }
     if rollback {
         transaction.rollback().await?;
     } else {
         transaction.commit().await?;
+    }
+    if boundary == Some(super::faults::Boundary::Enqueued) {
+        super::faults::barrier("enqueued", input).await?;
     }
     Ok(())
 }

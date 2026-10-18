@@ -58,6 +58,16 @@ pub(super) fn check(
         Some("anchore/sbom-action/download-syft") => {
             &[("syft-version", T("v${{ env.SYFT_VERSION }}"))]
         }
+        Some("actions/upload-artifact")
+            if name == "repository-quality.yml" && job == "local-platform-smoke" =>
+        {
+            &[
+                ("name", T("edgeagent-m02-${{ github.sha }}")),
+                ("path", T("artifacts/m02-qualification/*/results.tsv")),
+                ("if-no-files-found", T("error")),
+                ("retention-days", I(14)),
+            ]
+        }
         Some("actions/upload-artifact") => &[
             ("name", T("edgeagent-sboms-${{ github.sha }}")),
             ("path", T("artifacts/sbom/*.cdx.json")),

@@ -158,7 +158,8 @@ the complete protected ignored suite. It does not execute broker proofs.
 cargo xtask verify --check nats-topology
 ```
 
-The T3 check is part of the existing `local-platform` profile/job. It starts its
+The T3 check belongs to `m02-qualification`; the [canonical qualification
+command](m02-qualification.md) provisions dependencies and runs it in CI. It starts its
 own pinned `nats:2.14.7-alpine` container with generated authenticated fixture
 permissions, random loopback port, bounded resources, and disposable file storage.
 It requires no service URL, external credentials, or manually started database.

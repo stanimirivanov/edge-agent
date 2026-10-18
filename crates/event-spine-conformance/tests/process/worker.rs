@@ -90,7 +90,7 @@ impl Worker {
         input.write_all(&[action]).await?;
         input.write_all(bytes).await?;
         input.flush().await?;
-        if !matches!(action, b'h' | b'p') {
+        if !matches!(action, b'h' | b'v' | b'p' | b'b' | b'e' | b'u' | b'a') {
             self.input.take(); // Producer framing ends at EOF.
         }
         Ok(())
@@ -106,7 +106,7 @@ impl Worker {
         }
     }
 
-    async fn line(&mut self) -> Result<String, TestError> {
+    pub async fn line(&mut self) -> Result<String, TestError> {
         let mut line = String::new();
         tokio::time::timeout_at(self.deadline, self.output.read_line(&mut line)).await??;
         Ok(line.trim().to_owned())

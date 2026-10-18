@@ -82,6 +82,12 @@ duplicate and rollback proofs. See [process acceptance](../development/process-a
 This is tooling composition, not production worker readiness or full crash and
 wire acknowledgement-loss qualification; later M02 slices remain required.
 
+The seventh slice adds the [owned failure-qualification command](../development/m02-qualification.md)
+and retained scenario evidence for actual worker kills, same-store broker
+restart, directional wire ACK loss, post-deduplication duplicates and invalid
+input. These synthetic single-node proofs do not qualify PostgreSQL server
+restart, cloud/HA/load or production operations.
+
 **PostgreSQL SQL verification slice:** Outbox enqueue and all inbox adapter SQL
 use `sqlx::query!` or `sqlx::query_file!` with checked-in offline `.sqlx`
 metadata generated from both adapters' migrations. Database-backed CI

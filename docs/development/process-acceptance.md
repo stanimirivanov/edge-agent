@@ -2,18 +2,20 @@
 
 ## TL;DR
 
-- `cargo xtask verify --check event-spine-processes` launches independent
-  producer, relay and consumer OS processes against isolated PostgreSQL schemas
-  and an automatically owned authenticated NATS broker.
-- Set `EDGEAGENT_POSTGRES_URL` to an isolated administrative test database.
+- `cargo xtask m02-qualification` provisions dependencies and runs independent
+  producer, relay and consumer processes against isolated PostgreSQL schemas
+  and owned authenticated NATS brokers, retaining scenario evidence.
+- For the focused `event-spine-processes` check only, set
+  `EDGEAGENT_POSTGRES_URL` to an isolated administrative test database.
   Docker provisions the broker automatically; alternatively
   `EDGEAGENT_NATS_SERVER` names the absolute pinned 2.14.7 native executable.
 - Acceptance/outbox and inbox/probe/fact intent each share one commit. External
   publication occurs only through a separate production relay invocation.
 - Semantic receipts and aggregate-local revision guards tolerate distinct
   message IDs, out-of-order work and competing replicas without global FIFO.
-- This proves finite process composition and duplicate/rollback behavior, not
-  complete crash qualification, model durability or production service readiness.
+- The [qualification command](m02-qualification.md) additionally proves specific
+  worker kills, same-store broker restart and directional wire ACK loss. This
+  does not establish model durability or production service readiness.
 
 ## Composition and ownership
 
@@ -148,16 +150,19 @@ identity and outbox/inbox evidence determine safe re-entry. Never rerun with
 new message IDs to conceal an uncertain result.
 
 Worker errors intentionally omit source chains and payloads. A failed child
-returns unresolved failure, not a fabricated durable success. Tests distinguish
+returns unresolved failure, not a fabricated durable success. A classified
+settlement failure reports `confirmation_unknown`; it never reports `applied`.
+Oversized raw intake reports `protocol_halt` without ACK/quarantine. Tests distinguish
 explicit rollback, committed success, duplicate and idle outcomes. Neither child
 exit nor broker health alone constitutes transaction evidence.
 
 ## Verification and metadata
 
 Default `cargo xtask verify` compiles the worker and discovers the ignored T3
-suite; it does not execute service-backed proofs. The canonical local-platform
-profile runs the protected suite in existing CI with isolated PostgreSQL and
-automatically created NATS resources. Missing prerequisites fail, never skip.
+suite; it does not execute service-backed proofs. `cargo xtask m02-qualification`
+provisions isolated dependencies, runs protected suites, retains reports and
+cleans up. Missing prerequisites fail, never skip. The focused check below
+still accepts an explicitly managed isolated PostgreSQL environment.
 
 ```text
 cargo xtask verify --check event-spine-processes
@@ -181,7 +186,7 @@ The canonical gate admits at most two scenarios concurrently, independently of
 host CPU count. Each scenario retains its internal competing workers and its
 original deadlines; this bounds fixture pressure, not the behavior under test.
 
-The twelve-case protected suite includes four
+The nineteen-case protected suite includes four
 [authorized replay proofs](quarantine-replay.md): authenticated/atomic authorization,
 inbound result-loss recovery and bounded fencing, original-route fan-out, and
 outbound audited release. Replay authorization needs no broker connection;
@@ -197,8 +202,16 @@ child-only environment; normal process cases remain unconfigured. Bounded SDK
 threads and HTTP transport are installed before Tokio and shut down after it;
 their diagnostic result never replaces the worker's operation result.
 
-The proof does not establish production telemetry operation, wire ACK loss, general process
-kill/crash qualification, broker or PostgreSQL restart, HA or load capacity.
+Seven [failure qualification cases](m02-qualification.md) add producer, relay
+and consumer process kills, same-store broker restart, directional wire ACK
+loss, duplicates after broker deduplication expiry and invalid-input bounds.
+Fixture-only `b`/`e` producer actions hold before commit/after enqueue, `u`
+holds a real relay receipt before completion, and `a` holds postcommit
+settlement. These closed actions accept no arbitrary payload. Consumer `v`
+reports actual delivery attempt before a `c` release. All stay out of adapter APIs.
+
+The proof does not establish production telemetry operation, arbitrary crash
+or network faults, PostgreSQL restart, power-loss, HA or load capacity.
 Connection interruption is not a database restart or an unknown-commit proof.
 Those remain in the
 [M02 completion plan](plans/m02-completion.md) or their owning milestones.

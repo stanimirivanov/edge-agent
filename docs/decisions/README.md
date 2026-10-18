@@ -141,3 +141,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0027](0027-enforce-service-owned-semantic-command-ordering.md) | Accepted | Enforce service-owned semantic command ordering. |
 | [ADR-0028](0028-compose-authorized-recoverable-quarantine-replay.md) | Accepted | Compose authorized recoverable quarantine replay. |
 | [ADR-0029](0029-export-bounded-correlated-event-spine-observations.md) | Accepted | Export bounded correlated event-spine observations. |
+| [ADR-0030](0030-qualify-event-spine-failure-recovery.md) | Accepted | Qualify event-spine failure recovery. |
