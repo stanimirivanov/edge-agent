@@ -79,6 +79,37 @@ fn development_dependency_does_not_authorize_a_production_edge() -> Result<(), S
 }
 
 #[test]
+fn domain_cannot_import_transport_storage_observability_or_composition() -> Result<(), String> {
+    for class in [
+        DependencyClass::Normal,
+        DependencyClass::Development,
+        DependencyClass::Build,
+    ] {
+        for dependency in [
+            "edgeagent-messaging",
+            "edgeagent-inbox-postgres",
+            "edgeagent-messaging-nats",
+            "edgeagent-telemetry",
+            "edgeagent-market-data",
+        ] {
+            let mut graph = declared_graph();
+            graph.dependencies.insert(DependencyEdge::new(
+                "edgeagent-market-data-domain",
+                dependency,
+                class,
+            ));
+            assert_eq!(
+                policy_violations(validate_graph(&graph))?,
+                vec![format!(
+                    "unapproved dependency from domain package: edgeagent-market-data-domain -[{class}]-> {dependency}"
+                )]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn unapproved_development_dependency_is_rejected() -> Result<(), String> {
     let mut graph = declared_graph();
     graph.dependencies.insert(DependencyEdge::new(

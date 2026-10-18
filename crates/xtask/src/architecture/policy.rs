@@ -85,6 +85,13 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         build: NONE,
     },
     PackagePolicy {
+        name: "edgeagent-market-data-domain",
+        role: CrateRole::Domain,
+        normal: NONE,
+        development: NONE,
+        build: NONE,
+    },
+    PackagePolicy {
         name: "edgeagent-messaging-nats",
         role: CrateRole::Adapter,
         normal: &["edgeagent-contracts", "edgeagent-messaging"],

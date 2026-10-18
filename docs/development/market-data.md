@@ -36,6 +36,22 @@ new reviewed reference coverage, not a perpetual weekday rule.
 
 ## Point-in-time and reference authority
 
+The [domain crate](../../crates/market-data-domain/src/lib.rs) now implements
+checked instrument/listing/source identities, transformation revisions, USD
+prices, reported share volume, Gregorian dates, UTC millisecond instants and
+causally ordered observation times. Fields are private and values carry no wire
+format, provider SDK or persistence type. Decimal constructors take exact signed
+coefficient/scale pairs, reject excess scale without rounding, and normalize
+fractional trailing zeros before the 28-digit coefficient check. Equality,
+ordering and hashing are numeric; `decimal_parts()` round-trips losslessly.
+Price/volume diagnostics are redacted. Missing provider timestamps remain absent.
+The bounded integer representation implements no decimal parser or arithmetic
+engine; adapters must parse source tokens exactly before constructing values.
+Dates alone prove neither session membership nor timezone conversion; source
+IDs/revisions alone prove neither entitlement nor historical availability.
+Provider token parsing, reference/calendar validation and wire DTOs remain later
+M03 slices; this library does not make the bootstrap service acquire evidence.
+
 Capture mode freezes a snapshot only after every input has been received and
 validated. Its knowledge time is at least the latest input receipt time. Preserve
 event/effective time, provider-declared publication time when available, local

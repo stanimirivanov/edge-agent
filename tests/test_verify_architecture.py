@@ -259,6 +259,20 @@ class ManifestDeclarationTests(unittest.TestCase):
         ):
             self.assertIn(evidence, stderr.getvalue())
 
+    def test_domain_rejects_aliased_inactive_sdk_dependencies_in_every_kind(self) -> None:
+        path = self.manifest("crates/market-data-domain")
+        original = path.read_text(encoding="utf-8")
+        for kind in verify_architecture.DEPENDENCY_KINDS:
+            table = f"target.'cfg(any())'.{kind}"
+            for dependency in ("reqwest", "sqlx", "async-nats", "tracing", "vendor-market-sdk"):
+                with self.subTest(kind=kind, dependency=dependency):
+                    optional = ', optional = true' if kind != "dev-dependencies" else ""
+                    path.write_text(
+                        original + f'\n[{table}]\nhidden = {{ package = "{dependency}", version = "1"{optional} }}\n',
+                        encoding="utf-8",
+                    )
+                    self.assert_rejected(table, "hidden", dependency)
+
     def test_inactive_optional_dependency_is_checked_by_package_not_alias(self) -> None:
         path = self.manifest("crates/contracts")
         table = "target.'cfg(any())'.dependencies"
