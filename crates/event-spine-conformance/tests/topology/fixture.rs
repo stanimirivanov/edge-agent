@@ -25,7 +25,7 @@ enum Runtime {
     Native(Box<tokio::process::Child>),
     Container(String),
 }
-struct Broker {
+pub struct Broker {
     directory: PathBuf,
     runtime: Option<Runtime>,
     url: String,
@@ -153,14 +153,53 @@ impl Broker {
             }
             self.runtime = Some(Runtime::Container(id.to_owned()));
             docker(&["start", id]).await?;
-            let mapping = docker(&["port", id, "4222/tcp"]).await?;
-            let address = mapping
-                .trim()
-                .strip_prefix("127.0.0.1:")
-                .ok_or("fixture port must bind loopback")?;
-            let port: u16 = address.parse()?;
-            self.url = format!("nats://127.0.0.1:{port}");
+            self.url = container_url(id).await?;
         }
+        self.ready().await
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Shared fixture: only the process target uses restart control"
+    )]
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    #[allow(
+        dead_code,
+        reason = "Shared fixture: only the process target uses restart control"
+    )]
+    pub async fn restart(&mut self) -> TestResult {
+        match self.runtime.as_mut().ok_or("owned broker missing")? {
+            Runtime::Native(child) => {
+                tokio::time::timeout(DEADLINE, child.kill()).await??;
+                let port = self.url.rsplit(':').next().ok_or("owned port absent")?;
+                **child = Command::new(
+                    std::env::var_os("EDGEAGENT_NATS_SERVER").ok_or("native executable absent")?,
+                )
+                .args(["-a", "127.0.0.1", "-p", port, "-c"])
+                .arg(self.directory.join("nats.conf"))
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()?;
+            }
+            Runtime::Container(id) => {
+                docker(&["kill", id]).await?;
+                // Same container's writable layer retains /data. Never remove
+                // or recreate the broker between kill and restart.
+                docker(&["start", id]).await?;
+                // Docker can reallocate an ephemeral host port on restart.
+                // Fresh clients must use the owned container's current mapping.
+                self.url = container_url(id).await?;
+            }
+        }
+        self.ready().await
+    }
+
+    async fn ready(&mut self) -> TestResult {
         // Readiness follows an authenticated round trip, not an arbitrary sleep.
         tokio::time::timeout(Duration::from_secs(30), async {
             let mut poll = tokio::time::interval(Duration::from_millis(50));
@@ -189,7 +228,7 @@ impl Broker {
                 }
             }
             Some(Runtime::Container(id)) => {
-                docker(&["rm", "--force", &id]).await?;
+                docker(&["rm", "--force", "--volumes", &id]).await?;
             }
             None => (),
         }
@@ -226,19 +265,44 @@ async fn docker(arguments: &[&str]) -> Result<String, TestError> {
     Ok(String::from_utf8(output.stdout)?)
 }
 
+async fn container_url(id: &str) -> Result<String, TestError> {
+    let mapping = docker(&["port", id, "4222/tcp"]).await?;
+    let address = mapping
+        .trim()
+        .strip_prefix("127.0.0.1:")
+        .ok_or("fixture port must bind loopback")?;
+    let port: u16 = address.parse()?;
+    if port == 0 {
+        return Err("invalid owned broker port".into());
+    }
+    Ok(format!("nats://127.0.0.1:{port}"))
+}
+
 pub async fn with_broker<F, Fut>(plan: &TopologyPlan, body: F) -> TestResult
 where
     F: FnOnce(String) -> Fut,
     Fut: Future<Output = TestResult>,
 {
-    let mut broker = Broker::new()?;
+    with_controlled_broker(plan, |broker| async move {
+        let url = broker.lock().await.url.clone();
+        body(url).await
+    })
+    .await
+}
+
+pub async fn with_controlled_broker<F, Fut>(plan: &TopologyPlan, body: F) -> TestResult
+where
+    F: FnOnce(std::sync::Arc<tokio::sync::Mutex<Broker>>) -> Fut,
+    Fut: Future<Output = TestResult>,
+{
+    let broker = std::sync::Arc::new(tokio::sync::Mutex::new(Broker::new()?));
     let outcome = AssertUnwindSafe(async {
-        broker.start(plan).await?;
-        tokio::time::timeout(Duration::from_secs(90), body(broker.url.clone())).await?
+        broker.lock().await.start(plan).await?;
+        tokio::time::timeout(Duration::from_secs(90), body(broker.clone())).await?
     })
     .catch_unwind()
     .await;
-    let cleanup = broker.close().await;
+    let cleanup = broker.lock().await.close().await;
     match outcome {
         Ok(Ok(())) => cleanup,
         Ok(Err(error)) => {

@@ -1,6 +1,7 @@
 //! Repository-owned development commands for EdgeAgent.
 
 mod architecture;
+mod qualification;
 mod repository;
 mod verification;
 mod workflow_security;
@@ -14,6 +15,7 @@ fn main() -> ExitCode {
     let remaining: Vec<_> = arguments.collect();
     match command.as_deref() {
         Some("verify") => verification::run(&remaining),
+        Some("m02-qualification") if remaining.is_empty() => qualification::run(),
         Some("sqlx-metadata") if remaining.is_empty() => verification::sqlx_metadata(),
         Some("checks") if remaining.is_empty() => verification::print_inventory(),
         Some("message-schemas") if remaining.is_empty() || remaining == ["--write"] => {
@@ -106,6 +108,7 @@ fn print_usage() {
     eprintln!(
         "EdgeAgent repository tasks\n\n\
          Usage:\n\
+           cargo xtask m02-qualification Provision, qualify and clean up isolated M02 dependencies\n\
            cargo xtask architecture    Verify workspace dependency policy\n\
            cargo xtask repository      Verify documentation and governance policy\n\
            cargo xtask workflow-security Verify CI trust and permission boundaries\n\

@@ -1,3 +1,4 @@
+mod faults;
 mod ordering;
 mod persistence;
 mod replay;
@@ -153,13 +154,16 @@ pub(super) async fn run() -> Result<(), WorkerError> {
     let mut action = [0];
     let mut input = tokio::io::stdin();
     input.read_exact(&mut action).await?;
-    let hold_delivery = action[0] == b'h' && matches!(role, Role::Consumer);
+    let inspect_delivery = action[0] == b'v' && matches!(role, Role::Consumer);
+    let hold_delivery = matches!(action[0], b'h' | b'v') && matches!(role, Role::Consumer);
     let hold_receipt = action[0] == b'p' && matches!(role, Role::ReplayDispatch);
+    let fault = faults::Boundary::parse(role, action[0])?;
     let rollback = match action[0] {
         b'c' => false,
         b'r' => true,
-        b'h' if hold_delivery => false,
+        b'h' | b'v' if hold_delivery => false,
         b'p' if hold_receipt => false,
+        b'b' | b'e' | b'u' | b'a' if fault.is_some() => false,
         _ => return Err("invalid action".into()),
     };
     match role {
@@ -167,10 +171,12 @@ pub(super) async fn run() -> Result<(), WorkerError> {
             // EOF keeps the original default fixture convenient. Explicit bytes
             // use the same bounded contract decoder as every other producer.
             let mut bytes = Vec::new();
-            input
-                .take(u64::try_from(MAX_PORTABLE_MESSAGE_BYTES)? + 1)
-                .read_to_end(&mut bytes)
-                .await?;
+            if fault.is_none() {
+                (&mut input)
+                    .take(u64::try_from(MAX_PORTABLE_MESSAGE_BYTES)? + 1)
+                    .read_to_end(&mut bytes)
+                    .await?;
+            }
             let envelope = if bytes.is_empty() {
                 ApplyProbe::new("probe-01", 0, 42)?.envelope(metadata(false))?
             } else {
@@ -184,7 +190,8 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                 envelope
             };
             let started = std::time::Instant::now();
-            let result = persistence::accept(&mut database, &envelope, rollback).await;
+            let result =
+                persistence::accept(&mut database, &envelope, rollback, fault, &mut input).await;
             edgeagent_telemetry::record_event_spine_operation(
                 &edgeagent_telemetry::EventSpineContext::from_envelope(&envelope),
                 edgeagent_telemetry::EventSpineStage::Persistence,
@@ -203,7 +210,10 @@ pub(super) async fn run() -> Result<(), WorkerError> {
             if rollback {
                 return Err("relay cannot simulate rollback".into());
             }
-            let publisher = JetStreamPublisher::from_context(context.ok_or("broker absent")?);
+            let publisher = faults::Publisher {
+                inner: JetStreamPublisher::from_context(context.ok_or("broker absent")?),
+                hold: fault == Some(faults::Boundary::Published),
+            };
             let policy = RelayPolicy::new(
                 "m02_relay",
                 LeaseDuration::new(Duration::from_secs(10))?,
@@ -242,22 +252,59 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                 .get_consumer(name)
                 .await?;
             let mut consumer = JetStreamConsumer::new(durable).await?;
-            let delivery = tokio::time::timeout(IO_DEADLINE, consumer.receive()).await??;
+            let delivery = match tokio::time::timeout(IO_DEADLINE, consumer.receive()).await? {
+                Err(error) if error.kind() == edgeagent_messaging::ConsumeErrorKind::Protocol => {
+                    println!("protocol_halt");
+                    database.close().await?;
+                    return Ok(());
+                }
+                result => result?,
+            };
             if hold_delivery {
                 // Fixture-only intake barrier: no transaction is open. This
                 // exposes broker admission without production adapter hooks.
-                println!("delivered");
+                if inspect_delivery {
+                    println!(
+                        "delivery:{}:{}",
+                        delivery.metadata().delivery_attempt(),
+                        delivery.metadata().message_key()
+                    );
+                } else {
+                    println!("delivered");
+                }
                 std::io::stdout().flush()?;
                 input.read_exact(&mut action).await?;
                 if action[0] != b'c' {
                     return Err("invalid delivery release".into());
                 }
             }
+            let delivery = if fault == Some(faults::Boundary::Committed) {
+                faults::hold_settlement(delivery)?
+            } else {
+                delivery
+            };
             let handler = persistence::ProbeHandler { rollback };
             let mut store = PostgresInboundMessageStore::new(&mut database, &handler);
             let policy =
                 HandlerPolicy::new(name, 5, Duration::from_millis(10), Duration::from_secs(1))?;
-            let outcome = handle_once(&mut store, &registry()?, &policy, delivery).await?;
+            let outcome = match handle_once(&mut store, &registry()?, &policy, delivery).await {
+                Err(error)
+                    if error
+                        .source()
+                        .and_then(|source| {
+                            source.downcast_ref::<edgeagent_messaging::ConsumeError>()
+                        })
+                        .is_some_and(|source| {
+                            source.kind()
+                                == edgeagent_messaging::ConsumeErrorKind::ConfirmationUnknown
+                        }) =>
+                {
+                    println!("confirmation_unknown");
+                    database.close().await?;
+                    return Ok(());
+                }
+                result => result?,
+            };
             match (rollback, outcome) {
                 (false, HandlingOutcome::Applied { .. }) => println!("applied"),
                 (false, HandlingOutcome::Duplicate { .. }) => println!("duplicate"),

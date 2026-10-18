@@ -8,6 +8,12 @@ pub(super) fn diagnostic_or_cleanup(name: &str, job: &str, step: &Yaml) -> bool 
         return false;
     }
     let prefix = "docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yaml";
+    if text(step, "if") == Some("always()")
+        && text(step, "uses")
+            == Some("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
+    {
+        return true;
+    }
     (text(step, "if") == Some("failure()")
         && text(step, "run") == Some(format!("{prefix} logs --no-color --tail=200").as_str()))
         || (text(step, "if") == Some("always()")
@@ -41,6 +47,22 @@ pub(super) fn safe_interpolation(run: &str) -> bool {
 }
 
 pub(super) fn required(name: &str, job: &str, steps: &[Yaml], problems: &mut Vec<String>) {
+    if name == "repository-quality.yml" && job == "local-platform-smoke" {
+        let uploads = steps
+            .iter()
+            .filter(|step| {
+                text(step, "uses")
+                    == Some("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
+            })
+            .collect::<Vec<_>>();
+        if uploads.len() != 1
+            || uploads
+                .first()
+                .is_none_or(|step| text(step, "if") != Some("always()"))
+        {
+            problems.push("jobs.local-platform-smoke: retain exactly one unconditional-on-result M02 evidence upload".into());
+        }
+    }
     let runs: &[&str] = match (name, job) {
         ("repository-quality.yml", "architecture") => &[
             "cargo xtask workflow-security",
@@ -61,6 +83,7 @@ pub(super) fn required(name: &str, job: &str, steps: &[Yaml], problems: &mut Vec
         ("repository-quality.yml", "local-platform-smoke") => &[
             "cargo xtask verify sqlx-metadata",
             "cargo xtask verify local-platform",
+            "cargo xtask m02-qualification",
         ],
         ("m08-durable-execution.yml", "proof") => &[
             "cargo xtask verify m08-${{ matrix.candidate }}-static",

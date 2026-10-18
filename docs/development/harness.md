@@ -102,7 +102,7 @@ successful exit when a filter selects zero tests cannot satisfy a mandatory
 proof. Listing tests proves discovery only, not database, broker, crash-
 recovery, performance, or external-effect behavior.
 
-Specialized profiles include `local-platform`, `image-smoke`, `supply-chain`, `dependency-audit`, `ci-security`,
+Specialized profiles include `local-platform`, `m02-qualification`, `image-smoke`, `supply-chain`, `dependency-audit`, `ci-security`,
 and `m08-<candidate>`. Their prerequisites remain explicit in the inventory and
 focused guides. The local-platform environment and migrated test schema must
 be available before conformance executes; CI provisions them and always
@@ -112,15 +112,19 @@ default gate starts no service and makes no model-provider call.
 
 ## Feedback sensors
 
-The protected T3 `event-spine-processes` suite also belongs to `local-platform`.
+The protected T3 `event-spine-processes` and `nats-topology` suites belong to
+`m02-qualification`. `cargo xtask m02-qualification` provisions their owned
+dependencies and retains [scenario evidence](m02-qualification.md) through the
+same runner; CI runs them once outside legacy local-platform regressions.
 It launches independent tooling workers with restricted per-service PostgreSQL
 logins and an owned authenticated broker. Census mutation tests reject missing,
 renamed, duplicate or extra ignored proofs; default compilation/discovery is not
 runtime evidence. See [process acceptance](process-acceptance.md) for transaction,
 readiness, rollback, cleanup and qualification limits.
 
-Its twelve required cases include four [authorized replay proofs](quarantine-replay.md)
-and two [exported telemetry proofs](event-spine-telemetry.md).
+Its nineteen required cases include four [authorized replay proofs](quarantine-replay.md),
+two [exported telemetry proofs](event-spine-telemetry.md), and seven
+[failure qualification cases](m02-qualification.md).
 Authentication/SQL and broker denials, atomic audit/dispatch rollback, immutable
 routes/bytes, result-loss restart, stale fences and exhausted attempts are runtime
 assertions. Actual OTLP requests must prove W3C links, bounded dimensions,
