@@ -136,6 +136,12 @@ Work items:
 Completion means synthetic and one live provider produce identical canonical
 contracts and failure semantics without provider logic entering domain crates.
 
+The accepted [evidence/provider profile](../development/market-data.md) and
+[ADR-0031](../decisions/0031-define-the-supported-market-evidence-profile.md)
+define the initial raw daily scope and implementation budgets. Massive is the
+first technical candidate, not a live-data entitlement. Provider rights and actual
+live qualification remain required; documentation alone does not complete M03.
+
 ## M04 - Deterministic research
 
 **Outcome:** Publish the first reproducible artifact or abstention.
