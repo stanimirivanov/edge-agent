@@ -198,6 +198,14 @@ identifiers remain trace fields, and message payloads never enter this API.
 Deployable composition roots install the selected OpenTelemetry-compatible
 recorder and subscriber rather than coupling event processing to an exporter.
 
+The finite M02 conformance roots opt into a bounded OTLP/HTTP projection of those
+classified events. It exports completed-stage spans linked to the immutable
+message's W3C carrier and bounded delta metrics, not arbitrary logs or payloads.
+Actual captured wire data and exporter-rejection/timeout proofs establish the
+signal contract. Product exporter deployment remains separate. See
+[event-spine telemetry](../development/event-spine-telemetry.md) and
+[ADR-0029](../decisions/0029-export-bounded-correlated-event-spine-observations.md).
+
 The local event-spine conformance test composes the production adapters across
 both PostgreSQL transaction boundaries and JetStream. It abandons a first
 delivery and requires the durable consumer to redeliver the same transport

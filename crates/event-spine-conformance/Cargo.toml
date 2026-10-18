@@ -17,15 +17,25 @@ edgeagent-messaging.workspace = true
 edgeagent-messaging-nats.workspace = true
 edgeagent-outbox-postgres.workspace = true
 edgeagent-outbox-relay.workspace = true
+edgeagent-telemetry.workspace = true
 jsonschema.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true
+reqwest.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
-tokio = { workspace = true, features = ["io-std", "io-util", "process"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util", "process", "net", "sync", "time"] }
 
 [dev-dependencies]
+axum.workspace = true
 futures-util.workspace = true
+opentelemetry-proto.workspace = true
+prost.workspace = true
 
 [lints]
 workspace = true

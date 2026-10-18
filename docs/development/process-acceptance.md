@@ -118,7 +118,9 @@ transport identity committed; inspect receipt/state/fact counts to distinguish a
 new transition from an acknowledged semantic duplicate.
 
 Facts derive stable identity from probe/revision and causation/correlation from
-the winning command. Producer acceptance is still transport-identity based;
+the winning command. Facts also preserve that command's validated W3C carrier;
+the proof exporter's stage spans link it without rewriting accepted bytes.
+Producer acceptance is still transport-identity based;
 consumer semantics decide whether its independently published request changes state.
 
 ## Lifecycle and failure contract
@@ -134,7 +136,7 @@ release byte before opening any transaction. This fixture barrier exists only
 inside tooling, not production adapters. A unique worker application name lets
 the administrator identify owned lock waits without exposing credentials.
 Children have a 30-second total deadline; the proof has a tighter 15-second child
-budget and 90-second scenario budget. SQL statements are limited to 5 seconds,
+budget and 90-second database-scenario budget. SQL statements are limited to 5 seconds,
 locks to 2 seconds, broker operations/receive to 5 seconds. Runtime shutdown is
 bounded even if a parent abandons stdin. No arbitrary sleep coordinates work.
 
@@ -175,7 +177,11 @@ and lack semantic receipt history. Neither mixed-version workers nor an upgrade
 of retained synthetic state is supported. Never infer old receipts from current
 state or apply the fixture to a product deployment.
 
-The ten-case protected suite includes four
+The canonical gate admits at most two scenarios concurrently, independently of
+host CPU count. Each scenario retains its internal competing workers and its
+original deadlines; this bounds fixture pressure, not the behavior under test.
+
+The twelve-case protected suite includes four
 [authorized replay proofs](quarantine-replay.md): authenticated/atomic authorization,
 inbound result-loss recovery and bounded fencing, original-route fan-out, and
 outbound audited release. Replay authorization needs no broker connection;
@@ -183,7 +189,15 @@ dispatch uses a separate login and exact-subject broker scope. Its fixture-only
 `p` barrier reports `persisted` after a real broker receipt, then waits for `c`
 outside any transaction so a parent can kill or fence that holder.
 
-The proof does not establish OTLP export, wire ACK loss, general process
+Two [exported telemetry proofs](event-spine-telemetry.md) add an owned OTLP/HTTP
+receiver, non-default W3C links, exact metric dimensions/counts, raw-wire privacy
+sentinels and real child PID evidence. Rejected or stalled exports must preserve
+commits, duplicate suppression and confirmed settlement. Export is opt-in in
+child-only environment; normal process cases remain unconfigured. Bounded SDK
+threads and HTTP transport are installed before Tokio and shut down after it;
+their diagnostic result never replaces the worker's operation result.
+
+The proof does not establish production telemetry operation, wire ACK loss, general process
 kill/crash qualification, broker or PostgreSQL restart, HA or load capacity.
 Connection interruption is not a database restart or an unknown-commit proof.
 Those remain in the

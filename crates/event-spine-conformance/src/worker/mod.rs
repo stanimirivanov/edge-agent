@@ -1,6 +1,7 @@
 mod ordering;
 mod persistence;
 mod replay;
+mod telemetry;
 
 use std::{error::Error, io::Write, time::Duration};
 
@@ -32,6 +33,28 @@ enum Role {
 }
 
 impl Role {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Producer => "producer",
+            Self::Relay => "relay",
+            Self::Consumer => "consumer",
+            Self::ReplayAuthorize => "replay-authorize",
+            Self::ReplayDispatch => "replay-dispatch",
+        }
+    }
+
+    fn component(self) -> Result<Component, WorkerError> {
+        if matches!(self, Self::Producer) {
+            return Ok(Component::Gateway);
+        }
+        match std::env::var("EDGEAGENT_PROOF_COMPONENT")?.as_str() {
+            "gateway" => Ok(Component::Gateway),
+            "research" => Ok(Component::Research),
+            "auditor" => Ok(Component::AuditProjector),
+            _ => Err("invalid runtime component".into()),
+        }
+    }
+
     fn parse(value: &str) -> Result<Self, WorkerError> {
         match value {
             "producer" => Ok(Self::Producer),
@@ -86,16 +109,7 @@ pub(super) async fn run() -> Result<(), WorkerError> {
         ])
         .application_name(&format!("m02_worker_{}", std::process::id()));
     let mut database = PgConnection::connect_with(&options).await?;
-    let component = if matches!(role, Role::Producer) {
-        Component::Gateway
-    } else {
-        match std::env::var("EDGEAGENT_PROOF_COMPONENT")?.as_str() {
-            "gateway" => Component::Gateway,
-            "research" => Component::Research,
-            "auditor" => Component::AuditProjector,
-            _ => return Err("invalid runtime component".into()),
-        }
-    };
+    let component = role.component()?;
     let context = if matches!(role, Role::Producer | Role::ReplayAuthorize) {
         None
     } else {
@@ -169,7 +183,20 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                 }
                 envelope
             };
-            persistence::accept(&mut database, &envelope, rollback).await?;
+            let started = std::time::Instant::now();
+            let result = persistence::accept(&mut database, &envelope, rollback).await;
+            edgeagent_telemetry::record_event_spine_operation(
+                &edgeagent_telemetry::EventSpineContext::from_envelope(&envelope),
+                edgeagent_telemetry::EventSpineStage::Persistence,
+                if result.is_ok() && !rollback {
+                    edgeagent_telemetry::EventSpineOutcome::Succeeded
+                } else {
+                    edgeagent_telemetry::EventSpineOutcome::Failed
+                },
+                1,
+                started.elapsed(),
+            );
+            result?;
             println!("{}", if rollback { "rolled_back" } else { "accepted" });
         }
         Role::Relay => {
@@ -288,6 +315,18 @@ pub(super) async fn run() -> Result<(), WorkerError> {
     }
     database.close().await?;
     Ok(())
+}
+
+pub(super) fn start_telemetry() -> Result<Option<telemetry::Telemetry>, WorkerError> {
+    if std::env::var_os(telemetry::ENDPOINT).is_none() {
+        return Ok(None);
+    }
+    let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    let [role] = arguments.as_slice() else {
+        return Err("expected one role".into());
+    };
+    let role = Role::parse(role)?;
+    telemetry::Telemetry::start(role.as_str(), role.component()?.as_str())
 }
 
 fn metadata(fact: bool) -> MessageMetadata {

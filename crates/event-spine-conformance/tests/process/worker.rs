@@ -23,11 +23,25 @@ impl Worker {
         component: &str,
         url: &str,
     ) -> Result<Self, TestError> {
+        Self::spawn_observed(role, database_url, schema, component, url, None).await
+    }
+
+    pub async fn spawn_observed(
+        role: &str,
+        database_url: &str,
+        schema: &str,
+        component: &str,
+        url: &str,
+        telemetry: Option<&str>,
+    ) -> Result<Self, TestError> {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
         let mut command = Command::new(env!("CARGO_BIN_EXE_conformance-worker"));
         command.env_clear();
         if let Some(directory) = std::env::var_os("SystemRoot") {
             command.env("SystemRoot", directory);
+        }
+        if let Some(endpoint) = telemetry {
+            command.env("EDGEAGENT_PROOF_OTLP_ENDPOINT", endpoint);
         }
         let mut child = command
             .arg(role)

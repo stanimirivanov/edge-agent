@@ -98,10 +98,11 @@ PACKAGE_RULES = {
         "lib",
         frozenset({
             CONTRACTS, INBOX_HANDLER, INBOX_POSTGRES, MESSAGING, MESSAGING_NATS,
-            OUTBOX_POSTGRES, OUTBOX_RELAY, "async-nats", "jsonschema", "schemars",
-            "serde", "serde_json", "sqlx", "tokio",
+            OUTBOX_POSTGRES, OUTBOX_RELAY, TELEMETRY, "async-nats", "jsonschema", "schemars",
+            "serde", "serde_json", "sqlx", "tokio", "tracing", "tracing-subscriber",
+            "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest",
         }),
-        frozenset({"futures-util"}),
+        frozenset({"futures-util", "axum", "opentelemetry-proto", "prost"}),
     ),
     "crates/inbox-handler": PackageRule(
         INBOX_HANDLER,

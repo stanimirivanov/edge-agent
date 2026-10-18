@@ -244,6 +244,16 @@ impl Database {
     }
 
     pub async fn spawn(&self, role: &str, consumer: bool, url: &str) -> Result<Worker, TestError> {
+        self.spawn_observed(role, consumer, url, None).await
+    }
+
+    pub async fn spawn_observed(
+        &self,
+        role: &str,
+        consumer: bool,
+        url: &str,
+        telemetry: Option<&str>,
+    ) -> Result<Worker, TestError> {
         let schema = if consumer {
             &self.consumer
         } else {
@@ -254,7 +264,7 @@ impl Database {
             .runtime_options(consumer, role == "relay")
             .to_url_lossy()
             .to_string();
-        Worker::spawn(role, &database_url, schema, component, url).await
+        Worker::spawn_observed(role, &database_url, schema, component, url, telemetry).await
     }
 
     async fn close(&mut self) -> TestResult {

@@ -12,6 +12,8 @@ mod replicas;
 mod scenarios;
 #[path = "process/semantics.rs"]
 mod semantics;
+#[path = "process/telemetry/mod.rs"]
+mod telemetry;
 
 use broker::{TestError, TestResult};
 use edgeagent_contracts::{Component, MessageEnvelope};
