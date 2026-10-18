@@ -137,6 +137,7 @@ const ROUTES: &[Route] = &[
             "docs/development/message-contracts.md",
             "docs/development/plans/m02-completion.md",
             "docs/development/process-acceptance.md",
+            "docs/development/quarantine-replay.md",
         ],
         checks: &[
             "message-schema-contracts",
@@ -153,6 +154,11 @@ const ROUTES: &[Route] = &[
             "nats-topology",
             "event-spine-processes",
         ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/quarantine-replay.md"),
+        guides: &["docs/development/quarantine-replay.md"],
+        checks: &["event-spine-processes", "nats-topology", "sqlx-metadata"],
     },
     Route {
         matcher: Matcher::Exact("docs/development/process-acceptance.md"),

@@ -150,9 +150,11 @@ when the same worker token is reused after expiry.
 Outbound replay appends bounded operator identity and reason evidence before it
 releases an immutable quarantined outbox record. Replay preserves the original
 CloudEvents identity and bytes, resets only the relay attempt budget, and remains
-idempotent by replay-request identity. Authentication, authorization, and any
-dual-control requirement belong to the future operator control plane; direct
-table updates are not a supported replay path.
+idempotent by replay-request identity. M02's
+[conformance replay composition](../development/quarantine-replay.md) authenticates
+restricted owning operator logins. Production IAM, approval and dual control
+remain operator-control-plane work; direct table updates are not a supported
+replay path.
 
 `edgeagent-inbox-postgres` implements the atomic inbound store port. It owns
 transaction begin, commit, and rollback while it records `(consumer_name,
@@ -173,6 +175,11 @@ Inbound replay appends bounded operator identity, reason, target, and prior
 failure evidence before returning the original subject and bytes to a separate
 control-plane publisher. The authorization is idempotent by replay-request
 identity, never deletes quarantine evidence, and cannot publish on its own.
+The finite M02 composition atomically records authorization plus dispatch intent,
+then publishes exact bytes outside a transaction through a separate scoped
+principal. Bounded attempts, generation-fenced completion and durable broker
+receipts support process re-entry. Replay uses a separate transport request ID,
+never a new domain identity; original-route events reach other subscribers too.
 
 `edgeagent-inbox-handler` contains persistence-neutral application policy for
 one delivery. It validates before store work, invokes the semantic inbound port,

@@ -12,6 +12,11 @@
 
 ## Offline build contract
 
+The tooling worker also checks its authorization, dispatch claim and fenced
+receipt statements with macros. Metadata assembly applies its disposable
+`process-schema.sql` after adapter migrations. Fresh metadata databases are
+required; these fixture tables are not product migrations.
+
 All production inbox and outbox SQL uses checked SQLx query macros. Outbox
 enqueue and replay identity lookups use `sqlx::query!`; lease transitions and
 the audited replay CTE use readable capability-owned `query_file!` /

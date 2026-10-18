@@ -63,6 +63,16 @@ impl Broker {
                 "{{ user: {name:?}, password: fixture-only, permissions: {} }}",
                 role.nats_config()
             ));
+            if let Ok(replay) = edgeagent_event_spine_conformance::replay::ReplayPublisherScope::new(
+                plan,
+                role.component().ok_or("runtime component missing")?,
+            ) {
+                users.push(format!(
+                    "{{ user: {:?}, password: fixture-only, permissions: {} }}",
+                    replay.user(),
+                    replay.nats_config()
+                ));
+            }
         }
         let native = std::env::var_os("EDGEAGENT_NATS_SERVER");
         let store = if native.is_some() {

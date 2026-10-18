@@ -8,6 +8,7 @@
 
 mod contracts;
 mod error;
+pub mod replay;
 pub mod schemas;
 
 pub use contracts::{AcceptanceMessage, ApplyProbe, ProbeApplied, definitions, registry};
