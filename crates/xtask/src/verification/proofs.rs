@@ -86,6 +86,8 @@ const PROCESS_ACCEPTANCE: Target = Target {
         "replay::recovery::inbound_replay_recovers_persisted_result_loss_with_one_domain_transition",
         "replay::routes::original_route_replay_reaches_all_subscribers_without_exclusive_targeting",
         "replay::outbound::outbound_replay_preserves_audit_budget_and_stale_claim_fences",
+        "telemetry::exported_process_signals_preserve_context_privacy_and_bounded_dimensions",
+        "telemetry::rejected_or_stalled_exporters_preserve_commits_duplicates_and_settlement",
     ],
 };
 const OUTBOX: Target = Target {
@@ -172,7 +174,7 @@ pub(super) fn checks() -> Vec<Check> {
             "event-spine-processes",
             &PROCESS_ACCEPTANCE,
             PROCESS_DEPENDENCIES,
-            "Independent OS processes prove atomic acceptance, semantic ordering/admission, partition progress, connection-loss recovery, schema isolation and authenticated replay with atomic dispatch, result-loss recovery, bounded fenced claims and original-route fan-out; not full crash or wire-ACK loss qualification.",
+            "Independent OS processes prove atomic acceptance, ordering/admission, partition and connection recovery, authenticated fenced replay and original-route fan-out; decoded OTLP proves linked context, bounded private observations and export-failure isolation. Not full crash or wire-ACK loss qualification.",
         ),
         suite(
             "nats-topology",
@@ -379,7 +381,7 @@ fn suite(
     prerequisites: &'static [Requirement],
     evidence: &'static str,
 ) -> Check {
-    let args = vec![
+    let mut args = vec![
         "test",
         "--locked",
         "-p",
@@ -389,6 +391,12 @@ fn suite(
         "--",
         "--ignored",
     ];
+    if id == "event-spine-processes" {
+        // Each scenario already owns concurrent processes, a broker and SQL
+        // schemas. Bound fixture admission independently of host CPU count;
+        // retain every scenario's internal contention and original deadlines.
+        args.push("--test-threads=2");
+    }
     let mut discovery_args = args.clone();
     discovery_args.push("--list");
     Check {
@@ -441,6 +449,20 @@ mod tests {
     use std::{collections::BTreeSet, error::Error};
 
     #[test]
+    fn process_fixture_admission_is_bounded_without_filtering_the_suite() -> Result<(), String> {
+        let check = checks()
+            .into_iter()
+            .find(|c| c.id == "event-spine-processes")
+            .ok_or("process proof missing")?;
+        assert!(check.command.args.contains(&"--test-threads=2"));
+        assert!(!check.command.args.contains(&"--exact"));
+        let discovery = check.discovery.ok_or("process discovery missing")?;
+        assert_eq!(discovery.expected.len(), 12);
+        assert!(discovery.args.contains(&"--test-threads=2"));
+        Ok(())
+    }
+
+    #[test]
     fn proofs_cover_each_external_ignored_identity_without_duplicate_execution()
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
@@ -460,8 +482,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 53);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 53);
+        assert_eq!(inventory.len(), 55);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 55);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -608,7 +630,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"process_acceptance"));
         let discovery = check.discovery.ok_or("process discovery absent")?;
-        assert_eq!(discovery.expected.len(), 10);
+        assert_eq!(discovery.expected.len(), 12);
         let complete = discovery
             .expected
             .iter()

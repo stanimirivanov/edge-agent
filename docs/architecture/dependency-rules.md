@@ -46,7 +46,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
-| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay` |
+| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-inbox-handler` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
@@ -158,6 +158,16 @@ form its replacement boundary. A parser or feature change requires reviewing
 these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret-scanning.md).
 
 ## Related decisions
+
+Conformance roots alone pin OpenTelemetry API/SDK/OTLP 0.33.1, Reqwest 0.13.5
+(blocking, no default TLS/proxy features), and Tracing-subscriber 0.3.23
+(registry/std). Test-only Axum 0.8.9, OTLP models 0.33.1 and Prost 0.14.4 decode
+the owned HTTP/protobuf receiver. These Apache-2.0 and/or MIT dependencies are
+confined to tooling and use reviewed minimal features. The facade, application
+and product runtime crates acquire no exporter SDK. The allowlisted projection,
+bounded OTLP protocol and protected process proofs form the replacement boundary;
+[ADR-0029](../decisions/0029-export-bounded-correlated-event-spine-observations.md)
+records maintenance, lifecycle, privacy and rollout constraints.
 
 The conformance-only package pins Schemars 1.2.3 (derive/std only) and Jsonschema
 0.58.6 (default features disabled). They derive/validate local schemas, enter no

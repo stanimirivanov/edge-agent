@@ -28,6 +28,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
             "edgeagent-messaging-nats",
             "edgeagent-outbox-postgres",
             "edgeagent-outbox-relay",
+            "edgeagent-telemetry",
         ],
         development: NONE,
         build: NONE,

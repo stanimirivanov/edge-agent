@@ -137,6 +137,7 @@ const ROUTES: &[Route] = &[
             "docs/development/message-contracts.md",
             "docs/development/plans/m02-completion.md",
             "docs/development/process-acceptance.md",
+            "docs/development/event-spine-telemetry.md",
             "docs/development/quarantine-replay.md",
         ],
         checks: &[
@@ -159,6 +160,11 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Exact("docs/development/quarantine-replay.md"),
         guides: &["docs/development/quarantine-replay.md"],
         checks: &["event-spine-processes", "nats-topology", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/event-spine-telemetry.md"),
+        guides: &["docs/development/event-spine-telemetry.md"],
+        checks: &["event-spine-processes", "relay-observation-contracts"],
     },
     Route {
         matcher: Matcher::Exact("docs/development/process-acceptance.md"),
@@ -316,7 +322,11 @@ const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("crates/telemetry/"),
         guides: &["docs/development/event-spine-telemetry.md"],
-        checks: &["event-spine-client", "relay-observation-contracts"],
+        checks: &[
+            "event-spine-client",
+            "relay-observation-contracts",
+            "event-spine-processes",
+        ],
     },
     Route {
         matcher: Matcher::Prefix(".sqlx/"),

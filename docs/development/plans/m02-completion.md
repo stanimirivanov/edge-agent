@@ -110,6 +110,12 @@ metadata, unauthorized/rollback/conflict/restart/receipt-loss proofs and a runbo
 
 ### 6. Exported cross-process event-spine telemetry
 
+[Issue #195](https://github.com/stanimirivanov/edge-agent/issues/195) adds bounded
+conformance exporter wiring and protected OTLP wire-capture/failure proofs.
+See the [telemetry guide](../event-spine-telemetry.md) and
+[ADR-0029](../../decisions/0029-export-bounded-correlated-event-spine-observations.md)
+for context links, resource bounds, shutdown and evidence limits.
+
 Install bounded telemetry exporters in the conformance roots, propagate/link
 W3C context, and inspect captured OTLP publication, delivery/handling,
 persistence, and acknowledgement results. Maintain payload-safe diagnostics and

@@ -79,6 +79,7 @@ pub struct EventSpineContext {
     correlation_id: Option<String>,
     causation_id: Option<String>,
     trace_parent: Option<String>,
+    trace_state: Option<String>,
     transport_message_key: Option<String>,
 }
 
@@ -96,6 +97,7 @@ impl EventSpineContext {
             correlation_id: None,
             causation_id: None,
             trace_parent: None,
+            trace_state: None,
             transport_message_key: None,
         }
     }
@@ -110,6 +112,7 @@ impl EventSpineContext {
             correlation_id: envelope.extension("correlationid").map(str::to_owned),
             causation_id: envelope.extension("causationid").map(str::to_owned),
             trace_parent: envelope.extension("traceparent").map(str::to_owned),
+            trace_state: envelope.extension("tracestate").map(str::to_owned),
             transport_message_key: None,
         }
     }
@@ -124,6 +127,7 @@ impl EventSpineContext {
             correlation_id: None,
             causation_id: None,
             trace_parent: None,
+            trace_state: None,
             transport_message_key: Some(metadata.message_key().to_owned()),
         }
     }
@@ -142,6 +146,7 @@ impl EventSpineContext {
             correlation_id: None,
             causation_id: None,
             trace_parent: None,
+            trace_state: None,
             transport_message_key: None,
         }
     }
@@ -180,6 +185,12 @@ impl EventSpineContext {
     #[must_use]
     pub fn trace_parent(&self) -> Option<&str> {
         self.trace_parent.as_deref()
+    }
+
+    /// Return validated optional W3C vendor state, never a metric dimension.
+    #[must_use]
+    pub fn trace_state(&self) -> Option<&str> {
+        self.trace_state.as_deref()
     }
 
     /// Return the opaque transport identity for an untrusted delivery.
@@ -227,6 +238,7 @@ pub fn record_event_spine_operation(
         correlation_id = context.correlation_id().unwrap_or(""),
         causation_id = context.causation_id().unwrap_or(""),
         trace_parent = context.trace_parent().unwrap_or(""),
+        trace_state = context.trace_state().unwrap_or(""),
         transport_message_key = context.transport_message_key().unwrap_or(""),
     );
 }
@@ -330,6 +342,7 @@ mod tests {
         assert_eq!(context.correlation_id(), None);
         assert_eq!(context.causation_id(), None);
         assert_eq!(context.trace_parent(), None);
+        assert_eq!(context.trace_state(), None);
         assert_eq!(context.transport_message_key(), None);
     }
 

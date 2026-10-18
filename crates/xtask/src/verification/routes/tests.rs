@@ -414,6 +414,8 @@ fn process_composition_and_adapters_route_the_protected_process_proof() -> Resul
         "crates/outbox-relay/src/coordinator.rs",
         "docs/development/process-acceptance.md",
         "docs/development/quarantine-replay.md",
+        "docs/development/event-spine-telemetry.md",
+        "crates/telemetry/src/lib.rs",
     ] {
         let advice = advise(&[path.to_owned()])?;
         assert_eq!(advice.mandatory, DEFAULT_COMMAND);

@@ -123,6 +123,12 @@ impl PostgresTransactionalMessageHandler for ProbeHandler {
             if let Some(correlation) = envelope.extension("correlationid") {
                 fact_metadata.correlation_id = correlation.into();
             }
+            // A fact continues the winning command's carrier, not the default
+            // fixture's context. Never rewrite the accepted command itself.
+            if let Some(parent) = envelope.extension("traceparent") {
+                fact_metadata.trace_parent = parent.into();
+            }
+            fact_metadata.trace_state = envelope.extension("tracestate").map(str::to_owned);
             let fact = ProbeApplied::new(command.probe_id(), revision, command.value())
                 .map_err(invalid)?
                 .envelope(fact_metadata)
