@@ -76,7 +76,7 @@ impl Worker {
         input.write_all(&[action]).await?;
         input.write_all(bytes).await?;
         input.flush().await?;
-        if action != b'h' {
+        if !matches!(action, b'h' | b'p') {
             self.input.take(); // Producer framing ends at EOF.
         }
         Ok(())
@@ -118,5 +118,9 @@ impl Worker {
             tokio::time::timeout(Duration::from_secs(5), self.child.kill()).await??;
         }
         Ok(())
+    }
+
+    pub async fn kill(mut self) -> Result<(), TestError> {
+        self.stop().await
     }
 }

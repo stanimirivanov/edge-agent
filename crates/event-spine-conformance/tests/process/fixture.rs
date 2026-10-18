@@ -114,12 +114,43 @@ impl Database {
                     .await?;
                     if schema == self.consumer {
                         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                            "GRANT UPDATE ON conformance_probe, edgeagent_message_quarantine TO {role}"
+                            "GRANT UPDATE ON conformance_probe TO {role}; GRANT UPDATE (last_delivery_attempt, last_observed_at) ON edgeagent_message_quarantine TO {role}"
                         )))
                         .execute(&mut self.admin)
                         .await?;
                     }
                 }
+            }
+            let operator = format!("{schema}_o");
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "CREATE ROLE {operator} LOGIN PASSWORD 'fixture-only'"
+            )))
+            .execute(&mut self.admin)
+            .await?;
+            self.roles.push(operator.clone());
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "GRANT USAGE ON SCHEMA {schema} TO {operator};
+                 GRANT SELECT ON edgeagent_message_outbox TO {operator};
+                 GRANT SELECT, INSERT ON edgeagent_message_outbox_replay_audit TO {operator};
+                 GRANT UPDATE (available_at, attempt_count, lease_owner, lease_expires_at, last_failure_code, quarantined_at, quarantine_reason) ON edgeagent_message_outbox TO {operator}"
+            ))).execute(&mut self.admin).await?;
+            if schema == self.consumer {
+                let dispatcher = format!("{schema}_d");
+                sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                    "CREATE ROLE {dispatcher} LOGIN PASSWORD 'fixture-only'"
+                )))
+                .execute(&mut self.admin)
+                .await?;
+                self.roles.push(dispatcher.clone());
+                sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                    "GRANT SELECT ON edgeagent_message_quarantine, conformance_replay_receipt TO {operator};
+                     GRANT UPDATE (last_observed_at) ON edgeagent_message_quarantine TO {operator};
+                     GRANT SELECT, INSERT ON edgeagent_message_quarantine_replay_audit, conformance_replay_dispatch TO {operator};
+                     GRANT USAGE ON SCHEMA {schema} TO {dispatcher};
+                     GRANT SELECT ON conformance_replay_dispatch, edgeagent_message_quarantine_replay_audit, edgeagent_message_quarantine TO {dispatcher};
+                     GRANT UPDATE (attempt_count, generation, lease_owner, lease_expires_at, published_at) ON conformance_replay_dispatch TO {dispatcher};
+                     GRANT INSERT ON conformance_replay_receipt TO {dispatcher}"
+                ))).execute(&mut self.admin).await?;
             }
         }
         Ok(())
@@ -144,6 +175,46 @@ impl Database {
 
     pub async fn inspector(&self) -> Result<PgConnection, TestError> {
         Ok(PgConnection::connect_with(&self.options).await?)
+    }
+
+    pub fn replay_options(&self, consumer: bool, dispatcher: bool) -> PgConnectOptions {
+        let schema = if consumer {
+            &self.consumer
+        } else {
+            &self.producer
+        };
+        self.options
+            .clone()
+            .username(&format!("{schema}_{}", if dispatcher { "d" } else { "o" }))
+            .password("fixture-only")
+    }
+
+    pub async fn replay_worker(
+        &self,
+        consumer: bool,
+        dispatcher: bool,
+        component: &str,
+        url: &str,
+    ) -> Result<Worker, TestError> {
+        let schema = if consumer {
+            &self.consumer
+        } else {
+            &self.producer
+        };
+        Worker::spawn(
+            if dispatcher {
+                "replay-dispatch"
+            } else {
+                "replay-authorize"
+            },
+            self.replay_options(consumer, dispatcher)
+                .to_url_lossy()
+                .as_str(),
+            schema,
+            component,
+            url,
+        )
+        .await
     }
 
     pub async fn count(&mut self, consumer: bool, table: &str) -> Result<i64, TestError> {

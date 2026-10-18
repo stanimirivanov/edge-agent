@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT session_user::text AS \"actor!\", current_schema()::text AS schema",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "actor!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "schema",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "544ae9430317cb6d3a8bb320db5d961d59126a8e75f2da2448e988cb81b95fa4"
+}

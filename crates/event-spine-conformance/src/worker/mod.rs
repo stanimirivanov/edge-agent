@@ -1,5 +1,6 @@
 mod ordering;
 mod persistence;
+mod replay;
 
 use std::{error::Error, io::Write, time::Duration};
 
@@ -26,6 +27,8 @@ enum Role {
     Producer,
     Relay,
     Consumer,
+    ReplayAuthorize,
+    ReplayDispatch,
 }
 
 impl Role {
@@ -34,6 +37,8 @@ impl Role {
             "producer" => Ok(Self::Producer),
             "relay" => Ok(Self::Relay),
             "consumer" => Ok(Self::Consumer),
+            "replay-authorize" => Ok(Self::ReplayAuthorize),
+            "replay-dispatch" => Ok(Self::ReplayDispatch),
             _ => Err("invalid finite worker role".into()),
         }
     }
@@ -81,14 +86,19 @@ pub(super) async fn run() -> Result<(), WorkerError> {
         ])
         .application_name(&format!("m02_worker_{}", std::process::id()));
     let mut database = PgConnection::connect_with(&options).await?;
-    let context = if matches!(role, Role::Producer) {
-        None
+    let component = if matches!(role, Role::Producer) {
+        Component::Gateway
     } else {
-        let component = match std::env::var("EDGEAGENT_PROOF_COMPONENT")?.as_str() {
+        match std::env::var("EDGEAGENT_PROOF_COMPONENT")?.as_str() {
             "gateway" => Component::Gateway,
             "research" => Component::Research,
+            "auditor" => Component::AuditProjector,
             _ => return Err("invalid runtime component".into()),
-        };
+        }
+    };
+    let context = if matches!(role, Role::Producer | Role::ReplayAuthorize) {
+        None
+    } else {
         if matches!(role, Role::Consumer) && component != Component::Research {
             return Err("command handler must be research".into());
         }
@@ -97,9 +107,23 @@ pub(super) async fn run() -> Result<(), WorkerError> {
             .iter()
             .find(|permission| permission.component() == Some(component))
             .ok_or("missing runtime permission")?;
+        let replay_scope = if matches!(role, Role::ReplayDispatch) {
+            Some(
+                edgeagent_event_spine_conformance::replay::ReplayPublisherScope::new(
+                    &plan, component,
+                )?,
+            )
+        } else {
+            None
+        };
+        let (user, inbox) = replay_scope
+            .as_ref()
+            .map_or((component.as_str(), permissions.inbox_prefix()), |scope| {
+                (scope.user(), scope.inbox_prefix())
+            });
         let client = async_nats::ConnectOptions::new()
-            .user_and_password(component.as_str().into(), "fixture-only".into())
-            .custom_inbox_prefix(permissions.inbox_prefix())
+            .user_and_password(user.into(), "fixture-only".into())
+            .custom_inbox_prefix(inbox)
             .request_timeout(Some(IO_DEADLINE))
             .connect(std::env::var("EDGEAGENT_NATS_URL")?)
             .await?;
@@ -116,10 +140,12 @@ pub(super) async fn run() -> Result<(), WorkerError> {
     let mut input = tokio::io::stdin();
     input.read_exact(&mut action).await?;
     let hold_delivery = action[0] == b'h' && matches!(role, Role::Consumer);
+    let hold_receipt = action[0] == b'p' && matches!(role, Role::ReplayDispatch);
     let rollback = match action[0] {
         b'c' => false,
         b'r' => true,
         b'h' if hold_delivery => false,
+        b'p' if hold_receipt => false,
         _ => return Err("invalid action".into()),
     };
     match role {
@@ -228,6 +254,36 @@ pub(super) async fn run() -> Result<(), WorkerError> {
                 }
                 _ => return Err("unexpected handling outcome".into()),
             }
+        }
+        Role::ReplayAuthorize => {
+            let mut bytes = Vec::new();
+            input.take(4097).read_to_end(&mut bytes).await?;
+            if bytes.len() > 4096 {
+                return Err("replay request exceeds bound".into());
+            }
+            println!(
+                "{}",
+                replay::authorize(&mut database, &schema, &plan, component, &bytes, rollback)
+                    .await?
+            );
+        }
+        Role::ReplayDispatch => {
+            if rollback {
+                return Err("dispatch cannot simulate authorization rollback".into());
+            }
+            println!(
+                "{}",
+                replay::dispatch(
+                    &mut database,
+                    &schema,
+                    &plan,
+                    component,
+                    context.ok_or("broker absent")?,
+                    hold_receipt,
+                    &mut input
+                )
+                .await?
+            );
         }
     }
     database.close().await?;

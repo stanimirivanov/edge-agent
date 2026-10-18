@@ -25,8 +25,9 @@ records ownership, lifecycle and compatibility decisions.
 1. A fixture administrator creates fresh producer/consumer schemas, applies
    outbox migrations to both, inbox migrations to the consumer, and only the
    owning synthetic acceptance or probe/semantic-receipt tables to each schema.
-2. It creates four restricted logins: producer, producer relay, consumer and
-   consumer relay. None owns a schema or receives migration authority. A relay
+2. It creates seven restricted logins: producer, producer relay, consumer,
+   consumer relay, each owning schema's operator and the consumer dispatcher.
+   None owns a schema or receives migration authority. A relay
    can select/update only its outbox. Peer-schema writes and runtime DDL fail.
 3. The authenticated provisioner creates registry-derived topology before any
    runtime child starts. Runtime broker permissions come from the same plan.
@@ -174,7 +175,15 @@ and lack semantic receipt history. Neither mixed-version workers nor an upgrade
 of retained synthetic state is supported. Never infer old receipts from current
 state or apply the fixture to a product deployment.
 
-The proof does not establish OTLP export, quarantine replay, wire ACK loss, process
+The ten-case protected suite includes four
+[authorized replay proofs](quarantine-replay.md): authenticated/atomic authorization,
+inbound result-loss recovery and bounded fencing, original-route fan-out, and
+outbound audited release. Replay authorization needs no broker connection;
+dispatch uses a separate login and exact-subject broker scope. Its fixture-only
+`p` barrier reports `persisted` after a real broker receipt, then waits for `c`
+outside any transaction so a parent can kill or fence that holder.
+
+The proof does not establish OTLP export, wire ACK loss, general process
 kill/crash qualification, broker or PostgreSQL restart, HA or load capacity.
 Connection interruption is not a database restart or an unknown-commit proof.
 Those remain in the

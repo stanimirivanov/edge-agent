@@ -139,3 +139,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0025](0025-derive-bounded-jetstream-topology-from-the-registry.md) | Accepted | Derive bounded JetStream topology from the registry. |
 | [ADR-0026](0026-compose-durable-acceptance-in-independent-processes.md) | Accepted | Compose durable acceptance in independent processes. |
 | [ADR-0027](0027-enforce-service-owned-semantic-command-ordering.md) | Accepted | Enforce service-owned semantic command ordering. |
+| [ADR-0028](0028-compose-authorized-recoverable-quarantine-replay.md) | Accepted | Compose authorized recoverable quarantine replay. |

@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT envelope, transport_subject FROM edgeagent_message_outbox WHERE message_source = $1 AND message_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "envelope"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "transport_subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_outbox",
+            "name": "transport_subject"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0b498b3e3bbe9c109f5b6f5364f95a1bd92b1c4be492c62b13bdb0fc9e430e0b"
+}

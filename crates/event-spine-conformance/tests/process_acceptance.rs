@@ -4,6 +4,8 @@
 mod broker;
 #[path = "process/fixture.rs"]
 mod database;
+#[path = "process/replay/mod.rs"]
+mod replay;
 #[path = "process/replicas.rs"]
 mod replicas;
 #[path = "process/scenarios.rs"]

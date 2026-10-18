@@ -119,6 +119,12 @@ renamed, duplicate or extra ignored proofs; default compilation/discovery is not
 runtime evidence. See [process acceptance](process-acceptance.md) for transaction,
 readiness, rollback, cleanup and qualification limits.
 
+Its ten required cases include four [authorized replay proofs](quarantine-replay.md).
+Authentication/SQL and broker denials, atomic audit/dispatch rollback, immutable
+routes/bytes, result-loss restart, stale fences and exhausted attempts are runtime
+assertions. The independent protected inventory floor is 53 identities; removing
+a replay case cannot leave a passing discovery-only gate.
+
 The same protected process inventory covers semantic-key/content equality,
 aggregate revision guards, predecessor retry exhaustion, shared durable admission
 across replicas, unrelated-partition progress and targeted connection-loss recovery.

@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH candidate AS (\n            SELECT d.request_id FROM conformance_replay_dispatch d\n            JOIN edgeagent_message_quarantine_replay_audit a ON a.replay_request_id = d.request_id\n            JOIN edgeagent_message_quarantine q ON q.consumer_name = a.consumer_name AND q.delivery_key = a.delivery_key\n            WHERE d.published_at IS NULL AND d.attempt_count < 3 AND d.consumer_name = $2\n              AND (d.lease_expires_at IS NULL OR d.lease_expires_at <= clock_timestamp())\n              AND d.consumer_name = a.consumer_name AND d.transport_subject = q.transport_subject AND d.payload = q.payload\n            ORDER BY d.request_id FOR UPDATE OF d SKIP LOCKED LIMIT 1\n        )\n        UPDATE conformance_replay_dispatch d\n        SET attempt_count = attempt_count + 1, generation = generation + 1,\n            lease_owner = $1, lease_expires_at = clock_timestamp() + INTERVAL '10 seconds'\n        FROM candidate c WHERE d.request_id = c.request_id\n        RETURNING d.request_id, d.consumer_name, d.transport_subject, d.payload, d.generation\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "conformance_replay_dispatch",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "consumer_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "conformance_replay_dispatch",
+            "name": "consumer_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "transport_subject",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "conformance_replay_dispatch",
+            "name": "transport_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "payload",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "conformance_replay_dispatch",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "conformance_replay_dispatch",
+            "name": "generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "74a76e0ab3a9098c9cfbfd101896baa94219991ea644f85ff99004035c290dae"
+}

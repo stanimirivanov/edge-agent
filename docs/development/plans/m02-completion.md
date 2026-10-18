@@ -93,6 +93,12 @@ thresholds. `partitionkey` alone is not a FIFO guarantee.
 
 ### 5. Authorized recoverable quarantine replay
 
+[Issue #193](https://github.com/stanimirivanov/edge-agent/issues/193) composes
+authenticated operator/dispatcher tooling and protected replay process proofs.
+See the [replay runbook](../quarantine-replay.md) and
+[ADR-0028](../../decisions/0028-compose-authorized-recoverable-quarantine-replay.md)
+for identity, fencing, bounded unknown outcomes and original-route fan-out.
+
 Compose existing outbound replay audit/release/fence mechanics. For inbound
 replay, atomically commit audit authorization and durable dispatch intent, then
 publish after commit with restart-safe outcome recording. Distinguish immutable

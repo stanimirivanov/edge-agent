@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE conformance_replay_dispatch SET published_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL WHERE request_id = $1 AND lease_owner = $2 AND generation = $3 AND lease_expires_at > clock_timestamp() AND published_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cbc94d19605ead0554e1b782ce923e673487235c14c226e64e0a28d69e24033c"
+}

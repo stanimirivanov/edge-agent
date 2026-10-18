@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 27] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 28] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -156,6 +156,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 27] = [
         number: 27,
         path: "docs/decisions/0027-enforce-service-owned-semantic-command-ordering.md",
         title: "Enforce service-owned semantic command ordering",
+    },
+    PublishedIdentity {
+        number: 28,
+        path: "docs/decisions/0028-compose-authorized-recoverable-quarantine-replay.md",
+        title: "Compose authorized recoverable quarantine replay",
     },
 ];
 

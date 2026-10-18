@@ -82,6 +82,10 @@ const PROCESS_ACCEPTANCE: Target = Target {
         "semantics::missing_predecessors_recover_in_order_or_exhaust_into_quarantine",
         "replicas::competing_replicas_respect_shared_inflight_high_water",
         "replicas::locked_partition_and_connection_loss_preserve_other_progress_and_recovery",
+        "replay::authorization::authenticated_replay_authorization_is_scoped_atomic_and_immutable",
+        "replay::recovery::inbound_replay_recovers_persisted_result_loss_with_one_domain_transition",
+        "replay::routes::original_route_replay_reaches_all_subscribers_without_exclusive_targeting",
+        "replay::outbound::outbound_replay_preserves_audit_budget_and_stale_claim_fences",
     ],
 };
 const OUTBOX: Target = Target {
@@ -168,7 +172,7 @@ pub(super) fn checks() -> Vec<Check> {
             "event-spine-processes",
             &PROCESS_ACCEPTANCE,
             PROCESS_DEPENDENCIES,
-            "Independent OS processes prove atomic acceptance, transport and semantic idempotency, revision ordering, bounded replica admission, partition progress, connection-loss recovery, causal fact intent and schema isolation; not full crash or wire-ACK loss qualification.",
+            "Independent OS processes prove atomic acceptance, semantic ordering/admission, partition progress, connection-loss recovery, schema isolation and authenticated replay with atomic dispatch, result-loss recovery, bounded fenced claims and original-route fan-out; not full crash or wire-ACK loss qualification.",
         ),
         suite(
             "nats-topology",
@@ -456,8 +460,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 49);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 49);
+        assert_eq!(inventory.len(), 53);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 53);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
@@ -604,7 +608,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"process_acceptance"));
         let discovery = check.discovery.ok_or("process discovery absent")?;
-        assert_eq!(discovery.expected.len(), 6);
+        assert_eq!(discovery.expected.len(), 10);
         let complete = discovery
             .expected
             .iter()

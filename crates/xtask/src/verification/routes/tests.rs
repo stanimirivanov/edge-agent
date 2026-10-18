@@ -413,6 +413,7 @@ fn process_composition_and_adapters_route_the_protected_process_proof() -> Resul
         "crates/messaging-nats/src/lib.rs",
         "crates/outbox-relay/src/coordinator.rs",
         "docs/development/process-acceptance.md",
+        "docs/development/quarantine-replay.md",
     ] {
         let advice = advise(&[path.to_owned()])?;
         assert_eq!(advice.mandatory, DEFAULT_COMMAND);
