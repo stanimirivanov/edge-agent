@@ -49,8 +49,40 @@ The bounded integer representation implements no decimal parser or arithmetic
 engine; adapters must parse source tokens exactly before constructing values.
 Dates alone prove neither session membership nor timezone conversion; source
 IDs/revisions alone prove neither entitlement nor historical availability.
-Provider token parsing, reference/calendar validation and wire DTOs remain later
-M03 slices; this library does not make the bootstrap service acquire evidence.
+Provider token parsing and wire DTOs remain later M03 slices; this library does
+not make the bootstrap service acquire evidence.
+
+The domain also implements immutable `ReferenceVersion<T>` observations and
+bounded `ReferenceHistory<T>` selection for mappings, calendar days and actions.
+Each version records stable record ID, increasing reference revision, source,
+source-byte SHA-256 and actual local receipt/knowledge time. Histories accept at
+most 4096 versions; duplicate revisions and decreasing receipt times fail.
+Corrections reuse the logical record ID. Selection first chooses its latest
+revision known at the inclusive cutoff, then filters effective dates. Filtering
+effective dates first would resurrect superseded mappings or actions. Missing
+retained history cannot establish earlier availability.
+
+Mapping intervals are half-open and bounded; ticker reuse preserves distinct
+instrument/listing identities. Missing mappings and overlapping current records
+return typed failures, never source-priority guesses. Calendar coverage consists
+only of explicitly supplied days, including closed days and early closes. Every
+day pins `America/New_York`, a named timezone-data revision and reviewed UTC core
+session bounds; absent dates fail, including weekends. Constructors check ordering
+and same-date bounds, not exchange authority or correctness of DST conversion.
+Ingestion must verify source checksums, actual receipt times, timezone rules and
+closure notices before admitting these records. The invented
+[reference fixtures](../../crates/market-data-domain/tests/fixtures/mod.rs) and
+[regression suite](../../crates/market-data-domain/tests/reference.rs) exercise
+cutoffs, revisions, ticker reuse, holidays, early closes and UTC shifts across
+DST; they are not production calendar/reference coverage.
+
+Corporate-action metadata supports exact positive old/new split share counts,
+positive USD cash dividends, explicit unsupported actions and append-only
+cancellation revisions. Its effective date means split execution or dividend
+ex-date, not announcement/receipt. These annotations never adjust raw prices or
+splice identities. Unknown reorganizations must remain explicit unsupported
+records. An empty action lookup does not prove completeness; provider/reference
+conformance must establish coverage before downstream evidence acceptance.
 
 Capture mode freezes a snapshot only after every input has been received and
 validated. Its knowledge time is at least the latest input receipt time. Preserve

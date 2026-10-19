@@ -24,12 +24,22 @@
 //! ```
 #![deny(missing_docs)]
 
+mod actions;
+mod calendar;
 mod identity;
+mod mapping;
 mod quantity;
+mod reference;
 mod time;
 
-pub use identity::{InstrumentId, ListingId, SourceId, TransformationRevision};
+pub use actions::{ActionKind, CorporateAction};
+pub use calendar::{CalendarDay, SessionHours, SessionWindow};
+pub use identity::{
+    InstrumentId, ListingId, ReferenceId, ReferenceRevision, SourceId, TransformationRevision,
+};
+pub use mapping::{DateRange, InstrumentMapping, Symbol, Venue};
 pub use quantity::{Currency, ShareVolume, UsdPrice};
+pub use reference::{ReferenceError, ReferenceHistory, ReferenceVersion};
 pub use time::{ObservationTimes, SessionDate, UtcInstant};
 
 /// Payload-free failures from canonical value construction.
