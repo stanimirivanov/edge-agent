@@ -614,6 +614,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-market-data-domain"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "edgeagent-messaging"
 version = "0.1.0"
 dependencies = [

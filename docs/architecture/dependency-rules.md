@@ -18,6 +18,7 @@
 | Package | Role | Responsibility |
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
+| `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
 | `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
@@ -46,6 +47,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
+| `edgeagent-market-data-domain` | None |
 | `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
@@ -158,6 +160,16 @@ form its replacement boundary. A parser or feature change requires reviewing
 these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret-scanning.md).
 
 ## Related decisions
+
+The domain's only direct dependency is the already-resolved Chrono 0.4.45
+(MIT OR Apache-2.0), with default features disabled and only `std` requested.
+It supplies checked Gregorian dates and UTC instants, avoiding hand-written
+calendar arithmetic. Its types stay private; public constructors/accessors use
+primitive components, so replacing it does not expose a vendor/serialization
+API. No clock, locale or timezone-database lookup is performed. Both sensors
+reject unapproved normal, development and build capabilities, including aliases
+and inactive target declarations. Feature unification and transitive capability
+review remain separate obligations, not guarantees of these identity sensors.
 
 Conformance roots alone pin OpenTelemetry API/SDK/OTLP 0.33.1, Reqwest 0.13.5
 (blocking, no default TLS/proxy features), and Tracing-subscriber 0.3.23

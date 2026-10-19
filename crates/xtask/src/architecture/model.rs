@@ -19,6 +19,7 @@ impl fmt::Display for DependencyClass {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum CrateRole {
+    Domain,
     Contract,
     Port,
     Application,
@@ -32,6 +33,7 @@ pub(super) enum CrateRole {
 impl fmt::Display for CrateRole {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::Domain => "domain",
             Self::Contract => "contract",
             Self::Port => "port",
             Self::Application => "application",
