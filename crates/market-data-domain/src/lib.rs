@@ -1,4 +1,4 @@
-//! Canonical daily values and derivative specifications; no transport or provider DTOs.
+//! Canonical market observations, values and specifications; no transport or provider DTOs.
 //! Constructors establish value invariants, not entitlement or evidence quality.
 //! `Hash` supports collections, not stable evidence digests. Wire encoding and
 //! content-addressed manifests belong to separately versioned contracts.
@@ -26,9 +26,13 @@
 
 mod actions;
 mod calendar;
+mod capability;
 mod derivative;
+mod evidence_time;
 mod identity;
 mod mapping;
+mod market_value;
+mod observation;
 mod option_schedule;
 mod quantity;
 mod reference;
@@ -36,16 +40,29 @@ mod time;
 
 pub use actions::{ActionKind, CorporateAction};
 pub use calendar::{CalendarDay, SessionHours, SessionWindow};
+pub use capability::{
+    BarCoverage, DeliveryCapability, EvidenceContract, EvidenceKind, KnowledgeCapability,
+    MarketScope, ProviderCapability, SemanticReference, TimestampPrecision,
+};
 pub use derivative::{
     DeliverableReference, DerivativeError, ExerciseStyle, OptionKind, OptionSpecification,
     OptionTerms, SettlementStyle, Underlying,
 };
+pub use evidence_time::{EvidenceInterval, EvidenceTimes, PreciseInstant};
 pub use identity::{
-    InstrumentId, ListingId, ReferenceId, ReferenceRevision, SourceId, TransformationRevision,
+    InstrumentId, ListingId, ObservationId, ObservationRevision, ReferenceId, ReferenceRevision,
+    SourceId, TransformationRevision,
 };
 pub use mapping::{DateRange, InstrumentMapping, Symbol, Venue};
+pub use market_value::{ObservationValue, OptionQuoteSnapshot, QuoteSide, RawBar, ShareTrade};
+pub use observation::{
+    CanonicalObservation, ObservationContext, ObservationError, ObservationVersion,
+};
 pub use option_schedule::OptionSchedule;
-pub use quantity::{ContractQuantity, Currency, OptionPoints, ShareVolume, UsdPerPoint, UsdPrice};
+pub use quantity::{
+    ContractQuantity, Currency, DisplayedContracts, IndexPoints, OptionPoints, ShareVolume,
+    UsdPerPoint, UsdPrice,
+};
 pub use reference::{EffectiveInterval, ReferenceError, ReferenceHistory, ReferenceVersion};
 pub use time::{ObservationTimes, SessionDate, UtcInstant};
 
