@@ -1,4 +1,4 @@
-//! Canonical values for `us-equity-daily-v1`; no transport or provider DTOs.
+//! Canonical daily values and derivative specifications; no transport or provider DTOs.
 //! Constructors establish value invariants, not entitlement or evidence quality.
 //! `Hash` supports collections, not stable evidence digests. Wire encoding and
 //! content-addressed manifests belong to separately versioned contracts.
@@ -26,20 +26,27 @@
 
 mod actions;
 mod calendar;
+mod derivative;
 mod identity;
 mod mapping;
+mod option_schedule;
 mod quantity;
 mod reference;
 mod time;
 
 pub use actions::{ActionKind, CorporateAction};
 pub use calendar::{CalendarDay, SessionHours, SessionWindow};
+pub use derivative::{
+    DeliverableReference, DerivativeError, ExerciseStyle, OptionKind, OptionSpecification,
+    OptionTerms, SettlementStyle, Underlying,
+};
 pub use identity::{
     InstrumentId, ListingId, ReferenceId, ReferenceRevision, SourceId, TransformationRevision,
 };
 pub use mapping::{DateRange, InstrumentMapping, Symbol, Venue};
-pub use quantity::{Currency, ShareVolume, UsdPrice};
-pub use reference::{ReferenceError, ReferenceHistory, ReferenceVersion};
+pub use option_schedule::OptionSchedule;
+pub use quantity::{ContractQuantity, Currency, OptionPoints, ShareVolume, UsdPerPoint, UsdPrice};
+pub use reference::{EffectiveInterval, ReferenceError, ReferenceHistory, ReferenceVersion};
 pub use time::{ObservationTimes, SessionDate, UtcInstant};
 
 /// Payload-free failures from canonical value construction.

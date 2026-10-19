@@ -37,6 +37,36 @@ impl fmt::Display for ReferenceError {
 }
 impl std::error::Error for ReferenceError {}
 
+/// Half-open effective UTC interval `[start, end)`, independent of knowledge
+/// time. Unlike a date range, this can distinguish intraday specification changes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EffectiveInterval {
+    start: UtcInstant,
+    end: UtcInstant,
+}
+impl EffectiveInterval {
+    /// Construct a nonempty interval without inferring receipt or market times.
+    ///
+    /// # Errors
+    /// Returns `InvalidInterval` unless start precedes end.
+    pub fn new(start: UtcInstant, end: UtcInstant) -> Result<Self, ReferenceError> {
+        if start >= end {
+            return Err(ReferenceError::InvalidInterval);
+        }
+        Ok(Self { start, end })
+    }
+    /// Inclusive start and exclusive end.
+    #[must_use]
+    pub const fn bounds(self) -> (UtcInstant, UtcInstant) {
+        (self.start, self.end)
+    }
+    /// Whether an effective instant belongs to this interval.
+    #[must_use]
+    pub fn contains(self, at: UtcInstant) -> bool {
+        self.start <= at && at < self.end
+    }
+}
+
 /// Immutable observation of one logical reference record. Corrections reuse `id`.
 /// `known_at` is actual local receipt, not an effective date or a vendor claim.
 /// The caller verifies source authority and SHA-256 of the source bytes; this

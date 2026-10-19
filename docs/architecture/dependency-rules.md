@@ -161,12 +161,18 @@ these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret
 
 ## Related decisions
 
-The domain's only direct dependency is the already-resolved Chrono 0.4.45
-(MIT OR Apache-2.0), with default features disabled and only `std` requested.
-It supplies checked Gregorian dates and UTC instants, avoiding hand-written
-calendar arithmetic. Its types stay private; public constructors/accessors use
-primitive components, so replacing it does not expose a vendor/serialization
-API. No clock, locale or timezone-database lookup is performed. Both sensors
+The domain requests Chrono 0.4.45 and Chrono-TZ 0.10.4 (both MIT OR Apache-2.0),
+with default features disabled and only `std` requested. Chrono supplies checked
+Gregorian dates and UTC instants. P02 adds Chrono-TZ for deterministic New York
+local expiry dates across DST/UTC-midnight boundaries, rather than hand-written
+offset rules. Its [published package](https://crates.io/crates/chrono-tz/0.10.4)
+and [upstream license](https://github.com/chronotope/chrono-tz/blob/main/LICENSE)
+were reviewed for this use; the maintained Chronotope project uses generated,
+bundled IANA rules, not OS timezone data or network lookup. Pin/expose that data
+revision and reject mismatches; this is not a claim of latest exchange rules.
+Do not enable optional timezone generation, serde or case-insensitive features.
+Both libraries' types stay private; replacing the local-date conversion does
+not expose their API. No clock or locale lookup is performed. Both sensors
 reject unapproved normal, development and build capabilities, including aliases
 and inactive target declarations. Feature unification and transitive capability
 review remain separate obligations, not guarantees of these identity sensors.
