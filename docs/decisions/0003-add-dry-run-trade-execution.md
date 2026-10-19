@@ -1,11 +1,11 @@
 # ADR-0003: Add dry-run trade execution
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-09-18
 - Milestone: M07 - Dry-run execution
 - Deciders: EdgeAgent maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: ADR-0032
 
 ## TL;DR
 

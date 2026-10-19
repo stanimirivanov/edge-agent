@@ -136,11 +136,16 @@ Work items:
 Completion means synthetic and one live provider produce identical canonical
 contracts and failure semantics without provider logic entering domain crates.
 
-The accepted [evidence/provider profile](../development/market-data.md) and
-[ADR-0031](../decisions/0031-define-the-supported-market-evidence-profile.md)
-define the initial raw daily scope and implementation budgets. Massive is the
-first technical candidate, not a live-data entitlement. Provider rights and actual
-live qualification remain required; documentation alone does not complete M03.
+The [daily evidence profile](../development/market-data.md) retains its raw daily
+scope and budgets. [ADR-0032](../decisions/0032-define-vendor-neutral-simulation-profiles.md)
+defers vendor selection and adds separately qualified
+[intraday/options profiles](../development/simulation-profiles.md). Provider
+rights and actual live-daily-data qualification remain required; documentation
+alone does not complete M03 or qualify the extensions. The
+[P01-P13 delivery plan](../development/plans/simulation-expansion.md) integrates
+derivative specifications, bars/trades/index observations, option snapshots and
+continuity/recovery before their provider/schema consumers. It preserves the
+approved daily-data sequence rather than implementing parallel ports.
 
 ## M04 - Deterministic research
 
@@ -161,6 +166,10 @@ Work items:
 Completion means separate gateway, market-data, research, and projector processes
 produce a reproducible artifact or correct abstention from offline evidence.
 
+The expansion plan adds virtual time, deterministic input/ID/randomness manifests
+(P05) and separately qualified Greeks/IV analytics (P11). P11 can proceed in
+parallel and does not block quote-driven, fully funded simulation.
+
 ## M05 - Strategy and policy
 
 **Outcome:** Evolve approved strategies without weakening independent controls.
@@ -179,6 +188,10 @@ Work items:
 
 Completion means strategy implementations can evolve independently while policy
 and artifact validation remain deterministic and impossible to bypass.
+
+P06 adds account-wide and per-strategy/session limits, valuation, breach latching
+and authorized reset policy. ExecutionSimulator must enforce them atomically;
+strategy approval cannot override the account boundary.
 
 ## M06 - Evidence-grounded explanation
 
@@ -218,6 +231,14 @@ Work items:
 Completion means an approved scenario yields reproducible simulated execution
 state while architecture tests prove no live broker path exists.
 
+P07-P10 add the event-applied order lifecycle, serialized account/reservation
+boundary, evidence-driven fills/latency and qualified cash-settled European
+index-style option settlement. Cash/physical and European/American metadata are
+modeled earlier, but physical delivery and American exercise/assignment remain
+unsupported in the initial simulation. Stable IDs and replaceable capability
+seams do not authorize broker adapters or live execution. Account concurrency
+and recovery proofs ship here, not deferred to M10.
+
 ## M08 - Durable projections and evaluation
 
 **Outcome:** Rebuild lifecycle views and measure outcomes without hindsight.
@@ -236,6 +257,11 @@ Work items:
 
 Completion means state survives restarts, read models are disposable, and research
 and dry-run outcomes remain reproducible and explicit about uncertainty.
+
+P12-P13 extend this outcome to account/order/risk projection rebuilds, canonical
+simulation replay and frozen cost/latency/liquidity sensitivity evaluation.
+Deployment, operational and UI follow-through remains in M09-M11 as specified
+by the expansion plan; no new milestone or active-active account writer is added.
 
 ## M09 - Multi-cloud deployment profiles
 

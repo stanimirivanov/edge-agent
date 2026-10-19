@@ -114,7 +114,7 @@ How will the assumptions and consequences be verified?
 |---|---|---|
 | [ADR-0001](0001-use-a-rust-workspace-with-multiple-deployables.md) | Accepted | Use a Rust workspace monorepo with independently deployable components. |
 | [ADR-0002](0002-use-portable-at-least-once-event-messaging.md) | Accepted | Use versioned CloudEvents contracts and portable at-least-once messaging. |
-| [ADR-0003](0003-add-dry-run-trade-execution.md) | Accepted | Add dry-run order execution without broker connectivity or live trading. |
+| [ADR-0003](0003-add-dry-run-trade-execution.md) | Superseded | Add dry-run order execution without broker connectivity or live trading. |
 | [ADR-0004](0004-separate-application-ui-gitops-and-substrate-ownership.md) | Accepted | Separate application source, UI, GitOps desired state, and substrate ownership. |
 | [ADR-0005](0005-standardize-message-routing-and-retention.md) | Accepted | Standardize message subjects, ownership, partitions, size, and retention. |
 | [ADR-0006](0006-keep-inbound-coordination-persistence-neutral.md) | Accepted | Keep inbound orchestration behind a semantic atomic store port while adapters own transactions. |
@@ -142,4 +142,5 @@ How will the assumptions and consequences be verified?
 | [ADR-0028](0028-compose-authorized-recoverable-quarantine-replay.md) | Accepted | Compose authorized recoverable quarantine replay. |
 | [ADR-0029](0029-export-bounded-correlated-event-spine-observations.md) | Accepted | Export bounded correlated event-spine observations. |
 | [ADR-0030](0030-qualify-event-spine-failure-recovery.md) | Accepted | Qualify event-spine failure recovery. |
-| [ADR-0031](0031-define-the-supported-market-evidence-profile.md) | Accepted | Define the supported market evidence profile. |
+| [ADR-0031](0031-define-the-supported-market-evidence-profile.md) | Superseded | Define the supported market evidence profile. |
+| [ADR-0032](0032-define-vendor-neutral-simulation-profiles.md) | Accepted | Define vendor-neutral simulation profiles. |

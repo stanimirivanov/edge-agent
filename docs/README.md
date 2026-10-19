@@ -44,7 +44,8 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 | Repository policy, CI, agent guidance, or developer experience | [Coding harness](development/harness.md) | `make repository`, `make architecture` |
 | Workflow capabilities, action pins, or credential detection | [CI security](development/ci-security.md), [security policy](../SECURITY.md) | `cargo xtask workflow-security`, `cargo xtask verify ci-security` |
 | Milestone or issue planning | [Milestones](roadmap/milestones.md), [CONTRIBUTING.md](../CONTRIBUTING.md) | Relevant product and architecture sources |
-| M03 market evidence, provider boundaries, rights or acquisition limits | [Market-data profile](development/market-data.md) | [ADR-0031](decisions/0031-define-the-supported-market-evidence-profile.md), [M03 scope](roadmap/milestones.md#m03---market-data-fabric) |
+| M03 market evidence, provider boundaries, rights or acquisition limits | [Market-data profile](development/market-data.md) | [ADR-0032](decisions/0032-define-vendor-neutral-simulation-profiles.md), [M03 scope](roadmap/milestones.md#m03---market-data-fabric) |
+| Intraday/options profiles, simulation eligibility, account consistency or expansion sequencing | [Simulation profiles](development/simulation-profiles.md) | [Delivery plan](development/plans/simulation-expansion.md), [ADR-0032](decisions/0032-define-vendor-neutral-simulation-profiles.md) |
 | Vulnerability reporting or security-sensitive behavior | [Security policy](../SECURITY.md) | Relevant architecture and ADRs |
 
 ## Canonical collections

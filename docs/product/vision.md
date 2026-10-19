@@ -5,6 +5,7 @@
 - EdgeAgent turns a bounded market-research request into an auditable, time-limited research artifact and can execute an approved scenario through a dry-run order simulator.
 - A Rust monorepo produces multiple independently deployable, event-driven services that run on portable Kubernetes or managed GCP, Azure, and AWS profiles.
 - The first supported domain is liquid U.S.-listed equities and ETFs over approximately 3–20 trading days.
+- Planned intraday and cash-settled index-style option scenarios extend research/simulation only; modeled products require separate qualification before use.
 - Deterministic services own market facts, features, rankings, policy, simulated fills, positions, and P&L; generated language only explains validated evidence.
 - Missing, stale, contradictory, or unlicensed critical evidence produces an abstention, and unsupported execution modes fail closed.
 - Live brokerage connectivity, custody, and real-money order transmission remain outside the project boundary.
@@ -56,6 +57,14 @@ The first complete vertical slice targets:
 - explicit spread, slippage, fees, latency, liquidity, gaps, halts, and corporate-action assumptions;
 - source-linked explanations and immutable artifact lifecycle events; and
 - position, cash, realized P&L, and unrealized P&L projections.
+
+The approved [simulation profiles](../development/simulation-profiles.md) add
+separately versioned intraday underlying evidence and option quote snapshots.
+Model cash/physical settlement and European/American exercise, but first simulate
+only fully funded long cash-settled European index-style options, including
+0DTE, after the required proofs. These are roadmap capabilities, not current
+runtime support. Provider selection remains deferred. Account-wide risk spans
+all strategies and replicas, with per-strategy limits layered on top.
 
 The initial user surface may be a CLI or API. The separately owned web UI and
 any conversational adapter must use the same request, policy, event, evidence,
@@ -162,7 +171,7 @@ The current project does not:
 - transmit live orders, connect to brokerage accounts, or hold broker credentials;
 - provide custody, settlement, deposits, withdrawals, or portfolio accounting for real assets;
 - guarantee profit or represent uncertainty as certainty;
-- support options, leverage, short selling, micro-cap promotion, or copy trading;
+- simulate physical settlement, American exercise/assignment, leverage, short selling, micro-cap promotion, or copy trading in the initial profiles;
 - infer a person's income, tax status, liabilities, total assets, or suitability;
 - continuously retrain production strategies from unreviewed user feedback;
 - treat social sentiment or generated narrative as sufficient evidence;
