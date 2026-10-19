@@ -45,6 +45,16 @@ identity!(
     "Identity of a provenance source in the service-owned catalog."
 );
 identity!(
+    ObservationId,
+    u128,
+    "Service-owned logical observation identity within a source; corrections retain it."
+);
+identity!(
+    ObservationRevision,
+    u64,
+    "Service-owned observation revision, distinct from a reference revision."
+);
+identity!(
     TransformationRevision,
     u64,
     "Service-owned transformation revision; not a vendor revision claim."

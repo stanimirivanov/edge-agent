@@ -22,8 +22,9 @@ evidence requirements. [Product vision](../product/vision.md) owns scope;
 [delivery plan](plans/simulation-expansion.md) owns P01-P13 sequencing.
 Normative terms follow [CONTRIBUTING](../../CONTRIBUTING.md).
 
-The current domain implements checked daily values and versioned mappings,
-calendar days and action annotations. Product service binaries remain bootstrap
+The current domain implements checked daily/derivative values, canonical source
+observations and capability descriptors, plus versioned mappings, calendar days
+and action annotations. Product service binaries remain bootstrap
 entry points. No profile below claims a working acquisition, risk, fill, pricing
 or settlement runtime. Profile identifiers are reserved design vocabulary, not
 new CLI/configuration values or published wire schemas.
@@ -50,6 +51,55 @@ qualification inputs, not permissive defaults: do not inherit the daily
 Underlying identity and authoritative index/settlement feeds also remain required
 product/provider qualification decisions. No provider, subscription or access
 right is selected by P01.
+
+### Canonical observation and capability boundaries
+
+P03 implements `CanonicalObservation` with raw USD/share bars, positive-size
+underlying trades, distinct `IndexPoints` and two-sided option premium snapshots.
+`EvidenceContract` binds explicit coverage/discovery scope, an exact
+`SemanticReference` and source timestamp precision. That reference must resolve
+reviewed feed, session, condition and correction semantics; an opaque ID alone is
+not qualification. Index publishers cannot declare trades, and no ETF/future
+proxy substitutes for an index. The current option scope is consolidated only;
+the stock listing `Venue` enum is not reused as an options venue catalog.
+
+`PreciseInstant`, `EvidenceTimes` and `EvidenceInterval` preserve nanosecond-capable
+timestamps, causal optional provider times and actual local receipt. Existing
+daily millisecond types/semantics are unchanged. Source precision is checked,
+not rounded; receipt may be more precise. Bars preserve their explicit bucket
+bounds and source timestamp label (start through end inclusive), while receipt
+must follow bucket completion. Coverage never follows from bucket duration.
+Every raw bar remains unadjusted. Session dates are supplied labels, not proof
+of an exchange session or timezone/calendar authority.
+
+`ObservationContext` retains source, instrument, transformation revision and at
+most 16 sorted unique record-level condition codes, redacted in diagnostics.
+Unknown condition meanings deny qualification; empty codes do not prove trade
+eligibility. Side-specific conditions or unsupported coverage require a later
+explicit profile extension, not silently discarded metadata. Service-owned
+observation identities/revisions distinguish originals, corrections and
+payload-free cancellations. Sequence zero is valid; absent sequence remains
+absent. A predecessor key does not prove retained history or deduplication.
+
+`OptionQuoteSnapshot` pins the exact supplied option reference revision, checks
+its effective interval and receipt-time availability, and rejects crossed or
+off-tick sides without changing prices. Each side retains its own timestamp and
+optional `DisplayedContracts`: unknown, zero and positive are distinct. Locked
+and zero quotes are representable, not automatically usable; no fill, liquidity,
+underlying valuation or settlement observation is inferred. Reference authority,
+history completeness, quote age/skew and simulation eligibility remain required
+application/quality checks. No permissive freshness budget is introduced.
+
+`ProviderCapability::require` checks exact evidence semantics and required
+sequence/historical-knowledge support. Snapshot-only cannot satisfy sequenced
+delivery; fetching old dates is not historical-version support. Compatible
+sources retain different provenance and still require instrument coverage,
+rights, limits and semantic qualification; this is not automatic failover.
+These synchronous descriptors introduce no unused I/O port or vendor SDK.
+The [synthetic conformance suite](../../crates/market-data-domain/tests/observations.rs)
+runs in default workspace tests with boundary and redaction regressions; it does
+not certify any live adapter. P04 owns bounded continuity/recovery/readiness,
+and later M03 slices own provider ports, evidence storage and wire encoding.
 
 ## Instrument modeling versus simulation eligibility
 

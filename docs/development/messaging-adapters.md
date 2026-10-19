@@ -184,6 +184,16 @@ remain unacknowledged. A halted instance cannot reopen itself; investigate
 and replace it under the policy above. Recover a deleted/reconfigured durable
 consumer through provisioning before constructing a replacement adapter.
 
+The protected `jetstream_lifecycle` proofs observe actual pull frames beyond
+the pinned SDK's expiry/renewal window. The reconnect proof cancels an observed
+active control receive, confirms reconnection, and issues fresh explicit demand
+on that same client. Its positive pull witness proves the connection/observer
+are live while the halted adapter stays unpolled and emits no pulls. It does
+not assume that a pending SDK stream sees every intermediate connection state:
+the SDK uses a coalescing watch channel, not a guaranteed transition queue.
+Timeout diagnostics name the expected connection/pull phase; assertions, resource
+bounds and observation deadlines remain unchanged.
+
 ## Stored-envelope validation boundary
 
 An outbox claim is a persistence record, not a validated publication. Its

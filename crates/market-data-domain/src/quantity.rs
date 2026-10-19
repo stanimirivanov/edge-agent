@@ -77,6 +77,33 @@ quantity!(
     "Nonnegative option quotation/payoff points, not USD per share or total cash."
 );
 quantity!(
+    IndexPoints,
+    8,
+    1,
+    "Positive non-tradable cash-index points; not a share price or option premium."
+);
+
+/// Nonnegative displayed whole contracts; zero is known empty, not unknown size.
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DisplayedContracts(u64);
+impl DisplayedContracts {
+    /// Preserve an exact displayed count; imposes no liquidity or fill guarantee.
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+    /// Explicit count access; `None` at a quote side means unknown instead.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+impl fmt::Debug for DisplayedContracts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DisplayedContracts(..)")
+    }
+}
+quantity!(
     UsdPerPoint,
     8,
     1,
