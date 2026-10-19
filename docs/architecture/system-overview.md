@@ -290,7 +290,19 @@ The simulator contains no live execution mode, broker credentials, broker URL,
 or broker-adapter trait. Network egress policy allows only declared data,
 messaging, storage, identity, and telemetry endpoints. Introducing a live broker
 requires a separate deployable, threat model, ADR, and explicit project decision.
-See [ADR-0003](../decisions/0003-add-dry-run-trade-execution.md).
+See [ADR-0032](../decisions/0032-define-vendor-neutral-simulation-profiles.md),
+which retains ADR-0003's safety boundary while extending planned product scope.
+The [simulation profiles](../development/simulation-profiles.md) distinguish
+modeled option specifications from the first eligible cash-settled European
+scenario. Vendor-neutral data and simulation ports cannot enable live routing.
+
+The planned account boundary serializes every account mutation through one
+PostgreSQL account-root lock inside the existing inbox/domain/outbox transaction.
+It evaluates account-wide and per-strategy risk together, holds reservations
+through cancellation races and publishes revisioned outcomes after commit.
+Projection reads and NATS partition keys are not risk authority. One fenced
+writable primary is required; deterministic input ordering/replay is a separate
+contract. These are P08 requirements, not a claim of an implemented account store.
 
 ### Audit projector and surveillance
 

@@ -9,7 +9,8 @@
 - The same signed OCI digest targets portable Kubernetes and managed GCP, Azure, and AWS deployment profiles.
 - Separate UI and GitOps repositories consume versioned gateway contracts and immutable release digests without owning domain behavior.
 - There is no live broker path: unsupported execution modes fail closed, and the simulator contains no broker adapter or credentials.
-- The project is in **M02 - Contracts and event spine**; validated CloudEvents,
+- The project is implementing **M03 - Market data fabric**, with checked daily
+  values and versioned reference/calendar/action foundations. Validated CloudEvents,
   durable JetStream publication, and transactional PostgreSQL outbox and inbox
   storage are implemented. Bounded outbox relay retries and quarantine are also
   implemented, along with one-at-a-time JetStream delivery and confirmed
@@ -42,8 +43,13 @@ models, and user interfaces.
 
 EdgeAgent is not a brokerage, custody platform, source of guaranteed returns,
 or personalized financial adviser. It cannot connect to a brokerage account or
-transmit a live order. The initial scope excludes options, leverage, short
-selling, micro-cap securities, and individualized portfolio optimization.
+transmit a live order. The first vertical slice remains long-only equities/ETFs.
+The approved [simulation profiles](docs/development/simulation-profiles.md) plan
+separate intraday and cash-settled European index-style option scenarios; these
+are not implemented runtime capabilities. Physical settlement, American
+exercise/assignment, leverage, short selling, micro-cap securities and
+individualized portfolio optimization remain outside the initial simulation.
+Provider selection is deferred; no data rights or live execution are authorized.
 
 ## Architecture at a glance
 

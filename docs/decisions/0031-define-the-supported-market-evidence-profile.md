@@ -1,11 +1,11 @@
 # ADR-0031: Define the supported market evidence profile
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-10-18
 - Milestone: M03 - Market data fabric
 - Deciders: EdgeAgent maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: ADR-0032
 
 ## TL;DR
 

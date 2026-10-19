@@ -3,7 +3,7 @@
 ## TL;DR
 
 - `us-equity-daily-v1` targets bounded, USD-denominated U.S. equity/ETF evidence.
-- Massive is the first technical adapter candidate, not an approved data license.
+- Provider selection is deferred; no vendor or data license is committed.
 - Default tests and public demonstrations use synthetic, redistribution-safe data.
 - Historical prices fetched now establish capture-time evidence, not historical
   knowledge. Unknown rights, calendar coverage or provenance fail closed.
@@ -12,8 +12,11 @@
 
 ## Authority and supported inputs
 
-[ADR-0031](../decisions/0031-define-the-supported-market-evidence-profile.md)
-records the decision. The [M03 roadmap](../roadmap/milestones.md#m03---market-data-fabric)
+[ADR-0032](../decisions/0032-define-vendor-neutral-simulation-profiles.md)
+retains this daily evidence meaning and replaces ADR-0031's vendor selection.
+The [research/simulation profiles](simulation-profiles.md) define separate
+planned intraday/options capabilities, not changes to daily-v1. The
+[M03 roadmap](../roadmap/milestones.md#m03---market-data-fabric)
 owns completion; the [product vision](../product/vision.md) owns product scope.
 Normative terms follow [CONTRIBUTING](../../CONTRIBUTING.md#policy-language-and-sources-of-truth).
 
@@ -93,8 +96,8 @@ A provider request ID or response checksum is provenance, not a revision history
 Historical mode requires previously captured immutable evidence and reference
 versions demonstrably known by the requested cutoff, or a provider capability
 proving that history. A date filter, current adjusted history, or an action's
-effective date alone cannot establish historical knowledge. The selected live
-candidate has NOT been qualified for that capability; otherwise return a typed
+effective date alone cannot establish historical knowledge. No live provider
+has been qualified for that capability; otherwise return a typed
 historical-availability failure. Never backdate current acquisition.
 
 Reference authority is a bounded, reviewed catalog, not the current ticker list:
@@ -119,23 +122,25 @@ proof of finality. Missing eligible sessions, stale references, contradictory
 duplicates and unapproved outliers produce typed failures; no forward filling.
 Publish corrections as new linked snapshots, never overwrite old evidence.
 
-## Provider decision and capability review
+## Historical provider capability review
 
 Official sources reviewed on 2026-10-18; account-specific access remains unverified.
+This prior comparison is retained as research, not a current selection or a
+fresh assessment of intraday/options coverage. ADR-0032 defers provider choice.
 
 | Candidate/capability | Evidence and disposition |
 |---|---|
-| Massive daily bars | [Custom bars](https://massive.com/docs/rest/stocks/aggregates/custom-bars) documents OHLCV, split-adjustment control and pagination. Select as the first technical candidate; bounds, session scope and account access still require conformance. |
+| Massive daily bars | [Custom bars](https://massive.com/docs/rest/stocks/aggregates/custom-bars) documents OHLCV, split-adjustment control and pagination. Prior candidate only; bounds, session scope and account access still require conformance. |
 | Massive identity | [Ticker overview](https://massive.com/docs/rest/stocks/tickers/ticker-overview) supports dated lookup and external identifiers. It informs mappings; it does not replace service identity or prove historical knowledge. |
 | Massive actions | [Splits](https://massive.com/docs/rest/stocks/corporate-actions/splits) and [dividends](https://massive.com/docs/rest/stocks/corporate-actions/dividends) supply reference observations. Pin the implemented endpoint revision; do not infer announcement-time history. |
 | Massive calendar | [Market holidays](https://massive.com/docs/rest/stocks/market-operations/market-holidays) is supplemental, not sufficient proof of a complete historical calendar. Exchange schedules remain authoritative. |
 | Massive rights | [Market-data terms](https://www.massive.com/legal/market-data-terms-of-service) restrict non-display use, derived works and redistribution unless authorized. Default individual access is NOT treated as permission for this pipeline. |
-| Alpaca alternative | [Market-data plans](https://docs.alpaca.markets/us/docs/about-market-data-api) distinguish feeds; [historical bars](https://docs.alpaca.markets/us/reference/stockbars) expose feed/adjustment choices. IEX is not interchangeable with consolidated coverage. Deferred to keep one adapter; SIP and applicable rights require separate qualification. |
+| Alpaca alternative | [Market-data plans](https://docs.alpaca.markets/us/docs/about-market-data-api) distinguish feeds; [historical bars](https://docs.alpaca.markets/us/reference/stockbars) expose feed/adjustment choices. IEX is not interchangeable with consolidated coverage. Not selected; SIP and applicable rights require separate qualification. |
 | Synthetic only | Selected for public/default verification, rejected as the complete milestone: M03 also requires a qualified live provider. |
 
-Massive is chosen for its documented bar/reference surfaces, not price, presumed
-free access, an SLA, or legal approval. If the needed rights or semantics cannot
-be established, stop live activation and record a replacement decision. No
+Select a provider later through capability conformance and verified rights;
+neither an earlier comparison nor API access establishes entitlement, an SLA or
+semantic equivalence. Missing rights or semantics block live activation. No
 subscription purchase, vendor contact or credential submission is authorized by
 this profile. Data-only credentials MUST NOT enable broker connectivity.
 
@@ -203,8 +208,8 @@ gate. Missing credentials, rights or prerequisites must report not-run/nonzero,
 never a passing live qualification. Fork/default CI receives no live secrets.
 
 M03-PR2–PR6 implement domain/reference/quality/provider/message contracts;
-PR7–PR10 implement storage and bounded acquisition; PR11 implements the selected
-adapter; PR12 retention; PR13 runtime; PR14 offline recovery; PR15 live acceptance.
+PR7–PR10 implement storage and bounded acquisition; PR11 implements a later
+qualified adapter; PR12 retention; PR13 runtime; PR14 offline recovery; PR15 live acceptance.
 Synthetic and live results share contracts and failure semantics, not prices.
 M03 stays incomplete until live qualification passes under verified rights.
 No models, adjusted-return analytics, UI, cloud rollout or trade routing belong
