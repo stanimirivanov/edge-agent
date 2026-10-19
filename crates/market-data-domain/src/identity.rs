@@ -50,6 +50,16 @@ identity!(
     "Service-owned logical observation identity within a source; corrections retain it."
 );
 identity!(
+    FeedId,
+    u128,
+    "Service-owned identity of one explicitly qualified sequence/discovery scope."
+);
+identity!(
+    FeedEpoch,
+    u64,
+    "Monotonic feed incarnation; stale pre-reset work cannot enter a newer epoch."
+);
+identity!(
     ObservationRevision,
     u64,
     "Service-owned observation revision, distinct from a reference revision."
