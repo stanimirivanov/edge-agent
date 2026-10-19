@@ -23,9 +23,10 @@ const CONTROL: &str = "edgeagent.command.execution.lifecycle-control.v1";
 const CLOSED: &str = "edgeagent.command.execution.lifecycle-closed.v1";
 const BOUNDED: &str = "edgeagent.command.execution.lifecycle-bounded.v1";
 
-async fn observe_pull(observer: &mut async_nats::Subscriber) -> TestResult {
+async fn observe_pull(observer: &mut async_nats::Subscriber, phase: &'static str) -> TestResult {
     tokio::time::timeout(DEADLINE, observer.next())
-        .await?
+        .await
+        .map_err(|_| format!("timed out waiting for {phase}"))?
         .ok_or("pull observer closed")?;
     Ok(())
 }
@@ -49,7 +50,7 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
     )
     .await??;
     // Consume initial connection event before the reconnect stimulus.
-    wait_connected(&mut events_rx).await?;
+    wait_connected(&mut events_rx, "initial connection").await?;
     let context = jetstream::new(client.clone());
     with_stream(&context, stream_config(&[POISON, CONTROL]), CASE_DEADLINE, |stream| async move {
         let name = resource("halted");
@@ -61,7 +62,7 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
         context_publish(&client, POISON, vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1]).await?;
         let error = tokio::time::timeout(DEADLINE, halted.receive()).await?.err().ok_or("oversized delivery must halt")?;
         assert_eq!(error.kind(), ConsumeErrorKind::Protocol);
-        observe_pull(&mut observer).await?;
+        observe_pull(&mut observer, "poison delivery pull").await?;
         // Keep the adapter alive and do not poll it during the expiry window.
         // Retaining the old SDK stream issues another observable pull here.
         assert!(tokio::time::timeout(EXPIRY_OBSERVATION, observer.next()).await.is_err(), "halted worker issued an expiry pull");
@@ -71,13 +72,21 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
         let mut active = JetStreamConsumer::new(control).await?;
         let mut control_observer = observer_client.subscribe(format!("$JS.API.CONSUMER.MSG.NEXT.{}.{}", stream.cached_info().config.name, control_name)).await?;
         observer_client.flush().await?;
+        // Observe explicit demand, then cancel it before forcing the reconnect.
+        // The SDK uses a coalescing watch channel for connection state: an
+        // in-flight stream is not guaranteed to see a distinct Disconnected
+        // state and issue an automatic reconnect pull within DEADLINE.
+        tokio::select! {
+            result = active.receive() => return Err(format!("empty active control unexpectedly completed: {:?}", result.err()).into()),
+            result = observe_pull(&mut control_observer, "active control initial pull") => result?,
+        }
+        client.force_reconnect().await?;
+        wait_connected(&mut events_rx, "forced reconnect").await?;
         let reconnect_proof = async {
-            observe_pull(&mut control_observer).await?;
-            client.force_reconnect().await?;
-            wait_connected(&mut events_rx).await?;
-            // An active worker on the SAME connection must respond to the
-            // reconnect. This positive witness prevents a vacuous absence test.
-            observe_pull(&mut control_observer).await?;
+            // Fresh explicit demand on the SAME reconnected client proves
+            // transport and observation are live, without asserting an SDK
+            // background-renewal heuristic. The halted adapter stays unpolled.
+            observe_pull(&mut control_observer, "active control reconnect pull").await?;
             assert!(tokio::time::timeout(Duration::from_secs(1), observer.next()).await.is_err(), "halted worker issued a reconnect pull");
             Ok::<(), TestError>(())
         };
@@ -85,7 +94,8 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
             result = active.receive() => return Err(format!("empty active control unexpectedly completed: {:?}", result.err()).into()),
             result = reconnect_proof => result?,
         }
-        assert_eq!(halted.receive().await.err().map(|error| error.kind()), Some(ConsumeErrorKind::Protocol));
+        let halted_error = halted.receive().now_or_never().ok_or("halted intake must resolve without I/O")?.err().ok_or("halted intake must fail")?;
+        assert_eq!(halted_error.kind(), ConsumeErrorKind::Protocol);
         let info = inspector.get_info().await?;
         assert_eq!(info.num_ack_pending, 1);
         assert_eq!(info.delivered.consumer_sequence, 1);
@@ -94,7 +104,10 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
     }).await
 }
 
-async fn wait_connected(events: &mut tokio::sync::mpsc::Receiver<async_nats::Event>) -> TestResult {
+async fn wait_connected(
+    events: &mut tokio::sync::mpsc::Receiver<async_nats::Event>,
+    phase: &'static str,
+) -> TestResult {
     tokio::time::timeout(DEADLINE, async {
         loop {
             if matches!(
@@ -105,7 +118,8 @@ async fn wait_connected(events: &mut tokio::sync::mpsc::Receiver<async_nats::Eve
             }
         }
     })
-    .await?
+    .await
+    .map_err(|_| format!("timed out waiting for {phase}"))?
 }
 
 async fn context_publish(
@@ -143,7 +157,7 @@ async fn deleted_consumer_closes_intake_while_adapter_remains_alive() -> TestRes
             tokio::pin!(waiting);
             tokio::select! {
                 result = &mut waiting => return Err(format!("empty receive unexpectedly completed: {:?}", result.err()).into()),
-                result = observe_pull(&mut observer) => result?,
+                result = observe_pull(&mut observer, "cancelled receive pull") => result?,
             }
             // Cancel a polled receive, not the adapter. The outstanding broker
             // request can still deliver; cancellation does not prove non-delivery.
@@ -156,9 +170,9 @@ async fn deleted_consumer_closes_intake_while_adapter_remains_alive() -> TestRes
         recovered.settle(DeliveryDisposition::Acknowledge).await?;
         // Recovery owns a new stream; drain its observed pull before using the
         // next request as the deletion barrier.
-        observe_pull(&mut observer).await?;
+        observe_pull(&mut observer, "recovered receive pull").await?;
         let deletion = async {
-            observe_pull(&mut observer).await?;
+            observe_pull(&mut observer, "consumer deletion pull").await?;
             // A Core subscription can observe the request before JetStream
             // registers it. Wait for broker state, not a scheduling sleep.
             tokio::time::timeout(DEADLINE, async {
