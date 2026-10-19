@@ -21,7 +21,7 @@ macro_rules! quantity {
             /// Excess scale is rejected even if fractional trailing zeros could be removed.
             ///
             /// # Errors
-            /// Returns `InvalidSign` for a nonpositive price or negative volume,
+            /// Returns `InvalidSign` below this unit's minimum (positive or nonnegative),
             /// `Scale` for excess fractional scale, or `Precision` when the
             /// normalized coefficient exceeds 28 digits.
             pub fn new(coefficient: i128, scale: u32) -> Result<Self, ValueError> {
@@ -70,6 +70,58 @@ quantity!(
     0,
     "Nonnegative reported shares with at most six fractional decimal places."
 );
+quantity!(
+    OptionPoints,
+    8,
+    0,
+    "Nonnegative option quotation/payoff points, not USD per share or total cash."
+);
+quantity!(
+    UsdPerPoint,
+    8,
+    1,
+    "Positive USD per option point per contract; no implicit 100-share multiplier."
+);
+
+impl OptionPoints {
+    /// Whether points lie on a positive zero-origin premium tick grid. Variable
+    /// tick schedules require separate qualification; zero increment never matches.
+    #[must_use]
+    pub fn is_multiple_of(self, increment: Self) -> bool {
+        increment.0 > 0 && self.0 % increment.0 == 0
+    }
+}
+
+/// Positive whole contracts; deliberately not interchangeable with share volume.
+///
+/// ```compile_fail,E0308
+/// use edgeagent_market_data_domain::{ContractQuantity, ShareVolume};
+/// fn contracts(_: ContractQuantity) {}
+/// fn invalid(shares: ShareVolume) { contracts(shares); }
+/// ```
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ContractQuantity(std::num::NonZeroU64);
+impl ContractQuantity {
+    /// Accept a positive whole number of contracts without rounding.
+    ///
+    /// # Errors
+    /// Returns `ValueError::InvalidSign` for zero.
+    pub fn new(value: u64) -> Result<Self, ValueError> {
+        std::num::NonZeroU64::new(value)
+            .map(Self)
+            .ok_or(ValueError::InvalidSign)
+    }
+    /// Return whole contracts; apply specification multipliers explicitly later.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+impl fmt::Debug for ContractQuantity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ContractQuantity(..)")
+    }
+}
 
 impl UsdPrice {
     /// The unit binds this value to USD; it cannot carry a mismatched currency.

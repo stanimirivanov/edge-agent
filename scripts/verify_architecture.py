@@ -122,7 +122,7 @@ PACKAGE_RULES = {
         MESSAGING_DEPENDENCIES,
     ),
     "crates/market-data-domain": PackageRule(
-        "edgeagent-market-data-domain", "lib", frozenset({"chrono"}),
+        "edgeagent-market-data-domain", "lib", frozenset({"chrono", "chrono-tz"}),
     ),
     "crates/messaging-nats": PackageRule(
         MESSAGING_NATS,

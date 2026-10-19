@@ -62,6 +62,34 @@ exercise cutoff and settlement timing separately under versioned session rules;
 Physical settlement requires a versioned deliverable specification, not an
 assumption that every contract delivers 100 shares.
 
+P02 now implements checked `OptionSpecification`, `OptionTerms`, `OptionSchedule`,
+`OptionPoints`, `UsdPerPoint` and whole `ContractQuantity` values in the
+[domain crate](../../crates/market-data-domain/src/lib.rs). Physical metadata
+requires an exact `DeliverableReference`; its existence/resolution and delivery
+remain unqualified. Fixed premium ticks are checked independently of strike
+spacing; variable tick schemes are not implied. Daily USD/share values retain
+their existing units. Zero points are supported without a ledger/pricing engine.
+
+Schedules preserve explicit activation/last-trading/expiration/exercise-cutoff/
+settlement instants at existing UTC millisecond precision. No constructor rounds
+higher-resolution provider timestamps. Last trading may precede expiration by
+days; cutoff may differ from expiration; settlement cannot precede either final
+deadline. The pinned Chrono-TZ library computes `America/New_York` expiry dates
+with an exact exposed IANA revision, rejecting source-version mismatches and
+unsupported local year boundaries. `is_zero_dte_at` compares local dates only,
+not a 24-hour countdown or permission to trade after last trading. Exchange
+session membership, closure notices and product timing still need source
+qualification; no perpetual exchange calendar is inferred.
+
+Existing immutable reference histories resolve effective/knowledge versions of
+specifications. Option `EffectiveInterval` bounds are UTC instants, not dates,
+so revisions within one trading day remain distinguishable without changing
+daily `DateRange` semantics. `validate_initial_simulation_shape` rejects American, physical
+and non-index products, but its success is only a structural gate, not source,
+rights, funding, calendar, risk or runtime qualification. The
+[synthetic regressions](../../crates/market-data-domain/tests/derivatives.rs)
+prove these value/lookup boundaries, not working option simulation.
+
 | Settlement | Exercise | Modeling requirement | First options simulation |
 |---|---|---|---|
 | Cash | European | Explicit specification and settlement observation | Eligible only after qualification; fully funded long positions |
