@@ -23,6 +23,10 @@ impl UtcInstant {
     pub fn unix_millis(self) -> i64 {
         self.0.timestamp_millis()
     }
+
+    pub(crate) fn utc_date(self) -> SessionDate {
+        SessionDate(self.0.date_naive())
+    }
 }
 
 /// Exchange-local Gregorian date, not proof of an open market or a UTC instant.

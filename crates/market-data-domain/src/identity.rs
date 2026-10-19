@@ -49,3 +49,13 @@ identity!(
     u64,
     "Service-owned transformation revision; not a vendor revision claim."
 );
+identity!(
+    ReferenceId,
+    u128,
+    "Stable identity of one reference record across corrections, within its reference history."
+);
+identity!(
+    ReferenceRevision,
+    u64,
+    "Monotonically increasing service-owned reference revision, not a transformation revision."
+);
