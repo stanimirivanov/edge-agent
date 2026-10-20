@@ -27,6 +27,7 @@
 mod actions;
 mod calendar;
 mod capability;
+mod continuity;
 mod derivative;
 mod evidence_time;
 mod identity;
@@ -35,6 +36,7 @@ mod market_value;
 mod observation;
 mod option_schedule;
 mod quantity;
+mod readiness;
 mod reference;
 mod time;
 
@@ -44,14 +46,18 @@ pub use capability::{
     BarCoverage, DeliveryCapability, EvidenceContract, EvidenceKind, KnowledgeCapability,
     MarketScope, ProviderCapability, SemanticReference, TimestampPrecision,
 };
+pub use continuity::{
+    ContinuityError, ContinuityMode, ContinuityPolicy, ContinuityState, ContinuityTracker,
+    FeedScope, IngestOutcome, RecoveryTicket,
+};
 pub use derivative::{
     DeliverableReference, DerivativeError, ExerciseStyle, OptionKind, OptionSpecification,
     OptionTerms, SettlementStyle, Underlying,
 };
 pub use evidence_time::{EvidenceInterval, EvidenceTimes, PreciseInstant};
 pub use identity::{
-    InstrumentId, ListingId, ObservationId, ObservationRevision, ReferenceId, ReferenceRevision,
-    SourceId, TransformationRevision,
+    FeedEpoch, FeedId, InstrumentId, ListingId, ObservationId, ObservationRevision, ReferenceId,
+    ReferenceRevision, SourceId, TransformationRevision,
 };
 pub use mapping::{DateRange, InstrumentMapping, Symbol, Venue};
 pub use market_value::{ObservationValue, OptionQuoteSnapshot, QuoteSide, RawBar, ShareTrade};
@@ -62,6 +68,9 @@ pub use option_schedule::OptionSchedule;
 pub use quantity::{
     ContractQuantity, Currency, DisplayedContracts, IndexPoints, OptionPoints, ShareVolume,
     UsdPerPoint, UsdPrice,
+};
+pub use readiness::{
+    ContinuityRequirement, EvidenceInput, EvidenceRequirement, ReadinessPolicy, ReadyEvidence,
 };
 pub use reference::{EffectiveInterval, ReferenceError, ReferenceHistory, ReferenceVersion};
 pub use time::{ObservationTimes, SessionDate, UtcInstant};

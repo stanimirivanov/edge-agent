@@ -101,6 +101,72 @@ runs in default workspace tests with boundary and redaction regressions; it does
 not certify any live adapter. P04 owns bounded continuity/recovery/readiness,
 and later M03 slices own provider ports, evidence storage and wire encoding.
 
+### Bounded continuity, recovery and readiness
+
+P04 implements synchronous `ContinuityTracker` state under a `FeedScope` and
+monotonic `FeedEpoch`. A scope pins the source declaration, transformation and
+session; it can contain multiple instruments under that exact contract. Use
+`Contiguous` only after source qualification establishes gap-free sequences
+over the **complete** declared scope and an explicit initial baseline. A filtered
+global counter, arbitrary increasing sequence or snapshot-only API does not
+prove that contract. Snapshot mode never grants contiguous readiness.
+
+Every `ContinuityPolicy` supplies a reviewed revision, 1–4096 retained rows,
+1–64 lifetime recovery attempts, and positive heartbeat/recovery durations.
+There are no default timing budgets or selected vendor limits. Retained accepted
+and buffered rows share that bound; capacity exhaustion stops intake without
+eviction. Duplicate source revisions compare immutable content (not a later
+local receipt) and cannot freshen an old price. Conflicting IDs/sequences,
+missing current correction predecessors, and overlapping distinct current raw
+bars halt the scope. Adjacent bars and explicit cancellations remain distinct.
+An unknown below-baseline overlap fails rather than guessing it is a duplicate.
+
+Out-of-order rows remain ineligible until their contiguous prefix is repaired.
+Known gaps and heartbeat loss latch a recovery barrier; later input or a new
+heartbeat does not clear it. Heartbeats preserve explicit activity and optional
+source watermarks, not market freshness. Contiguous readiness/recovery completion
+also needs a watermark covering the accepted prefix; no watermark means unknown
+completion, and an announced higher sequence exposes a tail gap. Missing ranges
+are inclusive, bounded windows, never allocations spanning arbitrary counters.
+Sequence overflow stops intake instead of wrapping.
+
+`begin_recovery` consumes an attempt before external work and returns a
+feed/epoch/attempt fence. Recovery adapters use `ingest_recovered`, not live
+`ingest`; stale/expired output cannot spend a newer attempt's clock or row work.
+All admitted-scope rows during an active attempt, including duplicate overlap, consume
+its bounded row-work allowance. Expiry, abandonment and unsuccessful completion
+do not refund attempts or start retries. Successful completion requires repaired
+holes and a current heartbeat/watermark. Explicit reset advances the epoch,
+clears only this in-memory window, fences old work and requires recovery again;
+it cannot change source/policy or refund lifetime attempts. Exhausted attempts
+remain exhausted across resets.
+
+`ReadinessPolicy` separately pins 1–32 distinct feed/instrument/contract
+requirements and explicit source-age/skew bounds. Every requirement must resolve
+exactly one current accepted, non-cancelled revision from its expected epoch;
+buffered, superseded, missing, duplicate or conflicting feed-owner inputs deny
+readiness. Results pin each feed's epoch and continuity-policy revision in
+declared requirement order. Age/skew use raw-bar
+bucket end rather than a provider start label, and option snapshots check both
+side times as well as the snapshot time. Receipt/heartbeats never renew prices.
+Checks take an injected evaluation instant; no wall clock, scheduling sleep,
+provider call or model call participates. The borrowed `ReadyEvidence` result
+cannot be used across mutation/reset of its retained tracker values, as verified
+by a compile-fail doctest; it is a point-in-time result, not future authorization.
+Mutable tracker time cannot rewind; historical assessments replay the relevant
+journal prefix rather than consulting state already changed by later evidence.
+
+The [continuity](../../crates/market-data-domain/tests/continuity.rs) and
+[readiness](../../crates/market-data-domain/tests/readiness.rs) suites run in the
+default harness with invented records and deterministic replay. This is not a
+durable journal, source adapter or full quality/entitlement implementation.
+Later M03 application/storage work must preserve epoch, immutable observations,
+policy, active fences and consumed budget or replay their journal after restart;
+constructing a new tracker is not a production recovery shortcut. Archive and
+rights/retention obligations remain external before clearing a window. Daily
+series/calendar/outlier/cross-source quality, source rights and semantic authority,
+liquidity, risk and runtime qualification remain separate fail-closed gates.
+
 ## Instrument modeling versus simulation eligibility
 
 P02 must distinguish stable underlying identity, call/put, strike, currency,
