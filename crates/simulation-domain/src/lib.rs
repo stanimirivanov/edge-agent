@@ -6,6 +6,8 @@ mod input;
 mod manifest;
 mod run;
 
+pub mod risk;
+
 #[cfg(test)]
 mod tests;
 

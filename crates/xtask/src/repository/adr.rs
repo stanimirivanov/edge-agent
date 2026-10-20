@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 33] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 34] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -186,6 +186,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 33] = [
         number: 33,
         path: "docs/decisions/0033-freeze-deterministic-run-continuations.md",
         title: "Freeze deterministic run continuations",
+    },
+    PublishedIdentity {
+        number: 34,
+        path: "docs/decisions/0034-enforce-versioned-simulated-account-risk-policy.md",
+        title: "Enforce versioned simulated-account risk policy",
     },
 ];
 

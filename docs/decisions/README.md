@@ -145,3 +145,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0031](0031-define-the-supported-market-evidence-profile.md) | Superseded | Define the supported market evidence profile. |
 | [ADR-0032](0032-define-vendor-neutral-simulation-profiles.md) | Accepted | Define vendor-neutral simulation profiles. |
 | [ADR-0033](0033-freeze-deterministic-run-continuations.md) | Accepted | Freeze deterministic run continuations. |
+| [ADR-0034](0034-enforce-versioned-simulated-account-risk-policy.md) | Accepted | Enforce versioned simulated-account risk policy. |
