@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE simulation_valuation SET gross_cents=gross_cents+$3,loss_cents=loss_cents+$4 WHERE account=$1 AND strategy=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7d440e310d117a0448f2046e9ee3665eca0d79aa6e104d3609ba1a645ebe8282"
+}

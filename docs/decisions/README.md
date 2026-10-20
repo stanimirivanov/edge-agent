@@ -148,3 +148,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0034](0034-enforce-versioned-simulated-account-risk-policy.md) | Accepted | Enforce versioned simulated-account risk policy. |
 | [ADR-0035](0035-apply-dry-run-order-lifecycles-from-retained-facts.md) | Accepted | Apply dry-run order lifecycles from retained facts. |
 | [ADR-0036](0036-serialize-synthetic-account-admission-and-reservations.md) | Accepted | Serialize synthetic account admission and reservations. |
+| [ADR-0037](0037-commit-evidence-driven-simulation-execution.md) | Accepted | Commit evidence-driven simulation execution. |

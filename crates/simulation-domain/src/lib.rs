@@ -7,6 +7,7 @@ mod manifest;
 mod run;
 
 pub mod admission;
+pub mod execution;
 pub mod orders;
 pub mod risk;
 

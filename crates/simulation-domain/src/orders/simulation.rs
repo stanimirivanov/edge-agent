@@ -52,6 +52,7 @@ pub struct SimulationRequest<'borrow, 'tracker> {
     remaining: OrderQuantity,
     at: PreciseInstant,
     evidence: &'borrow ReadyEvidence<'tracker>,
+    inputs: &'borrow [FrozenInput],
 }
 impl<'borrow, 'tracker> SimulationRequest<'borrow, 'tracker> {
     /// Immutable order terms, including ownership and product specification.
@@ -73,6 +74,12 @@ impl<'borrow, 'tracker> SimulationRequest<'borrow, 'tracker> {
     #[must_use]
     pub const fn evidence(&self) -> &'borrow ReadyEvidence<'tracker> {
         self.evidence
+    }
+    /// Exact frozen provenance checked against the run's consumed prefix. Models
+    /// can bind a prepared budget to this packet rather than instrument alone.
+    #[must_use]
+    pub const fn inputs(&self) -> &'borrow [FrozenInput] {
+        self.inputs
     }
 }
 
@@ -185,6 +192,7 @@ impl Order {
             remaining,
             at,
             evidence: step.ready,
+            inputs: &frozen,
         })?;
         let kind = proposal.map_or(
             OrderEventKind::NoFill {

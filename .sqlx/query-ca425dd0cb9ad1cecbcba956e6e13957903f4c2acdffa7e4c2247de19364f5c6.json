@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE simulation_liquidity SET consumed=$3 WHERE run=$1 AND budget=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca425dd0cb9ad1cecbcba956e6e13957903f4c2acdffa7e4c2247de19364f5c6"
+}

@@ -6,18 +6,18 @@ use edgeagent_inbox_postgres::{
     PostgresHandlerFuture, PostgresInboundMessageStore, PostgresTransactionalMessageHandler,
 };
 use edgeagent_messaging::{FailureCode, HandlerFailure, InboundMessageStore};
-use edgeagent_simulation_postgres::{AdmissionContext, provision};
+use edgeagent_simulation_postgres::provision;
 use sqlx::{
     ConnectOptions, Connection, PgConnection, Postgres, Transaction, postgres::PgConnectOptions,
 };
 use std::{io::Write, process::ExitCode, time::Duration};
 use tokio::io::AsyncReadExt;
 
-struct Wrapper<'context, 'run> {
-    real: &'context AdmissionContext<'run>,
+struct Wrapper<'context> {
+    real: &'context dyn PostgresTransactionalMessageHandler,
     mode: String,
 }
-impl PostgresTransactionalMessageHandler for Wrapper<'_, '_> {
+impl PostgresTransactionalMessageHandler for Wrapper<'_> {
     fn handle<'a>(
         &'a self,
         transaction: &'a mut Transaction<'_, Postgres>,
@@ -79,9 +79,28 @@ async fn run() -> Result<(), Error> {
     options = options
         .application_name(&std::env::var("P08_APPLICATION")?)
         .disable_statement_logging();
-    let mut connection = PgConnection::connect_with(&options).await?;
-    let scenario = Scenario::new(case)?;
-    let context = scenario.context(principal.parse()?)?;
+    let mut connection = PgConnection::connect_with(&options)
+        .await
+        .inspect_err(|error| {
+            let code = error.as_database_error().and_then(|db| db.code());
+            eprintln!(
+                "fixture connection rejected; sqlstate={}",
+                code.as_deref().unwrap_or("unavailable")
+            );
+        })?;
+    let scenario = Scenario::new(case).inspect_err(|_| eprintln!("fixture scenario rejected"))?;
+    let context = scenario
+        .context(principal.parse()?)
+        .inspect_err(|_| eprintln!("fixture admission context rejected"))?;
+    let execution = if scenario.has_execution() {
+        Some(
+            scenario
+                .execution(&context)
+                .inspect_err(|_| eprintln!("fixture execution context rejected"))?,
+        )
+    } else {
+        None
+    };
     if mode == "initialize" {
         provision(
             &mut connection,
@@ -90,12 +109,32 @@ async fn run() -> Result<(), Error> {
             &scenario.valuations()?,
             &scenario.inventory()?,
         )
-        .await?;
+        .await
+        .inspect_err(|_| eprintln!("fixture account provisioning rejected"))?;
+        if let Some(execution) = &execution {
+            edgeagent_simulation_postgres::provision_execution(
+                &mut connection,
+                execution,
+                &scenario.costs()?,
+            )
+            .await
+            .inspect_err(|_| eprintln!("fixture execution provisioning rejected"))?;
+        }
     } else {
         let index: usize = slot.parse()?;
         let id = std::env::var("P08_MESSAGE_ID")?;
-        let mut envelope = scenario.envelope(index, &id)?;
-        if std::env::var("P08_CONFLICT").as_deref() == Ok("1") {
+        let executing = scenario.has_execution() && index >= 2;
+        let mut envelope = if executing {
+            scenario.execution_envelope(
+                execution.as_ref().ok_or("execution absent")?,
+                index as u64 + 1,
+                &id,
+                std::env::var("P08_CONFLICT").as_deref() == Ok("1"),
+            )?
+        } else {
+            scenario.envelope(index, &id)?
+        };
+        if !executing && std::env::var("P08_CONFLICT").as_deref() == Ok("1") {
             let original = scenario.request(index)?;
             let identity = original.identity();
             let request = edgeagent_contracts::simulation::SubmitDryRunOrder::new(
@@ -109,11 +148,28 @@ async fn run() -> Result<(), Error> {
             envelope = Scenario::wrap(&request, &id)?;
         }
         let wrapper = Wrapper {
-            real: &context,
+            real: if executing {
+                execution.as_ref().ok_or("execution absent")?
+            } else {
+                &context
+            },
             mode: mode.clone(),
         };
+        let registry = if executing {
+            edgeagent_contracts::execution::registry()?
+        } else {
+            registry()?
+        };
         if let Err(error) = PostgresInboundMessageStore::new(&mut connection, &wrapper)
-            .process("p08-admission", &registry()?, &envelope)
+            .process(
+                if executing {
+                    "p09-execution"
+                } else {
+                    "p08-admission"
+                },
+                &registry,
+                &envelope,
+            )
             .await
         {
             if let edgeagent_messaging::InboundProcessingError::Handler(failure) = &error {

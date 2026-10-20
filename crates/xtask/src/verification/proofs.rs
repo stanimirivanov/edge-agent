@@ -20,6 +20,9 @@ const ACCOUNT_ADMISSION: Target = Target {
         "rollback_process_crash_restart_and_lost_ack_preserve_one_effect",
         "aggregate_strategy_risk_and_breach_latches_survive_new_workers",
         "unauthorized_gapped_stale_and_tampered_quotes_leave_no_financial_state",
+        "execution_fill_accounting_and_shared_liquidity_hold_across_products",
+        "execution_crash_rollback_and_lost_ack_retain_one_fill",
+        "execution_competing_workers_serialize_without_reusing_liquidity",
     ],
 };
 const EVENT_SPINE: &[Requirement] = &[
@@ -191,7 +194,7 @@ pub(super) fn checks() -> Vec<Check> {
             "account-admission-processes",
             &ACCOUNT_ADMISSION,
             POSTGRES,
-            "Independent workers and restricted database credentials prove synthetic cash/inventory/options reservations, aggregate risk, sticky breach checkpoints, atomic rollback, actual process death and committed duplicate recovery; not qualified pricing, fills, HA or live execution.",
+            "Independent restricted workers prove synthetic cash/inventory/options admission and execution, shared liquidity, balanced accounting, retained virtual latency, sticky risk, rollback, process death and duplicate recovery; not provider/market-fidelity, HA or live qualification.",
         ),
         suite(
             "event-spine-processes",
@@ -490,7 +493,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"account_admission"));
         let discovery = check.discovery.ok_or("account discovery missing")?;
-        assert_eq!(discovery.expected.len(), 4);
+        assert_eq!(discovery.expected.len(), 7);
         let complete = discovery
             .expected
             .iter()
@@ -554,8 +557,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 66);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 66);
+        assert_eq!(inventory.len(), 69);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 69);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

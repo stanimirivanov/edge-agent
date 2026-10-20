@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM simulation_reservation WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "234e71104a09495e9077495e89aacdf010ca8a8b389b682c0a703d5f4bfa04fe"
+}

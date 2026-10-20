@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT strategy,instrument,unit,cash_cents,quantity FROM simulation_reservation WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "instrument",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "instrument"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unit",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "unit"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "cash_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "cash_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "quantity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "quantity"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f36653df5bb3ebc3d3741746153729beba0d9ba78d42745ba8f6251cde46f96d"
+}

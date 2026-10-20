@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 36] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 37] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -201,6 +201,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 36] = [
         number: 36,
         path: "docs/decisions/0036-serialize-synthetic-account-admission-and-reservations.md",
         title: "Serialize synthetic account admission and reservations",
+    },
+    PublishedIdentity {
+        number: 37,
+        path: "docs/decisions/0037-commit-evidence-driven-simulation-execution.md",
+        title: "Commit evidence-driven simulation execution",
     },
 ];
 

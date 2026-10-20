@@ -194,7 +194,7 @@ impl OrderDefinition {
     pub const fn lifetime(&self) -> EvidenceInterval {
         self.lifetime
     }
-    pub(super) fn fill_price(&self, price: OrderPrice) -> Result<(), OrderError> {
+    pub(crate) fn fill_price(&self, price: OrderPrice) -> Result<(), OrderError> {
         self.instrument.price(price)?;
         if let OrderKind::Limit(limit) = self.kind {
             let worse = match (price, limit) {

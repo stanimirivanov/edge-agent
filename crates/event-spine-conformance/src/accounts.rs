@@ -12,6 +12,7 @@ use edgeagent_simulation_postgres::{
     AdmissionContext, AdmissionLimits, InitialInventory, InitialValuation, hex,
 };
 use std::time::Duration;
+mod execution;
 
 /// Qualification error; worker binaries never print private source chains.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -22,6 +23,8 @@ pub struct Scenario {
     session: RiskSession,
     quotes: Vec<SyntheticReservationQuote>,
     case: String,
+    tracker: ContinuityTracker,
+    readiness: ReadinessPolicy,
 }
 /// Exact invented virtual time; no wall-clock reads.
 pub fn at(second: i64) -> Result<PreciseInstant, Error> {
@@ -45,10 +48,13 @@ impl Scenario {
                 | "strategy-risk"
                 | "stale"
                 | "valuation-stale"
+                | "execution"
+                | "execution-sell"
+                | "execution-options"
         ) {
             return Err("unknown synthetic case".into());
         }
-        let manifest = manifest(case)?;
+        let (manifest, tracker, readiness) = manifest(case)?;
         let session = RiskSession::new(
             SessionDate::new(1970, 1, 1)?,
             EvidenceInterval::new(at(0)?, at(100)?)?,
@@ -82,29 +88,38 @@ impl Scenario {
         let mut run = Run::new(&manifest);
         let mut quotes = Vec::new();
         for sequence in 1_u64..=2 {
-            let strategy = if case == "inventory" {
+            let strategy = if case == "inventory" || case == "execution-sell" {
                 1
             } else {
                 u128::from(sequence)
             };
-            let side = if case == "inventory" {
+            let side = if case == "inventory" || case == "execution-sell" {
                 OrderSide::SellToClose
             } else {
                 OrderSide::BuyToOpen
             };
-            let (instrument, quantity, ceiling) = if case == "options" {
-                (
-                    OrderInstrument::index_option(option()?)?,
-                    OrderQuantity::contracts(ContractQuantity::new(1)?),
-                    OrderPrice::Premium(OptionPoints::new(60, 2)?),
-                )
-            } else {
-                (
-                    OrderInstrument::equity(InstrumentId::new(1)?),
-                    OrderQuantity::shares(if case == "inventory" { 4 } else { 1 })?,
-                    OrderPrice::PerShare(UsdPrice::new(60, 0)?),
-                )
-            };
+            let (instrument, quantity, ceiling) =
+                if case == "options" || case == "execution-options" {
+                    (
+                        OrderInstrument::index_option(option()?)?,
+                        OrderQuantity::contracts(ContractQuantity::new(
+                            if case.starts_with("execution") { 2 } else { 1 },
+                        )?),
+                        OrderPrice::Premium(OptionPoints::new(60, 2)?),
+                    )
+                } else {
+                    (
+                        OrderInstrument::equity(InstrumentId::new(1)?),
+                        OrderQuantity::shares(if case == "inventory" {
+                            4
+                        } else if case.starts_with("execution") {
+                            2
+                        } else {
+                            1
+                        })?,
+                        OrderPrice::PerShare(UsdPrice::new(60, 0)?),
+                    )
+                };
             let order = OrderDefinition::new(
                 DryRunMode::parse(Some("dry_run"))?,
                 OrderScope::new(
@@ -128,7 +143,7 @@ impl Scenario {
             quotes.push(SyntheticReservationQuote::new(
                 order,
                 ceiling,
-                UsdCents::new(0),
+                UsdCents::new(if case.starts_with("execution") { 2 } else { 0 }),
                 EvidenceInterval::new(at(0)?, at(end)?)?,
                 sequence,
                 at(decision)?,
@@ -140,23 +155,40 @@ impl Scenario {
             session,
             quotes,
             case: case.into(),
+            tracker,
+            readiness,
         })
     }
     /// Bind a test principal outside the wire payload; only principal 1 is seeded.
     pub fn context(&self, principal: u128) -> Result<AdmissionContext<'_>, Error> {
-        Ok(AdmissionContext::new(
+        let slots = if self.case.starts_with("execution") {
+            vec![
+                (3, at(1)?),
+                (4, at(2)?),
+                (5, at(2)?),
+                (6, at(2)?),
+                (7, at(3)?),
+                (8, at(4)?),
+                (9, at(100)?),
+            ]
+        } else {
+            vec![]
+        };
+        Ok(AdmissionContext::new_scheduled(
             RiskAccountId::new(1)?,
             principal,
             &self.manifest,
             self.policy.clone(),
             self.session,
-            &self.quotes,
+            (&self.quotes, &slots),
             AdmissionLimits::new(Duration::from_secs(5), Duration::from_secs(15))?,
         )?)
     }
     /// Explicit invented cash, not a production account default.
     pub fn funding(&self) -> UsdCents {
-        UsdCents::new(if self.case == "account-risk" {
+        UsdCents::new(if self.case.starts_with("execution") {
+            30_000
+        } else if self.case == "account-risk" {
             100_000
         } else {
             10_000
@@ -168,11 +200,13 @@ impl Scenario {
             .map(|id| {
                 Ok(InitialValuation {
                     strategy: RiskStrategyId::new(id)?,
-                    position_gross: UsdCents::new(if self.case == "inventory" && id == 1 {
-                        30_000
-                    } else {
-                        0
-                    }),
+                    position_gross: UsdCents::new(
+                        if (self.case == "inventory" || self.case == "execution-sell") && id == 1 {
+                            30_000
+                        } else {
+                            0
+                        },
+                    ),
                     session_loss: UsdCents::new(0),
                     valued: at(0)?,
                     artifact: ArtifactDigest::of(b"invented-valuation-and-baseline-v1"),
@@ -182,16 +216,18 @@ impl Scenario {
     }
     /// Existing strategy-owned long shares for the inventory race only.
     pub fn inventory(&self) -> Result<Vec<InitialInventory>, Error> {
-        Ok(if self.case == "inventory" {
-            vec![InitialInventory {
-                strategy: RiskStrategyId::new(1)?,
-                instrument: InstrumentId::new(1)?,
-                unit: QuantityUnit::Shares,
-                quantity: 5,
-            }]
-        } else {
-            vec![]
-        })
+        Ok(
+            if self.case == "inventory" || self.case == "execution-sell" {
+                vec![InitialInventory {
+                    strategy: RiskStrategyId::new(1)?,
+                    instrument: InstrumentId::new(1)?,
+                    unit: QuantityUnit::Shares,
+                    quantity: 5,
+                }]
+            } else {
+                vec![]
+            },
+        )
     }
     /// Stable request preserving its original optimistic preconditions.
     pub fn request(&self, index: usize) -> Result<SubmitDryRunOrder, Error> {
@@ -231,9 +267,13 @@ impl Scenario {
         )?)
     }
 }
-fn manifest(case: &str) -> Result<RunManifest, Error> {
+fn manifest(case: &str) -> Result<(RunManifest, ContinuityTracker, ReadinessPolicy), Error> {
     let contract = EvidenceContract::new(
-        EvidenceKind::ShareTrade,
+        if case == "execution-options" {
+            EvidenceKind::OptionSnapshot
+        } else {
+            EvidenceKind::ShareTrade
+        },
         MarketScope::Consolidated,
         rules()?,
         TimestampPrecision::Nanoseconds,
@@ -248,14 +288,36 @@ fn manifest(case: &str) -> Result<RunManifest, Error> {
     let transform = TransformationRevision::new(1)?;
     let epoch = FeedEpoch::new(1)?;
     let observation = CanonicalObservation::new(
-        ObservationContext::new(InstrumentId::new(1)?, provider, transform, session, &[])?,
+        ObservationContext::new(
+            InstrumentId::new(if case == "execution-options" { 10 } else { 1 })?,
+            provider,
+            transform,
+            session,
+            &[],
+        )?,
         ObservationVersion::new(ObservationId::new(1)?, ObservationRevision::new(1)?, None)?,
         EvidenceTimes::new(at(0)?, None, None, at(0)?)?,
         None,
-        Some(ObservationValue::Trade(ShareTrade::new(
-            UsdPrice::new(60, 0)?,
-            ShareVolume::new(1, 0)?,
-        )?)),
+        Some(if case == "execution-options" {
+            ObservationValue::OptionQuote(OptionQuoteSnapshot::new(
+                &option()?,
+                QuoteSide::new(
+                    OptionPoints::new(55, 2)?,
+                    Some(DisplayedContracts::new(1)),
+                    at(0)?,
+                ),
+                QuoteSide::new(
+                    OptionPoints::new(60, 2)?,
+                    Some(DisplayedContracts::new(1)),
+                    at(0)?,
+                ),
+            )?)
+        } else {
+            ObservationValue::Trade(ShareTrade::new(
+                UsdPrice::new(60, 0)?,
+                ShareVolume::new(1, 0)?,
+            )?)
+        }),
     )?;
     let mut tracker = ContinuityTracker::new(
         FeedScope::new(FeedId::new(1)?, provider, transform, session),
@@ -278,7 +340,7 @@ fn manifest(case: &str) -> Result<RunManifest, Error> {
         Duration::ZERO,
         &[EvidenceRequirement::new(
             FeedId::new(1)?,
-            InstrumentId::new(1)?,
+            InstrumentId::new(if case == "execution-options" { 10 } else { 1 })?,
             contract,
             ContinuityRequirement::Snapshots,
         )],
@@ -292,13 +354,14 @@ fn manifest(case: &str) -> Result<RunManifest, Error> {
             ObservationRevision::new(1)?,
         )],
     )?;
-    Ok(RunManifest::new(
+    let manifest = RunManifest::new(
         at(0)?,
         ArtifactDigest::of(b"p08-synthetic-code-v1"),
         ArtifactDigest::of(case.as_bytes()),
         [0; 32],
         &FrozenInput::from_ready(&ready, &[ArtifactDigest::of(b"invented-share-trade-v1")])?,
-    )?)
+    )?;
+    Ok((manifest, tracker, policy))
 }
 fn option() -> Result<ReferenceVersion<OptionSpecification>, Error> {
     let utc = |second: i64| UtcInstant::from_unix_millis(second * 1000);

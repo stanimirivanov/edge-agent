@@ -1,6 +1,7 @@
 //! Event-applied dry-run orders, not funded admission or a broker abstraction.
 //! P08 owns authoritative account admission/persistence and wire contracts;
-//! P09 qualifies fill models. Domain facts remain uncommitted until that boundary.
+//! P09 supplies the evidence/liquidity model and atomic accounting adapter.
+//! Domain facts remain uncommitted until that account boundary.
 //!
 //! ```
 //! use edgeagent_simulation_domain::orders::{DryRunMode, OrderQuantity};
@@ -18,6 +19,7 @@
 
 mod definition;
 mod events;
+mod journal;
 mod lifecycle;
 mod simulation;
 mod values;

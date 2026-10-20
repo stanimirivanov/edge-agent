@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT admission_journal FROM simulation_order WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "admission_journal",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_order",
+            "name": "admission_journal"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "92a07e07805d7bcdcc1f5250a0c7ceb9b522ed17ddf0d5dce1141cae677250ef"
+}

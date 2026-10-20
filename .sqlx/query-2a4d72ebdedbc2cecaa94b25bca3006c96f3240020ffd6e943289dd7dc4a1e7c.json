@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT journal,exact_cents,filled_units,gross_cents,fees_cents FROM simulation_execution_order WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "journal",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_order",
+            "name": "journal"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "exact_cents",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_order",
+            "name": "exact_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "filled_units",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_order",
+            "name": "filled_units"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "gross_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_order",
+            "name": "gross_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "fees_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_order",
+            "name": "fees_cents"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2a4d72ebdedbc2cecaa94b25bca3006c96f3240020ffd6e943289dd7dc4a1e7c"
+}

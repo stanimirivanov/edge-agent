@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO simulation_execution_receipt(account,sequence,request,outcome,cash_delta,position_delta,realized_delta,fee_delta) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30bb853762632c74b09d3b723541a8ada3eba020d28323625cc474713044ecf8"
+}

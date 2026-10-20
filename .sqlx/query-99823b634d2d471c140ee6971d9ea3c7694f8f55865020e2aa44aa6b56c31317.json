@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO simulation_inventory(account,strategy,instrument,unit,quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(account,strategy,instrument,unit) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "99823b634d2d471c140ee6971d9ea3c7694f8f55865020e2aa44aa6b56c31317"
+}

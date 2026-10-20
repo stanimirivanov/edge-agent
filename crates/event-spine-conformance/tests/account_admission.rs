@@ -8,6 +8,168 @@ use std::panic::AssertUnwindSafe;
 
 #[tokio::test]
 #[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn execution_fill_accounting_and_shared_liquidity_hold_across_products() -> Result<(), Error>
+{
+    for case in ["execution", "execution-sell", "execution-options"] {
+        let mut database = Database::new(case).await?;
+        let result = AssertUnwindSafe(async {
+            for index in 0..=8 {
+                database
+                    .spawn(index, "apply", 1, &format!("step-{index}"))?
+                    .success()
+                    .await?;
+            }
+            let expected = if case == "execution-sell" {
+                (35_999, 4, 20_000, 1, 7, 1)
+            } else {
+                (23_999, 1, 6_000, 1, 7, 1)
+            };
+            assert_eq!(database.execution_state().await?, expected);
+            database.assert_counts(2, 0, 9, 9).await?;
+            database
+                .assert_ledger_and_valuation(if case == "execution-sell" { -1000 } else { 0 })
+                .await?;
+            let at_end = database.checkpoints().await?;
+            let original = database.execution_outcome(4).await?;
+            database
+                .spawn(3, "apply", 1, "new-delivery-of-old-fill")?
+                .success()
+                .await?;
+            assert_eq!(database.execution_outcome(4).await?, original);
+            assert_eq!(database.checkpoints().await?, at_end);
+            database
+                .spawn_conflict(3)?
+                .failure("execution_identity")
+                .await?;
+            database
+                .tamper_execution_artifact(case == "execution")
+                .await?;
+            database
+                .spawn(3, "apply", 1, "corrupt-retained-configuration")?
+                .failure("execution_configuration")
+                .await?;
+            assert_eq!(database.execution_state().await?, expected);
+            assert_eq!(database.checkpoints().await?, at_end);
+            Ok::<_, Error>(())
+        })
+        .catch_unwind()
+        .await;
+        database.finish(result).await?;
+    }
+    Ok(())
+}
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn execution_crash_rollback_and_lost_ack_retain_one_fill() -> Result<(), Error> {
+    let mut database = Database::new("execution").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..=2 {
+            database
+                .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                .success()
+                .await?;
+        }
+        let before = database.execution_state().await?;
+        let checkpoint = database.checkpoints().await?;
+        database
+            .spawn(3, "rollback", 1, "rolled-back-fill")?
+            .failure("p08_injected_failure")
+            .await?;
+        assert_eq!(database.execution_state().await?, before);
+        assert_eq!(database.checkpoints().await?, checkpoint);
+        let mut killed = database.spawn(3, "before", 1, "killed-fill")?;
+        killed.stage("READY").await?;
+        killed.kill().await?;
+        assert_eq!(database.execution_state().await?, before);
+        let mut lost_ack = database.spawn(3, "after", 1, "committed-no-ack")?;
+        lost_ack.stage("COMMITTED").await?;
+        lost_ack.kill().await?;
+        assert_eq!(
+            database.execution_state().await?,
+            (23_999, 1, 6_000, 1, 2, 1)
+        );
+        let committed = database.checkpoints().await?;
+        let fact = database.execution_outcome(4).await?;
+        database
+            .spawn(3, "apply", 1, "committed-no-ack")?
+            .success()
+            .await?;
+        database
+            .spawn(3, "apply", 1, "semantic-fill-retry")?
+            .success()
+            .await?;
+        assert_eq!(database.checkpoints().await?, committed);
+        assert_eq!(database.execution_outcome(4).await?, fact);
+        database
+            .spawn(4, "apply", 1, "durable-pending-cancel")?
+            .success()
+            .await?;
+        let pending = database.checkpoints().await?;
+        let mut cancel = database.spawn(7, "before", 1, "early-missing-predecessor")?;
+        cancel.failure("execution_input_gap").await?;
+        assert_eq!(database.checkpoints().await?, pending);
+        for index in 5..=8 {
+            database
+                .spawn(index, "apply", 1, &format!("restart-{index}"))?
+                .success()
+                .await?;
+        }
+        database.assert_reserved(0, 0).await?;
+        database.assert_ledger_and_valuation(0).await?;
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn execution_competing_workers_serialize_without_reusing_liquidity() -> Result<(), Error> {
+    let mut database = Database::new("execution").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..=2 {
+            database
+                .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                .success()
+                .await?;
+        }
+        let mut first = database.spawn(3, "before", 1, "winner")?;
+        first.stage("READY").await?;
+        let mut second = database.spawn(3, "apply", 1, "competing-same-fill")?;
+        database.wait_for_root_lock(&second.application).await?;
+        first.release().await?;
+        first.success().await?;
+        second.success().await?;
+        assert_eq!(
+            database.execution_state().await?,
+            (23_999, 1, 6_000, 1, 2, 1)
+        );
+        let snapshot = database.execution_state().await?;
+        database
+            .spawn(4, "apply", 2, "unauthorized-next")?
+            .failure("execution_unauthorized")
+            .await?;
+        assert_eq!(database.execution_state().await?, snapshot);
+        for index in 4..=6 {
+            database
+                .spawn(index, "apply", 1, &format!("competing-strategy-{index}"))?
+                .success()
+                .await?;
+        }
+        assert_eq!(
+            database.execution_state().await?,
+            (23_999, 1, 6_000, 1, 5, 1)
+        );
+        database.assert_reserved(18_003, 0).await?;
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
 async fn competing_processes_cannot_overspend_cash_inventory_or_option_contracts()
 -> Result<(), Error> {
     for case in ["cash", "inventory", "options"] {

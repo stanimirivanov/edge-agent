@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:edgeagent:schema:simulation:execution-decided:v1",
+  "title": "ExecutionDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request", "order", "order_revision", "status", "filled_units", "cash_delta_cents", "fee_delta_cents", "position_cost_delta_cents", "realized_pnl_expense_cents", "strategy", "instrument", "unit", "side", "model", "evidence"],
+  "properties": {
+    "request": {"$ref": "urn:edgeagent:schema:simulation:execute-step:v1"},
+    "order": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "^0+$"}},
+    "order_revision": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "status": {"enum": ["filled", "partial_fill", "no_fill", "cancel_pending", "cancelled", "expired"]},
+    "filled_units": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "cash_delta_cents": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+    "fee_delta_cents": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "position_cost_delta_cents": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+    "realized_pnl_expense_cents": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
+    "strategy": {"type": "string", "pattern": "^[0-9a-f]{32}$", "not": {"pattern": "^0+$"}},
+    "instrument": {"type": "string", "pattern": "^[0-9a-f]{32}$", "not": {"pattern": "^0+$"}},
+    "unit": {"enum": ["shares", "contracts"]},
+    "side": {"enum": ["buy_to_open", "sell_to_close"]},
+    "model": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "^0+$"}},
+    "evidence": {"anyOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "^0+$"}}]}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"enum": ["filled", "partial_fill"]}}},
+     "then": {"properties": {"filled_units": {"minimum": 1}}},
+     "else": {"properties": {"filled_units": {"const": 0}, "cash_delta_cents": {"const": 0}, "fee_delta_cents": {"const": 0}, "position_cost_delta_cents": {"const": 0}, "realized_pnl_expense_cents": {"const": 0}}}},
+    {"if": {"properties": {"status": {"enum": ["filled", "partial_fill", "no_fill"]}}},
+     "then": {"properties": {"evidence": {"type": "string"}}},
+     "else": {"properties": {"evidence": {"type": "null"}}}}
+  ]
+}

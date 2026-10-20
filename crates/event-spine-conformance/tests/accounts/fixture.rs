@@ -109,6 +109,73 @@ impl Database {
         )
         .await?;
         ddl(&mut self.connection,format!("GRANT UPDATE(revision,input_revision,risk_checkpoint,run_checkpoint) ON simulation_account TO {}",self.role)).await?;
+        if self.case.starts_with("execution") {
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT INSERT ON simulation_execution_order,simulation_liquidity TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(&mut self.connection,format!("GRANT UPDATE(journal,exact_cents,filled_units,gross_cents,fees_cents) ON simulation_execution_order TO {}",self.role)).await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(consumed) ON simulation_liquidity TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT INSERT ON simulation_execution_receipt TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(cash_cents) ON simulation_account TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(cash_cents,quantity),DELETE ON simulation_reservation TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(quantity) ON simulation_inventory TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(cost_cents) ON simulation_position_cost TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+            ddl(
+                &mut self.connection,
+                format!(
+                    "GRANT UPDATE(gross_cents,loss_cents) ON simulation_valuation TO {}",
+                    self.role
+                ),
+            )
+            .await?;
+        }
         Ok(())
     }
     fn command(
@@ -251,6 +318,54 @@ impl Database {
         transaction.commit().await?;
         Ok(())
     }
+    pub async fn execution_state(&mut self) -> Result<(i64, i64, i64, i64, i64, i64), Error> {
+        Ok(sqlx::query_as("SELECT (SELECT cash_cents FROM simulation_account),(SELECT COALESCE(SUM(quantity),0)::BIGINT FROM simulation_inventory),(SELECT COALESCE(SUM(cost_cents),0)::BIGINT FROM simulation_position_cost),(SELECT COALESCE(SUM(consumed),0)::BIGINT FROM simulation_liquidity),(SELECT COUNT(*) FROM simulation_execution_receipt),(SELECT COALESCE(SUM(fee_delta),0)::BIGINT FROM simulation_execution_receipt)").fetch_one(&mut self.connection).await?)
+    }
+    pub async fn execution_outcome(&mut self, sequence: i64) -> Result<Vec<u8>, Error> {
+        Ok(
+            sqlx::query_scalar(
+                "SELECT outcome FROM simulation_execution_receipt WHERE sequence=$1",
+            )
+            .bind(sequence)
+            .fetch_one(&mut self.connection)
+            .await?,
+        )
+    }
+    pub async fn tamper_execution_artifact(&mut self, profile: bool) -> Result<(), Error> {
+        if profile {
+            sqlx::query("UPDATE simulation_execution_config SET profile=set_byte(profile,0,0)")
+                .execute(&mut self.connection)
+                .await?;
+        } else {
+            sqlx::query("UPDATE simulation_execution_config SET canonical=set_byte(canonical,0,0)")
+                .execute(&mut self.connection)
+                .await?;
+        }
+        Ok(())
+    }
+    pub async fn assert_ledger_and_valuation(&mut self, realized: i64) -> Result<(), Error> {
+        let facts: Vec<Vec<u8>> = sqlx::query_scalar(
+            "SELECT outcome FROM simulation_execution_receipt ORDER BY sequence",
+        )
+        .fetch_all(&mut self.connection)
+        .await?;
+        for fact in facts {
+            let envelope = MessageEnvelope::from_json(&fact)?;
+            edgeagent_contracts::execution::DEFINITIONS[1].validate_envelope(&envelope)?;
+            let decision: edgeagent_contracts::execution::ExecutionDecision = envelope.payload()?;
+            assert_eq!(decision.postings().iter().sum::<i128>(), 0);
+            assert!(matches!(
+                decision.allocation().3,
+                "buy_to_open" | "sell_to_close"
+            ));
+        }
+        let row=sqlx::query("SELECT COALESCE(SUM(cash_delta+position_delta+realized_delta+fee_delta),0)::BIGINT AS balance,COALESCE(SUM(realized_delta),0)::BIGINT AS realized FROM simulation_execution_receipt").fetch_one(&mut self.connection).await?;
+        assert_eq!(row.try_get::<i64, _>("balance")?, 0);
+        assert_eq!(row.try_get::<i64, _>("realized")?, realized);
+        let refreshed:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM simulation_valuation WHERE valued_seconds<>0 OR valued_nanos<>0)").fetch_one(&mut self.connection).await?;
+        assert!(!refreshed, "execution cannot invent a fresh risk mark");
+        Ok(())
+    }
     pub async fn tamper_quote(&mut self) -> Result<(), Error> {
         let mut transaction = self.connection.begin().await?;
         sqlx::query("SELECT account FROM simulation_account FOR UPDATE")
@@ -318,7 +433,9 @@ impl Worker {
     pub async fn success(&mut self) -> Result<(), Error> {
         let status = tokio::time::timeout(Duration::from_secs(30), self.child.wait()).await??;
         if !status.success() {
-            return Err("account worker unexpectedly failed".into());
+            let mut stage = String::new();
+            self.output.read_line(&mut stage).await?;
+            return Err(format!("account worker unexpectedly failed: {}", stage.trim()).into());
         }
         Ok(())
     }
