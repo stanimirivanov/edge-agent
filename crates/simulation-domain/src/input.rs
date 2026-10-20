@@ -90,6 +90,18 @@ impl FrozenInput {
     pub const fn artifact(&self) -> ArtifactDigest {
         self.artifact
     }
+    pub(crate) fn supports_reassessment(&self, assessed: &Self) -> bool {
+        // Preserve first availability while allowing a later readiness check of
+        // the SAME consumed evidence, e.g. for delayed simulation. No identity,
+        // provenance, policy or retained bytes may change during reassessment.
+        self.available <= assessed.available
+            && self.feed == assessed.feed
+            && self.epoch == assessed.epoch
+            && self.sequence == assessed.sequence
+            && self.identity == assessed.identity
+            && self.provenance == assessed.provenance
+            && self.artifact == assessed.artifact
+    }
 
     pub(crate) fn key(&self) -> (PreciseInstant, u128, u64, Option<u64>, (u128, u64)) {
         (

@@ -18,6 +18,11 @@ P06's pure policy and recovery contract is documented in
 [simulation risk](../simulation-risk.md). P08 still owns authoritative account reads,
 atomic risk/reservation enforcement, persistence and multi-process qualification.
 
+P07's pure order lifecycle and proposal contract is documented in
+[dry-run orders](../dry-run-orders.md). P08 owns funded admission and product wire
+integration; P09 qualifies models and ledger effects. No simulator service path is
+activated by this foundation, and M07 is not complete.
+
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The
 [roadmap](../../roadmap/milestones.md) owns milestone outcomes. These slices
