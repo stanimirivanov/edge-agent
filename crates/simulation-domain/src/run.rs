@@ -58,6 +58,19 @@ impl<'a> Run<'a> {
     pub const fn now(&self) -> PreciseInstant {
         self.clock
     }
+    /// Frozen run identity for consumers binding virtual time to their own state.
+    #[must_use]
+    pub const fn manifest_digest(&self) -> ArtifactDigest {
+        self.manifest.digest()
+    }
+    /// Canonical input prefix already consumed by this continuation. Consumers
+    /// can bind ready evidence to frozen provenance rather than trusting time alone.
+    #[must_use]
+    pub fn consumed_inputs(&self) -> &[FrozenInput] {
+        // Constructors/restore bound the private cursor; next_input advances only
+        // after a successful manifest lookup, so this prefix always exists.
+        &self.manifest.inputs[..self.cursor]
+    }
     /// Next input without advancing time or exposing its retained payload.
     #[must_use]
     pub fn peek(&self) -> Option<&'a FrozenInput> {

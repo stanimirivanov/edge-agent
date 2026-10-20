@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P07 dry-run order facts, cancellation/expiry races and the simulation port, read
+[dry-run orders](development/dry-run-orders.md) and
+[ADR-0035](decisions/0035-apply-dry-run-order-lifecycles-from-retained-facts.md).
+
 For P06 account/strategy/session risk, breach latches and authorized recovery, read
 [simulation risk](development/simulation-risk.md) and
 [ADR-0034](decisions/0034-enforce-versioned-simulated-account-risk-policy.md).

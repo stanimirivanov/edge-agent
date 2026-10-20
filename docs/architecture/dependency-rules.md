@@ -19,7 +19,7 @@
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
-| `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation and simulated-account risk policy; no effects or storage |
+| `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation, simulated-account risk policy and event-applied dry-run orders; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
 | `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
