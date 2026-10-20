@@ -10,7 +10,13 @@ use std::panic::AssertUnwindSafe;
 #[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
 async fn execution_fill_accounting_and_shared_liquidity_hold_across_products() -> Result<(), Error>
 {
-    for case in ["execution", "execution-sell", "execution-options"] {
+    for case in [
+        "execution",
+        "execution-sell",
+        "execution-options",
+        "execution-full",
+        "execution-denied",
+    ] {
         let mut database = Database::new(case).await?;
         let result = AssertUnwindSafe(async {
             for index in 0..=8 {
@@ -19,13 +25,27 @@ async fn execution_fill_accounting_and_shared_liquidity_hold_across_products() -
                     .success()
                     .await?;
             }
-            let expected = if case == "execution-sell" {
+            let expected = if case == "execution-denied" {
+                (7_000, 0, 0, 0, 7, 0)
+            } else if case == "execution-sell" {
                 (35_999, 4, 20_000, 1, 7, 1)
             } else {
                 (23_999, 1, 6_000, 1, 7, 1)
             };
             assert_eq!(database.execution_state().await?, expected);
             database.assert_counts(2, 0, 9, 9).await?;
+            if matches!(case, "execution-full" | "execution-denied") {
+                let fact = edgeagent_contracts::MessageEnvelope::from_json(
+                    &database.execution_outcome(7).await?,
+                )?;
+                let decision: edgeagent_contracts::execution::ExecutionDecision = fact.payload()?;
+                assert_eq!(decision.effect(), ("already_terminal", 0));
+                assert_eq!(decision.postings(), [0; 4]);
+                assert_eq!(
+                    decision.position().2,
+                    if case == "execution-full" { 4 } else { 1 }
+                );
+            }
             database
                 .assert_ledger_and_valuation(if case == "execution-sell" { -1000 } else { 0 })
                 .await?;

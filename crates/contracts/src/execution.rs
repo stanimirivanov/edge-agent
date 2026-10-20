@@ -205,7 +205,13 @@ impl ExecutionDecision {
             || evidence.is_some_and(|e| !hex(e, 64))
             || !matches!(
                 status,
-                "filled" | "partial_fill" | "no_fill" | "cancel_pending" | "cancelled" | "expired"
+                "filled"
+                    | "partial_fill"
+                    | "no_fill"
+                    | "cancel_pending"
+                    | "cancelled"
+                    | "expired"
+                    | "already_terminal"
             )
             || ((status == "filled" || status == "partial_fill") != (amounts.0 > 0))
             || amounts.0 > i64::MAX as u64
@@ -238,7 +244,8 @@ impl ExecutionDecision {
             evidence: evidence.map(str::to_owned),
         })
     }
-    /// Original intent, order identity and resulting contiguous order revision.
+    /// Original intent, order identity and last lifecycle revision. An
+    /// `already_terminal` completion leaves that order revision unchanged.
     #[must_use]
     pub fn position(&self) -> (&ExecuteDryRunStep, &str, u64) {
         (&self.request, &self.order, self.order_revision)

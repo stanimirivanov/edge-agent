@@ -120,7 +120,7 @@ fn consumed_trade_capacity_is_shared_and_limit_and_ceiling_protected() -> TestRe
     Ok(())
 }
 #[test]
-fn registered_port_retains_pre_activation_no_fill_then_executes_at_virtual_due() -> TestResult {
+fn registered_port_retains_pre_activation_no_fill_without_reviving_old_liquidity() -> TestResult {
     let evidence = Evidence::trade()?;
     let ready = evidence.ready()?;
     let manifest = evidence.manifest()?;
@@ -168,9 +168,41 @@ fn registered_port_retains_pre_activation_no_fill_then_executes_at_virtual_due()
         &mut model,
         SimulationStep::new(id, 3, &ready, profile()?.identity(), digest(), &[digest()])?,
     )?;
-    assert!(matches!(fact.effect().1, OrderEventKind::Filled(_)));
+    assert!(matches!(fact.effect().1, OrderEventKind::NoFill { .. }));
     order.apply(fact)?;
-    assert_eq!(order.quantities().0.ok_or("not filled")?.parts().1, 2);
+    assert!(order.quantities().0.is_none());
+    Ok(())
+}
+#[test]
+fn registered_port_executes_a_consumed_post_activation_print() -> TestResult {
+    let evidence = Evidence::new_at(
+        1,
+        ObservationValue::Trade(ShareTrade::new(
+            UsdPrice::new(100, 0)?,
+            ShareVolume::new(10, 0)?,
+        )?),
+        EvidenceKind::ShareTrade,
+        MarketScope::Consolidated,
+        2,
+    )?;
+    let ready = evidence.ready()?;
+    let manifest = evidence.manifest()?;
+    let mut run = Run::new(&manifest);
+    let mut order = Order::new(definition(&mut run, OrderSide::BuyToOpen, 3)?, 8)?;
+    apply(&mut run, &mut order, 1, OrderEventKind::Accepted)?;
+    run.next_input();
+    let market =
+        ExecutableLiquidity::from_ready(&run, order.definition(), profile()?, &ready, &[digest()])?;
+    let mut model = LiquidityExecution::new(market, 0, price(100)?, at(1)?)?;
+    let id = OrderEventId::new(run.next_id()?);
+    let event = order.simulate(
+        &run,
+        &mut model,
+        SimulationStep::new(id, 2, &ready, profile()?.identity(), digest(), &[digest()])?,
+    )?;
+    assert!(matches!(event.effect().1, OrderEventKind::Filled(_)));
+    order.apply(event)?;
+    assert_eq!(order.quantities().0.ok_or("no fill")?.parts().1, 2);
     Ok(())
 }
 #[test]

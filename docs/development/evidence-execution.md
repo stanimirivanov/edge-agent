@@ -57,6 +57,12 @@ Each receipt balances cash + position cost + realized P/L expense + fees = zero.
 Partial fills consume holds; definitive fill/cancel/expiry releases the remainder.
 Pending cancel cannot release funds. Virtual submission/cancel delays and all
 no-fill decisions are retained; equal-time canonical sequence resolves races.
+Even fresh evidence cannot supply retroactive liquidity: its source print or
+snapshot must be at/after virtual submission activation, not merely received later.
+Scheduled steps targeting already terminal/denied orders retain an
+`already_terminal` decision with zero postings. They advance the account input,
+not the order revision, so a won full fill or denied admission cannot strand
+later scheduled operations. They never recreate a hold or displayed budget.
 After cancellation due time, a later step confirms cancellation; an expired
 deadline wins. Expiry closes the order, not the option position (P10).
 

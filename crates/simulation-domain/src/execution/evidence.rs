@@ -21,6 +21,7 @@ pub struct ExecutableLiquidity {
     specification: Option<(ReferenceId, ReferenceRevision)>,
     side: OrderSide,
     input: FrozenInput,
+    observed_at: PreciseInstant,
 }
 impl std::fmt::Debug for ExecutableLiquidity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -138,6 +139,7 @@ impl ExecutableLiquidity {
             specification: order.instrument().specification(),
             side: order.terms().0,
             input: input.clone(),
+            observed_at: observation.times().event_at(),
         })
     }
     /// Shared budget key, exact execution content and whole-unit capacity.
@@ -256,7 +258,13 @@ impl SimulationExecution for LiquidityExecution {
         {
             return Err(OrderError::Evidence);
         }
-        if request.at() < self.market.profile.submission_due(self.admitted)? {
+        let active = self.market.profile.submission_due(self.admitted)?;
+        // A delayed order cannot retroactively participate in an earlier print
+        // or snapshot merely because that evidence still passes freshness.
+        if request.at() < active
+            || self.market.observed_at < active
+            || self.market.observed_at > request.at()
+        {
             return Ok(None);
         }
         self.market.propose(

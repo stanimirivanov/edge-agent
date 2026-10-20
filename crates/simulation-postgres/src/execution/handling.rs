@@ -53,7 +53,7 @@ async fn execute(
         .ok_or_else(invariant)?;
     let definition = quote.order();
     let order_id = hex(&definition.scope().identity().3.bytes());
-    let admitted = sqlx::query!(
+    let submission = sqlx::query!(
         "SELECT admission_journal FROM simulation_order WHERE account=$1 AND order_id=$2",
         account,
         order_id
@@ -63,7 +63,7 @@ async fn execute(
     .map_err(storage)?
     .ok_or_else(|| permanent("execution_not_admitted"))?;
     let stored=sqlx::query!("SELECT journal,exact_cents,filled_units,gross_cents,fees_cents FROM simulation_execution_order WHERE account=$1 AND order_id=$2",account,order_id).fetch_optional(&mut **tx).await.map_err(storage)?;
-    let initial = admitted
+    let initial = submission
         .admission_journal
         .ok_or_else(|| permanent("execution_legacy_order"))?;
     let journal = stored
@@ -86,7 +86,23 @@ async fn execute(
     {
         return Err(invariant());
     }
-    let reservation=sqlx::query!("SELECT strategy,instrument,unit,cash_cents,quantity FROM simulation_reservation WHERE account=$1 AND order_id=$2",account,order_id).fetch_optional(&mut **tx).await.map_err(storage)?.ok_or_else(||permanent("execution_not_working"))?;
+    let reservation=sqlx::query!("SELECT strategy,instrument,unit,cash_cents,quantity FROM simulation_reservation WHERE account=$1 AND order_id=$2",account,order_id).fetch_optional(&mut **tx).await.map_err(storage)?;
+    let already_terminal = matches!(
+        order.state().0,
+        OrderStatus::Filled | OrderStatus::Cancelled | OrderStatus::Expired | OrderStatus::Rejected
+    );
+    if already_terminal == reservation.is_some() {
+        return Err(invariant());
+    }
+    let strategy = format!("{:032x}", definition.scope().identity().2.get());
+    let instrument = format!("{:032x}", definition.instrument().id().get());
+    let unit = crate::provision::unit(definition.terms().2.parts().0)?;
+    if reservation
+        .as_ref()
+        .is_some_and(|r| r.strategy != strategy || r.instrument != instrument || r.unit != unit)
+    {
+        return Err(invariant());
+    }
     let mut run =
         Run::restore(context.admission.manifest, &root.run_checkpoint).map_err(|_| invariant())?;
     while run.peek().is_some_and(|i| i.available_at() <= step.at) {
@@ -110,102 +126,111 @@ async fn execute(
         .transpose()
         .map_err(|_| invariant())?;
     let event_id = run.next_id().map_err(|_| invariant())?;
-    let kind = if step.at >= deadline {
-        OrderEventKind::Expired
-    } else if order.state().0 == OrderStatus::CancelPending
-        && cancel_due.is_some_and(|due| step.at > due)
-    {
-        OrderEventKind::Cancelled
+    // A scheduled operation may lose to a prior terminal fact or denied
+    // admission. Retain a no-effect decision; never strand the account's next
+    // canonical input or manufacture another lifecycle transition.
+    let kind = if already_terminal {
+        None
     } else {
-        match &step.action {
-            ExecutionAction::RequestCancel => OrderEventKind::CancelRequested,
-            ExecutionAction::ConfirmCancel => {
-                if !cancel_due.is_some_and(|due| step.at >= due) {
-                    return Err(permanent("execution_cancel_early"));
+        Some(if step.at >= deadline {
+            OrderEventKind::Expired
+        } else if order.state().0 == OrderStatus::CancelPending
+            && cancel_due.is_some_and(|due| step.at > due)
+        {
+            OrderEventKind::Cancelled
+        } else {
+            match &step.action {
+                ExecutionAction::RequestCancel => OrderEventKind::CancelRequested,
+                ExecutionAction::ConfirmCancel => {
+                    if !cancel_due.is_some_and(|due| step.at >= due) {
+                        return Err(permanent("execution_cancel_early"));
+                    }
+                    OrderEventKind::Cancelled
                 }
-                OrderEventKind::Cancelled
-            }
-            ExecutionAction::Expire => return Err(permanent("execution_expiry_early")),
-            ExecutionAction::Attempt(ready, artifacts) => {
-                let market = ExecutableLiquidity::from_ready(
-                    &run,
-                    definition,
-                    context.profile,
-                    ready,
-                    artifacts,
-                )
-                .map_err(|_| permanent("execution_evidence"))?;
-                let (key, content, capacity) = market.budget();
-                let run_id = run.manifest_digest().bytes();
-                let key_bytes = key.bytes();
-                let content_bytes = content.bytes();
-                let cap = signed(capacity)?;
-                // Insert/lock one run-wide budget after the account root. No lock
-                // cycle can acquire another account root while holding this row.
-                sqlx::query!("INSERT INTO simulation_liquidity(run,budget,content,capacity,consumed) VALUES($1,$2,$3,$4,0) ON CONFLICT(run,budget) DO NOTHING",&run_id[..],&key_bytes[..],&content_bytes[..],cap).execute(&mut **tx).await.map_err(storage)?;
-                let row=sqlx::query!("SELECT content,capacity,consumed FROM simulation_liquidity WHERE run=$1 AND budget=$2 FOR UPDATE",&run_id[..],&key_bytes[..]).fetch_one(&mut **tx).await.map_err(storage)?;
-                if row.content != content_bytes || row.capacity != cap {
-                    return Err(permanent("execution_liquidity_conflict"));
-                }
-                consumed = Some(unsigned(row.consumed)?);
-                budget_key = Some(key);
-                let mut provenance = b"EA-EXECUTION-EVIDENCE1\0".to_vec();
-                for artifact in artifacts {
-                    provenance.extend(artifact.bytes());
-                }
-                let digest = ArtifactDigest::of(&provenance);
-                evidence = Some(digest);
-                let mut model = LiquidityExecution::new(
-                    market,
-                    unsigned(row.consumed)?,
-                    quote.protection().0,
-                    quote.position().1,
-                )
-                .map_err(|_| invariant())?;
-                let candidate = order
-                    .simulate(
+                ExecutionAction::Expire => return Err(permanent("execution_expiry_early")),
+                ExecutionAction::Attempt(ready, artifacts) => {
+                    let market = ExecutableLiquidity::from_ready(
                         &run,
-                        &mut model,
-                        SimulationStep::new(
-                            OrderEventId::new(event_id),
-                            order.state().1 + 1,
-                            ready,
-                            context.profile.identity(),
-                            digest,
-                            artifacts,
-                        )
-                        .map_err(|_| invariant())?,
+                        definition,
+                        context.profile,
+                        ready,
+                        artifacts,
                     )
-                    .map_err(|_| permanent("execution_model"))?;
-                let kind = candidate.effect().1;
-                liquidity = if let OrderEventKind::Filled(fill) = kind {
-                    Some(fill.evidence().0)
-                } else {
-                    None
-                };
-                kind
+                    .map_err(|_| permanent("execution_evidence"))?;
+                    let (key, content, capacity) = market.budget();
+                    let run_id = run.manifest_digest().bytes();
+                    let key_bytes = key.bytes();
+                    let content_bytes = content.bytes();
+                    let cap = signed(capacity)?;
+                    // Insert/lock one run-wide budget after the account root. No lock
+                    // cycle can acquire another account root while holding this row.
+                    sqlx::query!("INSERT INTO simulation_liquidity(run,budget,content,capacity,consumed) VALUES($1,$2,$3,$4,0) ON CONFLICT(run,budget) DO NOTHING",&run_id[..],&key_bytes[..],&content_bytes[..],cap).execute(&mut **tx).await.map_err(storage)?;
+                    let row=sqlx::query!("SELECT content,capacity,consumed FROM simulation_liquidity WHERE run=$1 AND budget=$2 FOR UPDATE",&run_id[..],&key_bytes[..]).fetch_one(&mut **tx).await.map_err(storage)?;
+                    if row.content != content_bytes || row.capacity != cap {
+                        return Err(permanent("execution_liquidity_conflict"));
+                    }
+                    consumed = Some(unsigned(row.consumed)?);
+                    budget_key = Some(key);
+                    let mut provenance = b"EA-EXECUTION-EVIDENCE1\0".to_vec();
+                    for artifact in artifacts {
+                        provenance.extend(artifact.bytes());
+                    }
+                    let digest = ArtifactDigest::of(&provenance);
+                    evidence = Some(digest);
+                    let mut model = LiquidityExecution::new(
+                        market,
+                        unsigned(row.consumed)?,
+                        quote.protection().0,
+                        quote.position().1,
+                    )
+                    .map_err(|_| invariant())?;
+                    let candidate = order
+                        .simulate(
+                            &run,
+                            &mut model,
+                            SimulationStep::new(
+                                OrderEventId::new(event_id),
+                                order.state().1 + 1,
+                                ready,
+                                context.profile.identity(),
+                                digest,
+                                artifacts,
+                            )
+                            .map_err(|_| invariant())?,
+                        )
+                        .map_err(|_| permanent("execution_model"))?;
+                    let kind = candidate.effect().1;
+                    liquidity = if let OrderEventKind::Filled(fill) = kind {
+                        Some(fill.evidence().0)
+                    } else {
+                        None
+                    };
+                    kind
+                }
             }
-        }
+        })
     };
-    order
-        .apply(
-            OrderEvent::new(
-                OrderEventId::new(event_id),
-                definition.scope().identity().3,
-                order.state().1 + 1,
-                step.at,
-                kind,
+    if let Some(kind) = kind {
+        order
+            .apply(
+                OrderEvent::new(
+                    OrderEventId::new(event_id),
+                    definition.scope().identity().3,
+                    order.state().1 + 1,
+                    step.at,
+                    kind,
+                )
+                .map_err(|_| invariant())?,
             )
-            .map_err(|_| invariant())?,
-        )
-        .map_err(|_| permanent("execution_lifecycle"))?;
+            .map_err(|_| permanent("execution_lifecycle"))?;
+    }
     let mut totals = previous;
     let mut postings = [0_i128; 4];
     let mut filled = 0_u64;
     if let Some(proposal) = liquidity {
         let (quantity, price) = proposal.values();
         filled = quantity.parts().1;
-        let position=sqlx::query!("SELECT i.quantity,c.cost_cents FROM simulation_inventory i JOIN simulation_position_cost c USING(account,strategy,instrument,unit) WHERE i.account=$1 AND i.strategy=$2 AND i.instrument=$3 AND i.unit=$4",account,reservation.strategy,reservation.instrument,reservation.unit).fetch_one(&mut **tx).await.map_err(storage)?;
+        let position=sqlx::query!("SELECT i.quantity,c.cost_cents FROM simulation_inventory i JOIN simulation_position_cost c USING(account,strategy,instrument,unit) WHERE i.account=$1 AND i.strategy=$2 AND i.instrument=$3 AND i.unit=$4",account,strategy,instrument,unit).fetch_one(&mut **tx).await.map_err(storage)?;
         let position =
             PositionCost::new(unsigned(position.quantity)?, unsigned(position.cost_cents)?)
                 .map_err(|_| invariant())?;
@@ -225,11 +250,7 @@ async fn execute(
         super::persistence::position(
             tx,
             account,
-            (
-                &reservation.strategy,
-                &reservation.instrument,
-                &reservation.unit,
-            ),
+            (&strategy, &instrument, unit),
             position,
             postings,
         )
@@ -259,42 +280,44 @@ async fn execute(
         .ok_or_else(invariant)?;
     let terminal = matches!(
         order.state().0,
-        OrderStatus::Filled | OrderStatus::Cancelled | OrderStatus::Expired
+        OrderStatus::Filled | OrderStatus::Cancelled | OrderStatus::Expired | OrderStatus::Rejected
     );
-    let spent = if definition.terms().0 == OrderSide::BuyToOpen {
-        totals
-            .2
-            .checked_sub(previous.2)
-            .and_then(|n| n.checked_add(totals.3.checked_sub(previous.3)?))
-            .ok_or_else(invariant)?
-    } else {
-        totals.3.checked_sub(previous.3).ok_or_else(invariant)?
-    };
-    let held = signed(
-        unsigned(reservation.cash_cents)?
-            .checked_sub(spent)
-            .ok_or_else(invariant)?,
-    )?;
-    let inventory = if definition.terms().0 == OrderSide::SellToClose {
-        signed(
-            unsigned(reservation.quantity)?
-                .checked_sub(filled)
+    if let Some(reservation) = &reservation {
+        let spent = if definition.terms().0 == OrderSide::BuyToOpen {
+            totals
+                .2
+                .checked_sub(previous.2)
+                .and_then(|n| n.checked_add(totals.3.checked_sub(previous.3)?))
+                .ok_or_else(invariant)?
+        } else {
+            totals.3.checked_sub(previous.3).ok_or_else(invariant)?
+        };
+        let held = signed(
+            unsigned(reservation.cash_cents)?
+                .checked_sub(spent)
                 .ok_or_else(invariant)?,
-        )?
-    } else {
-        0
-    };
-    if terminal {
-        sqlx::query!(
-            "DELETE FROM simulation_reservation WHERE account=$1 AND order_id=$2",
-            account,
-            order_id
-        )
-        .execute(&mut **tx)
-        .await
-        .map_err(storage)?;
-    } else {
-        sqlx::query!("UPDATE simulation_reservation SET cash_cents=$3,quantity=$4 WHERE account=$1 AND order_id=$2",account,order_id,held,inventory).execute(&mut **tx).await.map_err(storage)?;
+        )?;
+        let inventory = if definition.terms().0 == OrderSide::SellToClose {
+            signed(
+                unsigned(reservation.quantity)?
+                    .checked_sub(filled)
+                    .ok_or_else(invariant)?,
+            )?
+        } else {
+            0
+        };
+        if terminal {
+            sqlx::query!(
+                "DELETE FROM simulation_reservation WHERE account=$1 AND order_id=$2",
+                account,
+                order_id
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(storage)?;
+        } else {
+            sqlx::query!("UPDATE simulation_reservation SET cash_cents=$3,quantity=$4 WHERE account=$1 AND order_id=$2",account,order_id,held,inventory).execute(&mut **tx).await.map_err(storage)?;
+        }
     }
     let risk = super::persistence::risk(tx, context, &root.risk_checkpoint, step.at).await?;
     let journal = order.journal_bytes(quote.fingerprint());
@@ -304,12 +327,13 @@ async fn execute(
     let fees = signed(totals.3)?;
     sqlx::query!("INSERT INTO simulation_execution_order(account,order_id,journal,exact_cents,filled_units,gross_cents,fees_cents) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(account,order_id) DO UPDATE SET journal=EXCLUDED.journal,exact_cents=EXCLUDED.exact_cents,filled_units=EXCLUDED.filled_units,gross_cents=EXCLUDED.gross_cents,fees_cents=EXCLUDED.fees_cents",account,order_id,journal,exact,units,gross,fees).execute(&mut **tx).await.map_err(storage)?;
     let status = match kind {
-        OrderEventKind::Filled(_) if terminal => "filled",
-        OrderEventKind::Filled(_) => "partial_fill",
-        OrderEventKind::NoFill { .. } => "no_fill",
-        OrderEventKind::CancelRequested => "cancel_pending",
-        OrderEventKind::Cancelled => "cancelled",
-        OrderEventKind::Expired => "expired",
+        None => "already_terminal",
+        Some(OrderEventKind::Filled(_)) if terminal => "filled",
+        Some(OrderEventKind::Filled(_)) => "partial_fill",
+        Some(OrderEventKind::NoFill { .. }) => "no_fill",
+        Some(OrderEventKind::CancelRequested) => "cancel_pending",
+        Some(OrderEventKind::Cancelled) => "cancelled",
+        Some(OrderEventKind::Expired) => "expired",
         _ => return Err(invariant()),
     };
     let evidence = evidence.map(|e| hex(&e.bytes()));
@@ -335,9 +359,9 @@ async fn execute(
         (filled, debits),
         (&model, evidence.as_deref()),
         (
-            &reservation.strategy,
-            &reservation.instrument,
-            &reservation.unit,
+            &strategy,
+            &instrument,
+            unit,
             if definition.terms().0 == OrderSide::BuyToOpen {
                 "buy_to_open"
             } else {

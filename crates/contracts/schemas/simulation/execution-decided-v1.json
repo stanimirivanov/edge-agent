@@ -9,7 +9,7 @@
     "request": {"$ref": "urn:edgeagent:schema:simulation:execute-step:v1"},
     "order": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "^0+$"}},
     "order_revision": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
-    "status": {"enum": ["filled", "partial_fill", "no_fill", "cancel_pending", "cancelled", "expired"]},
+    "status": {"enum": ["filled", "partial_fill", "no_fill", "cancel_pending", "cancelled", "expired", "already_terminal"]},
     "filled_units": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
     "cash_delta_cents": {"type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807},
     "fee_delta_cents": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},

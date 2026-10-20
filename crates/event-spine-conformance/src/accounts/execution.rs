@@ -32,26 +32,46 @@ impl Scenario {
         let second = self.quotes.get(1).ok_or("second quote")?.fingerprint();
         let mut steps = Vec::new();
         for (sequence, second_at) in [(3, 1), (4, 2), (5, 2), (6, 2), (7, 3), (8, 4), (9, 100)] {
+            let second_at = if self.case == "execution-full" && sequence == 4 {
+                1
+            } else {
+                second_at
+            };
             let quote = if sequence == 6 || sequence == 9 {
                 second
             } else {
                 first
             };
-            let action = match sequence {
-                5 => ExecutionAction::RequestCancel,
-                8 => ExecutionAction::ConfirmCancel,
-                9 => ExecutionAction::Expire,
+            let (tracker, observation, artifact) = if second_at >= 2 {
+                (
+                    self.following
+                        .as_ref()
+                        .ok_or("post-activation evidence missing")?,
+                    2,
+                    ArtifactDigest::of(b"post-activation-evidence-v1"),
+                )
+            } else {
+                (
+                    &self.tracker,
+                    1,
+                    ArtifactDigest::of(b"invented-share-trade-v1"),
+                )
+            };
+            let action = match (self.case == "execution-full", sequence) {
+                (true, 4) | (false, 5) => ExecutionAction::RequestCancel,
+                (true, 7) | (_, 8) => ExecutionAction::ConfirmCancel,
+                (_, 9) => ExecutionAction::Expire,
                 _ => ExecutionAction::Attempt(
                     self.readiness.check(
                         at(second_at)?,
                         &[EvidenceInput::new(
-                            &self.tracker,
+                            tracker,
                             FeedEpoch::new(1)?,
-                            ObservationId::new(1)?,
+                            ObservationId::new(observation)?,
                             ObservationRevision::new(1)?,
                         )],
                     )?,
-                    vec![ArtifactDigest::of(b"invented-share-trade-v1")],
+                    vec![artifact],
                 ),
             };
             steps.push(ExecutionStep::new(sequence, quote, at(second_at)?, action));
@@ -120,5 +140,30 @@ impl Scenario {
             },
             &request,
         )?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_execution_fixture_has_a_valid_frozen_plan_without_a_database() -> Result<(), Error> {
+        for case in [
+            "execution",
+            "execution-sell",
+            "execution-options",
+            "execution-full",
+            "execution-denied",
+        ] {
+            let scenario =
+                Scenario::new(case).map_err(|error| format!("scenario {case}: {error}"))?;
+            let admission = scenario
+                .context(1)
+                .map_err(|error| format!("admission {case}: {error}"))?;
+            scenario
+                .execution(&admission)
+                .map_err(|error| format!("execution {case}: {error}"))?;
+        }
+        Ok(())
     }
 }

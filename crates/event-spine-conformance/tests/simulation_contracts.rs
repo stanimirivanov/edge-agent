@@ -15,7 +15,7 @@ fn published_execution_schemas_retain_immutable_content_and_identity() {
         ),
         (
             DECISION_SCHEMA,
-            "b81ddfef2b47f01ff4b958ece36c12318645fc4a87c12dbd130e0dd48437333d",
+            "8e5271bad98be9b0b4f742df9ac0c13c39e4db19fc9e8654fff0963a6d83c7a9",
         ),
     ] {
         let normalized = schema.replace("\r\n", "\n");

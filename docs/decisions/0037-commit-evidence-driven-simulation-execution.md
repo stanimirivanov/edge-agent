@@ -53,11 +53,16 @@ in the remaining lot. Cash, position cost, realized P/L expense and fee expense
 postings must sum to zero. Initial book costs are explicit, never inferred.
 
 Submission/cancellation delays use virtual time only. A pending cancellation stays
+durable. Prints/snapshots predating submission activation never become eligible
+merely through delayed receipt or reassessment. The cancellation request remains
 in the retained journal. Its confirmation cannot precede the configured due time;
 equal-time canonical sequence determines the winner. After its due time a later
 operation confirms it rather than filling; deadline expiry takes precedence.
 No-fill attempts are retained too. Exact retries return before checking current
-revisions; changed requests conflict. Root locking serializes all account writers.
+revisions. Scheduled operations after a terminal fact or denied admission retain
+zero-posting `already_terminal` completions, consuming account input without
+inventing a lifecycle revision, hold or liquidity. Changed requests conflict.
+Root locking serializes all account writers.
 
 Partial fills consume cash and inventory holds; only terminal facts release the
 remainder. Conservative risk carry-forward never reduces gross on sale or refreshes

@@ -25,6 +25,7 @@ pub struct Scenario {
     case: String,
     tracker: ContinuityTracker,
     readiness: ReadinessPolicy,
+    following: Option<ContinuityTracker>,
 }
 /// Exact invented virtual time; no wall-clock reads.
 pub fn at(second: i64) -> Result<PreciseInstant, Error> {
@@ -51,10 +52,12 @@ impl Scenario {
                 | "execution"
                 | "execution-sell"
                 | "execution-options"
+                | "execution-full"
+                | "execution-denied"
         ) {
             return Err("unknown synthetic case".into());
         }
-        let (manifest, tracker, readiness) = manifest(case)?;
+        let (manifest, tracker, readiness, following) = manifest(case)?;
         let session = RiskSession::new(
             SessionDate::new(1970, 1, 1)?,
             EvidenceInterval::new(at(0)?, at(100)?)?,
@@ -113,7 +116,7 @@ impl Scenario {
                         OrderQuantity::shares(if case == "inventory" {
                             4
                         } else if case.starts_with("execution") {
-                            2
+                            if case == "execution-full" { 1 } else { 2 }
                         } else {
                             1
                         })?,
@@ -157,6 +160,7 @@ impl Scenario {
             case: case.into(),
             tracker,
             readiness,
+            following,
         })
     }
     /// Bind a test principal outside the wire payload; only principal 1 is seeded.
@@ -164,7 +168,7 @@ impl Scenario {
         let slots = if self.case.starts_with("execution") {
             vec![
                 (3, at(1)?),
-                (4, at(2)?),
+                (4, at(if self.case == "execution-full" { 1 } else { 2 })?),
                 (5, at(2)?),
                 (6, at(2)?),
                 (7, at(3)?),
@@ -186,7 +190,9 @@ impl Scenario {
     }
     /// Explicit invented cash, not a production account default.
     pub fn funding(&self) -> UsdCents {
-        UsdCents::new(if self.case.starts_with("execution") {
+        UsdCents::new(if self.case == "execution-denied" {
+            7_000
+        } else if self.case.starts_with("execution") {
             30_000
         } else if self.case == "account-risk" {
             100_000
@@ -267,7 +273,17 @@ impl Scenario {
         )?)
     }
 }
-fn manifest(case: &str) -> Result<(RunManifest, ContinuityTracker, ReadinessPolicy), Error> {
+fn manifest(
+    case: &str,
+) -> Result<
+    (
+        RunManifest,
+        ContinuityTracker,
+        ReadinessPolicy,
+        Option<ContinuityTracker>,
+    ),
+    Error,
+> {
     let contract = EvidenceContract::new(
         if case == "execution-options" {
             EvidenceKind::OptionSnapshot
@@ -319,6 +335,27 @@ fn manifest(case: &str) -> Result<(RunManifest, ContinuityTracker, ReadinessPoli
             )?)
         }),
     )?;
+    let following_observation = if case.starts_with("execution") {
+        let value = if let Some(ObservationValue::OptionQuote(quote)) = observation.value() {
+            let (bid, ask) = quote.sides();
+            Some(ObservationValue::OptionQuote(OptionQuoteSnapshot::new(
+                &option()?,
+                QuoteSide::new(bid.values().0, bid.values().1, at(2)?),
+                QuoteSide::new(ask.values().0, ask.values().1, at(2)?),
+            )?))
+        } else {
+            observation.value()
+        };
+        Some(CanonicalObservation::new(
+            observation.context().clone(),
+            ObservationVersion::new(ObservationId::new(2)?, ObservationRevision::new(1)?, None)?,
+            EvidenceTimes::new(at(2)?, None, None, at(2)?)?,
+            None,
+            value,
+        )?)
+    } else {
+        None
+    };
     let mut tracker = ContinuityTracker::new(
         FeedScope::new(FeedId::new(1)?, provider, transform, session),
         epoch,
@@ -354,14 +391,49 @@ fn manifest(case: &str) -> Result<(RunManifest, ContinuityTracker, ReadinessPoli
             ObservationRevision::new(1)?,
         )],
     )?;
+    let mut inputs =
+        FrozenInput::from_ready(&ready, &[ArtifactDigest::of(b"invented-share-trade-v1")])?;
+    let following = if let Some(observation) = following_observation {
+        let mut next = ContinuityTracker::new(
+            FeedScope::new(FeedId::new(1)?, provider, transform, session),
+            epoch,
+            ContinuityMode::Snapshots,
+            ContinuityPolicy::new(
+                rules()?,
+                4,
+                1,
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+            )?,
+            at(2)?,
+        )?;
+        next.ingest(epoch, at(2)?, observation)?;
+        next.heartbeat(epoch, at(2)?, None)?;
+        let ready = policy.check(
+            at(2)?,
+            &[EvidenceInput::new(
+                &next,
+                epoch,
+                ObservationId::new(2)?,
+                ObservationRevision::new(1)?,
+            )],
+        )?;
+        inputs.extend(FrozenInput::from_ready(
+            &ready,
+            &[ArtifactDigest::of(b"post-activation-evidence-v1")],
+        )?);
+        Some(next)
+    } else {
+        None
+    };
     let manifest = RunManifest::new(
         at(0)?,
         ArtifactDigest::of(b"p08-synthetic-code-v1"),
         ArtifactDigest::of(case.as_bytes()),
         [0; 32],
-        &FrozenInput::from_ready(&ready, &[ArtifactDigest::of(b"invented-share-trade-v1")])?,
+        &inputs,
     )?;
-    Ok((manifest, tracker, policy))
+    Ok((manifest, tracker, policy, following))
 }
 fn option() -> Result<ReferenceVersion<OptionSpecification>, Error> {
     let utc = |second: i64| UtcInstant::from_unix_millis(second * 1000);

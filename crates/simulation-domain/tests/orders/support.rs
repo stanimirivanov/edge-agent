@@ -27,6 +27,7 @@ pub fn quantity(value: u64) -> TestResult<OrderQuantity> {
 pub struct Evidence {
     tracker: ContinuityTracker,
     policy: ReadinessPolicy,
+    initial: i64,
 }
 impl Evidence {
     pub fn new(
@@ -34,6 +35,15 @@ impl Evidence {
         value: ObservationValue,
         kind: EvidenceKind,
         market: MarketScope,
+    ) -> TestResult<Self> {
+        Self::new_at(instrument, value, kind, market, 0)
+    }
+    pub fn new_at(
+        instrument: u128,
+        value: ObservationValue,
+        kind: EvidenceKind,
+        market: MarketScope,
+        source_at: i64,
     ) -> TestResult<Self> {
         let rules = model_identity()?.0;
         let contract = EvidenceContract::new(kind, market, rules, TimestampPrecision::Nanoseconds)?;
@@ -49,7 +59,7 @@ impl Evidence {
         let observation = CanonicalObservation::new(
             ObservationContext::new(instrument, provider, transformation, session, &[])?,
             ObservationVersion::new(ObservationId::new(1)?, ObservationRevision::new(1)?, None)?,
-            EvidenceTimes::new(at(0)?, None, None, at(0)?)?,
+            EvidenceTimes::new(at(source_at)?, None, None, at(source_at)?)?,
             None,
             Some(value),
         )?;
@@ -64,10 +74,10 @@ impl Evidence {
                 Duration::from_secs(20),
                 Duration::from_secs(20),
             )?,
-            at(0)?,
+            at(source_at)?,
         )?;
-        tracker.ingest(FeedEpoch::new(1)?, at(0)?, observation)?;
-        tracker.heartbeat(FeedEpoch::new(1)?, at(1)?, None)?;
+        tracker.ingest(FeedEpoch::new(1)?, at(source_at)?, observation)?;
+        tracker.heartbeat(FeedEpoch::new(1)?, at(source_at + 1)?, None)?;
         let policy = ReadinessPolicy::new(
             rules,
             Duration::from_secs(20),
@@ -79,7 +89,11 @@ impl Evidence {
                 ContinuityRequirement::Snapshots,
             )],
         )?;
-        Ok(Self { tracker, policy })
+        Ok(Self {
+            tracker,
+            policy,
+            initial: source_at + 1,
+        })
     }
     pub fn trade() -> TestResult<Self> {
         Self::new(
@@ -93,7 +107,7 @@ impl Evidence {
         )
     }
     pub fn ready(&self) -> TestResult<ReadyEvidence<'_>> {
-        self.ready_at(1)
+        self.ready_at(self.initial)
     }
     pub fn ready_at(&self, second: i64) -> TestResult<ReadyEvidence<'_>> {
         Ok(self.policy.check(
