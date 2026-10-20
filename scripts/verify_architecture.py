@@ -92,6 +92,10 @@ XTASK_DEPENDENCIES = frozenset(
 )
 
 PACKAGE_RULES = {
+    "crates/simulation-domain": PackageRule(
+        "edgeagent-simulation-domain", "lib",
+        frozenset({"edgeagent-market-data-domain", "rand_chacha", "sha2"}),
+    ),
     "crates/contracts": PackageRule(CONTRACTS, "lib", CONTRACT_DEPENDENCIES),
     "crates/event-spine-conformance": PackageRule(
         CONFORMANCE,

@@ -11,6 +11,7 @@ members = [
     "crates/outbox-postgres",
     "crates/outbox-relay",
     "crates/service-runtime",
+    "crates/simulation-domain",
     "crates/telemetry",
     "crates/xtask",
     "services/audit-projector",
@@ -36,6 +37,7 @@ chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
 chrono-tz = { version = "=0.10.4", default-features = false, features = ["std"] }
 cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-features = false }
 edgeagent-contracts = { path = "crates/contracts" }
+edgeagent-market-data-domain = { path = "crates/market-data-domain" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }
 edgeagent-messaging = { path = "crates/messaging" }
 edgeagent-messaging-nats = { path = "crates/messaging-nats" }
@@ -54,6 +56,8 @@ percent-encoding = { version = "=2.3.2", default-features = false }
 pulldown-cmark = { version = "=0.13.4", default-features = false }
 prost = { version = "=0.14.4", default-features = false, features = ["std"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["blocking"] }
+rand_chacha = { version = "=0.10.0", default-features = false }
+sha2 = { version = "=0.11.1", default-features = false }
 schemars = { version = "=1.2.3", default-features = false, features = ["derive", "std"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
