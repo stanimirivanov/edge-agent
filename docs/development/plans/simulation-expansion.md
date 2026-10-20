@@ -10,6 +10,10 @@
 
 ## Ordered slices
 
+P05's implemented finite-run contract is documented in
+[deterministic runs](../deterministic-runs.md). Application-owned atomic checkpoint
+storage and P07/P09/P13 consumers remain separate work.
+
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The
 [roadmap](../../roadmap/milestones.md) owns milestone outcomes. These slices

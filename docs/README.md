@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P05 manifests, virtual time, deterministic IDs/RNG and restart state, read
+[deterministic runs](development/deterministic-runs.md) and
+[ADR-0033](decisions/0033-freeze-deterministic-run-continuations.md).
+
 | Task or changed area | Read before changing it | Verify or consult as needed |
 |:--|:--|:--|
 | Product behavior, vocabulary, evidence meaning, or non-goals | [Product vision](product/vision.md) | [System architecture](architecture/system-overview.md), relevant [ADRs](decisions/README.md) |

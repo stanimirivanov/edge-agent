@@ -19,6 +19,7 @@
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
+| `edgeagent-simulation-domain` | Domain | Frozen input order, virtual clock and reproducible continuation; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
 | `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
@@ -48,6 +49,7 @@ dependencies between workspace packages:
 |---|---|
 | `edgeagent-contracts` | None |
 | `edgeagent-market-data-domain` | None |
+| `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
