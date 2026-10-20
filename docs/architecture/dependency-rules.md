@@ -26,6 +26,7 @@
 | `edgeagent-inbox-handler` | Application | Persistence-neutral policy for validation, atomic processing, retry, quarantine, and settlement |
 | `edgeagent-outbox-relay` | Application | Persistence-neutral publication, lease, retry, and terminal-quarantine policy |
 | `edgeagent-inbox-postgres` | Adapter | PostgreSQL transactions and durable inbox, quarantine, and replay evidence |
+| `edgeagent-simulation-postgres` | Adapter | ExecutionSimulator-owned atomic account admission and synthetic reservations through the existing inbox transaction |
 | `edgeagent-outbox-postgres` | Adapter | PostgreSQL outbox persistence, leasing, outcomes, quarantine, and replay evidence |
 | `edgeagent-messaging-nats` | Adapter | NATS JetStream publication, pull delivery, and confirmed settlement |
 | `edgeagent-service-runtime` | Runtime support | Common process bootstrap and component-description behavior |
@@ -50,12 +51,13 @@ dependencies between workspace packages:
 | `edgeagent-contracts` | None |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
-| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-telemetry` |
+| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-inbox-handler` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
 | `edgeagent-outbox-relay` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
 | `edgeagent-inbox-postgres` | `edgeagent-contracts`, `edgeagent-messaging` |
+| `edgeagent-simulation-postgres` | `edgeagent-contracts`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-outbox-postgres`, `edgeagent-simulation-domain` |
 | `edgeagent-outbox-postgres` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-messaging-nats` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-service-runtime` | `edgeagent-contracts` |

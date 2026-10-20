@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P08 atomic account admission and synthetic reservations, read
+[account admission](development/account-admission.md) and
+[ADR-0036](decisions/0036-serialize-synthetic-account-admission-and-reservations.md).
+
 For P07 dry-run order facts, cancellation/expiry races and the simulation port, read
 [dry-run orders](development/dry-run-orders.md) and
 [ADR-0035](decisions/0035-apply-dry-run-order-lifecycles-from-retained-facts.md).

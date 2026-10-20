@@ -38,7 +38,9 @@ const COMPOSE_PSQL: &[&str] = &[
 pub(super) fn run() -> ExitCode {
     match verify(super::workspace_root()) {
         Ok(()) => {
-            println!("SQLx metadata matches the isolated local inbox and outbox schema");
+            println!(
+                "SQLx metadata matches the isolated local inbox, outbox and simulation schema"
+            );
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -86,6 +88,10 @@ fn verify(root: &Path) -> Result<(), String> {
         println!("Applying inbox migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
+    let simulation =
+        fs::read(root.join("crates/simulation-postgres/migrations/0001_account_admission.sql"))
+            .map_err(|error| format!("cannot read simulation migration: {error}"))?;
+    apply_inbox_migration(root, &simulation)?;
     // The synthetic process composition also uses checked macros. This schema
     // exists only in conformance tooling, never in a product service migration.
     let conformance =

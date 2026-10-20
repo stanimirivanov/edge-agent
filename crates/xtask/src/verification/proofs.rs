@@ -12,6 +12,16 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const ACCOUNT_ADMISSION: Target = Target {
+    package: "edgeagent-event-spine-conformance",
+    name: "account_admission",
+    identities: &[
+        "competing_processes_cannot_overspend_cash_inventory_or_option_contracts",
+        "rollback_process_crash_restart_and_lost_ack_preserve_one_effect",
+        "aggregate_strategy_risk_and_breach_latches_survive_new_workers",
+        "unauthorized_gapped_stale_and_tampered_quotes_leave_no_financial_state",
+    ],
+};
 const EVENT_SPINE: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
     Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
@@ -177,6 +187,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "account-admission-processes",
+            &ACCOUNT_ADMISSION,
+            POSTGRES,
+            "Independent workers and restricted database credentials prove synthetic cash/inventory/options reservations, aggregate risk, sticky breach checkpoints, atomic rollback, actual process death and committed duplicate recovery; not qualified pricing, fills, HA or live execution.",
+        ),
         suite(
             "event-spine-processes",
             &PROCESS_ACCEPTANCE,
@@ -439,6 +455,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         NATS_LIFECYCLE,
         REGISTRY_TOPOLOGY,
         PROCESS_ACCEPTANCE,
+        ACCOUNT_ADMISSION,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -458,6 +475,36 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 mod tests {
     use super::*;
     use std::{collections::BTreeSet, error::Error};
+
+    #[test]
+    fn account_admission_gate_requires_postgres_and_each_named_process_proof() -> Result<(), String>
+    {
+        let check = checks()
+            .into_iter()
+            .find(|check| check.id == "account-admission-processes")
+            .ok_or("account gate missing")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
+        ));
+        assert!(check.command.args.contains(&"account_admission"));
+        let discovery = check.discovery.ok_or("account discovery missing")?;
+        assert_eq!(discovery.expected.len(), 4);
+        let complete = discovery
+            .expected
+            .iter()
+            .map(|name| format!("{name}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+        for name in &discovery.expected {
+            let removed = complete.replace(&format!("{name}: test\n"), "");
+            assert!(
+                super::super::runner::verify_discovery(&discovery, removed.as_bytes()).is_err()
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn process_fixture_admission_is_bounded_without_filtering_the_suite() -> Result<(), String> {
@@ -492,7 +539,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 28);
+        assert_eq!(checks.len(), 29);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -507,8 +554,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 62);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 62);
+        assert_eq!(inventory.len(), 66);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 66);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

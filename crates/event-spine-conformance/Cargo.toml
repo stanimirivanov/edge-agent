@@ -11,6 +11,9 @@ rust-version.workspace = true
 [dependencies]
 async-nats.workspace = true
 edgeagent-contracts.workspace = true
+edgeagent-market-data-domain.workspace = true
+edgeagent-simulation-domain.workspace = true
+edgeagent-simulation-postgres.workspace = true
 edgeagent-inbox-handler = { path = "../inbox-handler" }
 edgeagent-inbox-postgres.workspace = true
 edgeagent-messaging.workspace = true

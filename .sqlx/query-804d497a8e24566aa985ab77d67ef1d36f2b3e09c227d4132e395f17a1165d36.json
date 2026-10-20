@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(SUM(quantity),0)::BIGINT AS \"quantity!\" FROM simulation_reservation WHERE account=$1 AND strategy=$2 AND instrument=$3 AND unit=$4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quantity!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "804d497a8e24566aa985ab77d67ef1d36f2b3e09c227d4132e395f17a1165d36"
+}

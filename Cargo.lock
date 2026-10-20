@@ -549,10 +549,13 @@ dependencies = [
  "edgeagent-contracts",
  "edgeagent-inbox-handler",
  "edgeagent-inbox-postgres",
+ "edgeagent-market-data-domain",
  "edgeagent-messaging",
  "edgeagent-messaging-nats",
  "edgeagent-outbox-postgres",
  "edgeagent-outbox-relay",
+ "edgeagent-simulation-domain",
+ "edgeagent-simulation-postgres",
  "edgeagent-telemetry",
  "futures-util",
  "jsonschema",
@@ -699,6 +702,21 @@ dependencies = [
  "edgeagent-market-data-domain",
  "rand_chacha 0.10.0",
  "sha2 0.11.1",
+]
+
+[[package]]
+name = "edgeagent-simulation-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
+ "edgeagent-market-data-domain",
+ "edgeagent-messaging",
+ "edgeagent-outbox-postgres",
+ "edgeagent-simulation-domain",
+ "serde_json",
+ "sqlx",
 ]
 
 [[package]]

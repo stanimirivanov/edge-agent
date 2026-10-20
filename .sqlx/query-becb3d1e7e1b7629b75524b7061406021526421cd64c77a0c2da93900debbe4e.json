@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT configuration,revision,input_revision,cash_cents,risk_checkpoint,run_checkpoint FROM simulation_account WHERE account=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "configuration",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "configuration"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "input_revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "input_revision"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "cash_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "cash_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "risk_checkpoint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "risk_checkpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "run_checkpoint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "run_checkpoint"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "becb3d1e7e1b7629b75524b7061406021526421cd64c77a0c2da93900debbe4e"
+}

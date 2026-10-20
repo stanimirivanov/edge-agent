@@ -22,6 +22,16 @@ SPEC.loader.exec_module(policy)
 
 
 class VerifySqlxQueryPolicyTests(unittest.TestCase):
+    def test_account_adapter_retains_the_compiler_proven_api_bans(self) -> None:
+        actual = tomllib.loads((ROOT / "crates/simulation-postgres/clippy.toml").read_text(encoding="utf-8"))
+        policy.validate_policy(actual)
+        for field in ["disallowed-methods", "disallowed-macros"]:
+            for entry in actual[field]:
+                changed = deepcopy(actual)
+                changed[field].remove(entry)
+                with self.subTest(path=entry["path"]), self.assertRaises(RuntimeError):
+                    policy.validate_policy(changed)
+
     def test_fixture_uses_workspace_sqlx_version_and_features(self) -> None:
         original = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
         fixture = tomllib.loads(policy.fixture_manifest(ROOT))

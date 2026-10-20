@@ -8,6 +8,7 @@ use std::fmt::{Display, Formatter};
 mod message_type;
 mod messaging;
 mod routing;
+pub mod simulation;
 
 pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};
 pub use routing::{

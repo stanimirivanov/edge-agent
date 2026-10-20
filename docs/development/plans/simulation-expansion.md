@@ -15,11 +15,11 @@ P05's implemented finite-run contract is documented in
 storage and P07/P09/P13 consumers remain separate work.
 
 P06's pure policy and recovery contract is documented in
-[simulation risk](../simulation-risk.md). P08 still owns authoritative account reads,
+[simulation risk](../simulation-risk.md). P08 supplies authoritative account reads,
 atomic risk/reservation enforcement, persistence and multi-process qualification.
 
 P07's pure order lifecycle and proposal contract is documented in
-[dry-run orders](../dry-run-orders.md). P08 owns funded admission and product wire
+[dry-run orders](../dry-run-orders.md). P08 supplies funded admission and product wire
 integration; P09 qualifies models and ledger effects. No simulator service path is
 activated by this foundation, and M07 is not complete.
 
@@ -70,8 +70,9 @@ vendor chosen by the superseded ADR. Do not silently expand daily-v1 semantics.
 ## Harness and unresolved qualification
 
 Every implementation PR runs `cargo xtask verify` and adds focused tests. P08
-needs a new protected real account/process qualification gate in the existing
-runner; no such gate exists today, and M02 proof discovery is not a substitute.
+adds the protected `account-admission-processes` gate to the existing runner and
+local-platform CI profile. It proves synthetic-only reservations and recovery;
+P09 still owns qualified quote/fill/fee/ledger algorithms and service activation.
 Provider selection/rights, authoritative index and settlement sources, concrete
 freshness/skew/resource limits and product-specific cutoff/rounding rules remain
 qualification inputs. Unknown values fail closed, never become guessed defaults.

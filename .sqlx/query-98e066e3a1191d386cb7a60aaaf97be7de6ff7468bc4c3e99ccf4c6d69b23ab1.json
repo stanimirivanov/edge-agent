@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT strategy,COALESCE(SUM(cash_cents),0)::BIGINT AS \"cash!\",COUNT(*)::BIGINT AS \"orders!\" FROM simulation_reservation WHERE account=$1 GROUP BY strategy ORDER BY strategy LIMIT 33",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_reservation",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cash!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "orders!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "98e066e3a1191d386cb7a60aaaf97be7de6ff7468bc4c3e99ccf4c6d69b23ab1"
+}

@@ -6,6 +6,7 @@ mod input;
 mod manifest;
 mod run;
 
+pub mod admission;
 pub mod orders;
 pub mod risk;
 

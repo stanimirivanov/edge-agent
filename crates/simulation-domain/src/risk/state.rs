@@ -4,6 +4,8 @@ use super::{
 };
 use edgeagent_market_data_domain::{PreciseInstant, SemanticReference};
 
+mod checkpoint;
+
 #[cfg(test)]
 mod tests;
 

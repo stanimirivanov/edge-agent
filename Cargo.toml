@@ -12,6 +12,7 @@ members = [
     "crates/outbox-relay",
     "crates/service-runtime",
     "crates/simulation-domain",
+    "crates/simulation-postgres",
     "crates/telemetry",
     "crates/xtask",
     "services/audit-projector",
@@ -38,6 +39,8 @@ chrono-tz = { version = "=0.10.4", default-features = false, features = ["std"] 
 cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-features = false }
 edgeagent-contracts = { path = "crates/contracts" }
 edgeagent-market-data-domain = { path = "crates/market-data-domain" }
+edgeagent-simulation-domain = { path = "crates/simulation-domain" }
+edgeagent-simulation-postgres = { path = "crates/simulation-postgres" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }
 edgeagent-messaging = { path = "crates/messaging" }
 edgeagent-messaging-nats = { path = "crates/messaging-nats" }

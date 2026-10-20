@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod accounts;
 mod contracts;
 mod error;
 pub mod replay;

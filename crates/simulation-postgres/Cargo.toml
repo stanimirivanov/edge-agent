@@ -1,0 +1,22 @@
+[package]
+name = "edgeagent-simulation-postgres"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+chrono.workspace = true
+edgeagent-contracts.workspace = true
+edgeagent-inbox-postgres.workspace = true
+edgeagent-market-data-domain.workspace = true
+edgeagent-messaging.workspace = true
+edgeagent-outbox-postgres.workspace = true
+edgeagent-simulation-domain.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+
+[lints]
+workspace = true

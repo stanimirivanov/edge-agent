@@ -4,6 +4,20 @@ const NONE: &[&str] = &[];
 
 pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
+        name: "edgeagent-simulation-postgres",
+        role: CrateRole::Adapter,
+        normal: &[
+            "edgeagent-contracts",
+            "edgeagent-inbox-postgres",
+            "edgeagent-market-data-domain",
+            "edgeagent-messaging",
+            "edgeagent-outbox-postgres",
+            "edgeagent-simulation-domain",
+        ],
+        development: NONE,
+        build: NONE,
+    },
+    PackagePolicy {
         name: "edgeagent-simulation-domain",
         role: CrateRole::Domain,
         normal: &["edgeagent-market-data-domain"],
@@ -28,6 +42,9 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         name: "edgeagent-event-spine-conformance",
         role: CrateRole::Tooling,
         normal: &[
+            "edgeagent-market-data-domain",
+            "edgeagent-simulation-domain",
+            "edgeagent-simulation-postgres",
             "edgeagent-contracts",
             "edgeagent-inbox-handler",
             "edgeagent-inbox-postgres",

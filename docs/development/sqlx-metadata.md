@@ -17,6 +17,10 @@ receipt statements with macros. Metadata assembly applies its disposable
 `process-schema.sql` after adapter migrations. Fresh metadata databases are
 required; these fixture tables are not product migrations.
 
+P08 also assembles `simulation-postgres/migrations/0001_account_admission.sql`
+for checked account admission queries. Its capability-local Clippy policy rejects
+runtime SQL and unchecked macros; private proof fixture DDL remains tooling-only.
+
 All production inbox and outbox SQL uses checked SQLx query macros. Outbox
 enqueue and replay identity lookups use `sqlx::query!`; lease transitions and
 the audited replay CTE use readable capability-owned `query_file!` /
