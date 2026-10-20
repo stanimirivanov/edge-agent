@@ -145,6 +145,9 @@ impl RiskPolicy {
     pub const fn fingerprint(&self) -> ArtifactDigest {
         self.fingerprint
     }
+    pub(super) fn includes_strategy(&self, strategy: RiskStrategyId) -> bool {
+        self.strategies.iter().any(|row| row.0 == strategy)
+    }
     pub(super) fn current(
         &self,
         snapshot: &RiskSnapshot,

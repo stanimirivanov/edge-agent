@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request FROM simulation_order WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_order",
+            "name": "request"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21feb669b3a7a796a95f2accb7babd8a315c1dbeb0a63aa201691d544a1ffbcd"
+}

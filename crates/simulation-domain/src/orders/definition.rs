@@ -54,7 +54,15 @@ impl OrderInstrument {
             InstrumentKind::IndexOption(spec) => Some((spec.id(), spec.revision())),
         }
     }
-    pub(super) fn price(&self, price: OrderPrice) -> Result<(), OrderError> {
+    /// Full pinned option metadata for reservation arithmetic and artifact binding.
+    #[must_use]
+    pub fn option_specification(&self) -> Option<&ReferenceVersion<OptionSpecification>> {
+        match &self.0 {
+            InstrumentKind::Equity(_) => None,
+            InstrumentKind::IndexOption(spec) => Some(spec),
+        }
+    }
+    pub(crate) fn price(&self, price: OrderPrice) -> Result<(), OrderError> {
         match (&self.0, price) {
             (InstrumentKind::Equity(_), OrderPrice::PerShare(_)) => Ok(()),
             (InstrumentKind::IndexOption(spec), OrderPrice::Premium(points)) => {

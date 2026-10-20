@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO simulation_account_grant (account,principal) VALUES ($1,$2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "07700ce4e3678f33cbafbad2d3c343d35364de48aa4ec601a72f1412111ee2b9"
+}

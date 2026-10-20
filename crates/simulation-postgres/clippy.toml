@@ -1,0 +1,20 @@
+# This service-owned adapter admits only compile-checked SQL with offline metadata.
+disallowed-methods = [
+  { path = "sqlx::query", reason = "Use checked SQLx macros and retain offline metadata." },
+  { path = "sqlx::query_as", reason = "Use checked SQLx macros and retain offline metadata." },
+  { path = "sqlx::query_scalar", reason = "Use checked SQLx macros and retain offline metadata." },
+  { path = "sqlx::raw_sql", reason = "Schema administration belongs outside production callbacks." },
+  { path = "sqlx::query_with", reason = "Use checked SQLx macros." },
+  { path = "sqlx::__query_with_result", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_as_with", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_scalar_with", reason = "Use checked SQLx macros." },
+  { path = "sqlx::__query_scalar_with_result", reason = "Use checked SQLx macros." },
+]
+disallowed-macros = [
+  { path = "sqlx::query_unchecked", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_as_unchecked", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_file_unchecked", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_file_as_unchecked", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_scalar_unchecked", reason = "Use checked SQLx macros." },
+  { path = "sqlx::query_file_scalar_unchecked", reason = "Use checked SQLx macros." },
+]

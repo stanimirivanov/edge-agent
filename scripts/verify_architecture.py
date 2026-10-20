@@ -92,6 +92,11 @@ XTASK_DEPENDENCIES = frozenset(
 )
 
 PACKAGE_RULES = {
+    "crates/simulation-postgres": PackageRule(
+        "edgeagent-simulation-postgres", "lib",
+        frozenset({CONTRACTS, INBOX_POSTGRES, "edgeagent-market-data-domain", MESSAGING,
+                   OUTBOX_POSTGRES, "edgeagent-simulation-domain", "chrono", "serde_json", "sqlx"}),
+    ),
     "crates/simulation-domain": PackageRule(
         "edgeagent-simulation-domain", "lib",
         frozenset({"edgeagent-market-data-domain", "rand_chacha", "sha2"}),
@@ -105,6 +110,7 @@ PACKAGE_RULES = {
             OUTBOX_POSTGRES, OUTBOX_RELAY, TELEMETRY, "async-nats", "jsonschema", "schemars",
             "serde", "serde_json", "sqlx", "tokio", "tracing", "tracing-subscriber",
             "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest",
+            "edgeagent-market-data-domain", "edgeagent-simulation-domain", "edgeagent-simulation-postgres",
         }),
         frozenset({"futures-util", "axum", "opentelemetry-proto", "prost"}),
     ),

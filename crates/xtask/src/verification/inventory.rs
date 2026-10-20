@@ -345,6 +345,24 @@ pub(super) fn checks() -> Vec<Check> {
             "OCI builds and non-root/read-only/networkless smoke tests, not cloud deployment.",
         ),
         check(
+            "simulation-schema-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-event-spine-conformance",
+                "--test",
+                "simulation_contracts",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Protected synthetic admission constructors, schemas, mode rejection and immutable published v1 identities; no provider qualification.",
+        ),
+        check(
             "sqlx-metadata",
             "T3",
             &["sqlx-metadata"],
@@ -417,6 +435,18 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "simulation-schema-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "admission_wire_schema_and_constructor_reject_unsupported_modes_and_invalid_facts",
+                        "published_admission_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
             "message-schema-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");

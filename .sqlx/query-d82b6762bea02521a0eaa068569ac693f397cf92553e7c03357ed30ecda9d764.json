@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT quantity FROM simulation_inventory WHERE account=$1 AND strategy=$2 AND instrument=$3 AND unit=$4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quantity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "quantity"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d82b6762bea02521a0eaa068569ac693f397cf92553e7c03357ed30ecda9d764"
+}

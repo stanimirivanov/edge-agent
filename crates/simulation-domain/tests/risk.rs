@@ -79,6 +79,44 @@ fn healthy() -> Value<RiskSnapshot> {
 }
 
 #[test]
+fn durable_risk_checkpoint_preserves_breach_revision_and_rejects_other_contexts() -> TestResult {
+    let account = RiskAccountId::new(1)?;
+    let mut original = state(standard()?)?;
+    let breached = snapshot(row(1, [101, 0, 0, 0], 10)?, row(2, [0, 0, 0, 0], 10)?)?;
+    assert_eq!(
+        original.observe(1, &breached, at(10)?)?,
+        RiskDecision::Denied(RiskReason::AccountGross)
+    );
+    let bytes = original.checkpoint();
+    let mut restored = RiskState::restore(account, standard()?, session(1)?, &bytes)?;
+    assert_eq!(restored.status(), original.status());
+    assert_eq!(
+        restored.observe(restored.status().0, &healthy()?, at(10)?)?,
+        RiskDecision::Denied(RiskReason::AccountGross)
+    );
+    assert!(RiskState::restore(RiskAccountId::new(2)?, standard()?, session(1)?, &bytes).is_err());
+    assert!(RiskState::restore(account, standard()?, session(2)?, &bytes).is_err());
+    assert!(
+        RiskState::restore(
+            account,
+            policy(caps(101, 20, 4), caps(100, 20, 4))?,
+            session(1)?,
+            &bytes
+        )
+        .is_err()
+    );
+    for length in 0..bytes.len() {
+        assert!(RiskState::restore(account, standard()?, session(1)?, &bytes[..length]).is_err());
+    }
+    for offset in 0..bytes.len() {
+        let mut corrupt = bytes.clone();
+        corrupt[offset] ^= 1;
+        assert!(RiskState::restore(account, standard()?, session(1)?, &corrupt).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn inclusive_limits_sum_positions_and_reservations_across_all_strategies() -> TestResult {
     let first = row(1, [40, 10, 10, 2], 10)?;
     let second = row(2, [40, 10, 10, 2], 10)?;

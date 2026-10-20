@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO simulation_valuation (account,strategy,gross_cents,loss_cents,valued_seconds,valued_nanos,artifact) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb744cf866f642e07dcf5d9d31bfdd59bfdc5f63f1d690d061b8bf174b635177"
+}

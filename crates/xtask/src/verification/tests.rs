@@ -222,6 +222,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "relay-policy-contracts",
             "contracts-preserve-order",
             "message-schema-contracts",
+            "simulation-schema-contracts",
         ]
     );
     assert!(

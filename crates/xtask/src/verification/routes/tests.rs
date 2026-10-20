@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn account_owner_changes_require_the_independent_process_gate() -> Result<(), String> {
+    for path in [
+        "crates/simulation-postgres/src/processing.rs",
+        "crates/event-spine-conformance/src/accounts.rs",
+        "crates/event-spine-conformance/src/bin/account-worker.rs",
+        "crates/contracts/src/simulation.rs",
+        "crates/contracts/schemas/simulation/submit-order-v1.json",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("account-admission-processes"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/account-admission.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn registry_and_adapter_changes_route_the_isolated_topology_proof() -> Result<(), String> {
     for path in [
         "crates/contracts/src/routing.rs",

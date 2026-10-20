@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 35] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 36] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -196,6 +196,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 35] = [
         number: 35,
         path: "docs/decisions/0035-apply-dry-run-order-lifecycles-from-retained-facts.md",
         title: "Apply dry-run order lifecycles from retained facts",
+    },
+    PublishedIdentity {
+        number: 36,
+        path: "docs/decisions/0036-serialize-synthetic-account-admission-and-reservations.md",
+        title: "Serialize synthetic account admission and reservations",
     },
 ];
 

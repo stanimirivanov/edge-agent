@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:edgeagent:schema:simulation:order-admission:v1",
+  "title": "OrderAdmission",
+  "type": "object",
+  "required": ["request", "run", "strategy", "revision", "order_revision", "status", "cash_reserved_cents", "inventory_reserved", "risk_revision", "risk_reason"],
+  "properties": {
+    "request": {"$ref": "urn:edgeagent:schema:simulation:submit-order:v1"},
+    "run": {"type": "string", "pattern": "^(?!0{64}$)[0-9a-f]{64}$", "minLength": 64, "maxLength": 64},
+    "strategy": {"type": "string", "pattern": "^(?!0{32}$)[0-9a-f]{32}$", "minLength": 32, "maxLength": 32},
+    "revision": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "order_revision": {"const": 1},
+    "status": {"enum": ["admitted", "insufficient_cash", "insufficient_inventory", "risk_denied"]},
+    "cash_reserved_cents": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "inventory_reserved": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "risk_revision": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "risk_reason": {"enum": [null, "session_closed", "stale_valuation", "account_gross", "account_loss", "account_orders", "strategy_gross", "strategy_loss", "strategy_orders"]}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "risk_denied"}}}, "then": {"properties": {"risk_reason": {"type": "string"}}}, "else": {"properties": {"risk_reason": {"type": "null"}}}},
+    {"if": {"properties": {"status": {"not": {"const": "admitted"}}}}, "then": {"properties": {"cash_reserved_cents": {"const": 0}, "inventory_reserved": {"const": 0}}}}
+  ]
+}

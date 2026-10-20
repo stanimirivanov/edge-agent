@@ -1,3 +1,5 @@
+#[path = "orders/admission.rs"]
+mod admission;
 #[path = "orders/simulation.rs"]
 mod simulation;
 #[path = "orders/support.rs"]

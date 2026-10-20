@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the outbox's actual Clippy policy with offline compiler fixtures."""
+"""Exercise checked-SQL adapter Clippy policies with offline compiler fixtures."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def validate_policy(policy: dict) -> None:
         entries = policy[field]
         actual = {entry["path"] for entry in entries}
         if actual != {f"sqlx::{name}" for name in required} or len(actual) != len(entries):
-            raise RuntimeError(f"outbox {field} differs from the compiler-fixture inventory")
+            raise RuntimeError(f"SQLx adapter {field} differs from the compiler-fixture inventory")
 
 
 def compiler_errors(result: subprocess.CompletedProcess[str]) -> list[dict]:
@@ -122,8 +122,12 @@ def negative_source(path: str, alias: bool, identity: str) -> str:
 
 def verify(root: Path = ROOT) -> None:
     adapter = root / "crates" / "outbox-postgres"
-    policy = tomllib.loads((adapter / "clippy.toml").read_text(encoding="utf-8"))
-    validate_policy(policy)
+    # Both capabilities must retain the exact independently enumerated bans.
+    # Compiler fixtures below prove those paths, including renamed imports;
+    # a removed simulation restriction cannot silently keep that proof green.
+    for package in ("outbox-postgres", "simulation-postgres"):
+        policy = tomllib.loads((root / "crates" / package / "clippy.toml").read_text(encoding="utf-8"))
+        validate_policy(policy)
     build = subprocess.run(
         ["cargo", "check", "--locked", "--offline", "--workspace", "--all-targets",
          "--message-format=json"],
