@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P06 account/strategy/session risk, breach latches and authorized recovery, read
+[simulation risk](development/simulation-risk.md) and
+[ADR-0034](decisions/0034-enforce-versioned-simulated-account-risk-policy.md).
+
 For P05 manifests, virtual time, deterministic IDs/RNG and restart state, read
 [deterministic runs](development/deterministic-runs.md) and
 [ADR-0033](decisions/0033-freeze-deterministic-run-continuations.md).

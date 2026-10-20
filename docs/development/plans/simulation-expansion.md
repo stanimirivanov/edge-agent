@@ -14,6 +14,10 @@ P05's implemented finite-run contract is documented in
 [deterministic runs](../deterministic-runs.md). Application-owned atomic checkpoint
 storage and P07/P09/P13 consumers remain separate work.
 
+P06's pure policy and recovery contract is documented in
+[simulation risk](../simulation-risk.md). P08 still owns authoritative account reads,
+atomic risk/reservation enforcement, persistence and multi-process qualification.
+
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The
 [roadmap](../../roadmap/milestones.md) owns milestone outcomes. These slices
