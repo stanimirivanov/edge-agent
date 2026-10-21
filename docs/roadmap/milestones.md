@@ -260,6 +260,9 @@ and dry-run outcomes remain reproducible and explicit about uncertainty.
 
 P12-P13 extend this outcome to account/order/risk projection rebuilds, canonical
 simulation replay and frozen cost/latency/liquidity sensitivity evaluation.
+P12's [account audit](../development/account-audit.md) supplies bounded owner
+exports and checkpointed revision replay for finite synthetic runs, not public
+projector activation or completion of all evaluation/restore work.
 Deployment, operational and UI follow-through remains in M09-M11 as specified
 by the expansion plan; no new milestone or active-active account writer is added.
 

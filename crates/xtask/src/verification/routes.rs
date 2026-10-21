@@ -237,6 +237,28 @@ const ROUTES: &[Route] = &[
         checks: &[],
     },
     Route {
+        matcher: Matcher::Prefix("crates/audit-domain/"),
+        guides: &["docs/development/account-audit.md"],
+        checks: &["account-audit-contracts", "account-admission-processes"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/contracts/src/audit.rs"),
+        guides: &["docs/development/account-audit.md"],
+        checks: &["account-audit-contracts", "account-admission-processes"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/simulation-postgres/src/audit"),
+        guides: &[
+            "docs/development/account-audit.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &[
+            "account-audit-contracts",
+            "account-admission-processes",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/simulation-domain/src/analytics"),
         guides: &["docs/development/option-analytics.md"],
         checks: &["option-analytics-contracts"],

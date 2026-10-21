@@ -16,6 +16,8 @@ const ACCOUNT_ADMISSION: Target = Target {
     package: "edgeagent-event-spine-conformance",
     name: "account_admission",
     identities: &[
+        "audit_owner_export_rebuild_checkpoint_and_reordered_backfill_reconcile",
+        "audit_history_rolls_back_with_worker_death_and_lost_result_replays_once",
         "competing_processes_cannot_overspend_cash_inventory_or_option_contracts",
         "rollback_process_crash_restart_and_lost_ack_preserve_one_effect",
         "aggregate_strategy_risk_and_breach_latches_survive_new_workers",
@@ -496,7 +498,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"account_admission"));
         let discovery = check.discovery.ok_or("account discovery missing")?;
-        assert_eq!(discovery.expected.len(), 10);
+        assert_eq!(discovery.expected.len(), 12);
         let complete = discovery
             .expected
             .iter()
@@ -560,8 +562,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 72);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 72);
+        assert_eq!(inventory.len(), 74);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 74);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

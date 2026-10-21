@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.revision, a.input_revision, a.cash_cents, a.risk_checkpoint,\n                  e.binding AS \"execution?\", s.binding AS \"settlement?\"\n           FROM simulation_account a\n           LEFT JOIN simulation_execution_config e USING (account)\n           LEFT JOIN simulation_settlement_config s USING (account)\n           WHERE a.account = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "input_revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "input_revision"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "cash_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "cash_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "risk_checkpoint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "risk_checkpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "execution?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_config",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "settlement?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_settlement_config",
+            "name": "binding"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "1d004750969f666df0f3c8bed52361cc5a1953d6e312e9b44b36a35d409ec408"
+}

@@ -35,6 +35,7 @@ async fn execute(
     let command = fenced.command;
     let (account, plan, sequence, expected) = request.position();
     let owner = context.execution.admission;
+    crate::audit::ensure(tx, owner, root.revision).await?;
     let seq = signed(sequence)?;
     let step = context
         .steps
@@ -242,6 +243,7 @@ async fn execute(
     if changed.rows_affected() != 1 {
         return Err(invariant());
     }
+    crate::audit::capture(tx, owner).await?;
     PostgresOutbox
         .enqueue(tx, DEFINITIONS[1], &envelope_out)
         .await

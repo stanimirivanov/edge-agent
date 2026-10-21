@@ -35,6 +35,34 @@ fn analytics_census_rejects_every_removed_renamed_duplicated_and_extra_proof() -
 }
 
 #[test]
+fn audit_census_rejects_removed_renamed_duplicated_and_extra_proofs() -> Result<(), String> {
+    let check = inventory::checks()
+        .into_iter()
+        .find(|c| c.id == "account-audit-contracts")
+        .ok_or("audit gate missing")?;
+    assert!(check.profiles.contains(&"verify") && check.profiles.contains(&"test"));
+    let census = check.discovery.ok_or("audit discovery missing")?;
+    assert_eq!(census.expected.len(), 6);
+    let complete = census
+        .expected
+        .iter()
+        .map(|name| format!("{name}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(&census, complete.as_bytes())?;
+    for name in &census.expected {
+        for changed in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, "renamed_audit_proof"),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}extra_audit_proof: test\n"),
+        ] {
+            assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn executable_choices_fail_closed_for_invalid_explicit_overrides()
 -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
@@ -247,6 +275,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "rust-tests",
             "rust-doctests",
             "option-analytics-contracts",
+            "account-audit-contracts",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",

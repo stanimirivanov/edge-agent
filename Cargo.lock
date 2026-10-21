@@ -523,6 +523,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "edgeagent-audit-domain"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+]
+
+[[package]]
 name = "edgeagent-audit-projector"
 version = "0.1.0"
 dependencies = [
@@ -546,6 +556,7 @@ version = "0.1.0"
 dependencies = [
  "async-nats",
  "axum",
+ "edgeagent-audit-domain",
  "edgeagent-contracts",
  "edgeagent-inbox-handler",
  "edgeagent-inbox-postgres",

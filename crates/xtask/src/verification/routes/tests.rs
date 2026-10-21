@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn audit_sources_require_replay_and_owner_process_proofs() -> Result<(), String> {
+    for path in [
+        "crates/audit-domain/src/lib.rs",
+        "crates/contracts/src/audit.rs",
+        "crates/simulation-postgres/src/audit/orders.rs",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.guides.contains("docs/development/account-audit.md"));
+        assert!(advice.checks.contains("account-audit-contracts"));
+        assert!(advice.checks.contains("account-admission-processes"));
+    }
+    Ok(())
+}
+
+#[test]
 fn analytics_sources_and_references_require_independent_numerical_qualification()
 -> Result<(), String> {
     for path in [

@@ -410,6 +410,7 @@ mod tests {
                 "0001_account_admission.sql",
                 "0002_evidence_execution.sql",
                 "0003_account_settlement.sql",
+                "0004_account_audit.sql",
             ]
             .map(OsStr::new)
         );

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM simulation_account_audit WHERE account=$1) AS \"started!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "started!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b2f697539781696ca43306636b838e873052ceb8b9ffc9922f7c002cc4a2f4de"
+}

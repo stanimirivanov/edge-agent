@@ -152,3 +152,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0038](0038-bind-synthetic-cash-settlement-to-explicit-policy.md) | Accepted | Bind synthetic cash settlement to explicit policy. |
 | [ADR-0039](0039-commit-account-settlement-as-a-canonical-postlude.md) | Accepted | Commit account settlement as a canonical postlude. |
 | [ADR-0040](0040-qualify-bounded-european-option-analytics.md) | Accepted | Qualify bounded European option analytics. |
+| [ADR-0041](0041-retain-owner-authored-account-audit-revisions.md) | Accepted | Retain owner-authored account audit revisions. |

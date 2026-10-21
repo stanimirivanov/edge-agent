@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT strategy, gross_cents, loss_cents, valued_seconds, valued_nanos, artifact\n           FROM simulation_valuation WHERE account = $1\n           ORDER BY strategy COLLATE \"C\" LIMIT 33",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "gross_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "gross_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "loss_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "loss_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "valued_seconds",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "valued_seconds"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "valued_nanos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "valued_nanos"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "artifact",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "artifact"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3fdadec94a9db74d241aecee42863bb1ec7fc543d40218d9c325ff572a59572"
+}

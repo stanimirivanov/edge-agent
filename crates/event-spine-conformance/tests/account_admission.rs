@@ -8,6 +8,151 @@ use std::panic::AssertUnwindSafe;
 
 #[tokio::test]
 #[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn audit_owner_export_rebuild_checkpoint_and_reordered_backfill_reconcile()
+-> Result<(), Error> {
+    use edgeagent_audit_domain::{AccountProjection, ReplayError, ReplayOutcome};
+    let mut database = Database::new("execution-settlement-call-itm").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..9 {
+            database
+                .spawn(index, "apply", 1, &format!("audit-{index}"))?
+                .success()
+                .await?;
+        }
+        database.assert_audit_grants().await?;
+        assert!(database.audit_page(None, 2, 9).await.is_err());
+        assert!(database.audit_page(None, 0, 1).await.is_err());
+        assert!(database.audit_page(Some(10), 2, 1).await.is_err());
+        let mut cursor = None;
+        let mut frames = Vec::new();
+        loop {
+            let page = database.audit_page(cursor, 2, 1).await?;
+            assert_eq!(page.owner_revision, 9);
+            if page.frames.is_empty() {
+                break;
+            }
+            cursor = page.frames.last().map(|f| f.state().revision);
+            frames.extend(page.frames);
+        }
+        assert_eq!(frames.len(), 10);
+        let genesis = frames.first().ok_or("genesis missing")?.clone();
+        let mut view = AccountProjection::new(genesis.clone(), 10)?;
+        let last = frames.last().ok_or("last missing")?.clone();
+        assert_eq!(view.apply(last.clone()), Err(ReplayError::Gap));
+        for frame in frames.iter().skip(1) {
+            view.apply(frame.clone())?;
+            // Independent continuation restore on every revision, not hidden process state.
+            view = AccountProjection::restore(&genesis, &view.checkpoint()?)?;
+        }
+        let before = view.checkpoint()?;
+        for frame in frames.iter().rev() {
+            assert_eq!(view.apply(frame.clone())?, ReplayOutcome::Duplicate);
+        }
+        assert_eq!(view.checkpoint()?, before);
+        let mut rebuild = AccountProjection::new(genesis, 10)?;
+        for frame in frames.iter().skip(1) {
+            rebuild.apply(frame.clone())?;
+        }
+        assert_eq!(rebuild.checkpoint()?, before);
+        let actual = database.settlement_state().await?;
+        assert_eq!(view.state().cash_cents, u64::try_from(actual.0)?);
+        assert!(
+            view.state()
+                .positions
+                .iter()
+                .all(|p| p.quantity == 0 && p.cost_cents == Some(0))
+        );
+        assert!(
+            view.state()
+                .orders
+                .iter()
+                .all(|o| o.reserved_cash_cents == 0 && o.reserved_units == 0)
+        );
+        assert_eq!(view.state().revision, 9);
+        assert_eq!(view.lag(9)?, 0);
+        for frame in &frames {
+            assert_eq!(
+                frame
+                    .state()
+                    .postings
+                    .iter()
+                    .map(|n| i128::from(*n))
+                    .sum::<i128>(),
+                0
+            );
+            for value in &frame.state().valuations {
+                let initial = frames[0]
+                    .state()
+                    .valuations
+                    .iter()
+                    .find(|v| v.strategy == value.strategy)
+                    .ok_or("valuation missing")?;
+                assert_eq!(
+                    (value.valued_seconds, value.valued_nanos),
+                    (initial.valued_seconds, initial.valued_nanos)
+                );
+            }
+        }
+        database.assert_settlement_journals().await?;
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn audit_history_rolls_back_with_worker_death_and_lost_result_replays_once()
+-> Result<(), Error> {
+    let mut database = Database::new("cash").await?;
+    let result = AssertUnwindSafe(async {
+        database
+            .spawn(0, "rollback", 1, "audit-rollback")?
+            .failure("p08_injected_failure")
+            .await?;
+        assert!(database.audit_page(None, 8, 1).await.is_err());
+        let mut killed = database.spawn(0, "before", 1, "audit-killed")?;
+        killed.stage("READY").await?;
+        killed.kill().await?;
+        assert!(database.audit_page(None, 8, 1).await.is_err());
+        let mut lost = database.spawn(0, "after", 1, "audit-lost")?;
+        lost.stage("COMMITTED").await?;
+        lost.kill().await?;
+        let first = database.audit_page(None, 8, 1).await?;
+        assert_eq!(first.frames.len(), 2);
+        database
+            .spawn(0, "apply", 1, "audit-semantic-retry")?
+            .success()
+            .await?;
+        assert_eq!(database.audit_page(None, 8, 1).await?.frames, first.frames);
+        let before = database.checkpoints().await?;
+        database.remove_audit_history().await?;
+        database
+            .spawn(1, "apply", 1, "audit-missing-history")?
+            .failure("audit_history_missing")
+            .await?;
+        assert_eq!(database.checkpoints().await?, before);
+        database.restore_audit_history(&first.frames).await?;
+        database
+            .spawn(1, "apply", 1, "audit-denied-second")?
+            .success()
+            .await?;
+        let page = database.audit_page(None, 8, 1).await?;
+        assert_eq!(page.frames.len(), 3);
+        assert_eq!(
+            page.frames.last().ok_or("missing view")?.state().cash_cents,
+            10_000
+        );
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
 async fn settlement_payoffs_defer_without_releasing_holds_and_close_once_across_strategies()
 -> Result<(), Error> {
     for case in [
@@ -516,6 +661,16 @@ async fn aggregate_strategy_risk_and_breach_latches_survive_new_workers() -> Res
                 .await?;
             let first = database.outcome(0).await?;
             let second = database.outcome(1).await?;
+            let page = database.audit_page(None, 8, 1).await?;
+            let latest = page.frames.last().ok_or("missing risk audit")?.state();
+            assert_eq!(latest.revision, 2);
+            assert_eq!(
+                latest.risk_checkpoint,
+                edgeagent_simulation_postgres::hex(&database.checkpoints().await?.2)
+            );
+            if case == "valuation-stale" {
+                assert_eq!(latest.risk_breach.as_deref(), Some("stale_valuation"));
+            }
             match case {
                 "account-risk" => {
                     assert_eq!(first.decision().1, AdmissionStatus::Admitted);

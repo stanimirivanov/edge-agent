@@ -18,6 +18,7 @@
 | Package | Role | Responsibility |
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
+| `edgeagent-audit-domain` | Domain | Disposable revisioned account/order/risk views and checkpoints from checked owner exports; no persistence or risk authority |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
 | `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation, simulated-account risk policy and event-applied dry-run orders; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
@@ -49,9 +50,10 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
+| `edgeagent-audit-domain` | `edgeagent-contracts` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
-| `edgeagent-event-spine-conformance` | `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
+| `edgeagent-event-spine-conformance` | `edgeagent-audit-domain`, `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
 | `edgeagent-telemetry` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-inbox-handler` | `edgeagent-contracts`, `edgeagent-messaging`, `edgeagent-telemetry` |
