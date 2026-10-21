@@ -10,6 +10,14 @@ fn audit_sources_require_replay_and_owner_process_proofs() -> Result<(), String>
         let advice = advise(&[path.into()])?;
         assert!(advice.guides.contains("docs/development/account-audit.md"));
         assert!(advice.checks.contains("account-audit-contracts"));
+        if path.starts_with("crates/audit-domain/") {
+            assert!(advice.checks.contains("frozen-evaluation-contracts"));
+            assert!(
+                advice
+                    .guides
+                    .contains("docs/development/frozen-evaluation.md")
+            );
+        }
         assert!(advice.checks.contains("account-admission-processes"));
     }
     Ok(())

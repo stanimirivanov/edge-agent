@@ -288,6 +288,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded owner-export replay, checkpoint/backfill equivalence, duplicates/conflicts, financial reconciliation and scope; not public deployment or risk authority.",
         ),
         check(
+            "frozen-evaluation-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-audit-domain",
+                "--test",
+                "evaluation",
+                "--",
+            ],
+            "Synthetic frozen-run replay and one-factor fee/latency/liquidity sensitivity; no empirical market or statistical performance claim.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -479,6 +495,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "frozen-evaluation-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "actual_execution_and_settlement_expose_cost_latency_and_liquidity_sensitivity",
+                        "repeated_and_checkpoint_resumed_paths_have_identical_canonical_reports",
+                        "frozen_case_census_rejects_omitted_duplicate_and_multifactor_experiments",
+                        "overlapping_holdouts_future_marks_and_invalid_continuations_fail_closed",
+                        "partial_foreign_conflicting_and_open_owner_histories_produce_no_report",
+                        "diagnostics_redact_financial_payloads_and_reports_preserve_declared_order",
                     ],
                     ignored: false,
                 });

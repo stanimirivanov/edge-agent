@@ -6,6 +6,7 @@
 #![deny(missing_docs)]
 
 mod checkpoint;
+pub mod evaluation;
 
 use edgeagent_contracts::audit::{AccountAuditFrame, AccountAuditState};
 use sha2::{Digest, Sha256};

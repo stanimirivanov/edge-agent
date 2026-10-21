@@ -67,7 +67,11 @@ P12's bounded owner export, atomic revision history and disposable account/order
 risk replay views are documented in [account audit](../account-audit.md).
 Checkpoint/backfill and restricted worker proofs qualify finite synthetic runs;
 public export transport, durable projector deployment and UI remain unactivated.
-P13 frozen-run evaluation and the remaining M08 work are not implied complete.
+P13's [frozen evaluation](../frozen-evaluation.md) freezes complete one-factor
+cost/virtual-latency/participation comparisons and reconciles closed synthetic
+owner histories. Calculator and checkpoint-resume proofs qualify finite fidelity,
+not empirical/provider performance, public historical-checkpoint export, durable
+evaluation publication or the remaining M08 work.
 
 P11 can run in parallel after its prerequisites and does not block quote-driven
 fully funded simulation. M06 explanations are optional; they cannot participate

@@ -263,6 +263,9 @@ simulation replay and frozen cost/latency/liquidity sensitivity evaluation.
 P12's [account audit](../development/account-audit.md) supplies bounded owner
 exports and checkpointed revision replay for finite synthetic runs, not public
 projector activation or completion of all evaluation/restore work.
+P13's [frozen evaluation](../development/frozen-evaluation.md) adds bounded
+chronological synthetic fidelity and explicit one-factor sensitivity reports;
+empirical calibration, public transport and durable evaluation publication remain.
 Deployment, operational and UI follow-through remains in M09-M11 as specified
 by the expansion plan; no new milestone or active-active account writer is added.
 

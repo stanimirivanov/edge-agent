@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P13 frozen-run fidelity and explicit cost/latency/liquidity sensitivity, read
+[frozen evaluation](development/frozen-evaluation.md) and
+[ADR-0042](decisions/0042-freeze-complete-synthetic-sensitivity-evaluations.md).
+
 For P12 account/order/risk audit exports, rebuilds and checkpoints, read
 [account audit](development/account-audit.md) and
 [ADR-0041](decisions/0041-retain-owner-authored-account-audit-revisions.md).
