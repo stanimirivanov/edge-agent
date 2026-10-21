@@ -153,3 +153,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0039](0039-commit-account-settlement-as-a-canonical-postlude.md) | Accepted | Commit account settlement as a canonical postlude. |
 | [ADR-0040](0040-qualify-bounded-european-option-analytics.md) | Accepted | Qualify bounded European option analytics. |
 | [ADR-0041](0041-retain-owner-authored-account-audit-revisions.md) | Accepted | Retain owner-authored account audit revisions. |
+| [ADR-0042](0042-freeze-complete-synthetic-sensitivity-evaluations.md) | Accepted | Freeze complete synthetic sensitivity evaluations. |

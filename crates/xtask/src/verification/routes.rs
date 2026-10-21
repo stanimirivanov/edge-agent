@@ -238,8 +238,15 @@ const ROUTES: &[Route] = &[
     },
     Route {
         matcher: Matcher::Prefix("crates/audit-domain/"),
-        guides: &["docs/development/account-audit.md"],
-        checks: &["account-audit-contracts", "account-admission-processes"],
+        guides: &[
+            "docs/development/account-audit.md",
+            "docs/development/frozen-evaluation.md",
+        ],
+        checks: &[
+            "account-audit-contracts",
+            "frozen-evaluation-contracts",
+            "account-admission-processes",
+        ],
     },
     Route {
         matcher: Matcher::Exact("crates/contracts/src/audit.rs"),

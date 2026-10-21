@@ -318,6 +318,13 @@ access. Duplicate receipts, contiguous hash-linked revisions and financial
 reconciliation protect replay. The [audit guide](../development/account-audit.md)
 defines limits, legacy-account rejection and deferred public transport/deployment.
 
+The pure [frozen evaluation](../development/frozen-evaluation.md) consumer binds
+P05 manifests and continuations to complete P12 histories. It compares every
+predeclared fee, virtual-latency and participation case, reporting exact closed
+account results without inventing open-position marks or statistical confidence.
+Synthetic calculator/restart proofs establish reproducibility, not empirical
+provider fidelity or public evaluation deployment.
+
 Surveillance reevaluates named expiry, invalidation, data-quality, and withdrawal
 conditions. It can append lifecycle commands or events; it cannot mutate a
 published artifact or bypass the dry-run execution boundary.

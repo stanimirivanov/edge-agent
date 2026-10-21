@@ -26,6 +26,21 @@ pub struct ExecutionProfile {
     digest: ArtifactDigest,
 }
 impl ExecutionProfile {
+    /// Explicit whole-unit participation ceiling in basis points.
+    #[must_use]
+    pub const fn participation_bps(self) -> u16 {
+        self.participation
+    }
+    /// Fixed and per-unit fees, each in millionths of one USD cent.
+    #[must_use]
+    pub const fn fees_microcents(self) -> (u64, u64) {
+        (self.fixed_fee, self.unit_fee)
+    }
+    /// Virtual submission and cancellation delays, not measured worker latency.
+    #[must_use]
+    pub const fn latencies(self) -> (Duration, Duration) {
+        (self.submission, self.cancellation)
+    }
     /// Pin the complete deterministic model configuration. Zero latency/fees are
     /// valid only when explicitly supplied. Participation is 1..=10000 bps.
     ///

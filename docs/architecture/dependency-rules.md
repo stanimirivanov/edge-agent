@@ -50,7 +50,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
-| `edgeagent-audit-domain` | `edgeagent-contracts` |
+| `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-event-spine-conformance` | `edgeagent-audit-domain`, `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
