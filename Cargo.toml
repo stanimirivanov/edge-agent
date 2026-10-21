@@ -50,6 +50,7 @@ edgeagent-service-runtime = { path = "crates/service-runtime" }
 edgeagent-telemetry = { path = "crates/telemetry" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 jsonschema = { version = "=0.58.6", default-features = false }
+libm = { version = "=0.2.16", default-features = false }
 metrics = "=0.24.6"
 opentelemetry = { version = "=0.33.1", default-features = false, features = ["trace", "metrics"] }
 opentelemetry-otlp = { version = "=0.33.1", default-features = false, features = ["trace", "metrics", "http-proto", "reqwest-blocking-client"] }

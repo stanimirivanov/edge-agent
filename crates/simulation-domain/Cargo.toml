@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 edgeagent-market-data-domain.workspace = true
+libm.workspace = true
 rand_chacha.workspace = true
 sha2.workspace = true
 

@@ -58,6 +58,11 @@ PRs ship their negative tests and executable acceptance evidence together.
 | P12 | M08 | Account/order/risk replay and revisioned audit views | P08-P10 | Rebuild/checkpoint/reordered-event cases without duplicate effects |
 | P13 | M08 | Frozen-run fidelity and cost/latency/liquidity sensitivity evaluation | P05, P09-P10, P12; P11 only when used | Reproducibility and chronological evidence, not performance promises |
 
+P11's pure theoretical analytics are documented in
+[option analytics](../option-analytics.md). Independent numerical references,
+bounded IV failures and named default harness discovery qualify a finite tested
+envelope, not provider evidence, Greek-dependent policy activation or all M04.
+
 P11 can run in parallel after its prerequisites and does not block quote-driven
 fully funded simulation. M06 explanations are optional; they cannot participate
 in risk, settlement or numeric authority. Existing M03-PR4 quality work remains

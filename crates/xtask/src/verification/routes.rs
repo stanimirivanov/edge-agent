@@ -237,6 +237,21 @@ const ROUTES: &[Route] = &[
         checks: &[],
     },
     Route {
+        matcher: Matcher::Prefix("crates/simulation-domain/src/analytics"),
+        guides: &["docs/development/option-analytics.md"],
+        checks: &["option-analytics-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/simulation-domain/tests/analytics"),
+        guides: &["docs/development/option-analytics.md"],
+        checks: &["option-analytics-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("scripts/generate_option_analytics_references.py"),
+        guides: &["docs/development/option-analytics.md"],
+        checks: &["option-analytics-contracts"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/simulation-postgres/"),
         guides: &[
             "docs/development/account-admission.md",

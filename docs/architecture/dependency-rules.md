@@ -165,6 +165,17 @@ these contracts with [ADR-0021](../decisions/0021-enforce-ci-security-and-secret
 
 ## Related decisions
 
+P11 adds MIT `libm` 0.2.16, default features disabled, only to simulation-domain.
+The [maintained source](https://github.com/rust-lang/compiler-builtins/tree/main/libm)
+and packaged license were reviewed: the earlier rust-lang/libm repository was
+archived when development moved to compiler-builtins. The need is stable pure-Rust
+erfc for a tail-safe normal CDF plus exp/log/sqrt; stable 1.98.1's erfc is unavailable.
+No library type enters the public API. The analytics module owns replacement;
+replace/remove it only with independent reference and convergence requalification.
+The default named numerical census protects this boundary, not uniform relative
+accuracy, absence of future advisories or cross-platform bit identity. See
+[ADR-0040](../decisions/0040-qualify-bounded-european-option-analytics.md).
+
 The domain requests Chrono 0.4.45 and Chrono-TZ 0.10.4 (both MIT OR Apache-2.0),
 with default features disabled and only `std` requested. Chrono supplies checked
 Gregorian dates and UTC instants. P02 adds Chrono-TZ for deterministic New York
