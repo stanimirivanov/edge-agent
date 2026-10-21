@@ -13,6 +13,8 @@ use edgeagent_simulation_postgres::{
 };
 use std::time::Duration;
 mod execution;
+mod settlement;
+use settlement::option_for;
 
 /// Qualification error; worker binaries never print private source chains.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -54,6 +56,17 @@ impl Scenario {
                 | "execution-options"
                 | "execution-full"
                 | "execution-denied"
+        ) && !matches!(
+            case,
+            "execution-settlement-call-itm"
+                | "execution-settlement-call-atm"
+                | "execution-settlement-call-otm"
+                | "execution-settlement-put-itm"
+                | "execution-settlement-put-atm"
+                | "execution-settlement-put-otm"
+                | "execution-settlement-fractional"
+                | "execution-settlement-empty"
+                | "execution-settlement-unfunded"
         ) {
             return Err("unknown synthetic case".into());
         }
@@ -101,28 +114,30 @@ impl Scenario {
             } else {
                 OrderSide::BuyToOpen
             };
-            let (instrument, quantity, ceiling) =
-                if case == "options" || case == "execution-options" {
-                    (
-                        OrderInstrument::index_option(option()?)?,
-                        OrderQuantity::contracts(ContractQuantity::new(
-                            if case.starts_with("execution") { 2 } else { 1 },
-                        )?),
-                        OrderPrice::Premium(OptionPoints::new(60, 2)?),
-                    )
-                } else {
-                    (
-                        OrderInstrument::equity(InstrumentId::new(1)?),
-                        OrderQuantity::shares(if case == "inventory" {
-                            4
-                        } else if case.starts_with("execution") {
-                            if case == "execution-full" { 1 } else { 2 }
-                        } else {
-                            1
-                        })?,
-                        OrderPrice::PerShare(UsdPrice::new(60, 0)?),
-                    )
-                };
+            let (instrument, quantity, ceiling) = if case == "options"
+                || case == "execution-options"
+                || case.starts_with("execution-settlement")
+            {
+                (
+                    OrderInstrument::index_option(option_for(case)?)?,
+                    OrderQuantity::contracts(ContractQuantity::new(
+                        if case.starts_with("execution") { 2 } else { 1 },
+                    )?),
+                    OrderPrice::Premium(OptionPoints::new(60, 2)?),
+                )
+            } else {
+                (
+                    OrderInstrument::equity(InstrumentId::new(1)?),
+                    OrderQuantity::shares(if case == "inventory" {
+                        4
+                    } else if case.starts_with("execution") {
+                        if case == "execution-full" { 1 } else { 2 }
+                    } else {
+                        1
+                    })?,
+                    OrderPrice::PerShare(UsdPrice::new(60, 0)?),
+                )
+            };
             let order = OrderDefinition::new(
                 DryRunMode::parse(Some("dry_run"))?,
                 OrderScope::new(
@@ -165,7 +180,9 @@ impl Scenario {
     }
     /// Bind a test principal outside the wire payload; only principal 1 is seeded.
     pub fn context(&self, principal: u128) -> Result<AdmissionContext<'_>, Error> {
-        let slots = if self.case.starts_with("execution") {
+        let slots = if self.has_settlement() {
+            vec![(3, at(1)?), (4, at(2)?), (5, at(2)?)]
+        } else if self.case.starts_with("execution") {
             vec![
                 (3, at(1)?),
                 (4, at(if self.case == "execution-full" { 1 } else { 2 })?),
@@ -190,15 +207,17 @@ impl Scenario {
     }
     /// Explicit invented cash, not a production account default.
     pub fn funding(&self) -> UsdCents {
-        UsdCents::new(if self.case == "execution-denied" {
-            7_000
-        } else if self.case.starts_with("execution") {
-            30_000
-        } else if self.case == "account-risk" {
-            100_000
-        } else {
-            10_000
-        })
+        UsdCents::new(
+            if self.case == "execution-denied" || self.case == "execution-settlement-empty" {
+                7_000
+            } else if self.case.starts_with("execution") {
+                30_000
+            } else if self.case == "account-risk" {
+                100_000
+            } else {
+                10_000
+            },
+        )
     }
     /// Complete synthetic valuation set, including inactive/zero allocations.
     pub fn valuations(&self) -> Result<Vec<InitialValuation>, Error> {
@@ -207,7 +226,11 @@ impl Scenario {
                 Ok(InitialValuation {
                     strategy: RiskStrategyId::new(id)?,
                     position_gross: UsdCents::new(
-                        if (self.case == "inventory" || self.case == "execution-sell") && id == 1 {
+                        if self.has_settlement() && self.case != "execution-settlement-empty" {
+                            6_000
+                        } else if (self.case == "inventory" || self.case == "execution-sell")
+                            && id == 1
+                        {
                             30_000
                         } else {
                             0
@@ -223,7 +246,18 @@ impl Scenario {
     /// Existing strategy-owned long shares for the inventory race only.
     pub fn inventory(&self) -> Result<Vec<InitialInventory>, Error> {
         Ok(
-            if self.case == "inventory" || self.case == "execution-sell" {
+            if self.has_settlement() && self.case != "execution-settlement-empty" {
+                (1..=2)
+                    .map(|id| {
+                        Ok(InitialInventory {
+                            strategy: RiskStrategyId::new(id)?,
+                            instrument: InstrumentId::new(10)?,
+                            unit: QuantityUnit::Contracts,
+                            quantity: 1,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?
+            } else if self.case == "inventory" || self.case == "execution-sell" {
                 vec![InitialInventory {
                     strategy: RiskStrategyId::new(1)?,
                     instrument: InstrumentId::new(1)?,
@@ -285,7 +319,7 @@ fn manifest(
     Error,
 > {
     let contract = EvidenceContract::new(
-        if case == "execution-options" {
+        if case == "execution-options" || case.starts_with("execution-settlement") {
             EvidenceKind::OptionSnapshot
         } else {
             EvidenceKind::ShareTrade
@@ -305,7 +339,13 @@ fn manifest(
     let epoch = FeedEpoch::new(1)?;
     let observation = CanonicalObservation::new(
         ObservationContext::new(
-            InstrumentId::new(if case == "execution-options" { 10 } else { 1 })?,
+            InstrumentId::new(
+                if case == "execution-options" || case.starts_with("execution-settlement") {
+                    10
+                } else {
+                    1
+                },
+            )?,
             provider,
             transform,
             session,
@@ -314,32 +354,34 @@ fn manifest(
         ObservationVersion::new(ObservationId::new(1)?, ObservationRevision::new(1)?, None)?,
         EvidenceTimes::new(at(0)?, None, None, at(0)?)?,
         None,
-        Some(if case == "execution-options" {
-            ObservationValue::OptionQuote(OptionQuoteSnapshot::new(
-                &option()?,
-                QuoteSide::new(
-                    OptionPoints::new(55, 2)?,
-                    Some(DisplayedContracts::new(1)),
-                    at(0)?,
-                ),
-                QuoteSide::new(
-                    OptionPoints::new(60, 2)?,
-                    Some(DisplayedContracts::new(1)),
-                    at(0)?,
-                ),
-            )?)
-        } else {
-            ObservationValue::Trade(ShareTrade::new(
-                UsdPrice::new(60, 0)?,
-                ShareVolume::new(1, 0)?,
-            )?)
-        }),
+        Some(
+            if case == "execution-options" || case.starts_with("execution-settlement") {
+                ObservationValue::OptionQuote(OptionQuoteSnapshot::new(
+                    &option_for(case)?,
+                    QuoteSide::new(
+                        OptionPoints::new(55, 2)?,
+                        Some(DisplayedContracts::new(1)),
+                        at(0)?,
+                    ),
+                    QuoteSide::new(
+                        OptionPoints::new(60, 2)?,
+                        Some(DisplayedContracts::new(1)),
+                        at(0)?,
+                    ),
+                )?)
+            } else {
+                ObservationValue::Trade(ShareTrade::new(
+                    UsdPrice::new(60, 0)?,
+                    ShareVolume::new(1, 0)?,
+                )?)
+            },
+        ),
     )?;
     let following_observation = if case.starts_with("execution") {
         let value = if let Some(ObservationValue::OptionQuote(quote)) = observation.value() {
             let (bid, ask) = quote.sides();
             Some(ObservationValue::OptionQuote(OptionQuoteSnapshot::new(
-                &option()?,
+                &option_for(case)?,
                 QuoteSide::new(bid.values().0, bid.values().1, at(2)?),
                 QuoteSide::new(ask.values().0, ask.values().1, at(2)?),
             )?))
@@ -377,7 +419,13 @@ fn manifest(
         Duration::ZERO,
         &[EvidenceRequirement::new(
             FeedId::new(1)?,
-            InstrumentId::new(if case == "execution-options" { 10 } else { 1 })?,
+            InstrumentId::new(
+                if case == "execution-options" || case.starts_with("execution-settlement") {
+                    10
+                } else {
+                    1
+                },
+            )?,
             contract,
             ContinuityRequirement::Snapshots,
         )],

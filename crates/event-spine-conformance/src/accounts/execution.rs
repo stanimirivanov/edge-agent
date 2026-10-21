@@ -32,6 +32,9 @@ impl Scenario {
         let second = self.quotes.get(1).ok_or("second quote")?.fingerprint();
         let mut steps = Vec::new();
         for (sequence, second_at) in [(3, 1), (4, 2), (5, 2), (6, 2), (7, 3), (8, 4), (9, 100)] {
+            if self.has_settlement() && sequence > 5 {
+                break;
+            }
             let second_at = if self.case == "execution-full" && sequence == 4 {
                 1
             } else {
@@ -85,12 +88,14 @@ impl Scenario {
             let order = quote.order();
             let strategy = format!("{:032x}", order.scope().identity().2.get());
             let instrument = format!("{:032x}", order.instrument().id().get());
-            let unit = if self.case == "execution-options" {
+            let unit = if self.case == "execution-options" || self.has_settlement() {
                 "contracts"
             } else {
                 "shares"
             };
-            let position = if self.case == "execution-sell" {
+            let position = if self.has_settlement() && self.case != "execution-settlement-empty" {
+                PositionCost::new(1, 6_000)?
+            } else if self.case == "execution-sell" {
                 PositionCost::new(5, 25_000)?
             } else {
                 PositionCost::new(0, 0)?

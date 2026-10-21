@@ -6,7 +6,7 @@ use edgeagent_messaging::HandlerFailure;
 use edgeagent_simulation_domain::{execution::PositionCost, risk::*};
 use sqlx::{Postgres, Transaction};
 
-pub(super) async fn position(
+pub(crate) async fn position(
     tx: &mut Transaction<'_, Postgres>,
     account: &str,
     key: (&str, &str, &str),
@@ -42,7 +42,7 @@ pub(super) async fn position(
     }
     Ok(())
 }
-pub(super) async fn risk(
+pub(crate) async fn risk(
     tx: &mut Transaction<'_, Postgres>,
     context: &ExecutionContext<'_, '_, '_>,
     checkpoint: &[u8],

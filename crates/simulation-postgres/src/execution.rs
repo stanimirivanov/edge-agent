@@ -2,7 +2,7 @@
 mod bootstrap;
 mod fence;
 mod handling;
-mod persistence;
+pub(crate) mod persistence;
 
 pub use bootstrap::{InitialPositionCost, provision_execution};
 
@@ -32,7 +32,7 @@ pub enum ExecutionAction<'evidence> {
 pub struct ExecutionStep<'evidence> {
     sequence: u64,
     quote: ArtifactDigest,
-    at: PreciseInstant,
+    pub(crate) at: PreciseInstant,
     action: ExecutionAction<'evidence>,
 }
 impl<'evidence> ExecutionStep<'evidence> {
@@ -57,10 +57,10 @@ impl<'evidence> ExecutionStep<'evidence> {
 /// admission context, never through a payload/source URI. Retain the plan and
 /// its evidence artifacts with the run. No defaults or mutable model settings.
 pub struct ExecutionContext<'context, 'run, 'evidence> {
-    admission: &'context AdmissionContext<'run>,
-    profile: ExecutionProfile,
-    steps: Vec<ExecutionStep<'evidence>>,
-    binding: ArtifactDigest,
+    pub(crate) admission: &'context AdmissionContext<'run>,
+    pub(crate) profile: ExecutionProfile,
+    pub(crate) steps: Vec<ExecutionStep<'evidence>>,
+    pub(crate) binding: ArtifactDigest,
     canonical: Vec<u8>,
 }
 impl<'context, 'run, 'evidence> ExecutionContext<'context, 'run, 'evidence> {

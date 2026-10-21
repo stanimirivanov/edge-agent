@@ -11,9 +11,11 @@ mod context;
 mod execution;
 mod processing;
 mod provision;
+mod settlement;
 pub use execution::{
     ExecutionAction, ExecutionContext, ExecutionStep, InitialPositionCost, provision_execution,
 };
+pub use settlement::{SettlementContext, SettlementLimits, SettlementStep, provision_settlement};
 
 pub use context::{AdmissionContext, AdmissionLimits};
 pub use provision::{InitialInventory, InitialValuation, provision};
@@ -24,7 +26,9 @@ use edgeagent_messaging::{FailureCode, HandlerFailure, HandlerFailureKind};
 pub const MIGRATION_SQL: &str = concat!(
     include_str!("../migrations/0001_account_admission.sql"),
     "\n",
-    include_str!("../migrations/0002_evidence_execution.sql")
+    include_str!("../migrations/0002_evidence_execution.sql"),
+    "\n",
+    include_str!("../migrations/0003_account_settlement.sql")
 );
 
 fn permanent(code: &'static str) -> HandlerFailure {

@@ -406,7 +406,12 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()?;
         assert_eq!(
             names,
-            ["0001_account_admission.sql", "0002_evidence_execution.sql"].map(OsStr::new)
+            [
+                "0001_account_admission.sql",
+                "0002_evidence_execution.sql",
+                "0003_account_settlement.sql",
+            ]
+            .map(OsStr::new)
         );
         let library = fs::read_to_string(
             super::super::workspace_root().join("crates/simulation-postgres/src/lib.rs"),

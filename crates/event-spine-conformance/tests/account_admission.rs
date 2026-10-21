@@ -8,6 +8,229 @@ use std::panic::AssertUnwindSafe;
 
 #[tokio::test]
 #[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn settlement_payoffs_defer_without_releasing_holds_and_close_once_across_strategies()
+-> Result<(), Error> {
+    for case in [
+        "execution-settlement-call-itm",
+        "execution-settlement-call-atm",
+        "execution-settlement-call-otm",
+        "execution-settlement-put-itm",
+        "execution-settlement-put-atm",
+        "execution-settlement-put-otm",
+        "execution-settlement-fractional",
+        "execution-settlement-empty",
+    ] {
+        let mut database = Database::new(case).await?;
+        let result = AssertUnwindSafe(async {
+            for index in 0..5 {
+                database
+                    .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                    .success()
+                    .await?;
+            }
+            let empty = case.ends_with("empty");
+            let before = if empty {
+                (7000, 0, 0, 0, 0, 0)
+            } else {
+                (23999, 3, 18000, 18003, 0, 0)
+            };
+            assert_eq!(database.settlement_state().await?, before);
+            for (index, status) in [(5, "deferred_missing"), (6, "deferred_not_known")] {
+                database
+                    .spawn(index, "apply", 1, &format!("defer-{index}"))?
+                    .success()
+                    .await?;
+                let state = database.settlement_state().await?;
+                assert_eq!(
+                    (state.0, state.1, state.2, state.3, state.4),
+                    (before.0, before.1, before.2, before.3, 0)
+                );
+                let fact = database.settlement_outcome(index as i64 + 1).await?;
+                assert_eq!(fact.position().2, status);
+                assert!(fact.effects().0.is_empty());
+                assert!(fact.effects().1.is_empty());
+            }
+            database.spawn(7, "apply", 1, "settled")?.success().await?;
+            let gross = if case.ends_with("-itm") {
+                150000
+            } else if case.ends_with("fractional") {
+                2
+            } else {
+                0
+            };
+            let expected = if empty { 7000 } else { 23999 + gross - 3 };
+            assert_eq!(
+                database.settlement_state().await?,
+                (expected, 0, 0, 0, 1, 3)
+            );
+            database.assert_settlement_journals().await?;
+            let fact = database.settlement_outcome(8).await?;
+            assert_eq!(fact.position().2, "settled");
+            assert_eq!(fact.effects().1.len(), if empty { 0 } else { 2 });
+            let mut totals = [0_i128; 4];
+            let mut allocated_gross = 0;
+            let mut allocated_fees = 0;
+            for allocation in fact.effects().0 {
+                let (_, _, g, f, p) = allocation.parts();
+                allocated_gross += g;
+                allocated_fees += f;
+                assert_eq!(p.iter().map(|n| i128::from(*n)).sum::<i128>(), 0);
+                for (total, n) in totals.iter_mut().zip(p) {
+                    *total += i128::from(n);
+                }
+            }
+            assert_eq!(
+                (allocated_gross, allocated_fees),
+                if empty { (0, 0) } else { (gross as u64, 3) }
+            );
+            assert_eq!(totals.iter().sum::<i128>(), 0);
+            let checkpoint = database.checkpoints().await?;
+            database
+                .spawn(7, "apply", 1, "semantic-settlement-retry")?
+                .success()
+                .await?;
+            assert_eq!(database.checkpoints().await?, checkpoint);
+            assert_eq!(database.settlement_outcome(8).await?, fact);
+            database
+                .spawn(8, "apply", 1, "already-settled")?
+                .success()
+                .await?;
+            assert_eq!(
+                database.settlement_state().await?,
+                (expected, 0, 0, 0, 1, 4)
+            );
+            assert_eq!(
+                database.settlement_outcome(9).await?.position().2,
+                "already_settled"
+            );
+            Ok::<_, Error>(())
+        })
+        .catch_unwind()
+        .await;
+        database.finish(result).await?;
+    }
+    Ok(())
+}
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn settlement_worker_death_and_lost_result_preserve_atomic_journals_and_cash()
+-> Result<(), Error> {
+    let mut database = Database::new("execution-settlement-call-itm").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..7 {
+            database
+                .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                .success()
+                .await?;
+        }
+        let before = database.settlement_state().await?;
+        let checkpoint = database.checkpoints().await?;
+        database
+            .spawn(7, "rollback", 1, "rolled-back-settlement")?
+            .failure("p08_injected_failure")
+            .await?;
+        assert_eq!(database.settlement_state().await?, before);
+        assert_eq!(database.checkpoints().await?, checkpoint);
+        let mut killed = database.spawn(7, "before", 1, "killed-settlement")?;
+        killed.stage("READY").await?;
+        killed.kill().await?;
+        assert_eq!(database.settlement_state().await?, before);
+        assert_eq!(database.checkpoints().await?, checkpoint);
+        let mut lost = database.spawn(7, "after", 1, "lost-settlement-result")?;
+        lost.stage("COMMITTED").await?;
+        lost.kill().await?;
+        assert_eq!(database.settlement_state().await?, (173996, 0, 0, 0, 1, 3));
+        let committed = database.checkpoints().await?;
+        let fact = database.settlement_outcome(8).await?;
+        for id in ["lost-settlement-result", "new-settlement-delivery"] {
+            database.spawn(7, "apply", 1, id)?.success().await?;
+        }
+        assert_eq!(database.checkpoints().await?, committed);
+        assert_eq!(database.settlement_outcome(8).await?, fact);
+        database.assert_settlement_journals().await?;
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
+async fn settlement_competitors_authorization_conflicts_and_tampering_cannot_repay_a_position()
+-> Result<(), Error> {
+    let mut unfunded = Database::new("execution-settlement-unfunded").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..7 {
+            unfunded
+                .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                .success()
+                .await?;
+        }
+        let before = unfunded.settlement_state().await?;
+        let checkpoint = unfunded.checkpoints().await?;
+        unfunded
+            .spawn(7, "apply", 1, "unfunded-settlement")?
+            .failure("settlement_accounting")
+            .await?;
+        assert_eq!(unfunded.settlement_state().await?, before);
+        assert_eq!(unfunded.checkpoints().await?, checkpoint);
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    unfunded.finish(result).await?;
+    let mut database = Database::new("execution-settlement-call-itm").await?;
+    let result = AssertUnwindSafe(async {
+        for index in 0..7 {
+            database
+                .spawn(index, "apply", 1, &format!("initial-{index}"))?
+                .success()
+                .await?;
+        }
+        let before = database.settlement_state().await?;
+        database
+            .spawn(7, "apply", 2, "unauthorized-settlement")?
+            .failure("settlement_unauthorized")
+            .await?;
+        database
+            .spawn(8, "apply", 1, "settlement-gap")?
+            .failure("settlement_input_gap")
+            .await?;
+        assert_eq!(database.settlement_state().await?, before);
+        let mut first = database.spawn(7, "before", 1, "first-settlement")?;
+        first.stage("READY").await?;
+        let mut second = database.spawn(7, "apply", 1, "competing-settlement")?;
+        database.wait_for_root_lock(&second.application).await?;
+        first.release().await?;
+        first.success().await?;
+        second.success().await?;
+        assert_eq!(database.settlement_state().await?, (173996, 0, 0, 0, 1, 3));
+        let checkpoint = database.checkpoints().await?;
+        database
+            .spawn_conflict(7)?
+            .failure("settlement_identity")
+            .await?;
+        database
+            .spawn(3, "apply", 1, "old-fill-after-settlement")?
+            .success()
+            .await?;
+        assert_eq!(database.settlement_state().await?, (173996, 0, 0, 0, 1, 3));
+        assert_eq!(database.checkpoints().await?, checkpoint);
+        database.tamper_settlement().await?;
+        database
+            .spawn(7, "apply", 1, "tampered-plan")?
+            .failure("settlement_configuration")
+            .await?;
+        assert_eq!(database.settlement_state().await?, (173996, 0, 0, 0, 1, 3));
+        Ok::<_, Error>(())
+    })
+    .catch_unwind()
+    .await;
+    database.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated EDGEAGENT_POSTGRES_URL"]
 async fn execution_fill_accounting_and_shared_liquidity_hold_across_products() -> Result<(), Error>
 {
     for case in [

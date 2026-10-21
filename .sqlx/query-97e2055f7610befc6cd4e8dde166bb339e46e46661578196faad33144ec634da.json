@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT configuration,input_revision FROM simulation_account WHERE account=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "configuration",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "configuration"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "input_revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "input_revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "97e2055f7610befc6cd4e8dde166bb339e46e46661578196faad33144ec634da"
+}

@@ -29,10 +29,11 @@ inputs; provider/session qualification and public activation remain separate.
 
 P10 is split at the financial/commit boundary. P10a defines the tested pure
 [settlement contract](../option-settlement.md), with explicit synthetic final
-fixings, policy and balanced whole-position accounting. P10b remains next: retain
-canonical settlement inputs and qualify the account-root transaction, pending
-order/hold termination, idempotent position closure and crash/ACK recovery.
-P10a does not activate settlement or complete P10; P13 also consumes its calculator.
+fixings, policy and balanced whole-position accounting. P10b implements the retained
+postlude, account-root transaction, pending order/hold termination, idempotent
+position closure and worker crash/lost-result recovery. These proofs complete the
+synthetic finite P10 slice, not public activation, provider/session finality or
+M07. P13 also consumes the calculator and retained outcomes.
 
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The

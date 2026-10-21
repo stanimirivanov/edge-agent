@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT policy,evidence FROM simulation_settled_instrument WHERE account=$1 AND instrument=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_settled_instrument",
+            "name": "policy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "evidence",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_settled_instrument",
+            "name": "evidence"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e1a574ac1d2f9e15861df760b11453a6e8708b7deaee5aa8c8329362c266219e"
+}

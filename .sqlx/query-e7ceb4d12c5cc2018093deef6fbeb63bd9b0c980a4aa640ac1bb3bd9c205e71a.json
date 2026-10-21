@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.binding,e.binding AS execution,sha256(s.canonical)=s.binding AND sha256(e.canonical)=e.binding AND sha256(e.profile)=$2 AS \"valid!\" FROM simulation_settlement_config s JOIN simulation_execution_config e USING(account) WHERE s.account=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_settlement_config",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "execution",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_config",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "valid!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "e7ceb4d12c5cc2018093deef6fbeb63bd9b0c980a4aa640ac1bb3bd9c205e71a"
+}

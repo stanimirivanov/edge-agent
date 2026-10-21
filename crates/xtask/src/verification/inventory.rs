@@ -445,6 +445,8 @@ pub(super) fn checks() -> Vec<Check> {
                         "published_admission_schemas_retain_immutable_content_and_identity",
                         "published_execution_schemas_retain_immutable_content_and_identity",
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
+                        "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
+                        "published_settlement_schemas_retain_immutable_content_and_identity",
                     ],
                     ignored: false,
                 });
