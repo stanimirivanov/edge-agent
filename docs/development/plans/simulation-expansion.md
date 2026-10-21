@@ -63,6 +63,12 @@ P11's pure theoretical analytics are documented in
 bounded IV failures and named default harness discovery qualify a finite tested
 envelope, not provider evidence, Greek-dependent policy activation or all M04.
 
+P12's bounded owner export, atomic revision history and disposable account/order/
+risk replay views are documented in [account audit](../account-audit.md).
+Checkpoint/backfill and restricted worker proofs qualify finite synthetic runs;
+public export transport, durable projector deployment and UI remain unactivated.
+P13 frozen-run evaluation and the remaining M08 work are not implied complete.
+
 P11 can run in parallel after its prerequisites and does not block quote-driven
 fully funded simulation. M06 explanations are optional; they cannot participate
 in risk, settlement or numeric authority. Existing M03-PR4 quality work remains

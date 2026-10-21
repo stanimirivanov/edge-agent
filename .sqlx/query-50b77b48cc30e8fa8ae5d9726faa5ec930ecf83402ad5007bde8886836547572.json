@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.revision, a.configuration\n         FROM simulation_account a\n         JOIN simulation_account_grant g USING (account)\n         WHERE a.account = $1 AND g.principal = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "configuration",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_account",
+            "name": "configuration"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "50b77b48cc30e8fa8ae5d9726faa5ec930ecf83402ad5007bde8886836547572"
+}

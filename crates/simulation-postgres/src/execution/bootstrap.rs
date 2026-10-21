@@ -23,13 +23,14 @@ impl std::fmt::Debug for InitialPositionCost {
         f.write_str("InitialPositionCost(..)")
     }
 }
-/// Bind execution once to a new or already admitted account, under the root lock.
+/// Bind execution once during account bootstrap, before the first admission.
 /// Every original inventory and targeted product needs explicit book cost. The
 /// provisioning role owns this operation; runtime workers cannot edit the plan.
 ///
 /// # Errors
 /// Reject missing/extra/duplicate positions, changed configuration/quantity or
-/// repeated provisioning. Any failure rolls back the complete initialization.
+/// repeated provisioning or started audit history. Any failure rolls back the
+/// complete initialization; never change an already retained genesis baseline.
 pub async fn provision_execution(
     connection: &mut PgConnection,
     context: &ExecutionContext<'_, '_, '_>,
@@ -41,6 +42,7 @@ pub async fn provision_execution(
         let account = context.admission.account();
         let root = sqlx::query!("SELECT configuration FROM simulation_account WHERE account=$1 FOR UPDATE",account).fetch_one(&mut *tx).await.map_err(storage)?;
         if root.configuration != context.admission.configuration.bytes() { return Err(invariant()); }
+        crate::audit::require_unstarted(&mut tx, &account).await?;
         let rows = sqlx::query!("SELECT strategy,instrument,unit,quantity FROM simulation_inventory WHERE account=$1 ORDER BY strategy,instrument,unit LIMIT 4097",account).fetch_all(&mut *tx).await.map_err(storage)?;
         if rows.len()>4096 { return Err(invariant()); }
         let mut required = std::collections::BTreeMap::new();

@@ -296,19 +296,27 @@ The [simulation profiles](../development/simulation-profiles.md) distinguish
 modeled option specifications from the first eligible cash-settled European
 scenario. Vendor-neutral data and simulation ports cannot enable live routing.
 
-The planned account boundary serializes every account mutation through one
+The finite synthetic account adapter serializes every account mutation through one
 PostgreSQL account-root lock inside the existing inbox/domain/outbox transaction.
 It evaluates account-wide and per-strategy risk together, holds reservations
 through cancellation races and publishes revisioned outcomes after commit.
 Projection reads and NATS partition keys are not risk authority. One fenced
 writable primary is required; deterministic input ordering/replay is a separate
-contract. These are P08 requirements, not a claim of an implemented account store.
+contract. P08-P10 qualify this private adapter, not authenticated public service
+activation, provider finality or deployment-profile failover.
 
 ### Audit projector and surveillance
 
 The audit projector consumes retained events and builds disposable read models
 for artifacts, orders, fills, positions, P&L, and administrative history. Its
 projections can be rebuilt from authoritative records.
+
+P12 supplies a bounded owner-authored account audit export and pure checkpointed
+account/order/risk views. Genesis and each account revision commit with the
+simulator transaction; projectors receive checked records rather than private SQL
+access. Duplicate receipts, contiguous hash-linked revisions and financial
+reconciliation protect replay. The [audit guide](../development/account-audit.md)
+defines limits, legacy-account rejection and deferred public transport/deployment.
 
 Surveillance reevaluates named expiry, invalidation, data-quality, and withdrawal
 conditions. It can append lifecycle commands or events; it cannot mutate a

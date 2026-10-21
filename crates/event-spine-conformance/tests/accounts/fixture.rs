@@ -103,7 +103,7 @@ impl Database {
         ddl(
             &mut self.connection,
             format!(
-                "GRANT INSERT ON edgeagent_message_inbox, edgeagent_message_outbox, simulation_order, simulation_reservation TO {}",
+                "GRANT INSERT ON edgeagent_message_inbox, edgeagent_message_outbox, simulation_order, simulation_reservation, simulation_account_audit TO {}",
                 self.role
             ),
         )
@@ -309,6 +309,50 @@ impl Database {
         )
         .fetch_one(&mut self.connection)
         .await?)
+    }
+    pub async fn audit_page(
+        &mut self,
+        after: Option<u64>,
+        limit: usize,
+        principal: u128,
+    ) -> Result<edgeagent_simulation_postgres::AuditPage, Error> {
+        let scenario = Scenario::new(&self.case)?;
+        let context = scenario.context(principal)?;
+        Ok(edgeagent_simulation_postgres::export_audit(
+            &mut self.connection,
+            &context,
+            after,
+            limit,
+        )
+        .await?)
+    }
+    pub async fn assert_audit_grants(&mut self) -> Result<(), Error> {
+        let (update,delete):(bool,bool)=sqlx::query_as("SELECT has_table_privilege($1,'simulation_account_audit','UPDATE'),has_table_privilege($1,'simulation_account_audit','DELETE')").bind(&self.role).fetch_one(&mut self.connection).await?;
+        assert!(!update && !delete);
+        Ok(())
+    }
+    // Administrative fault injection only; runtime cannot delete this evidence.
+    pub async fn remove_audit_history(&mut self) -> Result<(), Error> {
+        sqlx::query("DELETE FROM simulation_account_audit")
+            .execute(&mut self.connection)
+            .await?;
+        Ok(())
+    }
+    pub async fn restore_audit_history(
+        &mut self,
+        frames: &[edgeagent_contracts::audit::AccountAuditFrame],
+    ) -> Result<(), Error> {
+        for frame in frames {
+            sqlx::query(
+                "INSERT INTO simulation_account_audit(account,revision,payload) VALUES($1,$2,$3)",
+            )
+            .bind(&frame.state().account)
+            .bind(i64::try_from(frame.state().revision)?)
+            .bind(frame.encode()?)
+            .execute(&mut self.connection)
+            .await?;
+        }
+        Ok(())
     }
     pub async fn refresh_valuations(&mut self) -> Result<(), Error> {
         let mut transaction = self.connection.begin().await?;

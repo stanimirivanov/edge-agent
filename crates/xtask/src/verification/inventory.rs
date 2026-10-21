@@ -272,6 +272,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Independent numerical references, finite differences, point-in-time boundaries and bounded IV convergence; not provider or policy qualification.",
         ),
         check(
+            "account-audit-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-audit-domain",
+                "--test",
+                "replay",
+                "--",
+            ],
+            "Bounded owner-export replay, checkpoint/backfill equivalence, duplicates/conflicts, financial reconciliation and scope; not public deployment or risk authority.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -451,6 +467,22 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "account-audit-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "complete_rebuild_checkpoint_resume_and_reordered_backfill_agree",
+                        "duplicates_conflicts_and_foreign_scope_never_mutate_a_view",
+                        "financial_drift_and_revision_regression_fail_atomically",
+                        "capacity_corruption_truncation_and_unknown_versions_fail_closed",
+                        "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
+                        "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
             "option-analytics-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");

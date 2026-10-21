@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+mod audit;
 mod context;
 mod execution;
 mod processing;
@@ -17,6 +18,7 @@ pub use execution::{
 };
 pub use settlement::{SettlementContext, SettlementLimits, SettlementStep, provision_settlement};
 
+pub use audit::{AuditPage, export_audit};
 pub use context::{AdmissionContext, AdmissionLimits};
 pub use provision::{InitialInventory, InitialValuation, provision};
 
@@ -28,7 +30,9 @@ pub const MIGRATION_SQL: &str = concat!(
     "\n",
     include_str!("../migrations/0002_evidence_execution.sql"),
     "\n",
-    include_str!("../migrations/0003_account_settlement.sql")
+    include_str!("../migrations/0003_account_settlement.sql"),
+    "\n",
+    include_str!("../migrations/0004_account_audit.sql")
 );
 
 fn permanent(code: &'static str) -> HandlerFailure {

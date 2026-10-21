@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+edgeagent-audit-domain.workspace = true
 async-nats.workspace = true
 edgeagent-contracts.workspace = true
 edgeagent-market-data-domain.workspace = true

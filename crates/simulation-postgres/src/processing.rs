@@ -115,6 +115,7 @@ async fn admit(
     if stored.canonical != quote.canonical_bytes() || unsigned(stored.input_revision)? != sequence {
         return Err(permanent("admission_quote_identity"));
     }
+    crate::audit::ensure(transaction, context, root.revision).await?;
     let at = quote.position().1;
     quote
         .validate_at(at)
@@ -306,6 +307,7 @@ async fn admit(
     if updated.rows_affected() != 1 {
         return Err(invariant());
     }
+    crate::audit::capture(transaction, context).await?;
     PostgresOutbox
         .enqueue(transaction, DEFINITIONS[1], &fact)
         .await
@@ -322,7 +324,7 @@ async fn admit(
         })?;
     Ok(())
 }
-fn reason_code(reason: RiskReason) -> Result<&'static str, HandlerFailure> {
+pub(crate) fn reason_code(reason: RiskReason) -> Result<&'static str, HandlerFailure> {
     Ok(match reason {
         RiskReason::SessionClosed => "session_closed",
         RiskReason::StaleValuation => "stale_valuation",

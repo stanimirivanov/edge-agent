@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(SUM(cash_delta), 0)::BIGINT AS \"cash!\",\n                  COALESCE(SUM(position_delta), 0)::BIGINT AS \"cost!\",\n                  COALESCE(SUM(realized_delta), 0)::BIGINT AS \"realized!\",\n                  COALESCE(SUM(fee_delta), 0)::BIGINT AS \"fees!\"\n           FROM (\n               SELECT cash_delta, position_delta, realized_delta, fee_delta\n               FROM simulation_execution_receipt WHERE account = $1\n               UNION ALL\n               SELECT cash_delta, position_delta, realized_delta, fee_delta\n               FROM simulation_settlement_receipt WHERE account = $1\n           ) effects",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cash!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "cost!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "realized!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "fees!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d914127100d98fb53937e21875488a9cc848a7bb076b437db264c94054664084"
+}

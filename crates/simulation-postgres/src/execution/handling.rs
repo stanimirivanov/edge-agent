@@ -39,6 +39,7 @@ async fn execute(
         return Ok(());
     };
     let (account, plan, sequence, expected) = request.position();
+    crate::audit::ensure(tx, context.admission, root.revision).await?;
     let seq = signed(sequence)?;
     let step = context
         .steps
@@ -410,6 +411,7 @@ async fn execute(
     if changed.rows_affected() != 1 {
         return Err(invariant());
     }
+    crate::audit::capture(tx, context.admission).await?;
     PostgresOutbox
         .enqueue(tx, DEFINITIONS[1], &fact)
         .await

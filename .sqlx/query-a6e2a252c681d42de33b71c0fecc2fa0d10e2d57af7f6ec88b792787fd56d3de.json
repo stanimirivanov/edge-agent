@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.strategy, i.instrument, i.unit, i.quantity, c.cost_cents AS \"cost_cents?\"\n           FROM simulation_inventory i\n           LEFT JOIN simulation_position_cost c USING (account, strategy, instrument, unit)\n           WHERE i.account = $1\n           ORDER BY i.strategy COLLATE \"C\", i.instrument COLLATE \"C\", i.unit COLLATE \"C\"\n           LIMIT 4097",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "instrument",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "instrument"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unit",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "unit"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "quantity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "cost_cents?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_position_cost",
+            "name": "cost_cents"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a6e2a252c681d42de33b71c0fecc2fa0d10e2d57af7f6ec88b792787fd56d3de"
+}

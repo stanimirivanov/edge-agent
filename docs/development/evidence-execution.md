@@ -24,6 +24,9 @@ bounded, contiguous sequence. `ExecutionContext::new` binds each execution slot
 to its original quote, action, virtual instant and ready artifacts. Provision
 once with `provision_execution`, explicitly supplying quantity and total book
 cost for every existing/targeted position. Unknown cost does not become zero.
+Provision before the first admission: P12 closes bootstrap once audit history
+starts, so adding execution afterward cannot rewrite a retained funding/book-cost
+baseline. See [account audit](account-audit.md) for the legacy-run boundary.
 Reconstruct the same verified context from retained run/catalog/evidence after
 restart; changed bytes/configuration fail closed. The fixture values in
 `crates/event-spine-conformance/src/accounts/execution.rs` are invented examples,

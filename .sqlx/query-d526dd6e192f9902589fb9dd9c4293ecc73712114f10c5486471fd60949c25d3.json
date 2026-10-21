@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT order_id FROM simulation_order WHERE account = $1\n           ORDER BY order_id COLLATE \"C\" LIMIT 4097",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_order",
+            "name": "order_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d526dd6e192f9902589fb9dd9c4293ecc73712114f10c5486471fd60949c25d3"
+}

@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P12 account/order/risk audit exports, rebuilds and checkpoints, read
+[account audit](development/account-audit.md) and
+[ADR-0041](decisions/0041-retain-owner-authored-account-audit-revisions.md).
+
 For P11 theoretical Greeks and bounded implied volatility, read
 [option analytics](development/option-analytics.md) and
 [ADR-0040](decisions/0040-qualify-bounded-european-option-analytics.md).
