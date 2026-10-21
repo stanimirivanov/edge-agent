@@ -27,6 +27,13 @@ P09's implemented finite execution/accounting path is documented in
 [evidence execution](../evidence-execution.md). Its process proofs use invented
 inputs; provider/session qualification and public activation remain separate.
 
+P10 is split at the financial/commit boundary. P10a defines the tested pure
+[settlement contract](../option-settlement.md), with explicit synthetic final
+fixings, policy and balanced whole-position accounting. P10b remains next: retain
+canonical settlement inputs and qualify the account-root transaction, pending
+order/hold termination, idempotent position closure and crash/ACK recovery.
+P10a does not activate settlement or complete P10; P13 also consumes its calculator.
+
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The
 [roadmap](../../roadmap/milestones.md) owns milestone outcomes. These slices
