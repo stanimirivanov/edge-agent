@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For P11 theoretical Greeks and bounded implied volatility, read
+[option analytics](development/option-analytics.md) and
+[ADR-0040](decisions/0040-qualify-bounded-european-option-analytics.md).
+
 For P10 synthetic final fixings and durable account cash settlement, read
 [option settlement](development/option-settlement.md) and
 [ADR-0038](decisions/0038-bind-synthetic-cash-settlement-to-explicit-policy.md) and

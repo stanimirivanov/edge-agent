@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn analytics_sources_and_references_require_independent_numerical_qualification()
+-> Result<(), String> {
+    for path in [
+        "crates/simulation-domain/src/analytics/solver.rs",
+        "crates/simulation-domain/tests/analytics/references.rs",
+        "scripts/generate_option_analytics_references.py",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/option-analytics.md")
+        );
+        assert!(advice.checks.contains("option-analytics-contracts"));
+    }
+    Ok(())
+}
+
+#[test]
 fn settlement_boundaries_route_the_financial_process_and_schema_gates() -> Result<(), String> {
     for path in [
         "crates/simulation-postgres/src/settlement/handling.rs",

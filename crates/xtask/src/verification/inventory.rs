@@ -256,6 +256,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Public API positive and compile-fail examples, absent from --all-targets.",
         ),
         check(
+            "option-analytics-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-simulation-domain",
+                "--test",
+                "analytics",
+                "--",
+            ],
+            "Independent numerical references, finite differences, point-in-time boundaries and bounded IV convergence; not provider or policy qualification.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -435,6 +451,22 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "option-analytics-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "independent_reference_premiums_and_greeks_cover_carry_and_intraday_expiry",
+                        "analytic_greeks_satisfy_parity_and_independent_finite_differences",
+                        "solver_requires_price_and_width_convergence_and_never_returns_an_exhausted_iterate",
+                        "near_expiry_and_flat_time_value_cannot_fabricate_identified_volatility",
+                        "nonfinite_degenerate_unsupported_and_unknown_inputs_fail_closed",
+                        "retained_identities_reproduce_results_and_diagnostics_redact_inputs",
+                    ],
+                    ignored: false,
+                });
+            }
             "simulation-schema-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");

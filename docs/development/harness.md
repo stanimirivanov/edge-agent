@@ -112,6 +112,15 @@ default gate starts no service and makes no model-provider call.
 
 ## Feedback sensors
 
+The protected T2 `option-analytics-contracts` suite discovers and executes six
+named independent-reference, finite-difference, convergence, near-expiry,
+rejection and provenance/redaction proofs. Census mutation fixtures reject each
+removed/renamed test, duplicate and extra identity. Changed-path routing includes
+analytics, checked-in vectors and their standard-library reference generator.
+This is numerical qualification of a finite tested envelope, not provider quality,
+exact financial accounting or permission to activate Greek-dependent policy.
+See [option analytics](option-analytics.md) for units and tolerance boundaries.
+
 The protected T3 `event-spine-processes` and `nats-topology` suites belong to
 `m02-qualification`. `cargo xtask m02-qualification` provisions their owned
 dependencies and retains [scenario evidence](m02-qualification.md) through the
