@@ -1,6 +1,20 @@
 use super::*;
 
 #[test]
+fn daily_evidence_changes_route_the_protected_quality_gate() -> Result<(), String> {
+    for path in [
+        "crates/market-data-domain/src/daily.rs",
+        "crates/market-data-domain/tests/daily.rs",
+        "docs/development/market-data.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.guides.contains("docs/development/market-data.md"));
+        assert!(advice.checks.contains("market-data-quality"));
+    }
+    Ok(())
+}
+
+#[test]
 fn audit_sources_require_replay_and_owner_process_proofs() -> Result<(), String> {
     for path in [
         "crates/audit-domain/src/lib.rs",
