@@ -110,6 +110,9 @@ impl Database {
         .await?;
         ddl(&mut self.connection,format!("GRANT UPDATE(revision,input_revision,risk_checkpoint,run_checkpoint) ON simulation_account TO {}",self.role)).await?;
         if self.case.starts_with("execution") {
+            if self.case.starts_with("execution-settlement") {
+                ddl(&mut self.connection,format!("GRANT INSERT ON simulation_settlement_receipt,simulation_settled_instrument TO {}",self.role)).await?;
+            }
             ddl(
                 &mut self.connection,
                 format!(
@@ -330,6 +333,43 @@ impl Database {
             .fetch_one(&mut self.connection)
             .await?,
         )
+    }
+    pub async fn settlement_state(&mut self) -> Result<(i64, i64, i64, i64, i64, i64), Error> {
+        Ok(sqlx::query_as("SELECT (SELECT cash_cents FROM simulation_account),(SELECT COALESCE(SUM(quantity),0)::BIGINT FROM simulation_inventory),(SELECT COALESCE(SUM(cost_cents),0)::BIGINT FROM simulation_position_cost),(SELECT COALESCE(SUM(cash_cents),0)::BIGINT FROM simulation_reservation),(SELECT COUNT(*) FROM simulation_settled_instrument),(SELECT COUNT(*) FROM simulation_settlement_receipt)").fetch_one(&mut self.connection).await?)
+    }
+    pub async fn settlement_outcome(
+        &mut self,
+        sequence: i64,
+    ) -> Result<edgeagent_contracts::settlement::AccountSettlement, Error> {
+        let bytes: Vec<u8> = sqlx::query_scalar(
+            "SELECT outcome FROM simulation_settlement_receipt WHERE sequence=$1",
+        )
+        .bind(sequence)
+        .fetch_one(&mut self.connection)
+        .await?;
+        let envelope = MessageEnvelope::from_json(&bytes)?;
+        edgeagent_contracts::settlement::DEFINITIONS[1].validate_envelope(&envelope)?;
+        Ok(envelope.payload()?)
+    }
+    pub async fn tamper_settlement(&mut self) -> Result<(), Error> {
+        sqlx::query("UPDATE simulation_settlement_config SET canonical=set_byte(canonical,0,0)")
+            .execute(&mut self.connection)
+            .await?;
+        Ok(())
+    }
+    pub async fn assert_settlement_journals(&mut self) -> Result<(), Error> {
+        let scenario = Scenario::new(&self.case)?;
+        for index in 0..2 {
+            let request = scenario.request(index)?;
+            let bytes:Vec<u8>=sqlx::query_scalar("SELECT COALESCE(x.journal,o.admission_journal) FROM simulation_order o LEFT JOIN simulation_execution_order x USING(account,order_id) WHERE o.order_id=$1").bind(request.identity().1).fetch_one(&mut self.connection).await?;
+            let order = scenario.restore_order(index, &bytes)?;
+            assert!(matches!(
+                order.state().0,
+                edgeagent_simulation_domain::orders::OrderStatus::Expired
+                    | edgeagent_simulation_domain::orders::OrderStatus::Rejected
+            ));
+        }
+        Ok(())
     }
     pub async fn tamper_execution_artifact(&mut self, profile: bool) -> Result<(), Error> {
         if profile {

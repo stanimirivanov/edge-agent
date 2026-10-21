@@ -21,7 +21,9 @@
 //!     let _ = policy.calculate(at, position, 0, &[mark]);
 //! }
 //! ```
+mod allocation;
 mod encoding;
+pub use allocation::SettlementAttribution;
 
 use crate::{ArtifactDigest, execution::PositionCost};
 use edgeagent_market_data_domain::{
@@ -150,6 +152,16 @@ impl SettlementPolicy {
     pub fn identity(&self) -> ArtifactDigest {
         ArtifactDigest::of(&self.canonical_bytes())
     }
+    /// Exact historical contract version; never re-resolve an expired position to latest.
+    #[must_use]
+    pub const fn specification(&self) -> &ReferenceVersion<OptionSpecification> {
+        &self.specification
+    }
+    /// Explicit fixing instant and inclusive receipt deadline.
+    #[must_use]
+    pub const fn timing(&self) -> (PreciseInstant, PreciseInstant) {
+        (self.fixing_at, self.known_by)
+    }
     /// Calculate without mutation or I/O. Supply the complete candidate fixing set,
     /// authoritative whole-position cost and available **unreserved** cash. Multiple
     /// candidates fail even when equal: this API never silently selects a revision.
@@ -166,10 +178,25 @@ impl SettlementPolicy {
         available_cash: u64,
         fixings: &[SyntheticFinalFixing],
     ) -> Result<SettlementDecision, SettlementError> {
-        let (units, cost) = position.values();
-        if units == 0 {
+        if position.values().0 == 0 {
             return Err(SettlementError::Position);
         }
+        self.calculate_account(at, position, available_cash, fixings)
+    }
+    /// Calculate the entire account/instrument lot, including an empty lot. Empty
+    /// lots still require valid known final evidence before returning zero effects;
+    /// this allows a durable writer to seal an instrument without guessing payoff.
+    ///
+    /// # Errors
+    /// Same evidence, funding and arithmetic failures as `calculate`.
+    pub fn calculate_account(
+        &self,
+        at: PreciseInstant,
+        position: PositionCost,
+        available_cash: u64,
+        fixings: &[SyntheticFinalFixing],
+    ) -> Result<SettlementDecision, SettlementError> {
+        let (units, cost) = position.values();
         if fixings.len() > 1 {
             return Err(SettlementError::Evidence);
         }

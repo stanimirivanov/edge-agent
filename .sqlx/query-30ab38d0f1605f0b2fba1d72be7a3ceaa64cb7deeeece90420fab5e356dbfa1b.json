@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT binding FROM simulation_execution_config WHERE account=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_config",
+            "name": "binding"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "30ab38d0f1605f0b2fba1d72be7a3ceaa64cb7deeeece90420fab5e356dbfa1b"
+}

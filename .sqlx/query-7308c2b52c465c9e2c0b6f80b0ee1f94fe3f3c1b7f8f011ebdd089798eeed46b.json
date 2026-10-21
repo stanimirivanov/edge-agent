@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(SUM(cash_cents),0)::BIGINT AS \"cash!\" FROM simulation_reservation WHERE account=$1 AND NOT(instrument=$2 AND unit='contracts')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cash!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7308c2b52c465c9e2c0b6f80b0ee1f94fe3f3c1b7f8f011ebdd089798eeed46b"
+}

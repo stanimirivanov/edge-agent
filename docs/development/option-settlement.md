@@ -5,7 +5,7 @@
 - P10a calculates whole-position cash/European/index expiry with explicit rules.
 - A synthetic final fixing is distinct from a quote, trade or ordinary index mark.
 - Missing/future evidence never means zero payout or permission to close exposure.
-- This pure API does not commit settlement; P10 account integration remains next.
+- The pure API proposes effects; the account adapter commits them atomically.
 
 Read [ADR-0038](../decisions/0038-bind-synthetic-cash-settlement-to-explicit-policy.md),
 [simulation profiles](simulation-profiles.md) and [P09 accounting](evidence-execution.md).
@@ -46,27 +46,57 @@ The calculated result exposes contracts closed, gross/fees, remaining available
 cash, policy/evidence digests and balanced signed postings in P09 order: cash,
 position cost, realized P/L expense, fee expense. It releases all supplied book
 cost in candidate effects. It never changes the supplied position or commits cash.
-Do not split a position to change rounding; future storage owns the whole-position
+Do not split a position to change rounding; the account adapter owns the whole-position
 lock and identity. A repeated pure calculation repeats its result, not a durable
 exactly-once guarantee.
 
 ## Integration and limits
 
-No SQL, public endpoint, provider, source qualification, exercise discretion,
-threshold/lapse policy, short options or delivery exists in this slice. All
+The pure domain layer contains no SQL. This integration adds no public endpoint,
+provider, source qualification, exercise discretion, threshold/lapse policy,
+short options or physical delivery. All
 fixtures are invented. Normalized finite input bounds and checked u128/u64
 arithmetic reject amounts too large for the current accounting representation.
 Only one explicitly declared final synthetic candidate is supported; corrections
 and source finality protocols require later reviewed integration.
 
-P10b must retain fixing artifacts in canonical run ordering, authenticate scope,
-lock the account root, terminate affected outstanding orders/holds, close the
-whole authoritative position once and commit account/run/risk continuations,
-receipt, postings and outbox atomically. It must cover missing evidence,
-duplicates/conflicts, rollback, process death, restart and lost ACK. Until then,
-P09 option order expiry continues to leave its position open. Public activation,
-provider/session qualification and all of M07 remain incomplete. Rollback of this
-foundation is code-only: no schema or persisted account meaning changed.
+P10b implements the transaction in
+[ADR-0039](../decisions/0039-commit-account-settlement-as-a-canonical-postlude.md).
+`SettlementContext::new` appends a bounded canonical postlude to `ExecutionContext`.
+Supply explicit order/allocation `SettlementLimits` (each 1..=32), contiguous steps,
+exact policies and complete synthetic candidate sets. Provision using
+`provision_settlement` after execution/book costs but before any admission. Retain
+the full configuration; reconstructed contexts must match its bytes after restart.
+
+The postlude is owner-authored input, not a new market feed or scheduler. It follows
+the original finite schedule and frozen market inputs. P05 time/IDs continue from
+the account checkpoint. Complete replay identity includes manifest, admission/
+execution configuration and the postlude. Combined slots stay within 4096 and
+postlude bytes within 1 MiB. Commands carry only account/plan/slot/revision.
+
+Under the existing inbox transaction, acquire the root lock, check grants and
+retained configuration, then return exact receipts before new revision checks.
+Deferred operations advance account/run and risk observation without changing cash,
+positions, order journals or holds. Successful settlement expires affected active
+orders and releases their holds, closing that instrument across all strategies.
+Other reservations protect cash. `calculate_account` requires known final evidence
+even for an empty lot, without weakening the positive-position `calculate` API.
+
+Round the account/instrument payoff once. The pure `SettlementCalculation::allocate`
+attributes gross/fees by cumulative quantity proportion in strategy-ID order,
+using differences of cumulative floors; the last attribution consumes the residue.
+Release actual strategy costs, not a second rounded payoff. Commit the balanced
+attributions, expiry revisions, receipt, terminal instrument seal, account/run/risk
+continuations and outbox together. Later sealed-instrument steps record zero-effect
+already-settled facts. Valuation timestamps/gross carry and risk latches are not reset.
+
+Apply expand-only migration 0003 with the owner role. Runtime may SELECT the new
+configuration and INSERT receipts/seals, not modify them, policies, funding or grants.
+Facts have a 16 KiB serialized limit. Missing/corrupt costs or legacy journals,
+unsupported units, exceeded work and unfunded fees fail closed. Rollback pauses
+ingress and retains committed cash, journals, receipts and seals, never drops them.
+P09 order expiry alone still leaves positions open. These proofs qualify finite
+synthetic P10 correctness, not public/provider/session activation or all of M07.
 
 ## Verification
 
@@ -74,7 +104,14 @@ foundation is code-only: no schema or persisted account meaning changed.
 cargo test --locked -p edgeagent-simulation-domain --test settlement
 cargo test --locked -p edgeagent-simulation-domain --doc
 cargo xtask verify
+cargo xtask verify --check account-admission-processes --check simulation-schema-contracts
+cargo xtask verify --check sqlx-metadata
 ```
 
-Default tests exercise deterministic financial behavior, redaction and compile-
-time separation of marks from settlement. They claim no database or crash proof.
+Default tests cover arithmetic, attributions, wire/schema checks, redaction and
+compile-time mark/fixing separation. The protected process gate uses the documented
+disposable PostgreSQL profile for concurrency, real worker death and replay.
+On Windows, finish process proofs before starting another Cargo build of the
+worker binary: a running executable cannot be replaced by a concurrent build.
+Post-commit worker-result loss is not a new broker-wire ACK fault; no proof claims
+provider finality, HA, power-loss durability or market fidelity.

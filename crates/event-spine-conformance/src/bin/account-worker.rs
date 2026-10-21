@@ -101,6 +101,11 @@ async fn run() -> Result<(), Error> {
     } else {
         None
     };
+    let settlement = if scenario.has_settlement() {
+        Some(scenario.settlement(execution.as_ref().ok_or("execution absent")?)?)
+    } else {
+        None
+    };
     if mode == "initialize" {
         provision(
             &mut connection,
@@ -120,11 +125,23 @@ async fn run() -> Result<(), Error> {
             .await
             .inspect_err(|_| eprintln!("fixture execution provisioning rejected"))?;
         }
+        if let Some(settlement) = &settlement {
+            edgeagent_simulation_postgres::provision_settlement(&mut connection, settlement)
+                .await?;
+        }
     } else {
         let index: usize = slot.parse()?;
         let id = std::env::var("P08_MESSAGE_ID")?;
-        let executing = scenario.has_execution() && index >= 2;
-        let mut envelope = if executing {
+        let settling = scenario.has_settlement() && index >= 5;
+        let executing = scenario.has_execution() && index >= 2 && !settling;
+        let mut envelope = if settling {
+            scenario.settlement_envelope(
+                settlement.as_ref().ok_or("settlement absent")?,
+                index as u64 + 1,
+                &id,
+                std::env::var("P08_CONFLICT").as_deref() == Ok("1"),
+            )?
+        } else if executing {
             scenario.execution_envelope(
                 execution.as_ref().ok_or("execution absent")?,
                 index as u64 + 1,
@@ -134,7 +151,7 @@ async fn run() -> Result<(), Error> {
         } else {
             scenario.envelope(index, &id)?
         };
-        if !executing && std::env::var("P08_CONFLICT").as_deref() == Ok("1") {
+        if !executing && !settling && std::env::var("P08_CONFLICT").as_deref() == Ok("1") {
             let original = scenario.request(index)?;
             let identity = original.identity();
             let request = edgeagent_contracts::simulation::SubmitDryRunOrder::new(
@@ -148,21 +165,27 @@ async fn run() -> Result<(), Error> {
             envelope = Scenario::wrap(&request, &id)?;
         }
         let wrapper = Wrapper {
-            real: if executing {
+            real: if settling {
+                settlement.as_ref().ok_or("settlement absent")?
+            } else if executing {
                 execution.as_ref().ok_or("execution absent")?
             } else {
                 &context
             },
             mode: mode.clone(),
         };
-        let registry = if executing {
+        let registry = if settling {
+            edgeagent_contracts::settlement::registry()?
+        } else if executing {
             edgeagent_contracts::execution::registry()?
         } else {
             registry()?
         };
         if let Err(error) = PostgresInboundMessageStore::new(&mut connection, &wrapper)
             .process(
-                if executing {
+                if settling {
+                    "p10-settlement"
+                } else if executing {
                     "p09-execution"
                 } else {
                     "p08-admission"

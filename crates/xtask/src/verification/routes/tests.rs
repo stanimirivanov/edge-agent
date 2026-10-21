@@ -1,6 +1,30 @@
 use super::*;
 
 #[test]
+fn settlement_boundaries_route_the_financial_process_and_schema_gates() -> Result<(), String> {
+    for path in [
+        "crates/simulation-postgres/src/settlement/handling.rs",
+        "crates/simulation-domain/src/settlement/allocation.rs",
+        "crates/contracts/src/settlement.rs",
+        "crates/contracts/schemas/simulation/settle-account-v1.json",
+        "crates/contracts/schemas/simulation/settlement-decided-v1.json",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/option-settlement.md")
+        );
+        assert!(advice.checks.contains("account-admission-processes"));
+        assert!(advice.checks.contains("simulation-schema-contracts"));
+        if path.starts_with("crates/simulation-postgres/") {
+            assert!(advice.checks.contains("sqlx-metadata"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn account_owner_changes_require_the_independent_process_gate() -> Result<(), String> {
     for path in [
         "crates/simulation-postgres/src/processing.rs",

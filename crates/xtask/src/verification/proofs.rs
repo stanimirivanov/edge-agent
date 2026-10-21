@@ -23,6 +23,9 @@ const ACCOUNT_ADMISSION: Target = Target {
         "execution_fill_accounting_and_shared_liquidity_hold_across_products",
         "execution_crash_rollback_and_lost_ack_retain_one_fill",
         "execution_competing_workers_serialize_without_reusing_liquidity",
+        "settlement_payoffs_defer_without_releasing_holds_and_close_once_across_strategies",
+        "settlement_worker_death_and_lost_result_preserve_atomic_journals_and_cash",
+        "settlement_competitors_authorization_conflicts_and_tampering_cannot_repay_a_position",
     ],
 };
 const EVENT_SPINE: &[Requirement] = &[
@@ -493,7 +496,7 @@ mod tests {
         ));
         assert!(check.command.args.contains(&"account_admission"));
         let discovery = check.discovery.ok_or("account discovery missing")?;
-        assert_eq!(discovery.expected.len(), 7);
+        assert_eq!(discovery.expected.len(), 10);
         let complete = discovery
             .expected
             .iter()
@@ -557,8 +560,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 69);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 69);
+        assert_eq!(inventory.len(), 72);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 72);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

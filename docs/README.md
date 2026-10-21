@@ -28,9 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
-For P10 synthetic final fixings and cash-settlement calculations, read
+For P10 synthetic final fixings and durable account cash settlement, read
 [option settlement](development/option-settlement.md) and
-[ADR-0038](decisions/0038-bind-synthetic-cash-settlement-to-explicit-policy.md).
+[ADR-0038](decisions/0038-bind-synthetic-cash-settlement-to-explicit-policy.md) and
+[ADR-0039](decisions/0039-commit-account-settlement-as-a-canonical-postlude.md).
 
 For P08 atomic account admission and synthetic reservations, read
 [account admission](development/account-admission.md) and

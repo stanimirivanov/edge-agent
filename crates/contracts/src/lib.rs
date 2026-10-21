@@ -9,6 +9,7 @@ pub mod execution;
 mod message_type;
 mod messaging;
 mod routing;
+pub mod settlement;
 pub mod simulation;
 
 pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};

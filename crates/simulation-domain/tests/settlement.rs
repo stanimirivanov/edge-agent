@@ -434,6 +434,77 @@ fn exact_fractional_payoffs_balance_across_a_bounded_reference_matrix() -> TestR
 }
 
 #[test]
+fn account_attribution_conserves_cents_independent_of_strategy_arrival_order() -> TestResult {
+    use edgeagent_simulation_domain::risk::RiskStrategyId;
+    let policy = policy(
+        OptionKind::Call,
+        SettlementRounding::NearestEven,
+        SettlementCharges::new(FeeBasis::EveryContract, 1),
+    )?;
+    let result = calculated(policy.calculate_account(
+        at(12)?,
+        PositionCost::new(3, 18000)?,
+        100,
+        &[fixing(&policy, 10_000_005, 5)?],
+    )?)?;
+    let first = RiskStrategyId::new(1)?;
+    let second = RiskStrategyId::new(2)?;
+    let positions = [
+        (second, PositionCost::new(1, 6000)?),
+        (first, PositionCost::new(2, 12000)?),
+    ];
+    let allocations = result.allocate(&positions)?;
+    let mut reversed = positions;
+    reversed.reverse();
+    assert_eq!(allocations, result.allocate(&reversed)?);
+    let actual: Vec<_> = allocations
+        .iter()
+        .copied()
+        .map(SettlementAttribution::parts)
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            (first, 2, 1, 2, [-1, -12000, 11999, 2]),
+            (second, 1, 1, 1, [0, -6000, 5999, 1])
+        ]
+    );
+    let mut totals = [0_i128; 4];
+    for allocation in &allocations {
+        for (total, n) in totals.iter_mut().zip(allocation.parts().4) {
+            *total += n;
+        }
+    }
+    assert_eq!(totals, result.effects().1);
+    assert_eq!(
+        result.allocate(&[(first, PositionCost::new(3, 17999)?)]),
+        Err(SettlementError::Position)
+    );
+    assert_eq!(
+        result.allocate(&[
+            (first, PositionCost::new(1, 6000)?),
+            (first, PositionCost::new(2, 12000)?)
+        ]),
+        Err(SettlementError::Position)
+    );
+    assert_eq!(
+        result.allocate(&[(first, PositionCost::new(0, 0)?); 33]),
+        Err(SettlementError::Position)
+    );
+    let empty = PositionCost::new(0, 0)?;
+    assert_eq!(
+        policy.calculate_account(at(12)?, empty, 99, &[])?,
+        SettlementDecision::Deferred(DeferredReason::MissingEvidence)
+    );
+    let empty_result =
+        calculated(policy.calculate_account(at(12)?, empty, 99, &[fixing(&policy, 105, 0)?])?)?;
+    assert_eq!(empty_result.amounts(), (0, 0, 0));
+    assert_eq!(empty_result.effects(), (99, [0; 4]));
+    assert!(empty_result.allocate(&[])?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn fractional_contract_terms_and_net_cash_boundaries_do_not_assume_a_standard_multiplier()
 -> TestResult {
     let original = specification(

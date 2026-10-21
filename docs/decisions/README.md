@@ -150,3 +150,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0036](0036-serialize-synthetic-account-admission-and-reservations.md) | Accepted | Serialize synthetic account admission and reservations. |
 | [ADR-0037](0037-commit-evidence-driven-simulation-execution.md) | Accepted | Commit evidence-driven simulation execution. |
 | [ADR-0038](0038-bind-synthetic-cash-settlement-to-explicit-policy.md) | Accepted | Bind synthetic cash settlement to explicit policy. |
+| [ADR-0039](0039-commit-account-settlement-as-a-canonical-postlude.md) | Accepted | Commit account settlement as a canonical postlude. |

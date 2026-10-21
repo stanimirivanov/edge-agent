@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request FROM simulation_settlement_receipt WHERE account=$1 AND sequence=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_settlement_receipt",
+            "name": "request"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a049a8aa5610f448f35b5f11f6606b85e0f095d1d765281dd63e7ff1c3d46c35"
+}
