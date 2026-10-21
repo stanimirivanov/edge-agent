@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT content,capacity,consumed FROM simulation_liquidity WHERE run=$1 AND budget=$2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "content",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_liquidity",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "capacity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_liquidity",
+            "name": "capacity"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "consumed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_liquidity",
+            "name": "consumed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "900cda99dadc99c9629d9db58951b6caf885cb9d68e961b28b9d7c703b2a7fd7"
+}

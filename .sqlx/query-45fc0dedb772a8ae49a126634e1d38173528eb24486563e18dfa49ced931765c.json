@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE simulation_reservation SET cash_cents=$3,quantity=$4 WHERE account=$1 AND order_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45fc0dedb772a8ae49a126634e1d38173528eb24486563e18dfa49ced931765c"
+}

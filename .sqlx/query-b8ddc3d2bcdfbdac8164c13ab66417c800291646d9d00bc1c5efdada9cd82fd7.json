@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT strategy,instrument,unit,quantity FROM simulation_inventory WHERE account=$1 ORDER BY strategy,instrument,unit LIMIT 4097",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "instrument",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "instrument"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unit",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "unit"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "quantity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "quantity"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b8ddc3d2bcdfbdac8164c13ab66417c800291646d9d00bc1c5efdada9cd82fd7"
+}

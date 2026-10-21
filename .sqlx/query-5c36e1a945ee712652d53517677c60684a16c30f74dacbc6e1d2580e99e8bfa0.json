@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.quantity,c.cost_cents FROM simulation_inventory i JOIN simulation_position_cost c USING(account,strategy,instrument,unit) WHERE i.account=$1 AND i.strategy=$2 AND i.instrument=$3 AND i.unit=$4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quantity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_inventory",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cost_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_position_cost",
+            "name": "cost_cents"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5c36e1a945ee712652d53517677c60684a16c30f74dacbc6e1d2580e99e8bfa0"
+}

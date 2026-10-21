@@ -289,7 +289,8 @@ async fn admit(
     .map_err(|_| invariant())?;
     let bytes = fact.to_json().map_err(|_| invariant())?;
     let revision = signed(expected + 1)?;
-    sqlx::query!("INSERT INTO simulation_order (account,order_id,quote,request,outcome,account_revision,order_revision) VALUES ($1,$2,$3,$4,$5,$6,1)",account,order_id,quote_id,command,bytes,revision)
+    let admission_journal = order.journal_bytes(quote.fingerprint());
+    sqlx::query!("INSERT INTO simulation_order (account,order_id,quote,request,outcome,account_revision,order_revision,admission_journal) VALUES ($1,$2,$3,$4,$5,$6,1,$7)",account,order_id,quote_id,command,bytes,revision,admission_journal)
         .execute(&mut **transaction).await.map_err(storage)?;
     if status == AdmissionStatus::Admitted {
         let cash = signed(cash)?;

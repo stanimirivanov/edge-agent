@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.strategy,v.gross_cents,v.loss_cents,v.valued_seconds,v.valued_nanos,v.artifact,COALESCE(r.cash,0)::BIGINT AS \"cash!\",COALESCE(r.orders,0)::BIGINT AS \"orders!\" FROM simulation_valuation v LEFT JOIN (SELECT strategy,SUM(cash_cents)::BIGINT AS cash,COUNT(*)::BIGINT AS orders FROM simulation_reservation WHERE account=$1 GROUP BY strategy) r USING(strategy) WHERE v.account=$1 ORDER BY v.strategy LIMIT 33",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "strategy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "gross_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "gross_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "loss_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "loss_cents"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "valued_seconds",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "valued_seconds"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "valued_nanos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "valued_nanos"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "artifact",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_valuation",
+            "name": "artifact"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cash!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "orders!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "dbc9103615047a4f3a70d23f01f8402864e185a7b0f8347260640e4eec7f9c1f"
+}

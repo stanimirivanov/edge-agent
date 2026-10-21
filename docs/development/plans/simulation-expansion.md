@@ -23,6 +23,10 @@ P07's pure order lifecycle and proposal contract is documented in
 integration; P09 qualifies models and ledger effects. No simulator service path is
 activated by this foundation, and M07 is not complete.
 
+P09's implemented finite execution/accounting path is documented in
+[evidence execution](../evidence-execution.md). Its process proofs use invented
+inputs; provider/session qualification and public activation remain separate.
+
 The [profiles](../simulation-profiles.md) own data meaning, supported/rejected
 products, account consistency and qualification. The
 [roadmap](../../roadmap/milestones.md) owns milestone outcomes. These slices
@@ -72,7 +76,9 @@ vendor chosen by the superseded ADR. Do not silently expand daily-v1 semantics.
 Every implementation PR runs `cargo xtask verify` and adds focused tests. P08
 adds the protected `account-admission-processes` gate to the existing runner and
 local-platform CI profile. It proves synthetic-only reservations and recovery;
-P09 still owns qualified quote/fill/fee/ledger algorithms and service activation.
+P09 adds explicit fill/fee/ledger algorithms and retained virtual latency through
+the same gate. Public activation still requires authenticated composition and
+provider/session qualification; synthetic proofs cannot grant those authorities.
 Provider selection/rights, authoritative index and settlement sources, concrete
 freshness/skew/resource limits and product-specific cutoff/rounding rules remain
 qualification inputs. Unknown values fail closed, never become guessed defaults.

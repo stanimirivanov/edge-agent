@@ -58,7 +58,7 @@ amend/replace are intentionally unsupported.
 
 Run `cargo test --locked -p edgeagent-simulation-domain`, then `cargo xtask verify`.
 Tests use invented evidence and fake models, without a provider/runtime call.
-P08 must add registry-checked product messages and prove multi-process admission,
-rollback/restart/acknowledgement loss. P09 adds balanced ledger/reproducibility
-qualification; P10 adds settlement. See [the plan](plans/simulation-expansion.md)
+P08 adds registry-checked admission and multi-process recovery proofs. The
+[P09 execution path](evidence-execution.md) adds balanced accounting, liquidity
+and virtual latency qualification; P10 still owns settlement. See [the plan](plans/simulation-expansion.md)
 and [ADR-0035](../decisions/0035-apply-dry-run-order-lifecycles-from-retained-facts.md).

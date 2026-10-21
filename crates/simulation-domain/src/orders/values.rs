@@ -63,7 +63,7 @@ macro_rules! identity {
     ($name:ident, $doc:literal) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name([u8; 32]);
+        pub struct $name(pub(super) [u8; 32]);
         impl $name {
             /// Assign an identity from P05's explicit deterministic ID stream.
             #[must_use]

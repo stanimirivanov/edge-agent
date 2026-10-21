@@ -166,6 +166,16 @@ inspection.
   failed step and advisory before regenerating locks. Patch every affected
   independent resolution and run `cargo xtask verify dependency-audit`; do not
   freeze the advisory database, weaken policy, or regenerate unrelated graphs.
+- Certificate distrust incidents can affect both the verifier (`rustls-webpki`)
+  and bundled trust anchors (`webpki-roots` or `webpki-root-certs`). Inspect all
+  six independent locks, not just the jobs that failed first. For
+  [RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382.html),
+  the patched stable verifier is 0.103.16; the related
+  [root-bundle advisories](https://github.com/rustls/webpki-roots/pull/133)
+  require bundle version 1.0.10. Use targeted Cargo updates in each affected
+  workspace and review that only the intended packages and checksums changed.
+  These are incident-specific patch versions, not a permanent security floor;
+  the current advisory audit remains authoritative.
 - A missing tool, Docker daemon, or network connection is an unavailable check,
   not a pass. Record it as not run and rely on the required CI job before merge.
 - A partial artifact directory fails validation. Delete the disposable output

@@ -240,9 +240,28 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Prefix("crates/simulation-postgres/"),
         guides: &[
             "docs/development/account-admission.md",
+            "docs/development/evidence-execution.md",
             "docs/development/sqlx-metadata.md",
         ],
         checks: &["account-admission-processes", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/event-spine-conformance/src/accounts/"),
+        guides: &["docs/development/evidence-execution.md"],
+        checks: &["account-admission-processes", "simulation-schema-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/simulation-domain/src/execution"),
+        guides: &[
+            "docs/development/evidence-execution.md",
+            "docs/development/dry-run-orders.md",
+        ],
+        checks: &["account-admission-processes", "simulation-schema-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/contracts/src/execution.rs"),
+        guides: &["docs/development/evidence-execution.md"],
+        checks: &["account-admission-processes", "simulation-schema-contracts"],
     },
     Route {
         matcher: Matcher::Exact("crates/event-spine-conformance/tests/account_admission.rs"),

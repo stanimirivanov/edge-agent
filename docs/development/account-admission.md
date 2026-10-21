@@ -4,8 +4,10 @@
 
 - One PostgreSQL account lock serializes all strategies and replicas.
 - The existing inbox transaction commits financial holds and outbox facts together.
-- Quotes/valuations remain explicitly synthetic until P09 qualification.
-- No live route, fill, ledger, release or public ingress is enabled.
+- Admission catalogs/bootstrap valuations remain explicitly synthetic protections;
+  P09 does not relabel them as provider quotes or fresh market marks.
+- Admission itself cannot fill/release. [P09 execution](evidence-execution.md)
+  adds the separately configured transactional path; public ingress stays inactive.
 
 ## Ownership and order
 
@@ -18,7 +20,8 @@ reservation, risk/run checkpoints and outbox fact atomically. ACK only after com
 Exact full duplicates retain original outcomes even after account advancement.
 Conflicts/stale revisions fail permanently; canonical gaps retry. Buys reserve
 upward-rounded debit plus fees; sells reserve existing long units, never proceeds.
-Cancellation cannot release funds in this slice. Missing evidence grants no capacity.
+Admission cannot release funds. P09 requires definitive terminal facts before
+releasing the remainder. Missing evidence grants no capacity.
 
 Provision new accounts only, with explicit funding and complete strategy valuations.
 Bind the principal at trusted composition, not through JSON/source URIs. Retain
@@ -42,15 +45,14 @@ acknowledgement, then recover with new workers. Error/panic paths clean up fixtu
 An unavailable database fails the selected gate; ignored tests are not proofs.
 Set connection-side transaction budgets before inbox insertion.
 
-## P09 hand-off
+## Execution integration
 
-P09 qualifies evidence-driven pricing, liquidity, fees and latency. Fills must
-respect retained protection and update balanced ledgers/release terminal remainders
-under the same lock and transaction. P10 qualifies expiry/settlement. Provider,
+The [P09 path](evidence-execution.md) adds evidence-driven pricing, liquidity,
+fees and latency with balanced postings and terminal release under the same
+lock/transaction. P10 still owns expiry/settlement. Provider,
 public authentication and HA integration remain later work.
-P09 must migrate the admission-only order-revision and held-reservation constraints
-before introducing later lifecycle revisions or terminal reservation states.
-The buy reservation rounds total-order notional once. P09 must keep cumulative
-partial-fill debits within that protection; independently rounding every partial
-fill upward can exceed the hold. Qualify cumulative rounding or an explicit extra
-allowance before activation, and never spend beyond the retained total fee cap.
+Admission receipts retain their original order revision 1; P09 persists the full
+later lifecycle journal separately. Active holds retain their held-only constraint;
+definitive terminal journal facts remove active holds without erasing the original
+admission, decision receipts or financial postings. Partial-fill debits round once
+cumulatively and cannot spend beyond retained cash or fee protection.

@@ -88,10 +88,12 @@ fn verify(root: &Path) -> Result<(), String> {
         println!("Applying inbox migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
-    let simulation =
-        fs::read(root.join("crates/simulation-postgres/migrations/0001_account_admission.sql"))
+    for path in inbox_migrations(&root.join("crates/simulation-postgres/migrations"))? {
+        let bytes = fs::read(&path)
             .map_err(|error| format!("cannot read simulation migration: {error}"))?;
-    apply_inbox_migration(root, &simulation)?;
+        println!("Applying simulation migration {}", path.display());
+        apply_inbox_migration(root, &bytes)?;
+    }
     // The synthetic process composition also uses checked macros. This schema
     // exists only in conformance tooling, never in a product service migration.
     let conformance =
@@ -390,6 +392,28 @@ mod tests {
             ]
             .map(OsStr::new)
         );
+        Ok(())
+    }
+    #[test]
+    fn simulation_schema_assembly_includes_every_execution_migration() -> Result<(), Box<dyn Error>>
+    {
+        let directory =
+            super::super::workspace_root().join("crates/simulation-postgres/migrations");
+        let migrations = inbox_migrations(&directory)?;
+        let names = migrations
+            .iter()
+            .map(|path| path.file_name().ok_or("migration name"))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            names,
+            ["0001_account_admission.sql", "0002_evidence_execution.sql"].map(OsStr::new)
+        );
+        let library = fs::read_to_string(
+            super::super::workspace_root().join("crates/simulation-postgres/src/lib.rs"),
+        )?;
+        for name in names {
+            assert!(library.contains(name.to_str().ok_or("migration filename")?));
+        }
         Ok(())
     }
 }

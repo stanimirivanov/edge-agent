@@ -1,13 +1,19 @@
-//! ExecutionSimulator-owned atomic admission adapter. Synthetic quotes only.
+//! ExecutionSimulator-owned atomic admission and evidence execution adapter.
+//! Reservation catalogs remain explicit synthetic protections, not provider quotes.
 //! Bind a verified principal and immutable scenario context at composition, never
 //! from payload claims. Use the existing PostgreSQL inbox transaction; ACK only
-//! after its commit. This library exposes no fill or reservation-release path.
+//! after its commit. Execution retains lifecycle, balanced postings and liquidity
+//! consumption under the same root fence, without a public or live broker path.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 mod context;
+mod execution;
 mod processing;
 mod provision;
+pub use execution::{
+    ExecutionAction, ExecutionContext, ExecutionStep, InitialPositionCost, provision_execution,
+};
 
 pub use context::{AdmissionContext, AdmissionLimits};
 pub use provision::{InitialInventory, InitialValuation, provision};
@@ -15,7 +21,11 @@ pub use provision::{InitialInventory, InitialValuation, provision};
 use edgeagent_messaging::{FailureCode, HandlerFailure, HandlerFailureKind};
 
 /// Service-owned migration, applied once in a private schema, not peers' tables.
-pub const MIGRATION_SQL: &str = include_str!("../migrations/0001_account_admission.sql");
+pub const MIGRATION_SQL: &str = concat!(
+    include_str!("../migrations/0001_account_admission.sql"),
+    "\n",
+    include_str!("../migrations/0002_evidence_execution.sql")
+);
 
 fn permanent(code: &'static str) -> HandlerFailure {
     HandlerFailure::permanent(FailureCode::from_static(code))

@@ -50,6 +50,7 @@ pub struct AdmissionContext<'run> {
     pub(crate) limits: AdmissionLimits,
     pub(crate) configuration: ArtifactDigest,
     pub(crate) initial_run: Vec<u8>,
+    pub(crate) execution_slots: Vec<(u64, edgeagent_market_data_domain::PreciseInstant)>,
 }
 impl<'run> AdmissionContext<'run> {
     /// Bind 1..=4096 distinct immutable synthetic quotes and canonical input slots.
@@ -66,7 +67,39 @@ impl<'run> AdmissionContext<'run> {
         quotes: &[SyntheticReservationQuote],
         limits: AdmissionLimits,
     ) -> Result<Self, HandlerFailure> {
-        if principal == 0 || quotes.is_empty() || quotes.len() > 4096 {
+        Self::new_scheduled(
+            account,
+            principal,
+            manifest,
+            policy,
+            session,
+            (quotes, &[]),
+            limits,
+        )
+    }
+    /// Bind a combined admission/execution schedule. Every canonical slot must
+    /// occur exactly once, starting at 1, with nonregressing virtual time. The
+    /// execution context subsequently binds the actual actions and evidence.
+    ///
+    /// # Errors
+    /// Reject gaps, overlapping slots and invalid quote/context configuration.
+    pub fn new_scheduled(
+        account: RiskAccountId,
+        principal: u128,
+        manifest: &'run RunManifest,
+        policy: RiskPolicy,
+        session: RiskSession,
+        catalog: (
+            &[SyntheticReservationQuote],
+            &[(u64, edgeagent_market_data_domain::PreciseInstant)],
+        ),
+        limits: AdmissionLimits,
+    ) -> Result<Self, HandlerFailure> {
+        let (quotes, execution_slots) = catalog;
+        if principal == 0
+            || quotes.is_empty()
+            || quotes.len().saturating_add(execution_slots.len()) > 4096
+        {
             return Err(permanent("admission_configuration"));
         }
         let mut identities = BTreeSet::new();
@@ -88,11 +121,27 @@ impl<'run> AdmissionContext<'run> {
         }
         let mut quotes = quotes.to_vec();
         quotes.sort_by_key(|quote| quote.position().0);
+        let mut schedule = quotes
+            .iter()
+            .map(SyntheticReservationQuote::position)
+            .collect::<Vec<_>>();
+        schedule.extend_from_slice(execution_slots);
+        schedule.sort_by_key(|slot| slot.0);
+        if schedule.len() > 4096
+            || schedule
+                .iter()
+                .enumerate()
+                .any(|(i, slot)| slot.0 != i as u64 + 1)
+            || schedule
+                .windows(2)
+                .any(|pair| matches!(pair, [a,b] if a.1>b.1))
+        {
+            return Err(invariant());
+        }
         let mut initial_run = edgeagent_simulation_domain::Run::new(manifest);
         for (index, quote) in quotes.iter().enumerate() {
-            if quote.position().0 != index as u64 + 1
-                || quote.order().scope().identity().3.bytes()
-                    != initial_run.next_id().map_err(|_| invariant())?.bytes()
+            if quote.order().scope().identity().3.bytes()
+                != initial_run.next_id().map_err(|_| invariant())?.bytes()
                 || index
                     .checked_sub(1)
                     .and_then(|previous| quotes.get(previous))
@@ -113,8 +162,19 @@ impl<'run> AdmissionContext<'run> {
         bytes.extend(risk.checkpoint());
         bytes.extend(limits.lock_ms.to_be_bytes());
         bytes.extend(limits.statement_ms.to_be_bytes());
+        if !execution_slots.is_empty() {
+            bytes.extend(b"EA-COMBINED-SLOTS1\0");
+            bytes.extend((quotes.len() as u64).to_be_bytes());
+            bytes.extend((execution_slots.len() as u64).to_be_bytes());
+        }
         for quote in &quotes {
             bytes.extend(quote.fingerprint().bytes());
+        }
+        for (slot, at) in execution_slots {
+            bytes.extend(slot.to_be_bytes());
+            let (seconds, nanos) = at.unix_parts();
+            bytes.extend(seconds.to_be_bytes());
+            bytes.extend(nanos.to_be_bytes());
         }
         Ok(Self {
             account,
@@ -126,6 +186,7 @@ impl<'run> AdmissionContext<'run> {
             limits,
             configuration: ArtifactDigest::of(&bytes),
             initial_run,
+            execution_slots: execution_slots.to_vec(),
         })
     }
     /// Account identity for private-schema provisioning and command routing.

@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT binding,slots,\n            sha256(canonical)=binding AS \"canonical_ok!\",\n            sha256(profile)=$2 AS \"profile_ok!\"\n           FROM simulation_execution_config WHERE account=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_config",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "slots",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "simulation_execution_config",
+            "name": "slots"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "canonical_ok!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "profile_ok!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "bbbe81b0ccbb1e4bfbf5090a4c1adb84b1d8d32133debd106d14eaf6b4783d2b"
+}
