@@ -10,6 +10,7 @@ pub mod admission;
 pub mod execution;
 pub mod orders;
 pub mod risk;
+pub mod settlement;
 
 #[cfg(test)]
 mod tests;
