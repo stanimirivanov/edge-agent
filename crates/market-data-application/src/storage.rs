@@ -93,7 +93,7 @@ pub trait EvidenceStorage: Send + Sync {
     ) -> impl Future<Output = Result<EvidenceObject, EvidenceStorageError>> + Send;
     /// Bounded verified retrieval; hashes never grant read permission.
     /// # Errors
-    /// Reject invalid identity, denied/expired access, missing/corrupt bytes and I/O failures.
+    /// Reject invalid identity, denied or expired access, absent or corrupt bytes and I/O failures.
     fn get(
         &self,
         object: &EvidenceObject,

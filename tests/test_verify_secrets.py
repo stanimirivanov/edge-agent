@@ -40,6 +40,9 @@ class SecretVerificationTests(unittest.TestCase):
             original.replace("useDefault = true", "useDefault = false"),
             original.replace("deploy[/\\\\]local[/\\\\]\\.env\\.example$", ".*"),
             original.replace("^edgeagent-local-(?:postgres|access|secret)$", "edgeagent"),
+            original.replace("^access, missing[/]corrupt $", ".*"),
+            original.replace('regexTarget = "match"', 'regexTarget = "secret"'),
+            original.replace("market-data-application[/\\\\]src[/\\\\]storage\\.rs$", ".*"),
             original.replace("[extend]", '[extend]\ndisabledRules = ["github-pat"]'),
             original + '\n[[allowlists]]\npaths = ["tests/.*"]\n',
             original + '\n[[rules]]\nid = "disabled-boundary"\nregex = "does-not-matter"\n',
@@ -92,7 +95,11 @@ class SecretVerificationTests(unittest.TestCase):
         self.assertEqual({"GIT_NO_REPLACE_OBJECTS": "1", "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": str(ROOT.resolve())}, git_keys)
 
     def test_fixture_paths_are_root_anchored_on_both_platforms(self) -> None:
-        for expression, relative in ((verify_secrets.FIXTURE_PATH_REGEX, "deploy/local/.env.example"), (verify_secrets.CANCELLATION_PATH_REGEX, "crates/outbox-relay/tests/cancellation.rs")):
+        for expression, relative in (
+            (verify_secrets.FIXTURE_PATH_REGEX, "deploy/local/.env.example"),
+            (verify_secrets.CANCELLATION_PATH_REGEX, "crates/outbox-relay/tests/cancellation.rs"),
+            (verify_secrets.STORAGE_DOC_PATH_REGEX, "crates/market-data-application/src/storage.rs"),
+        ):
             for candidate in (relative, "./" + relative, relative.replace("/", "\\"), ".\\" + relative.replace("/", "\\")):
                 self.assertIsNotNone(re.fullmatch(expression, candidate))
             for candidate in ("nested/" + relative, "../" + relative, "/" + relative, "C:/source/" + relative):
@@ -249,11 +256,14 @@ class SecretVerificationTests(unittest.TestCase):
             "clean", "built-in-rule", "canonical-fixture", "changed-fixture",
             "fixture-outside-allowlist", "nested-fixture-outside-allowlist", "inline-suppression",
             "idempotency-fixture", "changed-idempotency-fixture", "idempotency-fixture-outside-allowlist",
-            "nested-idempotency-fixture-outside-allowlist", "removed-secret-history",
+            "nested-idempotency-fixture-outside-allowlist",
+            "historical-storage-rustdoc", "changed-storage-rustdoc", "storage-rustdoc-other-context",
+            "storage-rustdoc-outside-allowlist", "nested-storage-rustdoc-outside-allowlist",
+            "removed-secret-history",
             "removed-merge-only-secret-history",
         )
         self.assertEqual(expected_ids, verify_secrets.SELF_TEST_CASE_IDS)
-        rules = iter((None, "github-pat", None, "edgeagent-config-credential", "edgeagent-config-credential", "edgeagent-config-credential", "github-pat", None, "generic-api-key", "generic-api-key", "generic-api-key", None, "github-pat", None, "github-pat"))
+        rules = iter((None, "github-pat", None, "edgeagent-config-credential", "edgeagent-config-credential", "edgeagent-config-credential", "github-pat", None, "generic-api-key", "generic-api-key", "generic-api-key", None, "generic-api-key", "generic-api-key", "generic-api-key", "generic-api-key", None, "github-pat", None, "github-pat"))
         def scan(executable: str, root: Path, source: Path, mode: str, temporary: Path) -> list:
             (temporary / "report.json").write_text("[]", encoding="utf-8")
             rule = next(rules)
@@ -273,8 +283,8 @@ class SecretVerificationTests(unittest.TestCase):
         stdout = io.StringIO()
         with patch.object(verify_secrets, "scan", side_effect=scan) as detector, patch.object(verify_secrets, "captured_command", side_effect=command), redirect_stdout(stdout):
             count = verify_secrets.self_test("mock-detector", ROOT)
-        self.assertEqual(13, count)
-        self.assertEqual(15, detector.call_count)
+        self.assertEqual(18, count)
+        self.assertEqual(20, detector.call_count)
         self.assertEqual(2, sum(call.args[3] == "git" for call in detector.call_args_list))
         prefix = "secret detector self-proof passed: "
         self.assertEqual(list(expected_ids), [line.removeprefix(prefix) for line in stdout.getvalue().splitlines()])

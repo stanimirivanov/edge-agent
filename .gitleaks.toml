@@ -31,3 +31,12 @@ condition = "AND"
 paths = ['''^(?:\.[/\\])?crates[/\\]outbox-relay[/\\]tests[/\\]cancellation\.rs$''']
 regexTarget = "secret"
 regexes = ['''^cancellation-order-01$''']
+
+# Historical Rustdoc prose misread as a base64-like credential assignment.
+# Match the complete detector span at this exact path, not every value/file.
+[[rules.allowlists]]
+description = "Exact historical evidence-storage Rustdoc false positive"
+condition = "AND"
+paths = ['''^(?:\.[/\\])?crates[/\\]market-data-application[/\\]src[/\\]storage\.rs$''']
+regexTarget = "match"
+regexes = ['''^access, missing[/]corrupt $''']

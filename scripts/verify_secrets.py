@@ -29,11 +29,16 @@ CONFIG_CREDENTIAL_REGEX = (
 )
 FIXTURE_PATH_REGEX = r'''^(?:\.[/\\])?deploy[/\\]local[/\\]\.env\.example$'''
 CANCELLATION_PATH_REGEX = r'''^(?:\.[/\\])?crates[/\\]outbox-relay[/\\]tests[/\\]cancellation\.rs$'''
+STORAGE_DOC_PATH_REGEX = r'''^(?:\.[/\\])?crates[/\\]market-data-application[/\\]src[/\\]storage\.rs$'''
+STORAGE_DOC_MATCH_REGEX = r"^access, missing[/]corrupt $"
 SELF_TEST_CASE_IDS = (
     "clean", "built-in-rule", "canonical-fixture", "changed-fixture",
     "fixture-outside-allowlist", "nested-fixture-outside-allowlist", "inline-suppression",
     "idempotency-fixture", "changed-idempotency-fixture", "idempotency-fixture-outside-allowlist",
-    "nested-idempotency-fixture-outside-allowlist", "removed-secret-history",
+    "nested-idempotency-fixture-outside-allowlist",
+    "historical-storage-rustdoc", "changed-storage-rustdoc", "storage-rustdoc-other-context",
+    "storage-rustdoc-outside-allowlist", "nested-storage-rustdoc-outside-allowlist",
+    "removed-secret-history",
     "removed-merge-only-secret-history",
 )
 
@@ -79,6 +84,12 @@ def expected_config(version: str) -> dict:
                 "paths": [CANCELLATION_PATH_REGEX],
                 "regexTarget": "secret",
                 "regexes": [r"^cancellation-order-01$"],
+            }, {
+                "description": "Exact historical evidence-storage Rustdoc false positive",
+                "condition": "AND",
+                "paths": [STORAGE_DOC_PATH_REGEX],
+                "regexTarget": "match",
+                "regexes": [STORAGE_DOC_MATCH_REGEX],
             }],
         }],
     }
@@ -291,6 +302,11 @@ def self_test(executable: str, root: Path) -> int:
     # this case must exercise entropy detection, not an upstream stopword.
     changed_identity = secret[4:]
     cancellation = "cancellation-order-01"
+    storage_path = "crates/market-data-application/src/storage.rs"
+    # Assemble the historical prose so this scanner proof does not itself carry
+    # the misleading assignment span in an unrelated source file.
+    documentation_value = "missing/corrupt"
+    documentation = "/// Reject invalid identity, denied/expired access, " + f"{documentation_value} bytes and I/O failures.\n"
     cases = (
         ("clean", "src/probe.txt", "non-sensitive source\n", None),
         ("built-in-rule", "src/probe.txt", f"access_token={secret}\n", "github-pat"),
@@ -303,6 +319,11 @@ def self_test(executable: str, root: Path) -> int:
         ("changed-idempotency-fixture", "crates/outbox-relay/tests/cancellation.rs", f'idempotency_key: "{changed_identity}"\n', "generic-api-key"),
         ("idempotency-fixture-outside-allowlist", "src/probe.txt", f'idempotency_key: "{cancellation}"\n', "generic-api-key"),
         ("nested-idempotency-fixture-outside-allowlist", "nested/crates/outbox-relay/tests/cancellation.rs", f'idempotency_key: "{cancellation}"\n', "generic-api-key"),
+        ("historical-storage-rustdoc", storage_path, documentation, None),
+        ("changed-storage-rustdoc", storage_path, documentation.replace(documentation_value, changed_identity), "generic-api-key"),
+        ("storage-rustdoc-other-context", storage_path, f'access_token="{documentation_value}"\n', "generic-api-key"),
+        ("storage-rustdoc-outside-allowlist", "src/probe.rs", documentation, "generic-api-key"),
+        ("nested-storage-rustdoc-outside-allowlist", f"nested/{storage_path}", documentation, "generic-api-key"),
     )
     if tuple(case[0] for case in cases) + SELF_TEST_CASE_IDS[-2:] != SELF_TEST_CASE_IDS:
         raise SecurityToolError("secret detector self-proof case inventory drift")
