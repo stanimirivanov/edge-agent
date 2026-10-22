@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
-mod canonical_json;
+pub(crate) mod canonical_json;
 mod error;
 mod validation;
 

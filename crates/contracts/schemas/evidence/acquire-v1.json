@@ -1,0 +1,28 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:acquire-evidence:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Identity-only request for an owner-retained immutable admission record; no actor, URL or price.",
+  "properties": {
+    "request": {
+      "description": "Immutable command identity, also the acquisition partition key.",
+      "maxLength": 32,
+      "minLength": 32,
+      "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+      "type": "string"
+    },
+    "request_sha256": {
+      "description": "Digest binding the complete owner-admitted request, not an API capability.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request",
+    "request_sha256"
+  ],
+  "title": "AcquireEvidence",
+  "type": "object"
+}

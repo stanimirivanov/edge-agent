@@ -57,7 +57,7 @@ OUTBOX_RELAY = "edgeagent-outbox-relay"
 SERVICE_RUNTIME = "edgeagent-service-runtime"
 TELEMETRY = "edgeagent-telemetry"
 XTASK = "edgeagent-xtask"
-CONTRACT_DEPENDENCIES = frozenset({"cloudevents-sdk", "serde", "serde_json", "url"})
+CONTRACT_DEPENDENCIES = frozenset({"chrono", "sha2", "schemars", "cloudevents-sdk", "serde", "serde_json", "url"})
 INBOX_POSTGRES_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "sqlx"})
 INBOX_POSTGRES_DEV_DEPENDENCIES = frozenset({"serde_json", "tokio"})
 INBOX_HANDLER_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
@@ -93,7 +93,7 @@ XTASK_DEPENDENCIES = frozenset(
 
 PACKAGE_RULES = {
     "crates/market-data-application": PackageRule(
-        "edgeagent-market-data-application", "lib", frozenset({"edgeagent-market-data-domain"}),
+        "edgeagent-market-data-application", "lib", frozenset({CONTRACTS, "edgeagent-market-data-domain"}),
     ),
     "crates/audit-domain": PackageRule(
         "edgeagent-audit-domain", "lib",

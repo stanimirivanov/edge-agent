@@ -61,8 +61,10 @@ Response conformance is not whole-series quality. Apply
 [daily quality](market-data.md#daily-series-quality-acceptance) to retained
 references/calendar/actions and the exact provider-day schedule before publishing.
 The acquisition request remains explicit-range-only: latest-session discovery,
-universe admission, storage/artifact contracts and runtime coordination remain
-later M03 slices. No provider or model calls occur in default verification.
+universe admission, storage and runtime coordination remain later M03 slices.
+The [evidence bridge](evidence-artifacts.md) now rechecks this authority and daily
+quality to seal immutable wire artifacts; it performs no publication or I/O.
+No provider or model calls occur in default verification.
 
 ## Verification
 

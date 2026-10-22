@@ -52,8 +52,9 @@ The bounded integer representation implements no decimal parser or arithmetic
 engine; adapters must parse source tokens exactly before constructing values.
 Dates alone prove neither session membership nor timezone conversion; source
 IDs/revisions alone prove neither entitlement nor historical availability.
-Provider token parsing and wire DTOs remain later M03 slices; this library does
-not make the bootstrap service acquire evidence.
+Provider token parsing remains a later M03 slice. Wire DTOs now live separately
+in [evidence contracts](evidence-artifacts.md); the pure domain does not make
+the bootstrap service acquire evidence.
 
 The domain also implements immutable `ReferenceVersion<T>` observations and
 bounded `ReferenceHistory<T>` selection for mappings, calendar days and actions.

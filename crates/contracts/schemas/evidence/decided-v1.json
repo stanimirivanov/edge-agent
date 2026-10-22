@@ -1,0 +1,218 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:evidence-acquisition-decided:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Untrusted terminal event input. The validated wrapper prevents invalid object bounds/times.",
+  "properties": {
+    "outcome": {
+      "description": "Mutually exclusive ready/rejected outcome.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Only publish after immutable storage and owner commit.",
+          "properties": {
+            "object": {
+              "additionalProperties": false,
+              "description": "Scoped canonical object identity.",
+              "properties": {
+                "audience": {
+                  "description": "Licensed audience, not a bearer token.",
+                  "maxLength": 32,
+                  "minLength": 32,
+                  "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                  "type": "string"
+                },
+                "bytes": {
+                  "description": "Exact encoded length, within the 4 MiB object limit.",
+                  "format": "uint32",
+                  "maximum": 4194304,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "delete_by": {
+                  "additionalProperties": false,
+                  "description": "Exclusive deletion/use deadline.",
+                  "properties": {
+                    "nanos": {
+                      "description": "Nanosecond fraction, never rounded to milliseconds.",
+                      "format": "uint32",
+                      "maximum": 999999999,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "seconds": {
+                      "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                      "format": "int64",
+                      "maximum": 253402300799,
+                      "minimum": -62135596800,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "nanos",
+                    "seconds"
+                  ],
+                  "type": "object"
+                },
+                "replaces": {
+                  "description": "Linked prior immutable snapshot, null for an original capture.",
+                  "maxLength": 64,
+                  "minLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "rights": {
+                  "additionalProperties": false,
+                  "description": "Exact selected rights version.",
+                  "properties": {
+                    "id": {
+                      "description": "Nonzero reference identity.",
+                      "maxLength": 32,
+                      "minLength": 32,
+                      "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "description": "Exact selected revision.",
+                      "maxLength": 20,
+                      "minLength": 1,
+                      "pattern": "^[1-9][0-9]{0,19}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "type": "object"
+                },
+                "sha256": {
+                  "description": "Canonical object digest.",
+                  "maxLength": 64,
+                  "minLength": 64,
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "storage": {
+                  "description": "Storage scope; the adapter must also bind rights and audience.",
+                  "maxLength": 32,
+                  "minLength": 32,
+                  "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "audience",
+                "bytes",
+                "delete_by",
+                "replaces",
+                "rights",
+                "sha256",
+                "storage"
+              ],
+              "type": "object"
+            },
+            "status": {
+              "const": "ready",
+              "type": "string"
+            }
+          },
+          "required": [
+            "object",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Terminal no-evidence result.",
+          "properties": {
+            "reason": {
+              "description": "Bounded reason, never provider text.",
+              "oneOf": [
+                {
+                  "const": "rights",
+                  "description": "Current rights unavailable.",
+                  "type": "string"
+                },
+                {
+                  "const": "conformance",
+                  "description": "Provider contract not qualified.",
+                  "type": "string"
+                },
+                {
+                  "const": "quality",
+                  "description": "Whole-series quality failed.",
+                  "type": "string"
+                },
+                {
+                  "const": "cancelled",
+                  "description": "Caller cancelled.",
+                  "type": "string"
+                },
+                {
+                  "const": "deadline",
+                  "description": "Command deadline elapsed.",
+                  "type": "string"
+                },
+                {
+                  "const": "budget",
+                  "description": "Durable resource budget exhausted.",
+                  "type": "string"
+                },
+                {
+                  "const": "provider",
+                  "description": "Provider failed terminally.",
+                  "type": "string"
+                }
+              ]
+            },
+            "status": {
+              "const": "rejected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "request": {
+      "additionalProperties": false,
+      "description": "Exact acquisition request binding.",
+      "properties": {
+        "request": {
+          "description": "Immutable command identity, also the acquisition partition key.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "request_sha256": {
+          "description": "Digest binding the complete owner-admitted request, not an API capability.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request",
+        "request_sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "outcome",
+    "request"
+  ],
+  "title": "EvidenceDecisionData",
+  "type": "object"
+}

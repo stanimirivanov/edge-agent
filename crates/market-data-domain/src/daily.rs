@@ -147,6 +147,7 @@ impl DailyQualityPolicy {
             })
             .transpose()?;
         let mut accepted = Vec::new();
+        let mut calendars = Vec::new();
         let mut previous_close = None;
         let mut previous_end = None;
         for date in dates {
@@ -155,6 +156,7 @@ impl DailyQualityPolicy {
                 .resolve_day(spec.venue, date, spec.cutoff)
                 .map_err(|_| DailyQualityError::Reference)?;
             self.fresh(calendar, spec.cutoff)?;
+            calendars.push(calendar);
             let actions = references
                 .actions
                 .actions_on(spec.instrument, date, spec.cutoff)
@@ -255,6 +257,7 @@ impl DailyQualityPolicy {
             range: spec.range,
             action_coverage: coverage,
             days: accepted,
+            calendars,
         })
     }
 
@@ -325,8 +328,14 @@ pub struct CheckedDailySeries<'a> {
     range: DateRange,
     action_coverage: &'a ReferenceVersion<ActionCoverage>,
     days: Vec<CheckedDailyDay<'a>>,
+    calendars: Vec<&'a ReferenceVersion<CalendarDay>>,
 }
 impl<'a> CheckedDailySeries<'a> {
+    /// Exact complete selected calendar coverage, including explicitly closed dates.
+    #[must_use]
+    pub fn calendars(&self) -> &[&'a ReferenceVersion<CalendarDay>] {
+        &self.calendars
+    }
     /// Exact requested half-open coverage, including explicitly closed dates.
     #[must_use]
     pub const fn range(&self) -> DateRange {

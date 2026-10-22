@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn evidence_sources_schemas_and_fixtures_route_protected_contracts() -> Result<(), String> {
+    for path in [
+        "crates/contracts/src/evidence/artifact.rs",
+        "crates/contracts/schemas/evidence/daily-v1.json",
+        "crates/contracts/fixtures/evidence-v1/daily.json",
+        "crates/event-spine-conformance/tests/evidence_contracts.rs",
+        "docs/development/evidence-artifacts.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("evidence-contracts"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/evidence-artifacts.md")
+        );
+    }
+    let advice = advise(&["crates/market-data-application/src/evidence.rs".into()])?;
+    assert!(advice.checks.contains("evidence-freezing"));
+    Ok(())
+}
+
+#[test]
 fn acquisition_contracts_route_reviewed_authority_conformance() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/authority.rs",

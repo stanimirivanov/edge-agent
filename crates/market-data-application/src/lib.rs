@@ -3,12 +3,14 @@
 //! not credentials; recheck current catalogs before accepting results or using retained data.
 #![deny(missing_docs)]
 mod authority;
+mod evidence;
 mod provider;
 mod request;
 pub use authority::{
     AccessScope, Permission, ProviderReview, ReviewStatus, RightsRecord, UsePermissions,
 };
 use edgeagent_market_data_domain::{ReferenceHistory, ReferenceVersion, ValueError};
+pub use evidence::{EvidenceFreeze, EvidenceFreezeError, freeze_evidence};
 pub use provider::{DailyProvider, ProviderBatch, ProviderFailure, validate_batch};
 pub use request::{AcquisitionRequest, Cancellation, KnowledgeMode, RawRetention, RequestBudget};
 use std::num::NonZeroU128;

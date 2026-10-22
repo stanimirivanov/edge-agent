@@ -1,0 +1,806 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:evidence-artifact:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Untrusted construction/wire input. Only `DailyEvidenceArtifact` validates and seals it.",
+  "properties": {
+    "bars": {
+      "description": "Strictly date-ordered accepted rows; calendar witnesses cover closed days too.",
+      "items": {
+        "additionalProperties": false,
+        "description": "Raw provider-day row, never adjusted or relabeled as core-only.",
+        "properties": {
+          "actions": {
+            "description": "Exact supported action annotations, never applied to prices.",
+            "items": {
+              "additionalProperties": false,
+              "description": "Exact service-owned logical reference version, not a database location.",
+              "properties": {
+                "id": {
+                  "description": "Nonzero reference identity.",
+                  "maxLength": 32,
+                  "minLength": 32,
+                  "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                  "type": "string"
+                },
+                "revision": {
+                  "description": "Exact selected revision.",
+                  "maxLength": 20,
+                  "minLength": 1,
+                  "pattern": "^[1-9][0-9]{0,19}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "revision"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4096,
+            "type": "array"
+          },
+          "bucket": {
+            "description": "Exact half-open provider bucket; not inferred from core hours.",
+            "items": {
+              "additionalProperties": false,
+              "description": "Lossless UTC seconds/nanoseconds, independent from event/receipt semantics.",
+              "properties": {
+                "nanos": {
+                  "description": "Nanosecond fraction, never rounded to milliseconds.",
+                  "format": "uint32",
+                  "maximum": 999999999,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "seconds": {
+                  "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                  "format": "int64",
+                  "maximum": 253402300799,
+                  "minimum": -62135596800,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "nanos",
+                "seconds"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "calendar": {
+            "additionalProperties": false,
+            "description": "Selected calendar version.",
+            "properties": {
+              "id": {
+                "description": "Nonzero reference identity.",
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                "type": "string"
+              },
+              "revision": {
+                "description": "Exact selected revision.",
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[1-9][0-9]{0,19}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "conditions": {
+            "description": "Reviewed, sorted source condition codes.",
+            "items": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "date": {
+            "description": "Exchange-local label.",
+            "maxLength": 10,
+            "minLength": 10,
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
+          },
+          "event_at": {
+            "additionalProperties": false,
+            "description": "Source event, actual receipt, optional provider observation/publication times.",
+            "properties": {
+              "nanos": {
+                "description": "Nanosecond fraction, never rounded to milliseconds.",
+                "format": "uint32",
+                "maximum": 999999999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seconds": {
+                "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                "format": "int64",
+                "maximum": 253402300799,
+                "minimum": -62135596800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nanos",
+              "seconds"
+            ],
+            "type": "object"
+          },
+          "mapping": {
+            "additionalProperties": false,
+            "description": "Selected mapping version.",
+            "properties": {
+              "id": {
+                "description": "Nonzero reference identity.",
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                "type": "string"
+              },
+              "revision": {
+                "description": "Exact selected revision.",
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[1-9][0-9]{0,19}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "observation": {
+            "additionalProperties": false,
+            "description": "Source observation identity/revision.",
+            "properties": {
+              "id": {
+                "description": "Nonzero reference identity.",
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                "type": "string"
+              },
+              "revision": {
+                "description": "Exact selected revision.",
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[1-9][0-9]{0,19}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "observed_at": {
+            "additionalProperties": false,
+            "description": "Optional provider observation time; presence is required even when null.",
+            "properties": {
+              "nanos": {
+                "description": "Nanosecond fraction, never rounded to milliseconds.",
+                "format": "uint32",
+                "maximum": 999999999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seconds": {
+                "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                "format": "int64",
+                "maximum": 253402300799,
+                "minimum": -62135596800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nanos",
+              "seconds"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "ohlc": {
+            "description": "Open/high/low/close in USD/share, without rounding.",
+            "items": {
+              "additionalProperties": false,
+              "description": "Exact normalized nonnegative decimal; prices require positive coefficients.",
+              "properties": {
+                "coefficient": {
+                  "description": "0 or 1..28 base-ten digits, with no leading zero/sign/exponent.",
+                  "maxLength": 28,
+                  "minLength": 1,
+                  "pattern": "^(0|[1-9][0-9]{0,27})$",
+                  "type": "string"
+                },
+                "scale": {
+                  "description": "Fractional scale; volume additionally requires <=6.",
+                  "format": "uint8",
+                  "maximum": 8,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "coefficient",
+                "scale"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "predecessor": {
+            "description": "Linked source predecessor, null for original revision one.",
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "additionalProperties": false,
+            "description": "Optional provider publication time; not independent historical proof.",
+            "properties": {
+              "nanos": {
+                "description": "Nanosecond fraction, never rounded to milliseconds.",
+                "format": "uint32",
+                "maximum": 999999999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seconds": {
+                "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                "format": "int64",
+                "maximum": 253402300799,
+                "minimum": -62135596800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nanos",
+              "seconds"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "received_at": {
+            "additionalProperties": false,
+            "description": "Actual local receipt.",
+            "properties": {
+              "nanos": {
+                "description": "Nanosecond fraction, never rounded to milliseconds.",
+                "format": "uint32",
+                "maximum": 999999999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seconds": {
+                "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                "format": "int64",
+                "maximum": 253402300799,
+                "minimum": -62135596800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nanos",
+              "seconds"
+            ],
+            "type": "object"
+          },
+          "sequence": {
+            "description": "Optional source sequence, preserving zero and the full u64 range as text.",
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^(0|[1-9][0-9]{0,19})$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transformation": {
+            "description": "Exact row transformation revision.",
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "type": "string"
+          },
+          "volume": {
+            "additionalProperties": false,
+            "description": "Reported nonnegative shares, zero permitted.",
+            "properties": {
+              "coefficient": {
+                "description": "0 or 1..28 base-ten digits, with no leading zero/sign/exponent.",
+                "maxLength": 28,
+                "minLength": 1,
+                "pattern": "^(0|[1-9][0-9]{0,27})$",
+                "type": "string"
+              },
+              "scale": {
+                "description": "Fractional scale; volume additionally requires <=6.",
+                "format": "uint8",
+                "maximum": 8,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "coefficient",
+              "scale"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "actions",
+          "bucket",
+          "calendar",
+          "conditions",
+          "date",
+          "event_at",
+          "mapping",
+          "observation",
+          "observed_at",
+          "ohlc",
+          "predecessor",
+          "published_at",
+          "received_at",
+          "sequence",
+          "transformation",
+          "volume"
+        ],
+        "type": "object"
+      },
+      "maxItems": 252,
+      "minItems": 1,
+      "type": "array"
+    },
+    "captured_at": {
+      "additionalProperties": false,
+      "description": "Actual capture/freeze time, not source label time.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nanos",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "cutoff": {
+      "additionalProperties": false,
+      "description": "Inclusive evidence knowledge cutoff.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nanos",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "delete_by": {
+      "additionalProperties": false,
+      "description": "Exclusive licensed retention deadline, never longer than 24 hours after capture.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nanos",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "knowledge": {
+      "description": "Explicit knowledge interpretation.",
+      "oneOf": [
+        {
+          "const": "capture",
+          "description": "Current capture, not past availability.",
+          "type": "string"
+        },
+        {
+          "const": "retained",
+          "description": "Previously retained observations.",
+          "type": "string"
+        }
+      ]
+    },
+    "quality": {
+      "additionalProperties": false,
+      "description": "Exact checked quality configuration.",
+      "properties": {
+        "close_change_bps": {
+          "description": "Inclusive consecutive-close basis-point threshold.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reference_age_ms": {
+          "description": "Positive maximum reference age.",
+          "maxLength": 19,
+          "minLength": 1,
+          "pattern": "^[1-9][0-9]{0,18}$",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Checked quality transformation revision.",
+          "maxLength": 20,
+          "minLength": 1,
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        },
+        "source_difference_bps": {
+          "description": "Inclusive source-price basis-point threshold; no comparison source is included in v1.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "close_change_bps",
+        "reference_age_ms",
+        "revision",
+        "source_difference_bps"
+      ],
+      "type": "object"
+    },
+    "range": {
+      "description": "Half-open requested exchange-local dates, including explicitly closed days.",
+      "items": {
+        "description": "Canonical Gregorian YYYY-MM-DD in years 1 through 9999; not proof of a session.",
+        "maxLength": 10,
+        "minLength": 10,
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "references": {
+      "description": "Complete selected reference census, canonically sorted by role/version.",
+      "items": {
+        "additionalProperties": false,
+        "description": "Immutable provenance witness; checksum is of authenticated source bytes, not an ETag.",
+        "properties": {
+          "date": {
+            "description": "Required effective date for calendar/action roles, null for the others.",
+            "maxLength": 10,
+            "minLength": 10,
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "Reference role.",
+            "oneOf": [
+              {
+                "const": "mapping",
+                "description": "Dated identity mapping.",
+                "type": "string"
+              },
+              {
+                "const": "calendar",
+                "description": "Explicit open/closed calendar coverage.",
+                "type": "string"
+              },
+              {
+                "const": "action",
+                "description": "Supported corporate-action annotation.",
+                "type": "string"
+              },
+              {
+                "const": "action_coverage",
+                "description": "Complete action catalog coverage.",
+                "type": "string"
+              },
+              {
+                "const": "rights",
+                "description": "Current acquisition rights review.",
+                "type": "string"
+              },
+              {
+                "const": "provider_review",
+                "description": "Current provider capability review.",
+                "type": "string"
+              }
+            ]
+          },
+          "known_at": {
+            "additionalProperties": false,
+            "description": "Actual knowledge time.",
+            "properties": {
+              "nanos": {
+                "description": "Nanosecond fraction, never rounded to milliseconds.",
+                "format": "uint32",
+                "maximum": 999999999,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seconds": {
+                "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                "format": "int64",
+                "maximum": 253402300799,
+                "minimum": -62135596800,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "nanos",
+              "seconds"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "description": "Source authority identity.",
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+            "type": "string"
+          },
+          "source_sha256": {
+            "description": "Source-byte digest; full referenced records must be retained for replay.",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "version": {
+            "additionalProperties": false,
+            "description": "Selected identity/revision.",
+            "properties": {
+              "id": {
+                "description": "Nonzero reference identity.",
+                "maxLength": 32,
+                "minLength": 32,
+                "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                "type": "string"
+              },
+              "revision": {
+                "description": "Exact selected revision.",
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[1-9][0-9]{0,19}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "date",
+          "kind",
+          "known_at",
+          "source",
+          "source_sha256",
+          "version"
+        ],
+        "type": "object"
+      },
+      "maxItems": 4717,
+      "minItems": 5,
+      "type": "array"
+    },
+    "replaces": {
+      "description": "Predecessor content digest for an append-only correction, null for original capture.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "additionalProperties": false,
+      "description": "Scope and immutable request binding.",
+      "properties": {
+        "account": {
+          "description": "Data-only provider account.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "audience": {
+          "description": "Permitted audience.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Exact reviewed endpoint catalog identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "instrument": {
+          "description": "Canonical instrument.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "listing": {
+          "description": "Canonical listing.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "principal": {
+          "description": "Authenticated principal.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "request": {
+          "description": "Immutable acquisition ID.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "request_sha256": {
+          "description": "Digest of the immutable admitted request record, verified by its owner.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source": {
+          "description": "Market source/feed identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "storage": {
+          "description": "Permitted storage location/security scope.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "audience",
+        "endpoint",
+        "instrument",
+        "listing",
+        "principal",
+        "request",
+        "request_sha256",
+        "source",
+        "storage"
+      ],
+      "type": "object"
+    },
+    "semantics": {
+      "additionalProperties": false,
+      "description": "Exact trade-eligibility/feed semantic revision.",
+      "properties": {
+        "id": {
+          "description": "Nonzero reference identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Exact selected revision.",
+          "maxLength": 20,
+          "minLength": 1,
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "description": "Exact immutable format (raw USD provider-day equity data only).",
+      "oneOf": [
+        {
+          "const": "edgeagent.evidence.daily.v1",
+          "description": "Strict daily-v1 canonical JSON, lexicographically sorted keys.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": [
+    "bars",
+    "captured_at",
+    "cutoff",
+    "delete_by",
+    "knowledge",
+    "quality",
+    "range",
+    "references",
+    "replaces",
+    "scope",
+    "semantics",
+    "version"
+  ],
+  "title": "DailyEvidence",
+  "type": "object"
+}

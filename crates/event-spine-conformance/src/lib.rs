@@ -9,6 +9,7 @@
 pub mod accounts;
 mod contracts;
 mod error;
+pub mod evidence;
 pub mod replay;
 pub mod schemas;
 
