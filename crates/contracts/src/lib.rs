@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 pub mod audit;
+pub mod evidence;
 pub mod execution;
 mod message_type;
 mod messaging;

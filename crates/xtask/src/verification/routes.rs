@@ -122,9 +122,52 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/contracts/src/evidence"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts", "evidence-freezing"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/contracts/schemas/evidence/"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/contracts/fixtures/evidence-v1/"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/event-spine-conformance/src/evidence.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/event-spine-conformance/examples/evidence_schemas.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/event-spine-conformance/tests/evidence_contracts.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/event-spine-conformance/fixtures/evidence-baselines.txt"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/evidence-artifacts.md"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["evidence-contracts", "evidence-freezing"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/"),
-        guides: &["docs/development/market-data-acquisition.md"],
-        checks: &["market-data-conformance"],
+        guides: &[
+            "docs/development/market-data-acquisition.md",
+            "docs/development/evidence-artifacts.md",
+        ],
+        checks: &["market-data-conformance", "evidence-freezing"],
     },
     Route {
         matcher: Matcher::Exact("docs/development/market-data-acquisition.md"),

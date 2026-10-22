@@ -546,9 +546,12 @@ dependencies = [
 name = "edgeagent-contracts"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "cloudevents-sdk",
+ "schemars",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "url",
 ]
 
@@ -643,6 +646,7 @@ dependencies = [
 name = "edgeagent-market-data-application"
 version = "0.1.0"
 dependencies = [
+ "edgeagent-contracts",
  "edgeagent-market-data-domain",
 ]
 

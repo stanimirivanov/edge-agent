@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For M03 versioned evidence bytes, lineage and scoped terminal messages, read
+[evidence artifacts](development/evidence-artifacts.md) and
+[ADR-0045](decisions/0045-freeze-versioned-evidence-artifacts-and-terminal-contracts.md).
+
 For M03 acquisition requests, reviewed rights and provider conformance, read
 [acquisition authority](development/market-data-acquisition.md) and
 [ADR-0044](decisions/0044-gate-acquisition-on-reviewed-rights-and-provider-authority.md).

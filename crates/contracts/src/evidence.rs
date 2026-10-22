@@ -1,0 +1,29 @@
+//! Immutable daily evidence bytes and identity-only acquisition decisions.
+//! Hashes identify bytes, never authenticity, entitlement or a bearer location.
+mod artifact;
+mod messages;
+mod model;
+#[cfg(feature = "schema")]
+pub mod schemas;
+pub use artifact::DailyEvidenceArtifact;
+pub use messages::*;
+pub use model::*;
+
+/// Maximum canonical evidence object bytes; the event envelope stays at 256 KiB.
+pub const MAX_EVIDENCE_BYTES: usize = 4 * 1024 * 1024;
+/// Payload-free evidence construction, decoding and integrity rejection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EvidenceContractError;
+impl std::fmt::Display for EvidenceContractError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("invalid evidence contract or integrity")
+    }
+}
+impl std::error::Error for EvidenceContractError {}
+
+macro_rules! redacted {
+    ($($t:ty),* $(,)?) => {$(impl std::fmt::Debug for $t {
+        fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result { f.write_str(concat!(stringify!($t),"(..)")) }
+    })*};
+}
+pub(crate) use redacted;

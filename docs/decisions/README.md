@@ -156,3 +156,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0042](0042-freeze-complete-synthetic-sensitivity-evaluations.md) | Accepted | Freeze complete synthetic sensitivity evaluations. |
 | [ADR-0043](0043-accept-complete-point-in-time-daily-series.md) | Accepted | Accept complete point-in-time daily series. |
 | [ADR-0044](0044-gate-acquisition-on-reviewed-rights-and-provider-authority.md) | Accepted | Gate acquisition on reviewed rights and provider authority. |
+| [ADR-0045](0045-freeze-versioned-evidence-artifacts-and-terminal-contracts.md) | Accepted | Freeze versioned evidence artifacts and terminal contracts. |

@@ -4,7 +4,7 @@ use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 
-pub(super) fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
+pub(crate) fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
     let value = serde_json::to_value(value)?;
     serde_json::to_vec(&CanonicalValue(&value))
 }

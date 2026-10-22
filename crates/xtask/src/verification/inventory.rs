@@ -336,6 +336,40 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
         ),
         check(
+            "evidence-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-event-spine-conformance",
+                "--test",
+                "evidence_contracts",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Immutable evidence schemas, canonical bytes and scoped terminal contracts, including preserved JSON object order.",
+        ),
+        check(
+            "evidence-freezing",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "evidence",
+                "--",
+            ],
+            "Checked authority and whole-series quality bridge to immutable scoped evidence; no I/O or publication.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -527,6 +561,34 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "evidence-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines",
+                        "canonical_evidence_bytes_preserve_exact_values_times_and_scoped_identity",
+                        "malformed_units_knowledge_coverage_and_lineage_cannot_form_artifacts",
+                        "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
+                        "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
+                        "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+                    ],
+                    ignored: false,
+                });
+            }
+            "evidence-freezing" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "freezing_preserves_exact_quality_lineage_and_closed_calendar_coverage",
+                        "corrections_link_immutable_predecessors_without_cross_scope_or_identity_reuse",
                     ],
                     ignored: false,
                 });

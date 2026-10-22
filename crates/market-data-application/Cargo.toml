@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+edgeagent-contracts.workspace = true
 edgeagent-market-data-domain.workspace = true
 
 [lints]

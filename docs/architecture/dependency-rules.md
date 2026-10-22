@@ -20,7 +20,7 @@
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
 | `edgeagent-audit-domain` | Domain | Disposable revisioned account/order/risk views and checkpoints from checked owner exports; no persistence or risk authority |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
-| `edgeagent-market-data-application` | Application | Reviewed acquisition authority, bounded provider port and response conformance; no transport or storage implementation |
+| `edgeagent-market-data-application` | Application | Reviewed acquisition authority, bounded provider port, response conformance and checked evidence DTO mapping; no transport or storage implementation |
 | `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation, simulated-account risk policy and event-applied dry-run orders; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
@@ -53,7 +53,7 @@ dependencies between workspace packages:
 | `edgeagent-contracts` | None |
 | `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-market-data-domain` | None |
-| `edgeagent-market-data-application` | `edgeagent-market-data-domain` |
+| `edgeagent-market-data-application` | `edgeagent-contracts`, `edgeagent-market-data-domain` |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-event-spine-conformance` | `edgeagent-audit-domain`, `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
@@ -206,9 +206,10 @@ bounded OTLP protocol and protected process proofs form the replacement boundary
 [ADR-0029](../decisions/0029-export-bounded-correlated-event-spine-observations.md)
 records maintenance, lifecycle, privacy and rollout constraints.
 
-The conformance-only package pins Schemars 1.2.3 (derive/std only) and Jsonschema
-0.58.6 (default features disabled). They derive/validate local schemas, enter no
-production dependency graph or image, and enable no HTTP/file schema resolver.
+Tooling pins Schemars 1.2.3 (derive/std only) and Jsonschema 0.58.6 (default
+features disabled). Contracts exposes Schemars only behind its optional `schema`
+feature, enabled by conformance tooling, not product binaries. They derive/validate
+local schemas and enable no HTTP/file schema resolver.
 Serde wire types, payload-safe errors, schema artifacts/baselines, and the
 protected `message-schema-contracts` gate form the replacement boundary.
 [ADR-0024](../decisions/0024-define-synthetic-event-spine-acceptance-contracts.md)

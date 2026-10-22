@@ -6,6 +6,55 @@ use super::{
 };
 
 #[test]
+fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() -> Result<(), String>
+{
+    for (id, expected) in [
+        (
+            "evidence-contracts",
+            vec![
+                "generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines",
+                "canonical_evidence_bytes_preserve_exact_values_times_and_scoped_identity",
+                "malformed_units_knowledge_coverage_and_lineage_cannot_form_artifacts",
+                "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
+                "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
+                "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+            ],
+        ),
+        (
+            "evidence-freezing",
+            vec![
+                "freezing_preserves_exact_quality_lineage_and_closed_calendar_coverage",
+                "corrections_link_immutable_predecessors_without_cross_scope_or_identity_reuse",
+            ],
+        ),
+    ] {
+        let check = inventory::checks()
+            .into_iter()
+            .find(|c| c.id == id)
+            .ok_or("evidence gate missing")?;
+        assert!(check.profiles.contains(&"verify") && check.profiles.contains(&"test"));
+        let census = check.discovery.ok_or("evidence census missing")?;
+        assert_eq!(census.expected, expected);
+        let complete = expected
+            .iter()
+            .map(|n| format!("{n}: test\n"))
+            .collect::<String>();
+        runner::verify_discovery(&census, complete.as_bytes())?;
+        for name in expected {
+            for changed in [
+                complete.replace(&format!("{name}: test\n"), ""),
+                complete.replace(name, "renamed_evidence_proof"),
+                format!("{complete}{name}: test\n"),
+                format!("{complete}extra_evidence_proof: test\n"),
+            ] {
+                assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn analytics_census_rejects_every_removed_renamed_duplicated_and_extra_proof() -> Result<(), String>
 {
     let check = inventory::checks()
@@ -313,6 +362,8 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "frozen-evaluation-contracts",
             "market-data-quality",
             "market-data-conformance",
+            "evidence-contracts",
+            "evidence-freezing",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",
