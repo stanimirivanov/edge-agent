@@ -9,6 +9,7 @@ members = [
     "crates/market-data-domain",
     "crates/market-data-application",
     "crates/market-data-http",
+    "crates/market-data-object-store",
     "crates/messaging",
     "crates/messaging-nats",
     "crates/outbox-postgres",
@@ -68,6 +69,7 @@ reqwest = { version = "=0.13.5", default-features = false }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-native-certs = "=0.8.5"
 httpdate = "=1.0.3"
+object_store = { version = "=0.14.2", default-features = false, features = ["fs"] }
 rand_chacha = { version = "=0.10.0", default-features = false }
 sha2 = { version = "=0.11.1", default-features = false }
 schemars = { version = "=1.2.3", default-features = false, features = ["derive", "std"] }

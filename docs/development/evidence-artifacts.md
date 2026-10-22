@@ -6,7 +6,8 @@
 - `market-data-application::freeze_evidence` rechecks acquisition authority and daily quality.
 - Canonical bytes bind exact values, scope, policy and retained reference witnesses.
 - Objects remain outside messages; hashes never grant permission or establish source authenticity.
-- This contract slice activates no provider, storage, worker, read or deletion runtime.
+- [Immutable storage](evidence-storage.md) provides a separate create-only adapter;
+  no provider, worker, public read route or deletion runtime is activated.
 
 ## Encoding and validation
 
@@ -81,8 +82,10 @@ not global public keys. Consumers must recheck authority and expiry on reads.
 Registry definitions are additive and are not yet activated in deployment
 composition. Later M03 persistence/publication work must commit authoritative
 decisions through the transactional outbox and preserve inbox deduplication.
-Storage publication, admission-record durability, correction-head fencing,
-retrieval, revocation and deletion proofs remain later M03 work.
+The [storage adapter](evidence-storage.md) now proves scoped create-only writes,
+bounded verified retrieval and injected current-authority/expiry checks. Storage
+publication, admission-record durability, correction-head fencing, live access
+policy composition and physical deletion remain later M03 work.
 
 ## Verification and evolution
 
@@ -113,4 +116,5 @@ PR introduces the first v1 baseline; it does not migrate persisted data.
 
 Runtime contracts use existing pinned `chrono` and `sha2` (MIT/Apache-2.0).
 Existing pinned `schemars` (MIT) is optional under `schema`, enabled only by
-tooling. No provider, cloud, object-store or network client dependency is added.
+tooling. These wire contracts do not depend on provider, cloud, object-store or
+network clients; the separate storage adapter owns its pinned SDK dependency.

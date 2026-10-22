@@ -336,6 +336,21 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
         ),
         check(
+            "evidence-storage-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-object-store",
+                "--lib",
+                "--",
+            ],
+            "Synthetic create-only storage, uncertain-write recovery, scoped authority, bounded integrity reads and local reopen; not cloud durability or physical deletion.",
+        ),
+        check(
             "provider-http-contracts",
             "T2",
             &["verify", "test"],
@@ -578,6 +593,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "evidence-storage-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "store::tests::concurrent_creates_and_corrections_preserve_exact_immutable_bytes",
+                        "store::tests::lost_write_completion_and_dropped_operations_recover_without_overwrite",
+                        "store::tests::corrupt_collisions_descriptors_and_stream_bounds_fail_closed",
+                        "store::tests::current_authority_and_exclusive_expiry_are_rechecked_after_io",
+                        "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
+                        "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
                     ],
                     ignored: false,
                 });

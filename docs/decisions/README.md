@@ -158,3 +158,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0044](0044-gate-acquisition-on-reviewed-rights-and-provider-authority.md) | Accepted | Gate acquisition on reviewed rights and provider authority. |
 | [ADR-0045](0045-freeze-versioned-evidence-artifacts-and-terminal-contracts.md) | Accepted | Freeze versioned evidence artifacts and terminal contracts. |
 | [ADR-0046](0046-bound-provider-http-and-preserve-exact-json-tokens.md) | Accepted | Bound provider HTTP and preserve exact JSON tokens. |
+| [ADR-0047](0047-store-scoped-evidence-with-create-only-integrity-checks.md) | Accepted | Store scoped evidence with create-only integrity checks. |
