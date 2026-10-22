@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 47] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 48] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -256,6 +256,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 47] = [
         number: 47,
         path: "docs/decisions/0047-store-scoped-evidence-with-create-only-integrity-checks.md",
         title: "Store scoped evidence with create-only integrity checks",
+    },
+    PublishedIdentity {
+        number: 48,
+        path: "docs/decisions/0048-persist-acquisition-admission-and-call-budgets.md",
+        title: "Persist acquisition admission and call budgets",
     },
 ];
 

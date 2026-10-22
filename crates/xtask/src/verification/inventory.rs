@@ -336,6 +336,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
         ),
         check(
+            "acquisition-budget-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "admission",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Canonical admission and accounting: original deadlines, conservative uncertainty, replay and account rate fences. Synthetic model, not SQL atomicity.",
+        ),
+        check(
             "evidence-storage-contracts",
             "T2",
             &["verify", "test"],
@@ -593,6 +611,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "acquisition-budget-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "admission_canonical_digest_binds_complete_inputs_and_current_authority",
+                        "admission_decode_rejects_noncanonical_unknown_duplicate_and_tampered_records",
+                        "attempt_call_page_and_byte_budgets_survive_state_recovery",
+                        "account_limits_spacing_window_and_pending_permits_span_commands",
+                        "cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release",
+                        "completion_replay_is_immutable_and_old_fences_cannot_release_new_work",
                     ],
                     ignored: false,
                 });

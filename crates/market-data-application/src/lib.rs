@@ -2,7 +2,14 @@
 //! Review catalogs must be authenticated outside this crate. Tokens are short-lived checks,
 //! not credentials; recheck current catalogs before accepting results or using retained data.
 #![deny(missing_docs)]
+mod admission;
 mod authority;
+mod budget;
+pub use admission::{AcquisitionLimits, AdmissionRecord};
+pub use budget::{
+    AccountBudget, AcquisitionBudget, AcquisitionLedger, BudgetError, BudgetErrorKind,
+    BudgetSnapshot, CallCompletion, CallPermit,
+};
 mod evidence;
 mod provider;
 mod request;

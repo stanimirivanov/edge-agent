@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT digest, admission, budget FROM edgeagent_acquisitions\n         WHERE request_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "admission",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "admission"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "budget",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "budget"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3ea880c96765280d24c3a918fb48a0b785fda9d7b9e5228ef828c30aa20174fe"
+}

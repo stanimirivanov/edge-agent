@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "acquisition-budget-contracts",
+            vec![
+                "admission_canonical_digest_binds_complete_inputs_and_current_authority",
+                "admission_decode_rejects_noncanonical_unknown_duplicate_and_tampered_records",
+                "attempt_call_page_and_byte_budgets_survive_state_recovery",
+                "account_limits_spacing_window_and_pending_permits_span_commands",
+                "cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release",
+                "completion_replay_is_immutable_and_old_fences_cannot_release_new_work",
+            ],
+        ),
+        (
             "evidence-storage-contracts",
             vec![
                 "store::tests::concurrent_creates_and_corrections_preserve_exact_immutable_bytes",
@@ -384,6 +395,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "frozen-evaluation-contracts",
             "market-data-quality",
             "market-data-conformance",
+            "acquisition-budget-contracts",
             "evidence-storage-contracts",
             "provider-http-contracts",
             "evidence-contracts",

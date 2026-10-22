@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_acquisitions SET budget=$2 WHERE request_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc4c287ab1450b0675d3df6148dcbcc52d632e812510cd9547bbd601aa0baed9"
+}

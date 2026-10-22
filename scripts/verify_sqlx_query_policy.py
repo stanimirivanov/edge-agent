@@ -125,7 +125,7 @@ def verify(root: Path = ROOT) -> None:
     # Both capabilities must retain the exact independently enumerated bans.
     # Compiler fixtures below prove those paths, including renamed imports;
     # a removed simulation restriction cannot silently keep that proof green.
-    for package in ("outbox-postgres", "simulation-postgres"):
+    for package in ("outbox-postgres", "simulation-postgres", "market-data-postgres"):
         policy = tomllib.loads((root / "crates" / package / "clippy.toml").read_text(encoding="utf-8"))
         validate_policy(policy)
     build = subprocess.run(

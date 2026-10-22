@@ -52,6 +52,9 @@ freshness and runtime conformance proofs.
 
 ## Schema assembly and isolation
 
+Assembly also includes `crates/market-data-postgres/migrations` for durable
+acquisition admission and account/command budget statements (M03-PR9).
+
 Metadata must be generated against a fresh, isolated PostgreSQL database with
 **both** adapters' checked-in tables in the default `public` schema. The two
 migration directories both start at version 1, so SQLx CLI's shared migration

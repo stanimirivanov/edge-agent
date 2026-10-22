@@ -12,6 +12,15 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const ACQUISITION_LEDGER: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "ledger",
+    identities: &[
+        "duplicate_and_conflicting_admission_preserve_original_deadline_and_bytes",
+        "competing_replicas_restart_and_lost_completion_preserve_permits_and_charges",
+        "expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutation",
+    ],
+};
 const ACCOUNT_ADMISSION: Target = Target {
     package: "edgeagent-event-spine-conformance",
     name: "account_admission",
@@ -195,6 +204,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "acquisition-ledger-postgres",
+            &ACQUISITION_LEDGER,
+            POSTGRES,
+            "Owned PostgreSQL schemas prove immutable admission, competing clients, client restart and completion-loss replay. No provider calls or worker-death qualification.",
+        ),
         suite(
             "account-admission-processes",
             &ACCOUNT_ADMISSION,
@@ -464,6 +479,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         REGISTRY_TOPOLOGY,
         PROCESS_ACCEPTANCE,
         ACCOUNT_ADMISSION,
+        ACQUISITION_LEDGER,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -481,6 +497,48 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn acquisition_census_rejects_missing_renamed_duplicate_and_extra_proofs() -> Result<(), String>
+    {
+        let check = super::checks()
+            .into_iter()
+            .find(|c| c.id == "acquisition-ledger-postgres")
+            .ok_or("acquisition proof missing")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [super::Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
+        ));
+        let discovery = check.discovery.ok_or("acquisition census absent")?;
+        let mut expected = vec![
+            "duplicate_and_conflicting_admission_preserve_original_deadline_and_bytes",
+            "competing_replicas_restart_and_lost_completion_preserve_permits_and_charges",
+            "expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutation",
+        ];
+        expected.sort_unstable();
+        let mut actual = discovery.expected.clone();
+        actual.sort_unstable();
+        assert_eq!(actual, expected);
+        let complete = expected
+            .iter()
+            .map(|name| format!("{name}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&discovery, complete.as_bytes())?;
+        for name in expected {
+            for mutation in [
+                complete.replace(&format!("{name}: test\n"), ""),
+                complete.replace(name, "renamed_acquisition"),
+                format!("{complete}{name}: test\n"),
+                format!("{complete}unregistered_acquisition: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&discovery, mutation.as_bytes())
+                        .is_err()
+                );
+            }
+        }
+        Ok(())
+    }
     use super::*;
     use std::{collections::BTreeSet, error::Error};
 
@@ -547,7 +605,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 29);
+        assert_eq!(checks.len(), 30);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -562,8 +620,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 74);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 74);
+        assert_eq!(inventory.len(), 77);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 77);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

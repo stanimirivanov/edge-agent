@@ -92,6 +92,10 @@ XTASK_DEPENDENCIES = frozenset(
 )
 
 PACKAGE_RULES = {
+    "crates/market-data-postgres": PackageRule(
+        "edgeagent-market-data-postgres", "lib", frozenset({CONTRACTS, "edgeagent-market-data-application", "sqlx"}),
+        frozenset({"edgeagent-market-data-domain", "futures-util", "serde_json", "tokio"}),
+    ),
     "crates/market-data-object-store": PackageRule(
         "edgeagent-market-data-object-store", "lib", frozenset({
             CONTRACTS, "edgeagent-market-data-application", "bytes", "futures-util", "object_store", "tokio",
@@ -104,7 +108,7 @@ PACKAGE_RULES = {
         }), frozenset({"tokio"}),
     ),
     "crates/market-data-application": PackageRule(
-        "edgeagent-market-data-application", "lib", frozenset({CONTRACTS, "edgeagent-market-data-domain"}),
+        "edgeagent-market-data-application", "lib", frozenset({CONTRACTS, "edgeagent-market-data-domain", "serde", "serde_json"}),
     ),
     "crates/audit-domain": PackageRule(
         "edgeagent-audit-domain", "lib",

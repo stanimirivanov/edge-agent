@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn acquisition_ledger_routes_model_and_postgres_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-postgres/src/ledger.rs",
+        "crates/market-data-application/src/admission/codec.rs",
+        "crates/market-data-application/src/budget/port.rs",
+        "crates/market-data-application/tests/admission.rs",
+        "docs/development/acquisition-ledger.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("acquisition-budget-contracts"));
+        assert!(advice.checks.contains("acquisition-ledger-postgres"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/acquisition-ledger.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn evidence_storage_routes_protected_integrity_and_recovery_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-object-store/src/store.rs",

@@ -10,6 +10,7 @@ members = [
     "crates/market-data-application",
     "crates/market-data-http",
     "crates/market-data-object-store",
+    "crates/market-data-postgres",
     "crates/messaging",
     "crates/messaging-nats",
     "crates/outbox-postgres",
