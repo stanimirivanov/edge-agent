@@ -7,7 +7,7 @@
 - Default tests and public demonstrations use synthetic, redistribution-safe data.
 - Historical prices fetched now establish capture-time evidence, not historical
   knowledge. Unknown rights, calendar coverage or provenance fail closed.
-- This profile specifies future M03 implementation; it adds no working adapter,
+- Daily-series quality is implemented in the pure domain; this profile adds no working adapter,
   configuration key, live qualification command or production-data permission.
 
 ## Authority and supported inputs
@@ -121,6 +121,50 @@ inside an explicit requested range. Grace is local policy, not a provider SLA or
 proof of finality. Missing eligible sessions, stale references, contradictory
 duplicates and unapproved outliers produce typed failures; no forward filling.
 Publish corrections as new linked snapshots, never overwrite old evidence.
+
+## Daily-series quality acceptance
+
+[ADR-0043](../decisions/0043-accept-complete-point-in-time-daily-series.md)
+defines `DailyQualityPolicy::check` in the domain crate. Supply a `DailySeriesSpec`,
+retained `DailyReferences`, canonical observations and optionally an independent
+source with the identical evidence contract. One acceptance covers the entire
+requested range, with no partial result on error. `CheckedDailySeries` retains
+the requested range, exact quality policy/cutoff and selected reference lineage.
+
+The range includes explicit closed dates and at most 252 open sessions within
+366 days. Every open date requires a dated mapping, reviewed provider bucket and
+bar. Bucket endpoints are not derived from core hours. All requested buckets
+must have ended at least 12 hours before cutoff; the boundary is inclusive.
+For latest requests, application code must determine the latest eligible session
+before invoking this checker. Accepting an old requested range is not proof of
+global latest freshness. That acquisition contract remains a later M03 slice.
+
+The policy requires its revision, positive maximum reference age and explicit
+close-change/source-price tolerances in basis points. There are no threshold
+defaults. Consecutive raw closes use the preceding close as denominator; each
+comparable-source OHLC pair uses the smaller price. Zero tolerance requires exact
+equality. Volume is retained but is not compared by this price-only policy.
+Outliers fail even on known splits; action annotations never adjust raw values.
+Unsupported actions and actions on closed dates fail rather than being shifted.
+
+An independently versioned `ActionCoverage` attests the complete instrument/date
+range and an exclusive validity deadline. Ingestion must verify its source,
+checksum, knowledge time and completeness. An empty action history alone is
+insufficient. All selected reference versions and the attestation must meet the
+policy's explicit freshness ceiling. Retain historical versions needed for the
+cutoff; a current capture cannot be backdated.
+
+Revision selection accepts at most 4096 observations per source. Exact canonical
+duplicates collapse, but changed receipt times are not identical duplicates.
+Corrections require retained predecessor chains and monotone receipt times;
+selection precedes effective-date filtering and cancellation. Cancellation never
+resurrects an older bar. Distinct live IDs claiming one date fail rather than
+being resolved by arrival order. No source ranking, merging or averaging occurs.
+
+Run `cargo xtask verify --check market-data-quality` for the six protected
+synthetic quality proofs, then `cargo xtask verify` for default acceptance.
+This gate establishes domain behavior only, not provider conformance, rights,
+live acquisition, immutable storage or publication readiness.
 
 ## Historical provider capability review
 

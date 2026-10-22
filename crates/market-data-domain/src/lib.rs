@@ -28,6 +28,7 @@ mod actions;
 mod calendar;
 mod capability;
 mod continuity;
+mod daily;
 mod derivative;
 mod evidence_time;
 mod identity;
@@ -49,6 +50,10 @@ pub use capability::{
 pub use continuity::{
     ContinuityError, ContinuityMode, ContinuityPolicy, ContinuityState, ContinuityTracker,
     FeedScope, IngestOutcome, RecoveryTicket,
+};
+pub use daily::{
+    ActionCoverage, CheckedDailyDay, CheckedDailySeries, DailyQualityError, DailyQualityPolicy,
+    DailyReferences, DailySeriesSpec,
 };
 pub use derivative::{
     DeliverableReference, DerivativeError, ExerciseStyle, OptionKind, OptionSpecification,

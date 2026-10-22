@@ -37,7 +37,11 @@ fn analytics_census_rejects_every_removed_renamed_duplicated_and_extra_proof() -
 #[test]
 fn audit_and_evaluation_census_reject_removed_renamed_duplicated_and_extra_proofs()
 -> Result<(), String> {
-    for id in ["account-audit-contracts", "frozen-evaluation-contracts"] {
+    for id in [
+        "account-audit-contracts",
+        "frozen-evaluation-contracts",
+        "market-data-quality",
+    ] {
         let check = inventory::checks()
             .into_iter()
             .find(|c| c.id == id)
@@ -45,6 +49,19 @@ fn audit_and_evaluation_census_reject_removed_renamed_duplicated_and_extra_proof
         assert!(check.profiles.contains(&"verify") && check.profiles.contains(&"test"));
         let census = check.discovery.ok_or("audit discovery missing")?;
         assert_eq!(census.expected.len(), 6);
+        if id == "market-data-quality" {
+            assert_eq!(
+                census.expected,
+                [
+                    "complete_explicit_calendars_preserve_dst_early_closes_and_raw_lineage",
+                    "missing_closed_conflicting_and_unbounded_series_fail_without_partial_acceptance",
+                    "bucket_end_grace_and_reference_freshness_have_exact_inclusive_boundaries",
+                    "revisions_duplicates_and_cancellations_select_before_effective_filtering",
+                    "action_coverage_and_point_in_time_reference_corrections_fail_closed",
+                    "exact_outlier_and_independent_source_thresholds_do_not_adjust_or_choose_prices",
+                ]
+            );
+        }
         let complete = census
             .expected
             .iter()
@@ -280,6 +297,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "option-analytics-contracts",
             "account-audit-contracts",
             "frozen-evaluation-contracts",
+            "market-data-quality",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",
