@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For M03 immutable object persistence and bounded integrity reads, read
+[evidence storage](development/evidence-storage.md) and
+[ADR-0047](decisions/0047-store-scoped-evidence-with-create-only-integrity-checks.md).
+
 For M03 exact numeric provider parsing and bounded HTTP, read
 [provider HTTP](development/provider-http.md) and
 [ADR-0046](decisions/0046-bound-provider-http-and-preserve-exact-json-tokens.md).

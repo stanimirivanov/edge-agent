@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn evidence_storage_routes_protected_integrity_and_recovery_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-object-store/src/store.rs",
+        "crates/market-data-application/src/storage.rs",
+        "docs/development/evidence-storage.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("evidence-storage-contracts"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/evidence-storage.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn provider_transport_routes_exact_http_contracts() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/transport.rs",

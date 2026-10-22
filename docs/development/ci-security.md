@@ -127,6 +127,14 @@ The inherited `generic-api-key` rule also exempts the public synthetic
 idempotency key `cancellation-order-01` only in
 `crates/outbox-relay/tests/cancellation.rs`. Its detector remains enabled;
 changed values, other files, and nested lookalike paths are not exempt.
+An additional exact-path, full-match exception covers a historical Rustdoc
+false positive in `crates/market-data-application/src/storage.rs`. The generic
+detector interpreted comma-separated failure prose as a base64-like credential.
+The source comment is reworded, but the narrow exception must remain while the
+old commits are reachable. It matches only the original detector span, including
+its trailing space, not arbitrary values or the whole file. Real-scanner proofs
+require changed values, other assignment contexts, other files and nested
+lookalikes to remain detectable. No history rewrite or fingerprint ignore is used.
 The detector policy sensor rejects drift, global ignores, and fingerprint
 ignore files. Scanner invocation disables inline `gitleaks:allow` suppression,
 uses an empty ignore source, and discards ambient Gitleaks and Git routing

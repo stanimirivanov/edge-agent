@@ -6,6 +6,7 @@ mod authority;
 mod evidence;
 mod provider;
 mod request;
+mod storage;
 pub use authority::{
     AccessScope, Permission, ProviderReview, ReviewStatus, RightsRecord, UsePermissions,
 };
@@ -14,6 +15,9 @@ pub use evidence::{EvidenceFreeze, EvidenceFreezeError, freeze_evidence};
 pub use provider::{DailyProvider, ProviderBatch, ProviderFailure, validate_batch};
 pub use request::{AcquisitionRequest, Cancellation, KnowledgeMode, RawRetention, RequestBudget};
 use std::num::NonZeroU128;
+pub use storage::{
+    EvidenceAccess, EvidenceStorage, EvidenceStorageError, EvidenceStorageErrorKind,
+};
 
 macro_rules! identity {
     ($($name:ident: $doc:literal),* $(,)?) => {$(

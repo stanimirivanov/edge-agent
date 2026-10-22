@@ -21,6 +21,7 @@
 | `edgeagent-audit-domain` | Domain | Disposable revisioned account/order/risk views and checkpoints from checked owner exports; no persistence or risk authority |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
 | `edgeagent-market-data-http` | Adapter | Exact JSON numeric tokens and scope-bound, resource-limited HTTPS GET transport; no vendor mapping or durable budget authority |
+| `edgeagent-market-data-object-store` | Adapter | Scoped create-only evidence bytes and bounded verified reads; no publication or rights authority |
 | `edgeagent-market-data-application` | Application | Reviewed acquisition authority, bounded provider port, response conformance and checked evidence DTO mapping; no transport or storage implementation |
 | `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation, simulated-account risk policy and event-applied dry-run orders; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
@@ -55,6 +56,7 @@ dependencies between workspace packages:
 | `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-market-data-http` | `edgeagent-market-data-application`, `edgeagent-market-data-domain` |
+| `edgeagent-market-data-object-store` | `edgeagent-contracts`, `edgeagent-market-data-application` |
 | `edgeagent-market-data-application` | `edgeagent-contracts`, `edgeagent-market-data-domain` |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-event-spine-conformance` | `edgeagent-audit-domain`, `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
@@ -70,7 +72,10 @@ dependencies between workspace packages:
 | Each service composition root | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |
 
-Two development-only compositions support adapter and recovery conformance:
+Development-only compositions support adapter and recovery conformance:
+
+- `edgeagent-market-data-object-store` uses `edgeagent-market-data-domain` for
+  synthetic authorization clocks; it does not expose domain implementation types;
 
 - `edgeagent-inbox-handler` may use `edgeagent-inbox-postgres`,
   `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, and

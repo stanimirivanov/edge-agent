@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "evidence-storage-contracts",
+            vec![
+                "store::tests::concurrent_creates_and_corrections_preserve_exact_immutable_bytes",
+                "store::tests::lost_write_completion_and_dropped_operations_recover_without_overwrite",
+                "store::tests::corrupt_collisions_descriptors_and_stream_bounds_fail_closed",
+                "store::tests::current_authority_and_exclusive_expiry_are_rechecked_after_io",
+                "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
+                "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
+            ],
+        ),
+        (
             "provider-http-contracts",
             vec![
                 "tests::exact_json_tokens_retain_precision_and_reject_ambiguous_or_excess_values",
@@ -373,6 +384,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "frozen-evaluation-contracts",
             "market-data-quality",
             "market-data-conformance",
+            "evidence-storage-contracts",
             "provider-http-contracts",
             "evidence-contracts",
             "evidence-freezing",
