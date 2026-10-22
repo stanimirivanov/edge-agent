@@ -320,6 +320,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded point-in-time daily-series quality against explicit calendars, buckets and action coverage; no acquisition or license authority.",
         ),
         check(
+            "market-data-conformance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "contracts",
+                "--",
+            ],
+            "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -511,6 +527,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "market-data-conformance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "rights_permissions_scope_and_conflicts_fail_closed",
+                        "latest_authority_revisions_never_resurrect_withdrawn_or_future_records",
+                        "provider_capabilities_and_historical_knowledge_require_review",
+                        "bounded_requests_cancellation_deadlines_and_retention_are_explicit",
+                        "provider_results_cannot_expand_authority_or_bypass_provenance",
+                        "synthetic_provider_port_requires_admission_and_post_call_authority",
                     ],
                     ignored: false,
                 });

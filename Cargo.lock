@@ -640,6 +640,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-market-data-application"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-market-data-domain",
+]
+
+[[package]]
 name = "edgeagent-market-data-domain"
 version = "0.1.0"
 dependencies = [

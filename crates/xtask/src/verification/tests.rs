@@ -41,6 +41,7 @@ fn audit_and_evaluation_census_reject_removed_renamed_duplicated_and_extra_proof
         "account-audit-contracts",
         "frozen-evaluation-contracts",
         "market-data-quality",
+        "market-data-conformance",
     ] {
         let check = inventory::checks()
             .into_iter()
@@ -49,6 +50,19 @@ fn audit_and_evaluation_census_reject_removed_renamed_duplicated_and_extra_proof
         assert!(check.profiles.contains(&"verify") && check.profiles.contains(&"test"));
         let census = check.discovery.ok_or("audit discovery missing")?;
         assert_eq!(census.expected.len(), 6);
+        if id == "market-data-conformance" {
+            assert_eq!(
+                census.expected,
+                [
+                    "rights_permissions_scope_and_conflicts_fail_closed",
+                    "latest_authority_revisions_never_resurrect_withdrawn_or_future_records",
+                    "provider_capabilities_and_historical_knowledge_require_review",
+                    "bounded_requests_cancellation_deadlines_and_retention_are_explicit",
+                    "provider_results_cannot_expand_authority_or_bypass_provenance",
+                    "synthetic_provider_port_requires_admission_and_post_call_authority",
+                ]
+            );
+        }
         if id == "market-data-quality" {
             assert_eq!(
                 census.expected,
@@ -298,6 +312,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "account-audit-contracts",
             "frozen-evaluation-contracts",
             "market-data-quality",
+            "market-data-conformance",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",

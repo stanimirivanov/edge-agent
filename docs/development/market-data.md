@@ -217,6 +217,11 @@ licensed prices and unapproved derived values, including hashes where restricted
 
 ## Acquisition and resource budget
 
+The [acquisition application contracts](market-data-acquisition.md) now enforce
+request ceiling validation, reviewed rights/capability admission and response
+conformance. They do not execute I/O deadlines, durable retries or distributed
+limits; the operational budget owner remains a later M03 slice.
+
 These are future application-enforced ceilings, not currently implemented settings
 or provider-plan promises. Lower account limits always win; increases require a
 reviewed profile revision. Counts include pagination, references and failed calls.

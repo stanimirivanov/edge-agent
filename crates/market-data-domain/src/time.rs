@@ -35,6 +35,9 @@ impl UtcInstant {
 pub struct SessionDate(NaiveDate);
 
 impl SessionDate {
+    pub(crate) fn days_until(self, end: Self) -> u64 {
+        (end.0 - self.0).num_days().unsigned_abs()
+    }
     /// Validate a Gregorian date within years 1 through 9999.
     ///
     /// # Errors
