@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For M03 acquisition requests, reviewed rights and provider conformance, read
+[acquisition authority](development/market-data-acquisition.md) and
+[ADR-0044](decisions/0044-gate-acquisition-on-reviewed-rights-and-provider-authority.md).
+
 For P13 frozen-run fidelity and explicit cost/latency/liquidity sensitivity, read
 [frozen evaluation](development/frozen-evaluation.md) and
 [ADR-0042](decisions/0042-freeze-complete-synthetic-sensitivity-evaluations.md).

@@ -4,6 +4,13 @@ const NONE: &[&str] = &[];
 
 pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
+        name: "edgeagent-market-data-application",
+        role: CrateRole::Application,
+        normal: &["edgeagent-market-data-domain"],
+        development: NONE,
+        build: NONE,
+    },
+    PackagePolicy {
         name: "edgeagent-audit-domain",
         role: CrateRole::Domain,
         normal: &[

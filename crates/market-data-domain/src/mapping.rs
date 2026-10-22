@@ -52,6 +52,11 @@ pub struct DateRange {
     end: SessionDate,
 }
 impl DateRange {
+    /// Exact Gregorian calendar-day count; never infers exchange sessions.
+    #[must_use]
+    pub fn calendar_days(self) -> u64 {
+        self.start.days_until(self.end)
+    }
     /// Construct a nonempty, bounded effective interval.
     ///
     /// # Errors

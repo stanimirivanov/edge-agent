@@ -7,6 +7,7 @@ members = [
     "crates/inbox-handler",
     "crates/inbox-postgres",
     "crates/market-data-domain",
+    "crates/market-data-application",
     "crates/messaging",
     "crates/messaging-nats",
     "crates/outbox-postgres",
@@ -41,6 +42,7 @@ cloudevents = { package = "cloudevents-sdk", version = "=0.9.0", default-feature
 edgeagent-contracts = { path = "crates/contracts" }
 edgeagent-audit-domain = { path = "crates/audit-domain" }
 edgeagent-market-data-domain = { path = "crates/market-data-domain" }
+edgeagent-market-data-application = { path = "crates/market-data-application" }
 edgeagent-simulation-domain = { path = "crates/simulation-domain" }
 edgeagent-simulation-postgres = { path = "crates/simulation-postgres" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }

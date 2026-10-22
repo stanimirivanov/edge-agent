@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn acquisition_contracts_route_reviewed_authority_conformance() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/authority.rs",
+        "crates/market-data-application/tests/contracts.rs",
+        "docs/development/market-data-acquisition.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("market-data-conformance"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/market-data-acquisition.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn daily_evidence_changes_route_the_protected_quality_gate() -> Result<(), String> {
     for path in [
         "crates/market-data-domain/src/daily.rs",
