@@ -8,6 +8,7 @@ members = [
     "crates/inbox-postgres",
     "crates/market-data-domain",
     "crates/market-data-application",
+    "crates/market-data-http",
     "crates/messaging",
     "crates/messaging-nats",
     "crates/outbox-postgres",
@@ -63,7 +64,10 @@ opentelemetry_sdk = { version = "=0.33.1", default-features = false, features = 
 percent-encoding = { version = "=2.3.2", default-features = false }
 pulldown-cmark = { version = "=0.13.4", default-features = false }
 prost = { version = "=0.14.4", default-features = false, features = ["std"] }
-reqwest = { version = "=0.13.5", default-features = false, features = ["blocking"] }
+reqwest = { version = "=0.13.5", default-features = false }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "=0.8.5"
+httpdate = "=1.0.3"
 rand_chacha = { version = "=0.10.0", default-features = false }
 sha2 = { version = "=0.11.1", default-features = false }
 schemars = { version = "=1.2.3", default-features = false, features = ["derive", "std"] }

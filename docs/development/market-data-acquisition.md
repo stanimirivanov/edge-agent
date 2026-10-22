@@ -7,6 +7,10 @@
 - Capture and retained historical knowledge are distinct. Never backdate receipts.
 - No live provider, runtime, HTTP, persistence or physical-deletion implementation exists here.
 
+The separate [provider HTTP adapter](provider-http.md) now supplies exact token
+and bounded I/O primitives; this application crate remains SDK-free and does not
+activate a vendor or worker.
+
 ## Application boundary
 
 [ADR-0044](../decisions/0044-gate-acquisition-on-reviewed-rights-and-provider-authority.md)
