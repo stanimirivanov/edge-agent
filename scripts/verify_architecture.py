@@ -92,6 +92,12 @@ XTASK_DEPENDENCIES = frozenset(
 )
 
 PACKAGE_RULES = {
+    "crates/market-data-http": PackageRule(
+        "edgeagent-market-data-http", "lib", frozenset({
+            "edgeagent-market-data-application", "edgeagent-market-data-domain",
+            "httpdate", "reqwest", "rustls", "rustls-native-certs", "serde", "serde_json", "tokio", "url",
+        }), frozenset({"tokio"}),
+    ),
     "crates/market-data-application": PackageRule(
         "edgeagent-market-data-application", "lib", frozenset({CONTRACTS, "edgeagent-market-data-domain"}),
     ),

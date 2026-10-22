@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For M03 exact numeric provider parsing and bounded HTTP, read
+[provider HTTP](development/provider-http.md) and
+[ADR-0046](decisions/0046-bound-provider-http-and-preserve-exact-json-tokens.md).
+
 For M03 versioned evidence bytes, lineage and scoped terminal messages, read
 [evidence artifacts](development/evidence-artifacts.md) and
 [ADR-0045](decisions/0045-freeze-versioned-evidence-artifacts-and-terminal-contracts.md).

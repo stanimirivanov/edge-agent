@@ -1,6 +1,20 @@
 use super::*;
 
 #[test]
+fn provider_transport_routes_exact_http_contracts() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/transport.rs",
+        "crates/market-data-http/src/json.rs",
+        "docs/development/provider-http.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("provider-http-contracts"));
+        assert!(advice.guides.contains("docs/development/provider-http.md"));
+    }
+    Ok(())
+}
+
+#[test]
 fn evidence_sources_schemas_and_fixtures_route_protected_contracts() -> Result<(), String> {
     for path in [
         "crates/contracts/src/evidence/artifact.rs",

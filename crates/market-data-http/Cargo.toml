@@ -1,0 +1,30 @@
+[package]
+name = "edgeagent-market-data-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-market-data-application.workspace = true
+edgeagent-market-data-domain.workspace = true
+httpdate.workspace = true
+reqwest = { workspace = true, features = ["rustls-no-provider"] }
+rustls.workspace = true
+rustls-native-certs.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+tokio = { workspace = true, features = ["time"] }
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "io-util", "sync", "test-util"] }
+
+[lints]
+workspace = true
+
+[features]
+# Adversarial feature-unification test: transport still disables every decoder.
+compression-unification-test = ["reqwest/gzip"]

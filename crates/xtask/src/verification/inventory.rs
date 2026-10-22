@@ -336,6 +336,23 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
         ),
         check(
+            "provider-http-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "--features",
+                "serde_json/preserve_order,compression-unification-test",
+                "--",
+            ],
+            "Loopback-only exact JSON and bounded HTTP authority, streaming, cancellation, deadline, status and TLS-failure proofs; not vendor qualification.",
+        ),
+        check(
             "evidence-contracts",
             "T2",
             &["verify", "test"],
@@ -561,6 +578,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "provider-http-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "tests::exact_json_tokens_retain_precision_and_reject_ambiguous_or_excess_values",
+                        "tests::endpoint_authority_credentials_and_redirects_cannot_expand_egress",
+                        "tests::response_streams_and_local_attempt_budgets_fail_closed_at_boundaries",
+                        "tests::cancellation_original_deadlines_and_dropped_attempts_do_not_restart_work",
+                        "tests::statuses_retry_after_encodings_and_public_diagnostics_are_explicit",
+                        "tests::tls_handshake_failure_never_downgrades_or_exposes_request_secrets",
                     ],
                     ignored: false,
                 });
