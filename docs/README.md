@@ -32,6 +32,10 @@ For M03 immutable object persistence and bounded integrity reads, read
 [evidence storage](development/evidence-storage.md) and
 [ADR-0047](decisions/0047-store-scoped-evidence-with-create-only-integrity-checks.md).
 
+For durable admission and shared provider accounting, read the
+[acquisition ledger guide](development/acquisition-ledger.md) and
+[ADR-0048](decisions/0048-persist-acquisition-admission-and-call-budgets.md).
+
 For M03 exact numeric provider parsing and bounded HTTP, read
 [provider HTTP](development/provider-http.md) and
 [ADR-0046](decisions/0046-bound-provider-http-and-preserve-exact-json-tokens.md).

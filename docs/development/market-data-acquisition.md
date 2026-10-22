@@ -32,9 +32,10 @@ The adapter must enforce positive connect/whole-request limits (at most 5/15
 seconds), remaining calls/pages (at most 12/4), response/command decoded bytes
 (at most 1/8 MiB), cancellation and the original 300-second command deadline.
 No hidden retry, hedging, cross-origin pagination or broker operation is allowed.
-Dropping a future does not undo remote work. This crate supplies no task executor,
-timer, durable budget ledger or distributed limiter; later adapters and workers
-must implement and qualify those obligations.
+Dropping a future does not undo remote work. The [durable ledger](acquisition-ledger.md)
+now supplies admission and shared accounting behind an application port. It grants
+no current rights and runs no provider calls. Worker fencing, execution and terminal
+receipt/outbox publication remain later acquisition slices.
 
 ## Response and retention
 

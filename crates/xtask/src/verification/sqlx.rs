@@ -39,7 +39,7 @@ pub(super) fn run() -> ExitCode {
     match verify(super::workspace_root()) {
         Ok(()) => {
             println!(
-                "SQLx metadata matches the isolated local inbox, outbox and simulation schema"
+                "SQLx metadata matches the isolated inbox, outbox, simulation and acquisition schemas"
             );
             ExitCode::SUCCESS
         }
@@ -92,6 +92,12 @@ fn verify(root: &Path) -> Result<(), String> {
         let bytes = fs::read(&path)
             .map_err(|error| format!("cannot read simulation migration: {error}"))?;
         println!("Applying simulation migration {}", path.display());
+        apply_inbox_migration(root, &bytes)?;
+    }
+    for path in inbox_migrations(&root.join("crates/market-data-postgres/migrations"))? {
+        let bytes = fs::read(&path)
+            .map_err(|error| format!("cannot read acquisition migration: {error}"))?;
+        println!("Applying acquisition migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
     // The synthetic process composition also uses checked macros. This schema
@@ -420,6 +426,19 @@ mod tests {
         for name in names {
             assert!(library.contains(name.to_str().ok_or("migration filename")?));
         }
+        Ok(())
+    }
+    #[test]
+    fn acquisition_schema_assembly_includes_the_ledger_migration() -> Result<(), Box<dyn Error>> {
+        let root = super::super::workspace_root();
+        let paths = inbox_migrations(&root.join("crates/market-data-postgres/migrations"))?;
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            paths.first().and_then(|p| p.file_name()),
+            Some(OsStr::new("0001_acquisition_ledger.sql"))
+        );
+        let library = fs::read_to_string(root.join("crates/market-data-postgres/src/lib.rs"))?;
+        assert!(library.contains("0001_acquisition_ledger.sql"));
         Ok(())
     }
 }

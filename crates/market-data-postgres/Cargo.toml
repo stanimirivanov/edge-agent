@@ -1,0 +1,22 @@
+[package]
+name = "edgeagent-market-data-postgres"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-contracts.workspace = true
+edgeagent-market-data-application.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+edgeagent-market-data-domain.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

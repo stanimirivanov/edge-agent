@@ -122,6 +122,50 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/"),
+        guides: &[
+            "docs/development/acquisition-ledger.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &[
+            "acquisition-budget-contracts",
+            "acquisition-ledger-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/admission"),
+        guides: &["docs/development/acquisition-ledger.md"],
+        checks: &[
+            "acquisition-budget-contracts",
+            "acquisition-ledger-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/budget"),
+        guides: &["docs/development/acquisition-ledger.md"],
+        checks: &[
+            "acquisition-budget-contracts",
+            "acquisition-ledger-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/admission.rs"),
+        guides: &["docs/development/acquisition-ledger.md"],
+        checks: &[
+            "acquisition-budget-contracts",
+            "acquisition-ledger-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/acquisition-ledger.md"),
+        guides: &["docs/development/acquisition-ledger.md"],
+        checks: &[
+            "acquisition-budget-contracts",
+            "acquisition-ledger-postgres",
+        ],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-object-store/"),
         guides: &["docs/development/evidence-storage.md"],
         checks: &["evidence-storage-contracts"],

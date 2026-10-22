@@ -708,6 +708,8 @@ version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
  "edgeagent-market-data-domain",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -745,6 +747,19 @@ dependencies = [
  "futures-util",
  "object_store",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "edgeagent-market-data-postgres"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "edgeagent-market-data-application",
+ "edgeagent-market-data-domain",
+ "futures-util",
+ "serde_json",
+ "sqlx",
  "tokio",
 ]
 

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "budget"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dd17ce8c49acae92a500d2f9a2e1762adaeeac9c856988016964cde6e0a79fdb"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_acquisition_accounts (account_id,budget)\n             VALUES ($1,$2) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "47f25faab941e808b5ef7bc2415d26674966a4b727baf307a5671f72b5ee4cbf"
+}
