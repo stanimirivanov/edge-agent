@@ -228,12 +228,20 @@ const ROUTES: &[Route] = &[
             "docs/development/provider-http.md",
             "docs/development/market-data-acquisition.md",
         ],
-        checks: &["provider-http-contracts"],
+        checks: &["provider-http-contracts", "metered-provider-dispatch"],
     },
     Route {
         matcher: Matcher::Exact("docs/development/provider-http.md"),
         guides: &["docs/development/provider-http.md"],
-        checks: &["provider-http-contracts"],
+        checks: &["provider-http-contracts", "metered-provider-dispatch"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/dispatch.rs"),
+        guides: &[
+            "docs/development/provider-http.md",
+            "docs/development/acquisition-ledger.md",
+        ],
+        checks: &["metered-provider-dispatch"],
     },
     Route {
         matcher: Matcher::Prefix("crates/contracts/src/evidence"),

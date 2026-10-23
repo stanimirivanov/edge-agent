@@ -25,6 +25,12 @@ pub struct Fixture {
     reviews: ReferenceHistory<ProviderReview>,
 }
 impl Fixture {
+    pub fn catalogs(&self) -> AuthorityCatalogs<'_> {
+        AuthorityCatalogs {
+            rights: &self.rights,
+            providers: &self.reviews,
+        }
+    }
     pub fn new(account: u128) -> TestResult<Self> {
         let scope = AccessScope {
             principal: PrincipalId::new(1)?,

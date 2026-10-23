@@ -21,7 +21,7 @@
 | `edgeagent-audit-domain` | Domain | Disposable revisioned account/order/risk views and checkpoints from checked owner exports; no persistence or risk authority |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
 | `edgeagent-market-data-replay` | Adapter | Invented daily source and P05 continuation bridge; no network, secrets, persistence or worker activation |
-| `edgeagent-market-data-http` | Adapter | Exact JSON numeric tokens and scope-bound, resource-limited HTTPS GET transport; no vendor mapping or durable budget authority |
+| `edgeagent-market-data-http` | Adapter | Exact JSON and permit-bound HTTPS pages; application ledger owns durable budgets, no vendor mapping |
 | `edgeagent-market-data-object-store` | Adapter | Scoped create-only evidence bytes and bounded verified reads; no publication or rights authority |
 | `edgeagent-market-data-application` | Application | Reviewed acquisition authority, bounded provider port, response conformance and checked evidence DTO mapping; no transport or storage implementation |
 | `edgeagent-market-data-postgres` | Adapter | Durable acquisition budgets and atomic terminal receipt/inbox/outbox publication with scoped correction/version fences; no provider I/O |
@@ -58,7 +58,7 @@ dependencies between workspace packages:
 | `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-market-data-replay` | `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
-| `edgeagent-market-data-http` | `edgeagent-market-data-application`, `edgeagent-market-data-domain` |
+| `edgeagent-market-data-http` | `edgeagent-contracts`, `edgeagent-market-data-application`, `edgeagent-market-data-domain` |
 | `edgeagent-market-data-object-store` | `edgeagent-contracts`, `edgeagent-market-data-application` |
 | `edgeagent-market-data-application` | `edgeagent-contracts`, `edgeagent-market-data-domain` |
 | `edgeagent-market-data-postgres` | `edgeagent-contracts`, `edgeagent-market-data-application`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres` |

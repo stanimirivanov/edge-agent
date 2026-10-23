@@ -4,6 +4,7 @@
 
 - M03-PR1–PR10 are merged foundations; do not repeat their contracts or adapters.
 - PR11A provides invented offline source/replay, not runtime or live qualification.
+- PR11B binds HTTP pages to durable permits; PR11C selection is the next slice.
 - Metered dispatch and selection precede connectors; retention precedes licensed activation.
 - Daily completion and the streaming extension have separate acceptance boundaries.
 - GitHub owns live delivery state; this plan owns intended scope and dependencies.
@@ -55,6 +56,9 @@ page, failure and uncertain call remains charged across restarts. Keep the daily
 four-starts/minute and 15-second spacing ceilings unless a separate reviewed profile
 changes them. Provider allowances may tighten, never implicitly raise, local limits.
 Quota scope follows verified account/subscription sharing, not API-key count.
+The implemented [metered adapter](../provider-http.md) retains uncertainty and
+supports accounting-only confirmation retries. PR13/PR14 still own worker fencing
+and process-recovery qualification before live activation.
 
 PR11C narrows requests/subscriptions before dispatch and routes before full payload
 decode. Local filtering saves CPU/memory, not already-received bandwidth or billed
@@ -84,8 +88,9 @@ silent market-data dropping and unqualified gap-free claims are prohibited.
 
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.
-PR11B/PR11C and PR14 add protected metered-dispatch, routing and process-recovery
-tests when implemented; these gates do not exist yet. Streaming adds protocol,
+PR11B adds the protected `metered-provider-dispatch` gate. PR11C and PR14 add
+routing and process-recovery tests when implemented; those gates do not exist yet.
+Streaming adds protocol,
 segment/checkpoint atomicity and bounded recovery proofs alongside implementation.
 
 Open decisions: vendor pairs and comparable semantics; authenticated live catalogs

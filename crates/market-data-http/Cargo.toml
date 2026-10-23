@@ -8,9 +8,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+edgeagent-contracts.workspace = true
 edgeagent-market-data-application.workspace = true
 edgeagent-market-data-domain.workspace = true
 httpdate.workspace = true
+metrics.workspace = true
 reqwest = { workspace = true, features = ["rustls-no-provider"] }
 rustls.workspace = true
 rustls-native-certs.workspace = true

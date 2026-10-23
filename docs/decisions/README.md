@@ -162,3 +162,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0048](0048-persist-acquisition-admission-and-call-budgets.md) | Accepted | Persist acquisition admission and call budgets. |
 | [ADR-0049](0049-commit-terminal-acquisition-publication-atomically.md) | Accepted | Commit terminal acquisition publication atomically. |
 | [ADR-0050](0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md) | Accepted | Isolate invented daily sources and reuse frozen replay. |
+| [ADR-0051](0051-bind-provider-page-dispatch-to-durable-permits.md) | Accepted | Bind provider page dispatch to durable permits. |

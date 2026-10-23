@@ -64,10 +64,11 @@ fn provider_transport_routes_exact_http_contracts() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/transport.rs",
         "crates/market-data-http/src/json.rs",
+        "crates/market-data-application/src/dispatch.rs",
         "docs/development/provider-http.md",
     ] {
         let advice = advise(&[path.into()])?;
-        assert!(advice.checks.contains("provider-http-contracts"));
+        assert!(advice.checks.contains("metered-provider-dispatch"));
         assert!(advice.guides.contains("docs/development/provider-http.md"));
     }
     Ok(())
