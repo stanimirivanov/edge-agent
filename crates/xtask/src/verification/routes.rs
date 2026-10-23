@@ -123,8 +123,25 @@ struct Route {
 const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("crates/market-data-replay/"),
-        guides: &["docs/development/offline-market-data.md"],
-        checks: &["offline-source-isolation", "offline-source-network-denial"],
+        guides: &[
+            "docs/development/offline-market-data.md",
+            "docs/development/instrument-selection.md",
+        ],
+        checks: &[
+            "offline-source-isolation",
+            "offline-source-network-denial",
+            "instrument-selection-routing",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/selection"),
+        guides: &["docs/development/instrument-selection.md"],
+        checks: &["instrument-selection-routing", "offline-source-isolation"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/instrument-selection.md"),
+        guides: &["docs/development/instrument-selection.md"],
+        checks: &["instrument-selection-routing", "offline-source-isolation"],
     },
     Route {
         matcher: Matcher::Exact("scripts/verify_offline_source.py"),

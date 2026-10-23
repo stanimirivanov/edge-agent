@@ -8,6 +8,9 @@ use std::time::Duration;
 #[allow(dead_code)]
 mod support;
 use support::{Fixture, Result, at, ready};
+#[path = "support/selection.rs"]
+#[allow(dead_code)]
+mod selection;
 
 fn now() -> Result<UtcInstant> {
     at(3 * support::DAY)
@@ -26,6 +29,13 @@ fn source(seed: u8) -> Result<SyntheticDailySource> {
 fn build(
     seed: u8,
     change: impl FnOnce(&mut AcquisitionRequest, &mut Vec<Vec<u8>>),
+) -> Result<SyntheticDailySource> {
+    build_revision(seed, change, 1)
+}
+fn build_revision(
+    seed: u8,
+    change: impl FnOnce(&mut AcquisitionRequest, &mut Vec<Vec<u8>>),
+    revision: u64,
 ) -> Result<SyntheticDailySource> {
     let mut f = fixture()?;
     let mut trackers = Vec::new();
@@ -110,9 +120,27 @@ fn build(
         .collect::<Result<Vec<_>>>()?;
     let checked = policy.check(clock, &inputs)?;
     change(&mut f.request, &mut retained);
+    let mut selection =
+        selection::SelectionFixture::new(&f.request, &[f.request.scope.instrument])?;
+    let value = selection
+        .selections
+        .at(now()?)
+        .next()
+        .ok_or("selection")?
+        .value()
+        .clone();
+    selection.selections = ReferenceHistory::new(vec![selection::version(
+        1,
+        revision,
+        at(0)?,
+        f.request.scope.source,
+        value,
+    )?])?;
+    let plan = selection.plan()?;
+    let selected = plan.prepare(&f.request)?;
     Ok(SyntheticDailySource::new(
         OfflineMode,
-        &f.request,
+        &selected,
         &checked,
         &retained,
         ArtifactDigest::of(b"invented-producer-v1"),
@@ -152,7 +180,10 @@ fn daily_source_returns_meaningful_repeatable_canonical_batches() -> Result {
     let f = fixture()?;
     let cancel = Cancellation::default();
     let admitted = f.catalogs().admit(&f.request, now()?, &cancel)?;
-    let first = ready(source.fetch(&admitted, &cancel))??;
+    let selection = selection::SelectionFixture::new(&f.request, &[f.request.scope.instrument])?;
+    let plan = selection.plan()?;
+    let selected = SelectedDailyProvider::new(&plan, &source);
+    let first = ready(selected.fetch(&admitted, &cancel))??;
     assert_eq!(first.observations.len(), 2);
     assert_eq!(first, ready(source.fetch(&admitted, &cancel))??);
     validate_batch(&admitted, f.catalogs(), now()?, &cancel, &first)?;
@@ -185,6 +216,13 @@ fn replay_restores_every_prefix_without_repeating_ids_or_random_draws() -> Resul
         checkpoints.push(replay.checkpoint());
     }
     assert_eq!(expected.len(), 2);
+    // The source itself binds selection content/revisions; callers cannot forget to hash them.
+    let revised = build_revision(7, |_, _| {}, 2)?;
+    assert!(
+        revised
+            .restore(checkpoints.first().ok_or("checkpoint")?)
+            .is_err()
+    );
     for (prefix, checkpoint) in checkpoints.iter().enumerate() {
         let rebuilt = source(7)?;
         let mut resumed = rebuilt.restore(checkpoint)?;

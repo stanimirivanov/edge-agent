@@ -15,6 +15,12 @@ pub use dispatch::{AcquisitionUsage, DispatchAuthority, DispatchCheck};
 mod evidence;
 mod provider;
 mod request;
+mod selection;
+pub use selection::{
+    EarlyRouter, FrameKind, FrameMetadata, InstrumentRoute, InstrumentSelection, RouteBinding,
+    RouteDecision, RoutingDirectory, RoutingKey, RoutingScope, SelectedDailyProvider,
+    SelectedRequest, SelectionContext, SelectionError, SelectionPlan,
+};
 mod storage;
 mod terminal;
 pub use authority::{

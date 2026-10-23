@@ -21,6 +21,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             ],
         ),
         (
+            "instrument-selection-routing",
+            vec![
+                "latest_known_revisions_never_resurrect_obsolete_selection_or_directories",
+                "narrowed_requests_fail_before_provider_invocation_and_keep_exact_aliases",
+                "framing_and_header_selection_run_before_full_payload_decoding",
+                "controls_gaps_unknown_keys_and_stale_epochs_cannot_hide_behind_filtering",
+                "canonical_binding_tracks_content_revisions_and_order_without_diagnostic_leaks",
+                "bounds_ambiguous_mappings_and_malformed_frames_fail_closed",
+            ],
+        ),
+        (
             "acquisition-terminal-contracts",
             vec![
                 "committed_recovery_skips_preparation_and_preserves_original_event_bytes",
@@ -426,6 +437,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "account-audit-contracts",
             "frozen-evaluation-contracts",
             "offline-source-isolation",
+            "instrument-selection-routing",
             "market-data-quality",
             "market-data-conformance",
             "acquisition-terminal-contracts",

@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn selection_and_early_routing_sources_route_protected_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/selection.rs",
+        "crates/market-data-application/src/selection/router.rs",
+        "crates/market-data-replay/src/routing.rs",
+        "crates/market-data-replay/tests/selection.rs",
+        "docs/development/instrument-selection.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("instrument-selection-routing"));
+        assert!(advice.checks.contains("offline-source-isolation"));
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/instrument-selection.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn terminal_publication_routes_model_and_atomic_postgres_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-postgres/src/terminal.rs",

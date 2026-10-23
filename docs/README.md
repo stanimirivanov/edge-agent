@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For pinned instrument selection, narrowed provider requests and header-first routing,
+read [instrument selection](development/instrument-selection.md) and
+[ADR-0052](decisions/0052-freeze-instrument-selection-and-route-headers-before-payloads.md).
+
 For permit-bound provider pages and usage projection, read
 [provider HTTP](development/provider-http.md) and
 [ADR-0051](decisions/0051-bind-provider-page-dispatch-to-durable-permits.md).
