@@ -143,7 +143,10 @@ fn action_allowed(name: &str, job: &str, action: &str) -> bool {
                 | "anchore/sbom-action/download-syft"
                 | "actions/upload-artifact"
         ),
-        ("repository-quality.yml", "security" | "verify" | "container-smoke")
+        (
+            "repository-quality.yml",
+            "security" | "verify" | "container-smoke" | "offline-source-isolation",
+        )
         | ("release-images.yml", "plan") => action == "actions/setup-python",
         ("m08-durable-execution.yml", "proof") | ("dependency-audit.yml", "audit") => {
             action == "EmbarkStudios/cargo-deny-action"

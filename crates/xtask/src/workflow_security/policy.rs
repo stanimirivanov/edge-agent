@@ -27,6 +27,7 @@ pub(super) fn check(name: &str, root: &Yaml) -> Vec<String> {
             "architecture",
             "security",
             "verify",
+            "offline-source-isolation",
             "container-smoke",
             "local-platform-smoke",
             "supply-chain",

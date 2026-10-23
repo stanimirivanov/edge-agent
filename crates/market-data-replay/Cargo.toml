@@ -1,0 +1,16 @@
+[package]
+name = "edgeagent-market-data-replay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-market-data-application.workspace = true
+edgeagent-market-data-domain.workspace = true
+edgeagent-simulation-domain.workspace = true
+
+[lints]
+workspace = true

@@ -122,6 +122,21 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/market-data-replay/"),
+        guides: &["docs/development/offline-market-data.md"],
+        checks: &["offline-source-isolation", "offline-source-network-denial"],
+    },
+    Route {
+        matcher: Matcher::Exact("scripts/verify_offline_source.py"),
+        guides: &["docs/development/offline-market-data.md"],
+        checks: &["offline-source-isolation", "offline-source-network-denial"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/offline-market-data.md"),
+        guides: &["docs/development/offline-market-data.md"],
+        checks: &["offline-source-isolation", "offline-source-network-denial"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/src/terminal"),
         guides: &["docs/development/acquisition-publication.md"],
         checks: &[

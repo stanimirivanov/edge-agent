@@ -28,6 +28,11 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For invented daily provider output, strict offline selection and deterministic
+continuations, read [offline market data](development/offline-market-data.md),
+[ADR-0050](decisions/0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md)
+and the [M03 acquisition plan](development/plans/m03-acquisition.md).
+
 For M03 atomic terminal receipt/inbox/outbox publication and correction fencing, read
 [acquisition publication](development/acquisition-publication.md) and
 [ADR-0049](decisions/0049-commit-terminal-acquisition-publication-atomically.md).

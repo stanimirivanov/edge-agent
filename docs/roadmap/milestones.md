@@ -121,6 +121,11 @@ that the current Rust executor can consume those enqueued arguments.
 
 **Outcome:** Publish trustworthy point-in-time evidence through provider-neutral contracts.
 
+The [acquisition implementation plan](../development/plans/m03-acquisition.md)
+orders the remaining daily work and separately bounded streaming extension.
+M03-PR11A implements the invented offline source/P05 replay bridge, not service
+activation or live qualification. Provider selection remains deferred.
+
 Work items:
 
 - Define stable instrument identity, market time, observations, corporate actions, entitlements, and evidence snapshots.

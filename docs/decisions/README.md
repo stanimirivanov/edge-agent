@@ -161,3 +161,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0047](0047-store-scoped-evidence-with-create-only-integrity-checks.md) | Accepted | Store scoped evidence with create-only integrity checks. |
 | [ADR-0048](0048-persist-acquisition-admission-and-call-budgets.md) | Accepted | Persist acquisition admission and call budgets. |
 | [ADR-0049](0049-commit-terminal-acquisition-publication-atomically.md) | Accepted | Commit terminal acquisition publication atomically. |
+| [ADR-0050](0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md) | Accepted | Isolate invented daily sources and reuse frozen replay. |

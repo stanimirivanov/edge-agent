@@ -4,6 +4,7 @@ use super::{Check, CommandSpec, Discovery, Program, Requirement, proofs};
 
 pub(super) const PROFILES: &[&str] = &[
     "verify",
+    "offline-ingestion",
     "fmt",
     "repository",
     "architecture",
@@ -302,6 +303,30 @@ pub(super) fn checks() -> Vec<Check> {
                 "--",
             ],
             "Synthetic frozen-run replay and one-factor fee/latency/liquidity sensitivity; no empirical market or statistical performance claim.",
+        ),
+        check(
+            "offline-source-isolation",
+            "T2",
+            &["verify", "test", "offline-ingestion"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-replay",
+                "--test",
+                "offline",
+                "--",
+            ],
+            "Network-free invented daily source, ambient credential isolation and P05 prefix replay; OS network denial is a separate Linux CI proof.",
+        ),
+        check(
+            "offline-source-network-denial",
+            "T3",
+            &["offline-ingestion"],
+            Python,
+            &["scripts/verify_offline_source.py"],
+            "Linux fresh network namespace executes the complete synthetic source suite without external routes; requires sudo/unshare and a populated Cargo cache.",
         ),
         check(
             "market-data-quality",
@@ -617,6 +642,12 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "offline-source-network-denial" => {
+                entry.prerequisites = &[
+                    Requirement::Executable("unshare"),
+                    Requirement::Executable("sudo"),
+                ];
+            }
             "account-audit-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -629,6 +660,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "offline-source-isolation" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "offline_mode_is_default_and_live_or_malformed_flags_fail_closed",
+                        "daily_source_returns_meaningful_repeatable_canonical_batches",
+                        "replay_restores_every_prefix_without_repeating_ids_or_random_draws",
+                        "fixture_bytes_scope_bounds_and_provenance_are_checked_before_replay",
+                        "cancellation_and_foreign_admission_leave_the_checkpoint_unchanged",
+                        "ambient_credentials_cannot_activate_live_access",
                     ],
                     ignored: false,
                 });

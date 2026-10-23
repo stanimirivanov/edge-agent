@@ -35,6 +35,11 @@ and automated conformance tests.
 
 ## Quality priorities
 
+The network-free `market-data-replay` adapter supplies invented daily source
+output and P05 deterministic continuations. Its explicit offline selection cannot
+construct live clients. No product worker is activated; see
+[offline market data](../development/offline-market-data.md).
+
 M03 acquisition authority lives in `market-data-application`, inward of provider
 adapters and outside pure market values. It checks reviewed rights/capabilities
 before and after acquisition and defines bounded provider, storage and publication
