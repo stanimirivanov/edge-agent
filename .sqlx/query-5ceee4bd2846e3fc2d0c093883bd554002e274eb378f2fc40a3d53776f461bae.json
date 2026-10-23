@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_acquisition_receipts (request_id,event) VALUES ($1,$2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ceee4bd2846e3fc2d0c093883bd554002e274eb378f2fc40a3d53776f461bae"
+}

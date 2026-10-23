@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO edgeagent_observation_versions (identity,fingerprint)\n        SELECT identity,fingerprint FROM unnest($1::text[],$2::text[]) AS incoming(identity,fingerprint)\n        ORDER BY identity ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8862b4ccc6c65897cba271764466c51a7c044cd9270f1bad4d9e77ecc73c01c9"
+}

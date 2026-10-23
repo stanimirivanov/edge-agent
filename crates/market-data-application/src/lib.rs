@@ -14,6 +14,7 @@ mod evidence;
 mod provider;
 mod request;
 mod storage;
+mod terminal;
 pub use authority::{
     AccessScope, Permission, ProviderReview, ReviewStatus, RightsRecord, UsePermissions,
 };
@@ -24,6 +25,10 @@ pub use request::{AcquisitionRequest, Cancellation, KnowledgeMode, RawRetention,
 use std::num::NonZeroU128;
 pub use storage::{
     EvidenceAccess, EvidenceStorage, EvidenceStorageError, EvidenceStorageErrorKind,
+};
+pub use terminal::{
+    AcquisitionPublication, PublicationAuthority, PublicationHead, TerminalProposal,
+    TerminalReceipt, finish_acquisition,
 };
 
 macro_rules! identity {

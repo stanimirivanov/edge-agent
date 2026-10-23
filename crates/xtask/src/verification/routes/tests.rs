@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn terminal_publication_routes_model_and_atomic_postgres_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-postgres/src/terminal.rs",
+        "crates/market-data-application/src/terminal/receipt.rs",
+        "crates/market-data-application/tests/terminal.rs",
+        "docs/development/acquisition-publication.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/acquisition-publication.md")
+        );
+        assert!(advice.checks.contains("acquisition-terminal-contracts"));
+        assert!(advice.checks.contains("acquisition-terminal-postgres"));
+    }
+    Ok(())
+}
+
+#[test]
 fn acquisition_ledger_routes_model_and_postgres_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-postgres/src/ledger.rs",

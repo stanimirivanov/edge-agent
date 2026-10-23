@@ -44,7 +44,13 @@ impl Harness {
             .max_connections(4)
             .connect_with(options.clone())
             .await?;
-        sqlx::raw_sql(edgeagent_market_data_postgres::MIGRATION_SQL)
+        for migration in edgeagent_market_data_postgres::MIGRATIONS {
+            sqlx::raw_sql(migration).execute(&pool).await?;
+        }
+        sqlx::raw_sql(edgeagent_inbox_postgres::PostgresInbox::MIGRATION_SQL)
+            .execute(&pool)
+            .await?;
+        sqlx::raw_sql(edgeagent_outbox_postgres::PostgresOutbox::MIGRATION_SQL)
             .execute(&pool)
             .await?;
         let now =

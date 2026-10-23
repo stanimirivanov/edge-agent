@@ -66,7 +66,7 @@ checking one batch or its hash cannot authenticate a globally consistent history
 
 `AcquireEvidence` contains only the immutable admission-record ID and SHA-256.
 The owner must load and authenticate that record and verify its digest before
-freezing; this PR does not define a canonical admission-record encoding.
+freezing; the [admission ledger](acquisition-ledger.md) now defines that encoding.
 The mapper checks identity and preserves the authenticated digest, not its
 correspondence to caller-supplied request fields.
 
@@ -80,12 +80,14 @@ objects under storage + audience + rights authority; content hashes alone are
 not global public keys. Consumers must recheck authority and expiry on reads.
 
 Registry definitions are additive and are not yet activated in deployment
-composition. Later M03 persistence/publication work must commit authoritative
-decisions through the transactional outbox and preserve inbox deduplication.
+composition. [Terminal publication](acquisition-publication.md) now commits
+authoritative receipts/inbox/outbox together and fences correction heads and
+retained immutable observation versions.
 The [storage adapter](evidence-storage.md) now proves scoped create-only writes,
 bounded verified retrieval and injected current-authority/expiry checks. Storage
-publication, admission-record durability, correction-head fencing, live access
-policy composition and physical deletion remain later M03 work.
+runtime activation, live access-policy composition and physical deletion remain
+later M03 work. Admission durability and publication fencing are implemented
+behind owner-owned ports; they do not activate a worker.
 
 ## Verification and evolution
 

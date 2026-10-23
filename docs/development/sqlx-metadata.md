@@ -53,7 +53,8 @@ freshness and runtime conformance proofs.
 ## Schema assembly and isolation
 
 Assembly also includes `crates/market-data-postgres/migrations` for durable
-acquisition admission and account/command budget statements (M03-PR9).
+acquisition admission/accounting and terminal receipt/head/version statements
+(M03-PR9/PR10). Compose existing inbox/outbox tables in the same private schema.
 
 Metadata must be generated against a fresh, isolated PostgreSQL database with
 **both** adapters' checked-in tables in the default `public` schema. The two

@@ -22,6 +22,10 @@ pub enum BudgetErrorKind {
     RateLimited,
     /// Database failure; commit may be uncertain. Reload instead of refunding.
     Storage,
+    /// An authoritative terminal receipt prevents new acquisition work.
+    Terminal,
+    /// Current owner-authenticated evidence authority denies publication.
+    Denied,
 }
 /// Safe public diagnostics with deliberately inspectable private storage causes.
 pub struct BudgetError {
@@ -44,6 +48,18 @@ impl BudgetError {
     pub fn storage(source: impl StdError + Send + Sync + 'static) -> Self {
         Self {
             kind: BudgetErrorKind::Storage,
+            source: Some(Box::new(source)),
+            retry_at_ms: None,
+        }
+    }
+    /// Preserve a classified concrete cause without exposing its text.
+    #[must_use]
+    pub fn with_source(
+        kind: BudgetErrorKind,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            kind,
             source: Some(Box::new(source)),
             retry_at_ms: None,
         }

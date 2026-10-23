@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For M03 atomic terminal receipt/inbox/outbox publication and correction fencing, read
+[acquisition publication](development/acquisition-publication.md) and
+[ADR-0049](decisions/0049-commit-terminal-acquisition-publication-atomically.md).
+
 For M03 immutable object persistence and bounded integrity reads, read
 [evidence storage](development/evidence-storage.md) and
 [ADR-0047](decisions/0047-store-scoped-evidence-with-create-only-integrity-checks.md).

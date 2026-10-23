@@ -1,7 +1,8 @@
 # Durable acquisition admission and budgets
 
-M03-PR9 implements admission/accounting. M03-PR10 owns terminal receipt/inbox/outbox
-publication. No provider worker, model call or cloud deployment is enabled.
+M03-PR9 implements admission/accounting. M03-PR10 adds atomic
+[terminal publication](acquisition-publication.md). No provider worker, model call
+or cloud deployment is enabled.
 [ADR-0048](../decisions/0048-persist-acquisition-admission-and-call-budgets.md)
 records this boundary.
 

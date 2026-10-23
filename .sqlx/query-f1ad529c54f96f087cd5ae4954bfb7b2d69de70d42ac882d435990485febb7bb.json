@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_evidence_heads (series_key) VALUES ($1) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f1ad529c54f96f087cd5ae4954bfb7b2d69de70d42ac882d435990485febb7bb"
+}
