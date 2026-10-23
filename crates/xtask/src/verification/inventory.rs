@@ -321,6 +321,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Network-free invented daily source, ambient credential isolation and P05 prefix replay; OS network denial is a separate Linux CI proof.",
         ),
         check(
+            "instrument-selection-routing",
+            "T2",
+            &["verify", "test", "offline-ingestion"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-replay",
+                "--test",
+                "selection",
+                "--",
+            ],
+            "Invented header-first routing, immutable selection/directory history, narrowed requests and fail-closed control/sequence/framing proofs; not native feed qualification.",
+        ),
+        check(
             "offline-source-network-denial",
             "T3",
             &["offline-ingestion"],
@@ -696,6 +712,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "fixture_bytes_scope_bounds_and_provenance_are_checked_before_replay",
                         "cancellation_and_foreign_admission_leave_the_checkpoint_unchanged",
                         "ambient_credentials_cannot_activate_live_access",
+                    ],
+                    ignored: false,
+                });
+            }
+            "instrument-selection-routing" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "latest_known_revisions_never_resurrect_obsolete_selection_or_directories",
+                        "narrowed_requests_fail_before_provider_invocation_and_keep_exact_aliases",
+                        "framing_and_header_selection_run_before_full_payload_decoding",
+                        "controls_gaps_unknown_keys_and_stale_epochs_cannot_hide_behind_filtering",
+                        "canonical_binding_tracks_content_revisions_and_order_without_diagnostic_leaks",
+                        "bounds_ambiguous_mappings_and_malformed_frames_fail_closed",
                     ],
                     ignored: false,
                 });

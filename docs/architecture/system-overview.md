@@ -40,6 +40,12 @@ output and P05 deterministic continuations. Its explicit offline selection canno
 construct live clients. No product worker is activated; see
 [offline market data](../development/offline-market-data.md).
 
+Application-owned immutable selection/directory plans narrow provider requests and
+route header/control metadata before payload decoding. The offline source requires
+a sealed selected request and binds configuration into replay. This is not an
+activated subscription or another continuity/recovery engine; see
+[instrument selection](../development/instrument-selection.md).
+
 M03 acquisition authority lives in `market-data-application`, inward of provider
 adapters and outside pure market values. It checks reviewed rights/capabilities
 before and after acquisition and defines bounded provider, storage and publication

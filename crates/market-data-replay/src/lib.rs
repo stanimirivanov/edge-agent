@@ -4,13 +4,15 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 mod encoding;
+mod routing;
 use edgeagent_market_data_application::{
     AcquisitionRequest, AuthorizedAcquisition, Cancellation, DailyProvider, KnowledgeMode,
-    ProviderBatch, ProviderFailure,
+    ProviderBatch, ProviderFailure, SelectedRequest,
 };
 use edgeagent_market_data_domain::{CanonicalObservation, PreciseInstant, ReadyEvidence};
 use edgeagent_simulation_domain::{ArtifactDigest, DeterministicId, FrozenInput, Run, RunManifest};
 pub use encoding::synthetic_daily_bytes;
+pub use routing::{RoutedFrame, route_synthetic_frame, synthetic_frame};
 
 /// Payload-free fixture/configuration rejection; underlying data is never formatted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,20 +64,22 @@ impl std::fmt::Debug for SyntheticDailySource {
 }
 impl SyntheticDailySource {
     /// Bind invented canonical records to exact retained bytes and checked P04 readiness.
-    /// `configuration` must identify synthetic reference/rights/policy/selection revisions;
-    /// `implementation` identifies the producer code. Neither digest is authentication.
+    /// Selection/directory values and revisions bind automatically through `selected`.
+    /// `configuration` identifies other synthetic reference/rights/policy revisions;
+    /// `implementation` identifies producer code. Neither digest is authentication.
     /// Only capture-mode provider-day snapshots at the admission clock are supported.
     /// # Errors
     /// Rejects >4096 records, >4 MiB retained bytes, foreign provenance or byte mismatch.
     pub fn new(
         _: OfflineMode,
-        request: &AcquisitionRequest,
+        selected: &SelectedRequest<'_>,
         ready: &ReadyEvidence<'_>,
         retained: &[Vec<u8>],
         implementation: ArtifactDigest,
         configuration: ArtifactDigest,
         seed: [u8; 32],
     ) -> Result<Self, OfflineError> {
+        let request = selected.request();
         let records = ready.observations();
         let actual_provider = records
             .first()
@@ -115,7 +119,11 @@ impl SyntheticDailySource {
             digests.push(ArtifactDigest::of(bytes));
         }
         let inputs = FrozenInput::from_ready(ready, &digests).map_err(|_| OfflineError::Fixture)?;
-        let binding = encoding::bind_request(request, configuration);
+        let mut selection = selected
+            .binding_bytes()
+            .map_err(|_| OfflineError::Fixture)?;
+        selection.extend(configuration.bytes());
+        let binding = encoding::bind_request(request, ArtifactDigest::of(&selection));
         let manifest = RunManifest::new(clock, implementation, binding, seed, &inputs)
             .map_err(|_| OfflineError::Fixture)?;
         // One daily acquisition cannot use arrival order to resolve conflicting identities.

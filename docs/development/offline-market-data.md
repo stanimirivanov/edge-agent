@@ -16,12 +16,16 @@ does not inspect environment variables, load secrets, create clients or read clo
 The bootstrap MarketData service is unchanged; this is not a new CLI/env setting
 on that service. PR13 owns runtime composition and authenticated configuration.
 
-Build an explicit synthetic `AcquisitionRequest`, invented canonical observations,
+Build an explicit synthetic `AcquisitionRequest`, compile a pinned
+[selection plan](instrument-selection.md), then call `prepare` for the sealed
+`SelectedRequest` required by the constructor. Empty/excluded/foreign selections
+cannot construct the source. Build invented canonical observations,
 P04 continuity trackers and a checked readiness plan. Serialize each record with
 `synthetic_daily_bytes`, retain those bytes in plan order and supply them to the
 constructor with implementation/configuration digests and a reproducible seed.
-The configuration digest identifies synthetic rights, calendar/reference, quality
-and selection revisions; the adapter additionally binds exact request scope,
+The supplied configuration digest identifies other synthetic rights,
+calendar/reference and quality revisions. The adapter automatically binds actual
+selection/directory values and revisions, plus exact request scope,
 dates, deadlines and resource ceilings. A digest proves bytes, not permissions.
 
 The private fixture encoding uses a version tag and explicit fixed-width fields.

@@ -4,7 +4,7 @@
 
 - M03-PR1–PR10 are merged foundations; do not repeat their contracts or adapters.
 - PR11A provides invented offline source/replay, not runtime or live qualification.
-- PR11B binds HTTP pages to durable permits; PR11C selection is the next slice.
+- PR11B binds HTTP pages to durable permits; PR11C supplies pinned selection/routing.
 - Metered dispatch and selection precede connectors; retention precedes licensed activation.
 - Daily completion and the streaming extension have separate acceptance boundaries.
 - GitHub owns live delivery state; this plan owns intended scope and dependencies.
@@ -65,6 +65,10 @@ decode. Local filtering saves CPU/memory, not already-received bandwidth or bill
 calls. Validate framing and process control/feed-sequence metadata before filtering;
 never skip auth errors, resets, directory updates or heartbeat evidence. No native
 ITCH connector is implied. Unknown mappings fail readiness rather than accepting all.
+The [selection guide](../instrument-selection.md) describes the implemented frozen
+catalogs, narrowed request/source construction and invented header adapter. It
+does not persist watchlists or configure live subscriptions. PR13 must pin the
+chosen configuration durably; admission-v1 has no selection fields.
 
 PR12 covers scoped objects and licensed private metadata/fingerprints. PR13 composes
 existing authority, metering, conformance, quality and atomic terminal publication;
@@ -88,8 +92,9 @@ silent market-data dropping and unqualified gap-free claims are prohibited.
 
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.
-PR11B adds the protected `metered-provider-dispatch` gate. PR11C and PR14 add
-routing and process-recovery tests when implemented; those gates do not exist yet.
+PR11B adds the protected `metered-provider-dispatch` gate. PR11C adds
+`instrument-selection-routing` and selected-source replay proofs. PR14's
+process-recovery gates remain unimplemented.
 Streaming adds protocol,
 segment/checkpoint atomicity and bounded recovery proofs alongside implementation.
 
