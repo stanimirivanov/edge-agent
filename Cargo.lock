@@ -724,9 +724,11 @@ dependencies = [
 name = "edgeagent-market-data-http"
 version = "0.1.0"
 dependencies = [
+ "edgeagent-contracts",
  "edgeagent-market-data-application",
  "edgeagent-market-data-domain",
  "httpdate",
+ "metrics",
  "reqwest",
  "rustls",
  "rustls-native-certs",

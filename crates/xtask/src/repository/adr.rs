@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 50] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 51] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -271,6 +271,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 50] = [
         number: 50,
         path: "docs/decisions/0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md",
         title: "Isolate invented daily sources and reuse frozen replay",
+    },
+    PublishedIdentity {
+        number: 51,
+        path: "docs/decisions/0051-bind-provider-page-dispatch-to-durable-permits.md",
+        title: "Bind provider page dispatch to durable permits",
     },
 ];
 

@@ -5,6 +5,7 @@
 - `market-data-http` is an outbound adapter foundation, not a qualified vendor or deployed worker.
 - Only reviewed, scope-bound HTTPS GET endpoints are public; credentials use sensitive headers.
 - Explicit admitted budgets bound streamed bytes, calls/pages and monotonic deadlines.
+- Every page requires a confirmed durable permit; uncertain requests stay fenced.
 - Identity encoding only: redirects, proxy inheritance, automatic retries and decompression are disabled.
 - Raw JSON tokens preserve exact decimals; invalid evidence is rejected without payload diagnostics.
 
@@ -42,14 +43,18 @@ compiled only for tests; it is not a runtime feature or configuration switch.
 
 ## Resource and cancellation semantics
 
-Start a non-cloneable `HttpSession` from an `AuthorizedAcquisition` and a trusted
-UTC sample. Capture mode only is supported: a fresh HTTP read cannot satisfy a
+Start a non-cloneable `MeteredSession` with `HttpTransport::start_metered`, the
+existing `AcquisitionLedger`, immutable admission and a trusted `DispatchAuthority`.
+It loads and matches durable admission before opening. The authority supplies
+fresh authenticated local catalogs/time through `DispatchCheck`, without network
+I/O. The former unmetered `HttpSession`/`start` path is no longer public.
+Capture mode only is supported: a fresh HTTP read cannot satisfy a
 retained historical knowledge claim. Scope must match exactly. The monotonic
 session deadline preserves the remaining original command/retention deadline;
 each request also has its admitted whole-request ceiling, including body reads.
 The public acquisition contracts already cap these at 300 seconds and 15 seconds.
 
-`get` sends one page, never a hidden retry or automatic traversal. It reserves
+`get_page` sends one page, never a hidden retry or automatic traversal. It reserves
 an attempt before polling I/O. Failed or dropped futures do not refund attempts.
 Calls/pages and observed command bytes remain consumed for the session. Check
 cancellation before dispatch, during I/O at the configured polling interval,
@@ -66,12 +71,26 @@ Request identity encoding and reject every nonidentity Content-Encoding before
 parsing. Supporting gzip or another encoding requires a reviewed, tested bounded
 decompression path; enabling a dependency feature must not silently enable it.
 
-These counters are local, not a durable quota, account lock or distributed rate
-limiter. Recreating a session does not authorize resetting a command budget.
-The later M03 owner must reserve/persist budgets before I/O, coordinate replicas,
-honor account limits, and recheck current rights/provider catalogs before accepting
-results. This adapter never holds a database transaction or implements `DailyProvider`
-without real provider-specific mapping.
+`get_page` charges the existing durable ledger before I/O and rechecks authority
+after that await. Supply a stable traversal ID across pages, not one ID per call.
+A lost reservation reply or dropped/partial/oversized request stays charged and
+fenced, including after opening another session. No timeout/lease-expiry release
+or recovered-permit dispatch exists. Runtime ownership/quiescence remains PR13.
+
+For known complete receipt (including invalid JSON), classified status or proven
+pre-I/O denial, persist exact observed bytes. Save the page/error and immutable
+completion before awaiting accounting. On a lost/dropped confirmation, call
+`confirm_page`; it never fetches again. It can reconcile after cancellation/expiry
+but rechecks authority before releasing data. Losing the session loses its local
+body; cross-process body recovery and exactly-once remote reads are not promised.
+
+`usage` loads confirmed identifier-free ledger counters, plus explicitly local
+HTTP observations and a local pending-confirmation flag. Outstanding/unknown
+reservations remain charged. Best-effort counters `edgeagent_provider_dispatch_total`
+use only static `stage=reserved|confirmed|uncertain`; the observed-byte counter has
+no labels. Neither counter is a durable quota or additive replica snapshot.
+Crashes may undercount telemetry. This adapter never holds a database transaction
+or implements `DailyProvider` without real provider-specific mapping.
 
 ## Exact data and failure contracts
 
@@ -97,8 +116,10 @@ not read. Optional Retry-After supports integer seconds or an HTTP date relative
 to the trusted UTC sample plus monotonic elapsed time, never the untrusted Date
 header. Past dates mean zero, fractional milliseconds round upwards, malformed
 or duplicate headers reject, and a delay that cannot fit the original deadline
-is a budget failure. Classification never performs a retry or sleep. The later
-durable owner must persist decisions and account for any external uncertainty.
+is a budget failure. Persist a valid delay even if it exceeds this command's
+deadline, so account cooldown survives the command. Classification never retries
+or sleeps. Unclassified/rejected headers, partial and oversized bodies retain the
+full reservation conservatively; a timeout does not refund bytes or clear fences.
 
 Configuration, transport, sessions, documents and public error formatting redact
 URLs, tokens and data. Real request causes retain `Error::source()` after removing
@@ -109,6 +130,7 @@ no underlying error. HTTP/JSON parsing failures never expose provider body text.
 
 ```text
 cargo xtask verify --check provider-http-contracts
+cargo xtask verify --check metered-provider-dispatch
 cargo xtask verify
 ```
 
@@ -119,6 +141,13 @@ budgets, incomplete bodies, cancellation, whole/original deadlines, dropped
 requests, Retry-After and rejection of a plaintext TLS peer. Tests use request
 barriers and virtual time for stalled I/O, not sleeps to guess request arrival.
 They do not qualify a vendor, prove a public CA chain or claim a live-provider SLA.
+The separate six-test metered gate uses the existing pure accounting transitions
+behind a deterministic committed-state fault model and real loopback HTTP. It
+proves permit-before-dispatch, cross-session fencing, lost reservation/confirmation,
+dropped futures, authority/cancellation/expiry denial, actual/conservative bytes
+and identifier-free diagnostics/usage. It does not prove PostgreSQL or process
+termination; those boundaries retain their own tests. Each gate has an exact
+discovery census and an independent removal/rename/ignore mutation check.
 The feature-unified gate enables serde_json/preserve_order deliberately.
 It also enables `compression-unification-test` to compile Reqwest's gzip decoder
 adversarially: a valid compressed JSON body must still be rejected at headers,

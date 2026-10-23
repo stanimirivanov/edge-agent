@@ -37,6 +37,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         name: "edgeagent-market-data-http",
         role: CrateRole::Adapter,
         normal: &[
+            "edgeagent-contracts",
             "edgeagent-market-data-application",
             "edgeagent-market-data-domain",
         ],

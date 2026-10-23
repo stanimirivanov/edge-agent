@@ -425,8 +425,28 @@ pub(super) fn checks() -> Vec<Check> {
                 "--features",
                 "serde_json/preserve_order,compression-unification-test",
                 "--",
+                "--skip",
+                "tests::metered::",
             ],
             "Loopback-only exact JSON and bounded HTTP authority, streaming, cancellation, deadline, status and TLS-failure proofs; not vendor qualification.",
+        ),
+        check(
+            "metered-provider-dispatch",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "tests::metered::",
+                "--features",
+                "serde_json/preserve_order,compression-unification-test",
+                "--",
+            ],
+            "Loopback HTTP and committed-state model prove permit-before-I/O, conservative uncertainty, idempotent page confirmation and safe usage; not process/PostgreSQL qualification.",
         ),
         check(
             "evidence-contracts",
@@ -739,6 +759,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "tests::cancellation_original_deadlines_and_dropped_attempts_do_not_restart_work",
                         "tests::statuses_retry_after_encodings_and_public_diagnostics_are_explicit",
                         "tests::tls_handshake_failure_never_downgrades_or_exposes_request_secrets",
+                    ],
+                    ignored: false,
+                });
+            }
+            "metered-provider-dispatch" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "tests::metered::each_page_requires_confirmed_permit_and_usage_is_ledger_backed",
+                        "tests::metered::lost_reservation_confirmation_and_inflight_drop_never_redispatch",
+                        "tests::metered::completed_page_reconfirmation_survives_lost_or_dropped_confirmation",
+                        "tests::metered::authority_cancellation_and_original_deadlines_are_rechecked_after_waits",
+                        "tests::metered::partial_overflow_and_retry_after_accounting_stays_conservative",
+                        "tests::metered::dispatch_diagnostics_and_usage_exclude_identity_and_payloads",
                     ],
                     ignored: false,
                 });

@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For permit-bound provider pages and usage projection, read
+[provider HTTP](development/provider-http.md) and
+[ADR-0051](decisions/0051-bind-provider-page-dispatch-to-durable-permits.md).
+
 For invented daily provider output, strict offline selection and deterministic
 continuations, read [offline market data](development/offline-market-data.md),
 [ADR-0050](decisions/0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md)

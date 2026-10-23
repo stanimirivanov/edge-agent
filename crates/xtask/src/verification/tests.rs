@@ -64,6 +64,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             ],
         ),
         (
+            "metered-provider-dispatch",
+            vec![
+                "tests::metered::each_page_requires_confirmed_permit_and_usage_is_ledger_backed",
+                "tests::metered::lost_reservation_confirmation_and_inflight_drop_never_redispatch",
+                "tests::metered::completed_page_reconfirmation_survives_lost_or_dropped_confirmation",
+                "tests::metered::authority_cancellation_and_original_deadlines_are_rechecked_after_waits",
+                "tests::metered::partial_overflow_and_retry_after_accounting_stays_conservative",
+                "tests::metered::dispatch_diagnostics_and_usage_exclude_identity_and_payloads",
+            ],
+        ),
+        (
             "evidence-contracts",
             vec![
                 "generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines",
@@ -421,6 +432,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "acquisition-budget-contracts",
             "evidence-storage-contracts",
             "provider-http-contracts",
+            "metered-provider-dispatch",
             "evidence-contracts",
             "evidence-freezing",
             "messaging-error-contracts",

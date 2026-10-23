@@ -6,6 +6,13 @@ or cloud deployment is enabled.
 [ADR-0048](../decisions/0048-persist-acquisition-admission-and-call-budgets.md)
 records this boundary.
 
+M03-PR11B binds every HTTP page to this ledger through `MeteredSession`; see
+[provider HTTP](provider-http.md) and
+[ADR-0051](../decisions/0051-bind-provider-page-dispatch-to-durable-permits.md).
+No second limiter, lease release or production worker is added. Current local
+authority is checked before dispatch and data release. Usage reads confirmed
+ledger state without exposing permit or account identifiers.
+
 ## Ownership and recovery
 
 The application owns `AdmissionRecord`, `AcquisitionLedger` and pure transitions.

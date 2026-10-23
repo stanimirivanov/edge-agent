@@ -5,11 +5,13 @@
 mod admission;
 mod authority;
 mod budget;
+mod dispatch;
 pub use admission::{AcquisitionLimits, AdmissionRecord};
 pub use budget::{
     AccountBudget, AcquisitionBudget, AcquisitionLedger, BudgetError, BudgetErrorKind,
     BudgetSnapshot, CallCompletion, CallPermit,
 };
+pub use dispatch::{AcquisitionUsage, DispatchAuthority, DispatchCheck};
 mod evidence;
 mod provider;
 mod request;

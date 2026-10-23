@@ -1,7 +1,9 @@
 use crate::{HttpError, HttpErrorKind as K, JsonDocument, endpoint::Endpoint};
+#[cfg(test)]
+use edgeagent_market_data_application::AuthorizedAcquisition;
 use edgeagent_market_data_application::{
-    AccessScope, AuthorizedAcquisition, Cancellation, KnowledgeMode, ProviderFailure as P,
-    RequestBudget,
+    AccessScope, AcquisitionRequest, Cancellation, DispatchCheck, KnowledgeMode,
+    ProviderFailure as P, RequestBudget,
 };
 use edgeagent_market_data_domain::UtcInstant;
 use reqwest::{Client, header};
@@ -32,21 +34,26 @@ pub struct HttpTransport {
     poll: Duration,
     authorization: Option<header::HeaderValue>,
 }
-/// Local conservative consumption only; durable accounting belongs to the future owner.
+/// Local conservative observations; `MeteredSession` projects authoritative ledger usage.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HttpUsage {
     /// Attempts reserved before polling I/O, including failed or uncertain attempts.
     pub attempts: u32,
     /// Identity-encoded bytes observed; may include one rejected overflow chunk.
     pub observed_bytes: u64,
+    /// Last attempt reached complete JSON-body receipt or a classified terminal HTTP status.
+    pub response_observed: bool,
+    /// Last valid provider delay, preserved even when it exceeds the current command deadline.
+    pub retry_after_ms: Option<u32>,
 }
 /// Non-cloneable single traversal, anchored to the original command's remaining deadline.
-pub struct HttpSession<'a> {
+pub(crate) struct HttpSession<'a> {
     transport: &'a HttpTransport,
     budget: RequestBudget,
     started: Instant,
     deadline: Instant,
     trusted_at: UtcInstant,
+    last_checked_at: UtcInstant,
     usage: HttpUsage,
 }
 macro_rules! redacted { ($($t:ty),*) => {$(impl std::fmt::Debug for $t {
@@ -134,19 +141,27 @@ impl HttpTransport {
     /// Recreating sessions cannot replace durable budgets or authorize historical fresh fetches.
     /// # Errors
     /// Rejects scope/knowledge changes, connect-budget mismatch and expired command/retention.
-    pub fn start(
+    #[cfg(test)]
+    pub(crate) fn start(
         &self,
         admitted: &AuthorizedAcquisition<'_>,
         now: UtcInstant,
     ) -> Result<HttpSession<'_>, HttpError> {
-        let request = admitted.request();
+        self.start_checked(admitted.request(), now, admitted.delete_by().unix_millis())
+    }
+    pub(crate) fn start_checked(
+        &self,
+        request: &AcquisitionRequest,
+        now: UtcInstant,
+        until: i64,
+    ) -> Result<HttpSession<'_>, HttpError> {
         if request.scope != self.scope || request.knowledge != KnowledgeMode::Capture {
             return Err(K::Authority.into());
         }
         if request.budget.connect_ms != self.connect_ms || now < request.admitted_at {
             return Err(K::Configuration.into());
         }
-        let until = request.deadline.min(admitted.delete_by()).unix_millis();
+        let until = request.deadline.unix_millis().min(until);
         let remaining = until
             .checked_sub(now.unix_millis())
             .filter(|n| *n > 0)
@@ -158,11 +173,33 @@ impl HttpTransport {
             started,
             deadline: started + Duration::from_millis(remaining as u64),
             trusted_at: now,
+            last_checked_at: now,
             usage: HttpUsage::default(),
         })
     }
 }
 impl HttpSession<'_> {
+    pub(crate) fn recheck(&mut self, check: &DispatchCheck) -> Result<(), HttpError> {
+        if check.at() < self.last_checked_at {
+            return Err(K::Authority.into());
+        }
+        self.last_checked_at = check.at();
+        let remaining = check
+            .valid_until_ms()
+            .checked_sub(check.at().unix_millis())
+            .filter(|ms| *ms > 0)
+            .ok_or(K::Deadline)?;
+        self.deadline = self
+            .deadline
+            .min(Instant::now() + Duration::from_millis(remaining as u64));
+        if Instant::now() >= self.deadline {
+            return Err(K::Deadline.into());
+        }
+        Ok(())
+    }
+    pub(crate) fn validate_page(&self, next: Option<&str>) -> Result<(), HttpError> {
+        self.transport.endpoint.page(next).map(|_| ())
+    }
     /// Local attempt/observed-byte counters, also available after errors/cancellation.
     #[must_use]
     pub const fn usage(&self) -> HttpUsage {
@@ -192,6 +229,8 @@ impl HttpSession<'_> {
             return Err(K::Budget.into());
         }
         self.usage.attempts += 1;
+        self.usage.response_observed = false;
+        self.usage.retry_after_ms = None;
         let end = self
             .deadline
             .min(Instant::now() + Duration::from_millis(self.budget.request_ms.get().into()));
@@ -236,6 +275,7 @@ impl HttpSession<'_> {
         let mut response = request.send().await.map_err(HttpError::request)?;
         let status = response.status().as_u16();
         if matches!(status, 401 | 403) {
+            self.usage.response_observed = true;
             return Err(K::Provider(P::Forbidden).into());
         }
         if matches!(status, 408 | 429 | 500 | 502 | 503 | 504) {
@@ -243,6 +283,14 @@ impl HttpSession<'_> {
             let retry_after_ms = retry.next().map(|h| self.retry_after(h)).transpose()?;
             if retry.next().is_some() {
                 return Err(K::Provider(P::InvalidResponse).into());
+            }
+            self.usage.retry_after_ms = retry_after_ms;
+            self.usage.response_observed = true;
+            if retry_after_ms.is_some_and(|ms| {
+                Duration::from_millis(ms.into())
+                    >= self.deadline.saturating_duration_since(Instant::now())
+            }) {
+                return Err(K::Budget.into());
             }
             return Err(K::Provider(P::Transient { retry_after_ms }).into());
         }
@@ -287,6 +335,7 @@ impl HttpSession<'_> {
             }
             body.extend_from_slice(&chunk);
         }
+        self.usage.response_observed = true;
         JsonDocument::from_body(body)
     }
     fn retry_after(&self, header: &header::HeaderValue) -> Result<u32, HttpError> {
@@ -309,9 +358,6 @@ impl HttpSession<'_> {
             date.duration_since(trusted.checked_add(elapsed).ok_or(K::Configuration)?)
                 .unwrap_or_default()
         };
-        if delay >= self.deadline.saturating_duration_since(Instant::now()) {
-            return Err(K::Budget.into());
-        }
         // Round a fractional HTTP-date delay upwards; never retry before the provider's boundary.
         u32::try_from(delay.as_millis() + u128::from(delay.subsec_nanos() % 1_000_000 != 0))
             .map_err(|_| K::Budget.into())

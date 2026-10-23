@@ -1,4 +1,5 @@
 use super::*;
+mod metered;
 mod support;
 use edgeagent_market_data_application::{Cancellation, ProviderFailure as P};
 use serde::Deserialize;
