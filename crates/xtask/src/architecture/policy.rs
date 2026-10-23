@@ -6,7 +6,12 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
         name: "edgeagent-market-data-postgres",
         role: CrateRole::Adapter,
-        normal: &["edgeagent-contracts", "edgeagent-market-data-application"],
+        normal: &[
+            "edgeagent-contracts",
+            "edgeagent-market-data-application",
+            "edgeagent-inbox-postgres",
+            "edgeagent-outbox-postgres",
+        ],
         development: &["edgeagent-market-data-domain"],
         build: NONE,
     },

@@ -249,7 +249,7 @@ impl AdmissionRecord {
             .unix_millis()
             .min(self.delete_by_ms()?))
     }
-    fn delete_by_ms(&self) -> Result<i64, Error> {
+    pub(crate) fn delete_by_ms(&self) -> Result<i64, Error> {
         self.fields
             .get("delete_ms")
             .ok_or_else(|| Error::new(Kind::Invalid))?

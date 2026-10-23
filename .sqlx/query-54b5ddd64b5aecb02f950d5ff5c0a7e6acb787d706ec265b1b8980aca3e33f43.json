@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT event FROM edgeagent_acquisition_receipts WHERE request_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_receipts",
+            "name": "event"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "54b5ddd64b5aecb02f950d5ff5c0a7e6acb787d706ec265b1b8980aca3e33f43"
+}

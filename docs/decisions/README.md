@@ -160,3 +160,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0046](0046-bound-provider-http-and-preserve-exact-json-tokens.md) | Accepted | Bound provider HTTP and preserve exact JSON tokens. |
 | [ADR-0047](0047-store-scoped-evidence-with-create-only-integrity-checks.md) | Accepted | Store scoped evidence with create-only integrity checks. |
 | [ADR-0048](0048-persist-acquisition-admission-and-call-budgets.md) | Accepted | Persist acquisition admission and call budgets. |
+| [ADR-0049](0049-commit-terminal-acquisition-publication-atomically.md) | Accepted | Commit terminal acquisition publication atomically. |

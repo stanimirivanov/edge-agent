@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT digest,captured_ms,cutoff_ms FROM edgeagent_evidence_heads WHERE series_key=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_heads",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "captured_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_heads",
+            "name": "captured_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "cutoff_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_heads",
+            "name": "cutoff_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "164740c032296515bd83a305651d24acf0fb9abee9b2fd7ea91d4dd3b5a3904d"
+}

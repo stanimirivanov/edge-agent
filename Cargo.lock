@@ -755,8 +755,10 @@ name = "edgeagent-market-data-postgres"
 version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
  "edgeagent-market-data-application",
  "edgeagent-market-data-domain",
+ "edgeagent-outbox-postgres",
  "futures-util",
  "serde_json",
  "sqlx",

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS at)\n        SELECT floor(extract(epoch FROM at)*1000)::bigint AS \"now!\",\n               to_char(at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS \"time!\"\n        FROM instant\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "now!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "time!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "167a2ad5ca72c4379c9522590897e53b71339283d04fea5b9b9cdb7b7f0d9c7c"
+}

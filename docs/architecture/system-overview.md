@@ -37,9 +37,11 @@ and automated conformance tests.
 
 M03 acquisition authority lives in `market-data-application`, inward of provider
 adapters and outside pure market values. It checks reviewed rights/capabilities
-before and after acquisition and defines a bounded provider port. This does not
-activate the bootstrap service or implement HTTP, distributed budgets or storage.
-See [acquisition authority](../development/market-data-acquisition.md).
+before and after acquisition and defines bounded provider, storage and publication
+ports. Separate HTTP, object-store and PostgreSQL adapters supply bounded I/O,
+durable budgets and atomic terminal publication. The bootstrap service/worker is
+not activated. See [acquisition authority](../development/market-data-acquisition.md)
+and [terminal publication](../development/acquisition-publication.md).
 
 The architecture prioritizes, in order:
 

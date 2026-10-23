@@ -336,6 +336,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic acquisition admission, reviewed rights/capabilities and response conformance; no live qualification or legal authority.",
         ),
         check(
+            "acquisition-terminal-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "terminal",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Receipt-first recovery, uncertain confirmation and authority/storage prerequisites; model proofs, not SQL atomicity.",
+        ),
+        check(
             "acquisition-budget-contracts",
             "T2",
             &["verify", "test"],
@@ -611,6 +629,21 @@ pub(super) fn checks() -> Vec<Check> {
                         "capacity_corruption_truncation_and_unknown_versions_fail_closed",
                         "invalid_wire_state_ordering_reservations_and_nullable_presence_are_rejected",
                         "immutable_export_identity_and_payload_safe_diagnostics_are_stable",
+                    ],
+                    ignored: false,
+                });
+            }
+            "acquisition-terminal-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "committed_recovery_skips_preparation_and_preserves_original_event_bytes",
+                        "failed_or_cancelled_confirmation_recovers_without_compensation",
+                        "ready_preparation_requires_matching_admission_storage_and_current_authority",
+                        "ready_guards_pending_cancelled_and_expired_work_while_rejection_retains_charges",
+                        "receipts_bind_exact_route_command_identity_and_payload_safe_diagnostics",
                     ],
                     ignored: false,
                 });

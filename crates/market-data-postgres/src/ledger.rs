@@ -24,7 +24,7 @@ impl PostgresAcquisitionLedger {
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-    async fn transaction(&self) -> Result<Transaction<'_, Postgres>, Error> {
+    pub(super) async fn transaction(&self) -> Result<Transaction<'_, Postgres>, Error> {
         let mut tx = self.pool.begin().await.map_err(Error::storage)?;
         sqlx::query!(
             "SELECT set_config('statement_timeout', '5000', true) AS statement_timeout,
@@ -38,6 +38,7 @@ impl PostgresAcquisitionLedger {
     async fn mutate<T>(
         &self,
         command: &AcquireEvidence,
+        allow_terminal: bool,
         change: impl FnOnce(
             &AdmissionRecord,
             &mut AcquisitionBudget,
@@ -63,6 +64,12 @@ impl PostgresAcquisitionLedger {
         .map_err(Error::storage)?;
         let mut shared = AccountBudget::decode(&row.budget)?;
         let (record, mut budget) = load(&mut tx, command).await?;
+        if !allow_terminal && sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM edgeagent_acquisition_receipts WHERE request_id=$1) AS "present!""#,
+            command.request.as_str()
+        ).fetch_one(&mut *tx).await.map_err(Error::storage)? {
+            return Err(Error::new(Kind::Terminal));
+        }
         if format!("{:032x}", record.request().scope.account.get()) != account.account_id {
             return Err(Error::new(Kind::Invalid));
         }
@@ -78,7 +85,7 @@ impl PostgresAcquisitionLedger {
         Ok(result)
     }
 }
-async fn load(
+pub(super) async fn load(
     tx: &mut Transaction<'_, Postgres>,
     command: &AcquireEvidence,
 ) -> Result<(AdmissionRecord, AcquisitionBudget), Error> {
@@ -199,7 +206,7 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         command: &AcquireEvidence,
         attempt: u8,
     ) -> Result<BudgetSnapshot, Error> {
-        self.mutate(command, |r, b, _, now| {
+        self.mutate(command, false, |r, b, _, now| {
             b.begin_attempt(r, attempt, now)?;
             Ok(b.snapshot())
         })
@@ -210,7 +217,7 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         command: &AcquireEvidence,
         traversal: Option<&EvidenceId>,
     ) -> Result<CallPermit, Error> {
-        self.mutate(command, |r, b, a, now| b.start(a, r, traversal, now))
+        self.mutate(command, false, |r, b, a, now| b.start(a, r, traversal, now))
             .await
     }
     async fn complete_call(
@@ -218,14 +225,14 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         permit: &CallPermit,
         outcome: CallCompletion,
     ) -> Result<BudgetSnapshot, Error> {
-        self.mutate(permit.command(), |r, b, a, now| {
+        self.mutate(permit.command(), true, |r, b, a, now| {
             b.complete(a, r, permit, outcome, now)?;
             Ok(b.snapshot())
         })
         .await
     }
     async fn cancel(&self, command: &AcquireEvidence) -> Result<BudgetSnapshot, Error> {
-        self.mutate(command, |_, b, _, _| {
+        self.mutate(command, false, |_, b, _, _| {
             b.cancel();
             Ok(b.snapshot())
         })
