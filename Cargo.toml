@@ -11,6 +11,7 @@ members = [
     "crates/market-data-http",
     "crates/market-data-object-store",
     "crates/market-data-postgres",
+    "crates/market-data-replay",
     "crates/messaging",
     "crates/messaging-nats",
     "crates/outbox-postgres",

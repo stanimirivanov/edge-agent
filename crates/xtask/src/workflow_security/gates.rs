@@ -79,6 +79,10 @@ pub(super) fn required(name: &str, job: &str, steps: &[Yaml], problems: &mut Vec
             "cargo xtask verify --check secret-scan",
         ],
         ("repository-quality.yml", "verify") => &["cargo xtask verify"],
+        ("repository-quality.yml", "offline-source-isolation") => &[
+            "cargo test --locked -p edgeagent-market-data-replay --test offline --no-run",
+            "cargo xtask verify --check offline-source-network-denial",
+        ],
         ("repository-quality.yml", "container-smoke") => &["cargo xtask verify image-smoke"],
         ("repository-quality.yml", "local-platform-smoke") => &[
             "cargo xtask verify sqlx-metadata",

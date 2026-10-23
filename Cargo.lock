@@ -766,6 +766,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-market-data-replay"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-market-data-application",
+ "edgeagent-market-data-domain",
+ "edgeagent-simulation-domain",
+]
+
+[[package]]
 name = "edgeagent-messaging"
 version = "0.1.0"
 dependencies = [

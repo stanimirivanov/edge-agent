@@ -23,6 +23,29 @@ fn source(name: &str) -> &'static str {
 }
 
 #[test]
+fn offline_network_proof_is_an_unconditional_protected_job() {
+    let name = "repository-quality.yml";
+    reject(
+        name,
+        "  offline-source-isolation:\n",
+        "  renamed-offline-source:\n",
+        "exact reviewed job inventory",
+    );
+    reject(
+        name,
+        "run: cargo xtask verify --check offline-source-network-denial",
+        "run: cargo xtask verify --check offline-source-network-denial || true",
+        "protected command",
+    );
+    reject(
+        name,
+        "      - name: Prove offline source with networking disabled\n",
+        "      - name: Prove offline source with networking disabled\n        if: false\n",
+        "must not be conditional",
+    );
+}
+
+#[test]
 fn m02_qualification_and_retained_evidence_cannot_be_bypassed() {
     let name = "repository-quality.yml";
     reject(
@@ -180,7 +203,7 @@ fn every_checkout_and_every_remote_action_is_checked() {
             .iter()
             .filter(|problem| problem.contains("checkout must disable"))
             .count(),
-        6
+        7
     );
     reject(
         name,

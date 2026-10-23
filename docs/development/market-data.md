@@ -258,8 +258,12 @@ gate. Missing credentials, rights or prerequisites must report not-run/nonzero,
 never a passing live qualification. Fork/default CI receives no live secrets.
 
 M03-PR2–PR6 implement domain/reference/quality/provider/message contracts;
-PR7–PR10 implement storage and bounded acquisition; PR11 implements a later
-qualified adapter; PR12 retention; PR13 runtime; PR14 offline recovery; PR15 live acceptance.
+PR7–PR10 implement storage and bounded acquisition. The
+[acquisition plan](plans/m03-acquisition.md) splits PR11 into offline source,
+metered dispatch, selection and provider implementations. PR11A now supplies the
+[invented source/replay bridge](offline-market-data.md); PR12 owns retention,
+PR13 runtime, PR14 offline recovery and PR15 live acceptance. PR16–PR20 separately
+bound the streaming extension; none silently changes daily-v1.
 Synthetic and live results share contracts and failure semantics, not prices.
 M03 stays incomplete until live qualification passes under verified rights.
 No models, adjusted-return analytics, UI, cloud rollout or trade routing belong

@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "offline-source-isolation",
+            vec![
+                "offline_mode_is_default_and_live_or_malformed_flags_fail_closed",
+                "daily_source_returns_meaningful_repeatable_canonical_batches",
+                "replay_restores_every_prefix_without_repeating_ids_or_random_draws",
+                "fixture_bytes_scope_bounds_and_provenance_are_checked_before_replay",
+                "cancellation_and_foreign_admission_leave_the_checkpoint_unchanged",
+                "ambient_credentials_cannot_activate_live_access",
+            ],
+        ),
+        (
             "acquisition-terminal-contracts",
             vec![
                 "committed_recovery_skips_preparation_and_preserves_original_event_bytes",
@@ -403,6 +414,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "option-analytics-contracts",
             "account-audit-contracts",
             "frozen-evaluation-contracts",
+            "offline-source-isolation",
             "market-data-quality",
             "market-data-conformance",
             "acquisition-terminal-contracts",
