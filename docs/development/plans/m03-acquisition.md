@@ -70,7 +70,11 @@ catalogs, narrowed request/source construction and invented header adapter. It
 does not persist watchlists or configure live subscriptions. PR13 must pin the
 chosen configuration durably; admission-v1 has no selection fields.
 
-PR12 covers scoped objects and licensed private metadata/fingerprints. PR13 composes
+PR12's [retention boundary](../evidence-retention.md) covers scoped objects and
+licensed private metadata/fingerprints with opaque denial tombstones and
+generation-fenced account blocks. PR13 must supply authenticated current authority,
+write/provider quiescence evidence, maintenance scheduling and restore/readiness
+gates; no timeout can stand in for worker fencing. PR13 composes
 existing authority, metering, conformance, quality and atomic terminal publication;
 ACK only after confirmed commit. Minimal startup/readiness/shutdown are
 **[Prerequisite from M10]**; M10 retains full operational qualification. PR14 tests

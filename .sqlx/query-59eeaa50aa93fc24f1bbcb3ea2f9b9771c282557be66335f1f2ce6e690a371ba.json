@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_evidence_heads WHERE series_key=$1 AND owner_request=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "59eeaa50aa93fc24f1bbcb3ea2f9b9771c282557be66335f1f2ce6e690a371ba"
+}

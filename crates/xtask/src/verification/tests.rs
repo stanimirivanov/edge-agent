@@ -53,6 +53,13 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             ],
         ),
         (
+            "evidence-retention-contracts",
+            vec![
+                "durable_denial_checks_surround_storage_and_never_release_revoked_bytes",
+                "cleanup_requires_quiescence_and_keeps_inventory_after_uncertain_deletion",
+            ],
+        ),
+        (
             "evidence-storage-contracts",
             vec![
                 "store::tests::concurrent_creates_and_corrections_preserve_exact_immutable_bytes",
@@ -61,6 +68,7 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "store::tests::current_authority_and_exclusive_expiry_are_rechecked_after_io",
                 "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
                 "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
+                "store::tests::quiescent_deletion_is_scoped_idempotent_and_recovers_after_timeout",
             ],
         ),
         (
@@ -442,6 +450,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "market-data-conformance",
             "acquisition-terminal-contracts",
             "acquisition-budget-contracts",
+            "evidence-retention-contracts",
             "evidence-storage-contracts",
             "provider-http-contracts",
             "metered-provider-dispatch",

@@ -1,7 +1,8 @@
 //! MarketData-owned immutable admission and serialized account budget transactions.
-//! No timers, provider requests, implicit retries or terminal publication live here.
+//! No timers, provider requests or implicit retries live here.
 #![deny(missing_docs)]
 mod ledger;
+mod retention;
 mod terminal;
 pub use ledger::PostgresAcquisitionLedger;
 
@@ -10,5 +11,11 @@ pub const MIGRATION_SQL: &str = include_str!("../migrations/0001_acquisition_led
 /// Additive terminal receipt and ready-publication fences, applied after the ledger.
 pub const TERMINAL_MIGRATION_SQL: &str =
     include_str!("../migrations/0002_terminal_publication.sql");
-/// Ordered service-private migrations; compose existing inbox/outbox migrations separately.
-pub const MIGRATIONS: [&str; 2] = [MIGRATION_SQL, TERMINAL_MIGRATION_SQL];
+/// Retirement inventory, opaque denial identities and account block generations.
+pub const RETENTION_MIGRATION_SQL: &str = include_str!("../migrations/0003_evidence_retention.sql");
+/// Ordered private migrations; retention refuses un-inventoried legacy publication metadata.
+pub const MIGRATIONS: [&str; 3] = [
+    MIGRATION_SQL,
+    TERMINAL_MIGRATION_SQL,
+    RETENTION_MIGRATION_SQL,
+];

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT descriptor FROM edgeagent_evidence_objects WHERE request_id=$1 ORDER BY object_key LIMIT 13",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "descriptor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_objects",
+            "name": "descriptor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3a0964eee87100b825b09541ce41e2d7cf847e45bcbf1d35465c786909948833"
+}

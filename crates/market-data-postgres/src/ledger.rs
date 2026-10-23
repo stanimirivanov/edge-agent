@@ -7,7 +7,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use std::fmt;
 
 /// PostgreSQL ledger. Bind a service-private schema and explicit pool bounds at composition.
-/// All mutations lock account before command, use database time and commit before return.
+/// Mutations lock scope, account then command, use database time and commit before return.
 #[derive(Clone)]
 pub struct PostgresAcquisitionLedger {
     pool: PgPool,
@@ -47,6 +47,7 @@ impl PostgresAcquisitionLedger {
         ) -> Result<T, Error>,
     ) -> Result<T, Error> {
         let mut tx = self.transaction().await?;
+        crate::retention::guard_request(&mut tx, &command.request).await?;
         let account = sqlx::query!(
             "SELECT account_id FROM edgeagent_acquisitions WHERE request_id=$1",
             command.request.as_str()
@@ -56,7 +57,7 @@ impl PostgresAcquisitionLedger {
         .map_err(Error::storage)?
         .ok_or_else(|| Error::new(Kind::NotFound))?;
         let row = sqlx::query!(
-            "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+            "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
             account.account_id
         )
         .fetch_one(&mut *tx)
@@ -64,6 +65,9 @@ impl PostgresAcquisitionLedger {
         .map_err(Error::storage)?;
         let mut shared = AccountBudget::decode(&row.budget)?;
         let (record, mut budget) = load(&mut tx, command).await?;
+        if row.blocked {
+            return Err(Error::new(Kind::Denied));
+        }
         if !allow_terminal && sqlx::query_scalar!(
             r#"SELECT EXISTS(SELECT 1 FROM edgeagent_acquisition_receipts WHERE request_id=$1) AS "present!""#,
             command.request.as_str()
@@ -89,6 +93,7 @@ pub(super) async fn load(
     tx: &mut Transaction<'_, Postgres>,
     command: &AcquireEvidence,
 ) -> Result<(AdmissionRecord, AcquisitionBudget), Error> {
+    crate::retention::guard_request(tx, &command.request).await?;
     let row = sqlx::query!(
         "SELECT digest, admission, budget FROM edgeagent_acquisitions
          WHERE request_id=$1 FOR UPDATE",
@@ -96,12 +101,16 @@ pub(super) async fn load(
     )
     .fetch_optional(&mut **tx)
     .await
-    .map_err(Error::storage)?
-    .ok_or_else(|| Error::new(Kind::NotFound))?;
+    .map_err(Error::storage)?;
+    let Some(row) = row else {
+        crate::retention::not_retired(tx, &command.request).await?;
+        return Err(Error::new(Kind::NotFound));
+    };
     if row.digest != command.request_sha256.as_str() {
         return Err(Error::new(Kind::Conflict));
     }
     let record = AdmissionRecord::decode(&row.admission, command)?;
+    crate::retention::active(tx, &record).await?;
     let budget = AcquisitionBudget::decode(&row.budget)?;
     budget.verify(&record)?;
     Ok((record, budget))
@@ -143,6 +152,16 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         let account = format!("{:032x}", record.request().scope.account.get());
         let shared = AccountBudget::new(record.limits())?.encode()?;
         let mut tx = self.transaction().await?;
+        crate::retention::not_retired(&mut tx, &record.command().request).await?;
+        let retention_scope = crate::retention::scope_key(&record.retention_scope()?);
+        sqlx::query!(
+            "INSERT INTO edgeagent_evidence_scopes(scope) VALUES($1) ON CONFLICT DO NOTHING",
+            retention_scope
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
+        crate::retention::active(&mut tx, record).await?;
         sqlx::query!(
             "INSERT INTO edgeagent_acquisition_accounts (account_id,budget)
              VALUES ($1,$2) ON CONFLICT DO NOTHING",
@@ -153,12 +172,16 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         .await
         .map_err(Error::storage)?;
         let row = sqlx::query!(
-            "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+            "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
             account
         )
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::storage)?;
+        if row.blocked {
+            return Err(Error::new(Kind::Denied));
+        }
+        crate::retention::not_retired(&mut tx, &record.command().request).await?;
         // Sample after contention; a lock wait must not extend the admission deadline.
         let now = sqlx::query_scalar!(
             r#"SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS "now!""#
@@ -172,14 +195,16 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         let mut shared = AccountBudget::decode(&row.budget)?;
         shared.tighten(record.limits())?;
         let initial = AcquisitionBudget::default().encode()?;
+        let delete_ms = record.delete_by_ms()?;
+        let orphan_ms = record.valid_until_ms()?;
         sqlx::query!(
-            "INSERT INTO edgeagent_acquisitions (request_id,account_id,digest,admission,budget)
-             VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+            "INSERT INTO edgeagent_acquisitions (request_id,account_id,digest,admission,budget,retention_scope,delete_ms,orphan_ms)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
             record.command().request.as_str(),
             account,
             record.command().request_sha256.as_str(),
             record.bytes(),
-            initial
+            initial, retention_scope, delete_ms, orphan_ms
         )
         .execute(&mut *tx)
         .await

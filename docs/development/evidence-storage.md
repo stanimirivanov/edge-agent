@@ -6,7 +6,7 @@
 - `market-data-object-store` implements create-only writes and bounded verified reads.
 - Exact canonical daily-v1 bytes remain outside messages and inside licensed scopes.
 - Retry uncertain writes with the same bytes/key; never overwrite or compensate by deletion.
-- Synthetic/local qualification is not cloud activation, a public read API or physical deletion.
+- Compose durable retirement and exact-key deletion through the retention adapter; no cloud activation or public read API.
 
 ## Composition and authority
 
@@ -68,8 +68,9 @@ transactions. A failure after object creation can leave an orphan for later
 reconciliation; it must not cause an uncommitted ready event.
 
 Expiry/revocation denies use immediately; neither implies physical deletion.
-M03-PR12 must implement deletion/orphan/backup policies; later acquisition/runtime
-slices own durable receipts, correction-head fencing and access-policy composition.
+The [retention boundary](evidence-retention.md) implements durable denial, bounded
+orphan cleanup and scoped deletion after write quiescence. Runtime still owns
+authenticated policy composition, scheduling, and provider/process fencing.
 No raw response storage or live provider access is enabled here. Rollback can stop
 using the adapter without changing existing immutable evidence or v1 contracts.
 
@@ -81,7 +82,7 @@ cargo xtask verify
 cargo xtask verify supply-chain
 ```
 
-The default gate protects six named tests with an independent census and mutation
+The default gate protects seven named tests with an independent census and mutation
 tests. They cover concurrent creates/corrections, a committed PUT followed by
 confirmation timeout and restart, dropped operations, corrupt collisions,
 descriptor and bounded-stream attacks, current revocation/exclusive expiry during

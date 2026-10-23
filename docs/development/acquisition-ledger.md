@@ -65,4 +65,7 @@ per worker, current-rights integration and process-kill qualification.
 Bounded private accounting JSON rejects missing fields, unsupported versions and
 inconsistent counters. It is not a public event format. Default diagnostics redact
 admission bytes, URLs, account identities, licensed values and credentials; error
-sources remain explicitly inspectable. PR12 owns physical deletion and retention.
+sources remain explicitly inspectable. The [retention boundary](evidence-retention.md)
+erases expired command metadata while retaining opaque account blocks for unknown
+calls. After erasure, only generation-fenced owner quiescence can clear the block;
+ordinary completion/recovery never resurrects the retired command.

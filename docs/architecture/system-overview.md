@@ -54,6 +54,12 @@ durable budgets and atomic terminal publication. The bootstrap service/worker is
 not activated. See [acquisition authority](../development/market-data-acquisition.md)
 and [terminal publication](../development/acquisition-publication.md).
 
+The [retention boundary](../development/evidence-retention.md) inventories objects
+before PUT, commits withdrawal/expiry denial before physical cleanup, and erases
+licensed private publication metadata. Uncertain provider work retains an opaque
+account block until generation-fenced owner quiescence; storage deletion requires
+separate writer quiescence. No maintenance scheduler or cloud erasure is activated.
+
 The architecture prioritizes, in order:
 
 1. evidence integrity and point-in-time reproducibility;

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_evidence_ownership WHERE request_id=$1 RETURNING series_key,observations",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "series_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_ownership",
+            "name": "series_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "observations",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_ownership",
+            "name": "observations"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "bb72ba06b672be178c7f0700045eb3f7f9699d549b43b2c7e187efc1d71141ac"
+}

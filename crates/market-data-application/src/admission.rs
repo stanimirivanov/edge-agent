@@ -249,12 +249,75 @@ impl AdmissionRecord {
             .unix_millis()
             .min(self.delete_by_ms()?))
     }
-    pub(crate) fn delete_by_ms(&self) -> Result<i64, Error> {
+    /// Original exclusive licensed deletion time; checks never renew this value.
+    /// # Errors
+    /// Returns Invalid for malformed retained metadata.
+    pub fn delete_by_ms(&self) -> Result<i64, Error> {
         self.fields
             .get("delete_ms")
             .ok_or_else(|| Error::new(Kind::Invalid))?
             .parse()
             .map_err(|_| Error::new(Kind::Invalid))
+    }
+    /// Licensed cleanup namespace, independent of content hashes and rights revisions.
+    /// # Errors
+    /// Rejects malformed retained authority pins.
+    pub fn retention_scope(&self) -> Result<crate::RetentionScope, Error> {
+        let rights = self
+            .fields
+            .get("rights")
+            .and_then(|p| p.split(':').next())
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let id = |s: &str| EvidenceId::new(s).map_err(|_| Error::new(Kind::Invalid));
+        Ok(crate::RetentionScope {
+            storage: id(&format!("{:032x}", self.request.scope.storage.get()))?,
+            audience: id(&format!("{:032x}", self.request.scope.audience.get()))?,
+            rights: id(rights)?,
+        })
+    }
+    /// Bind an object upload to all original request/scope and authority identities.
+    /// # Errors
+    /// Denies foreign scope, changed rights pins or extended retention.
+    pub fn verify_artifact(&self, artifact: &DailyEvidenceArtifact) -> Result<(), Error> {
+        let data = artifact.data();
+        let s = &data.scope;
+        let r = self.request.scope;
+        let pairs = [
+            (&s.principal, r.principal.get()),
+            (&s.account, r.account.get()),
+            (&s.source, r.source.get()),
+            (&s.instrument, r.instrument.get()),
+            (&s.endpoint, r.endpoint.get()),
+            (&s.storage, r.storage.get()),
+            (&s.audience, r.audience.get()),
+        ];
+        let rights = data
+            .references
+            .iter()
+            .find(|p| p.kind == edgeagent_contracts::evidence::EvidenceReferenceKind::Rights)
+            .ok_or_else(|| Error::new(Kind::Denied))?;
+        let pin = self
+            .fields
+            .get("rights")
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let expected = format!(
+            "{}:{}:",
+            rights.version.id.as_str(),
+            rights.version.revision.as_str()
+        );
+        let delete = i128::from(data.delete_by.seconds) * 1000
+            + i128::from(data.delete_by.nanos / 1_000_000);
+        if s.request != self.command.request
+            || s.request_sha256 != self.command.request_sha256
+            || pairs
+                .iter()
+                .any(|(id, n)| id.as_str() != format!("{n:032x}"))
+            || !pin.starts_with(&expected)
+            || delete > i128::from(self.delete_by_ms()?)
+        {
+            return Err(Error::new(Kind::Denied));
+        }
+        Ok(())
     }
 }
 fn pin<T>(v: &ReferenceVersion<T>) -> String {

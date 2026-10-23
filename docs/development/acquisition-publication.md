@@ -70,7 +70,11 @@ publication can leave private orphan objects for PR12 cleanup, not usable receip
 Apply inbox/outbox migrations and `market-data-postgres::MIGRATIONS` in the same
 private schema. The second migration is additive; code rollback leaves history
 inert. Do not drop receipts or rewrite outbox envelopes as rollback. PR12 owns
-physical deletion/retention, PR13 runtime, and later qualification real process faults.
+the [retention boundary](evidence-retention.md), PR13 runtime, and later qualification
+real process faults. Ready publication now requires the pre-PUT inventory and holds
+the namespace denial fence through commit. Retired/revoked recovery returns denial,
+not a historical receipt. Heads and fingerprints follow retained ownership, not
+indefinite global retention.
 Existing v1 message formats are unchanged.
 
 After runtime activation, disable acquisition ingress/dispatch before rolling back

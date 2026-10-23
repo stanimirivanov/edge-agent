@@ -164,3 +164,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0050](0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md) | Accepted | Isolate invented daily sources and reuse frozen replay. |
 | [ADR-0051](0051-bind-provider-page-dispatch-to-durable-permits.md) | Accepted | Bind provider page dispatch to durable permits. |
 | [ADR-0052](0052-freeze-instrument-selection-and-route-headers-before-payloads.md) | Accepted | Freeze instrument selection and route headers before payloads. |
+| [ADR-0053](0053-retire-evidence-with-opaque-denials-and-quiescent-cleanup.md) | Accepted | Retire evidence with opaque denials and quiescent cleanup. |

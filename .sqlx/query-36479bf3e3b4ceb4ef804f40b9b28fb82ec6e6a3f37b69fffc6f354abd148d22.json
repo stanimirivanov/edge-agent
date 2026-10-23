@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT account_id,retention_scope FROM edgeagent_acquisitions WHERE request_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "retention_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "retention_scope"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "36479bf3e3b4ceb4ef804f40b9b28fb82ec6e6a3f37b69fffc6f354abd148d22"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT blocked,block_generation FROM edgeagent_acquisition_accounts WHERE account_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blocked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "blocked"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "block_generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "block_generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9f68eeb6b1f78871d8b1d324ac8abd753794fddbd070697659c7d4d2cac54984"
+}
