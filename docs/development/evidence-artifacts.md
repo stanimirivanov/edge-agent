@@ -11,6 +11,37 @@
 
 ## Encoding and validation
 
+### Date-only temporal prerequisite
+
+[ADR-0056](../decisions/0056-preserve-native-dates-with-reviewed-bucket-provenance.md)
+adds the separate `edgeagent.evidence.date-only-time.v1` value. A native date is not
+an event instant, publication time or evidence of earlier availability. Domain
+`DateOnlyTime` retains an explicit reviewed bucket rule, exact calendar revision,
+source checksums, actual local receipt and actual derivation time. Check open/early
+close coverage and chronology; do not infer a provider bucket from core hours or
+midnight. Explicit 23/25-hour inputs fit the 26-hour daily capacity. No timezone
+rules are extrapolated; the current profile pins America/New_York and a named
+tzdata revision. Authentication and correctness of retained reviews remain external.
+
+`freeze_date_only_time` performs a pure lossless mapping to `DateOnlyTimeEvidence`.
+Its own strict canonical codec bounds input at 4096 bytes, authenticates the digest
+and rejects alternate/unknown/missing/duplicate encodings. Wire checks cannot prove
+core coverage from a witness alone: retain/authenticate the full referenced records.
+The new local schema and invented golden are independent of all existing v1 bytes.
+There is deliberately no `event_at` or conversion into precise `EvidenceTimes`.
+
+This is a temporal prerequisite, not an activated provider or a complete date-only
+daily object. PR11D must embed it in a new observation/artifact format and integrate
+strict consumer format dispatch before any publication; existing daily-v1 admission,
+freezing, storage and publication APIs do not accept it. PR11E must reuse the same
+boundary. No provider, credentials, model calls or data rights are enabled.
+
+Run `cargo xtask verify --check date-only-evidence` for the protected synthetic
+domain/mapper/codec proofs, and `cargo xtask verify --check evidence-contracts`
+for immutable old/new schema and golden freshness. Default verification runs both.
+
+### Existing daily-v1 encoding
+
 The daily-v1 format uses compact recursively key-sorted JSON with exactly one
 final LF. SHA-256 includes that LF. This is a specific encoding, not a general
 RFC 8785 implementation. Reordered reference witnesses normalize before sealing;

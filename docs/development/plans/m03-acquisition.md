@@ -34,8 +34,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 3 | M03-PR11C | Versioned instrument selection and early routing | PR11A | B |
 | 3 | M03-PR12 | Retention, immediate revocation denial and orphan cleanup | PR10 | B |
 | 4 | M03-CREDITS | Durable daily allocation and endpoint-weight accounting prerequisite | PR11B, PR12 | C |
-| 5 | M03-PR11D | Conditional Twelve Data daily adapter and offline protocol conformance | PR11B, PR11C, M03-CREDITS, semantics/rights review | D |
-| 5 | M03-PR11E | Conditional Alpaca historical daily adapter | PR11B, PR11C, M03-CREDITS, semantics/rights review | D |
+| 4 | M03-DATE | Native date-only temporal contract and reviewed bucket provenance | PR3, PR6 | C |
+| 5 | M03-PR11D | Conditional Twelve Data daily adapter and offline protocol conformance | PR11B, PR11C, M03-CREDITS, M03-DATE, semantics/rights review | D |
+| 5 | M03-PR11E | Conditional Alpaca historical daily adapter | PR11B, PR11C, M03-CREDITS, M03-DATE, semantics/rights review | D |
 | 4 | M03-PR13 | Offline-only daily worker with pinned invented profile | PR11A, PR11B, PR11C, PR12 | C |
 | 6 | M03-PR14 | Worker/process death, acknowledgement loss and quota isolation proofs | PR13 | E |
 | 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, PR11D, PR11E, activation review, account/rights approval | F |
@@ -49,6 +50,11 @@ Each implementation ships focused negative tests and docs with its behavior.
 
 The conditional provider pair is Twelve Data first and Alpaca historical data
 second; neither selection authorizes credentials, live calls or data use.
+The [date-only prerequisite](../evidence-artifacts.md#date-only-temporal-prerequisite)
+adds an independently versioned temporal value, not a fabricated precise source
+instant. PR11D must integrate it into a new date-only observation/object path with
+consumer format dispatch; old daily-v1 publication/storage remain unchanged and
+must never silently accept date-only input. PR11E reuses that integration.
 The [daily-credit prerequisite](../acquisition-ledger.md#reviewed-daily-credits)
 must precede adapters. It extends the existing ledger, requires an exclusive
 owner-reviewed allocation, known opening debit and maximum endpoint prices, and

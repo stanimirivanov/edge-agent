@@ -531,6 +531,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Checked authority and whole-series quality bridge to immutable scoped evidence; no I/O or publication.",
         ),
         check(
+            "date-only-evidence",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "date_only",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Native labels, reviewed DST/core coverage, precise local receipt and bounded canonical provenance. No source timestamp conversion, provider I/O or publication activation.",
+        ),
+        check(
             "messaging-error-contracts",
             "T2",
             &["verify", "test"],
@@ -887,6 +905,19 @@ pub(super) fn checks() -> Vec<Check> {
                         "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
                         "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
                         "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+                    ],
+                    ignored: false,
+                });
+            }
+            "date-only-evidence" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "native_dates_preserve_reviewed_dst_buckets_and_exact_local_receipts",
+                        "date_only_construction_rejects_unreviewed_or_conflicting_calendar_and_chronology",
+                        "date_only_wire_decode_is_bounded_canonical_versioned_and_payload_safe",
                     ],
                     ignored: false,
                 });

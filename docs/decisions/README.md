@@ -167,3 +167,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0053](0053-retire-evidence-with-opaque-denials-and-quiescent-cleanup.md) | Accepted | Retire evidence with opaque denials and quiescent cleanup. |
 | [ADR-0054](0054-compose-an-offline-only-acquisition-worker.md) | Accepted | Compose an offline-only acquisition worker. |
 | [ADR-0055](0055-reserve-reviewed-daily-credits-with-account-permits.md) | Accepted | Reserve reviewed daily credits with account permits. |
+| [ADR-0056](0056-preserve-native-dates-with-reviewed-bucket-provenance.md) | Accepted | Preserve native dates with reviewed bucket provenance. |

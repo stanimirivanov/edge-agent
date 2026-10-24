@@ -16,7 +16,7 @@ fn root() -> std::path::PathBuf {
 fn generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines() -> Result {
     verify(&root())?;
     let generated = artifacts()?;
-    assert_eq!(generated.len(), 7);
+    assert_eq!(generated.len(), 9);
     // Independent published SHA-256 census, populated on initial v1 publication.
     let baseline = include_str!("../fixtures/evidence-baselines.txt");
     let mut covered = std::collections::BTreeSet::new();
@@ -33,6 +33,17 @@ fn generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines() -
 
 #[test]
 fn canonical_evidence_bytes_preserve_exact_values_times_and_scoped_identity() -> Result {
+    let native = edgeagent_event_spine_conformance::evidence::date_only_fixture()?;
+    let validator = jsonschema::validator_for(&EvidenceSchema::DateOnlyTime.generate()?)?;
+    let native_json: Value = serde_json::from_slice(native.bytes())?;
+    assert!(validator.is_valid(&native_json));
+    assert!(
+        !jsonschema::validator_for(&EvidenceSchema::Artifact.generate()?)?.is_valid(&native_json)
+    );
+    assert_eq!(
+        DateOnlyTimeEvidence::decode(native.bytes(), native.digest())?,
+        native
+    );
     let original = fixture()?;
     assert_eq!(
         DailyEvidenceArtifact::decode(original.bytes(), original.digest())?,

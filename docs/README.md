@@ -70,6 +70,8 @@ For M03 exact numeric provider parsing and bounded HTTP, read
 For M03 versioned evidence bytes, lineage and scoped terminal messages, read
 [evidence artifacts](development/evidence-artifacts.md) and
 [ADR-0045](decisions/0045-freeze-versioned-evidence-artifacts-and-terminal-contracts.md).
+For the native-date temporal prerequisite and explicitly reviewed UTC bucket provenance,
+also read [ADR-0056](decisions/0056-preserve-native-dates-with-reviewed-bucket-provenance.md).
 
 For M03 acquisition requests, reviewed rights and provider conformance, read
 [acquisition authority](development/market-data-acquisition.md) and

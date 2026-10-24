@@ -91,6 +91,43 @@ pub fn fixture() -> Result<DailyEvidenceArtifact, EvidenceContractError> {
         replaces: None,
     })
 }
+/// Invented temporal value; never converts the existing v1 fixture's source event.
+pub fn date_only_fixture() -> Result<DateOnlyTimeEvidence, EvidenceContractError> {
+    let daily = fixture()?;
+    let data = daily.data();
+    let calendar = data
+        .references
+        .iter()
+        .find(|r| r.kind == EvidenceReferenceKind::Calendar)
+        .ok_or(EvidenceContractError)?
+        .clone();
+    DateOnlyTimeEvidence::new(DateOnlyTimeData {
+        version: DateOnlyTimeFormat::V1,
+        source_date: calendar.date.clone().ok_or(EvidenceContractError)?,
+        bucket: [
+            EvidenceTime {
+                seconds: 0,
+                nanos: 0,
+            },
+            EvidenceTime {
+                seconds: 86400,
+                nanos: 0,
+            },
+        ],
+        received_at: data.cutoff,
+        derived_at: data.captured_at,
+        rule: DateOnlyRuleWitness {
+            version: data.semantics.clone(),
+            source: data.scope.source.clone(),
+            known_at: calendar.known_at,
+            source_sha256: calendar.source_sha256.clone(),
+            calendar: calendar.version.clone(),
+        },
+        calendar,
+        timezone: DateOnlyTimezone::AmericaNewYork,
+        tzdata_revision: "synthetic-v1".into(),
+    })
+}
 /// Exact metadata for invented command/fact envelopes, supplied without clock/random work.
 pub fn envelope<T: serde::Serialize>(
     index: usize,
@@ -132,6 +169,10 @@ pub fn artifacts() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Erro
         );
     }
     let artifact = fixture()?;
+    files.insert(
+        "fixtures/evidence-date-only-v1/time.json".into(),
+        date_only_fixture()?.bytes().to_vec(),
+    );
     let request = AcquireEvidence {
         request: artifact.data().scope.request.clone(),
         request_sha256: artifact.data().scope.request_sha256.clone(),
@@ -156,7 +197,11 @@ pub fn artifacts() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Erro
 /// Verify byte freshness, exact inventories and regular files; never resolve schema URIs.
 pub fn verify(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let files = artifacts()?;
-    for directory in ["schemas/evidence", "fixtures/evidence-v1"] {
+    for directory in [
+        "schemas/evidence",
+        "fixtures/evidence-v1",
+        "fixtures/evidence-date-only-v1",
+    ] {
         let path = root.join(directory);
         if !std::fs::symlink_metadata(&path)?.file_type().is_dir() {
             return Err("evidence inventory is not a regular directory".into());

@@ -122,6 +122,21 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Exact("crates/market-data-domain/src/date_only.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["date-only-evidence", "evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/date_only.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["date-only-evidence", "evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/date_only.rs"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["date-only-evidence", "evidence-contracts"],
+    },
+    Route {
         matcher: Matcher::Prefix("services/market-data/"),
         guides: &["docs/development/offline-worker.md"],
         checks: &[
@@ -310,7 +325,11 @@ const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("crates/contracts/src/evidence"),
         guides: &["docs/development/evidence-artifacts.md"],
-        checks: &["evidence-contracts", "evidence-freezing"],
+        checks: &[
+            "evidence-contracts",
+            "evidence-freezing",
+            "date-only-evidence",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("crates/contracts/schemas/evidence/"),
@@ -321,6 +340,11 @@ const ROUTES: &[Route] = &[
         matcher: Matcher::Prefix("crates/contracts/fixtures/evidence-v1/"),
         guides: &["docs/development/evidence-artifacts.md"],
         checks: &["evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/contracts/fixtures/evidence-date-only-v1/"),
+        guides: &["docs/development/evidence-artifacts.md"],
+        checks: &["date-only-evidence", "evidence-contracts"],
     },
     Route {
         matcher: Matcher::Exact("crates/event-spine-conformance/src/evidence.rs"),

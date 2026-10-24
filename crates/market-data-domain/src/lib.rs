@@ -29,6 +29,7 @@ mod calendar;
 mod capability;
 mod continuity;
 mod daily;
+mod date_only;
 mod derivative;
 mod evidence_time;
 mod identity;
@@ -55,6 +56,7 @@ pub use daily::{
     ActionCoverage, CheckedDailyDay, CheckedDailySeries, DailyQualityError, DailyQualityPolicy,
     DailyReferences, DailySeriesSpec,
 };
+pub use date_only::{DateOnlyBucket, DateOnlyTime};
 pub use derivative::{
     DeliverableReference, DerivativeError, ExerciseStyle, OptionKind, OptionSpecification,
     OptionTerms, SettlementStyle, Underlying,

@@ -1,11 +1,13 @@
 //! Immutable daily evidence bytes and identity-only acquisition decisions.
 //! Hashes identify bytes, never authenticity, entitlement or a bearer location.
 mod artifact;
+mod date_only;
 mod messages;
 mod model;
 #[cfg(feature = "schema")]
 pub mod schemas;
 pub use artifact::DailyEvidenceArtifact;
+pub use date_only::*;
 pub use messages::*;
 pub use model::*;
 
