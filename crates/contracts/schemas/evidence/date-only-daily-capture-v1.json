@@ -1,0 +1,604 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:date-only-daily-capture:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Untrusted capture DTO, deliberately distinct from quality-approved `DailyEvidence`.",
+  "properties": {
+    "range": {
+      "description": "Half-open requested native date range.",
+      "items": {
+        "description": "Canonical Gregorian YYYY-MM-DD in years 1 through 9999; not proof of a session.",
+        "maxLength": 10,
+        "minLength": 10,
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "response_sha256": {
+      "description": "Exact response body checksum; raw retention still requires separate rights.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "rows": {
+      "description": "Original captured rows, in strictly ascending native-date order.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One immutable captured row; the full retained bucket/calendar records remain required.",
+        "properties": {
+          "ohlc": {
+            "description": "Exact unadjusted USD/share open/high/low/close.",
+            "items": {
+              "additionalProperties": false,
+              "description": "Exact normalized nonnegative decimal; prices require positive coefficients.",
+              "properties": {
+                "coefficient": {
+                  "description": "0 or 1..28 base-ten digits, with no leading zero/sign/exponent.",
+                  "maxLength": 28,
+                  "minLength": 1,
+                  "pattern": "^(0|[1-9][0-9]{0,27})$",
+                  "type": "string"
+                },
+                "scale": {
+                  "description": "Fractional scale; volume additionally requires <=6.",
+                  "format": "uint8",
+                  "maximum": 8,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "coefficient",
+                "scale"
+              ],
+              "type": "object"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "time": {
+            "additionalProperties": false,
+            "description": "Native label, explicit bucket, actual receipt and derivation provenance.",
+            "properties": {
+              "bucket": {
+                "description": "Explicit half-open derived UTC bucket; never core-session/midnight defaults.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "Lossless UTC seconds/nanoseconds, independent from event/receipt semantics.",
+                  "properties": {
+                    "nanos": {
+                      "description": "Nanosecond fraction, never rounded to milliseconds.",
+                      "format": "uint32",
+                      "maximum": 999999999,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "seconds": {
+                      "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                      "format": "int64",
+                      "maximum": 253402300799,
+                      "minimum": -62135596800,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "nanos",
+                    "seconds"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "calendar": {
+                "additionalProperties": false,
+                "description": "Required exact dated calendar witness, not proof by a calendar ID alone.",
+                "properties": {
+                  "date": {
+                    "description": "Required effective date for calendar/action roles, null for the others.",
+                    "maxLength": 10,
+                    "minLength": 10,
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "description": "Reference role.",
+                    "oneOf": [
+                      {
+                        "const": "mapping",
+                        "description": "Dated identity mapping.",
+                        "type": "string"
+                      },
+                      {
+                        "const": "calendar",
+                        "description": "Explicit open/closed calendar coverage.",
+                        "type": "string"
+                      },
+                      {
+                        "const": "action",
+                        "description": "Supported corporate-action annotation.",
+                        "type": "string"
+                      },
+                      {
+                        "const": "action_coverage",
+                        "description": "Complete action catalog coverage.",
+                        "type": "string"
+                      },
+                      {
+                        "const": "rights",
+                        "description": "Current acquisition rights review.",
+                        "type": "string"
+                      },
+                      {
+                        "const": "provider_review",
+                        "description": "Current provider capability review.",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "known_at": {
+                    "additionalProperties": false,
+                    "description": "Actual knowledge time.",
+                    "properties": {
+                      "nanos": {
+                        "description": "Nanosecond fraction, never rounded to milliseconds.",
+                        "format": "uint32",
+                        "maximum": 999999999,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "seconds": {
+                        "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                        "format": "int64",
+                        "maximum": 253402300799,
+                        "minimum": -62135596800,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nanos",
+                      "seconds"
+                    ],
+                    "type": "object"
+                  },
+                  "source": {
+                    "description": "Source authority identity.",
+                    "maxLength": 32,
+                    "minLength": 32,
+                    "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                    "type": "string"
+                  },
+                  "source_sha256": {
+                    "description": "Source-byte digest; full referenced records must be retained for replay.",
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "additionalProperties": false,
+                    "description": "Selected identity/revision.",
+                    "properties": {
+                      "id": {
+                        "description": "Nonzero reference identity.",
+                        "maxLength": 32,
+                        "minLength": 32,
+                        "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "description": "Exact selected revision.",
+                        "maxLength": 20,
+                        "minLength": 1,
+                        "pattern": "^[1-9][0-9]{0,19}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "date",
+                  "kind",
+                  "known_at",
+                  "source",
+                  "source_sha256",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "derived_at": {
+                "additionalProperties": false,
+                "description": "Actual local derivation time, at or after receipt and both reference witnesses.",
+                "properties": {
+                  "nanos": {
+                    "description": "Nanosecond fraction, never rounded to milliseconds.",
+                    "format": "uint32",
+                    "maximum": 999999999,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seconds": {
+                    "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                    "format": "int64",
+                    "maximum": 253402300799,
+                    "minimum": -62135596800,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "nanos",
+                  "seconds"
+                ],
+                "type": "object"
+              },
+              "received_at": {
+                "additionalProperties": false,
+                "description": "Actual local receipt, not historical knowledge inferred from the label.",
+                "properties": {
+                  "nanos": {
+                    "description": "Nanosecond fraction, never rounded to milliseconds.",
+                    "format": "uint32",
+                    "maximum": 999999999,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seconds": {
+                    "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                    "format": "int64",
+                    "maximum": 253402300799,
+                    "minimum": -62135596800,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "nanos",
+                  "seconds"
+                ],
+                "type": "object"
+              },
+              "rule": {
+                "additionalProperties": false,
+                "description": "Required reviewed bucket rule and retained source provenance.",
+                "properties": {
+                  "calendar": {
+                    "additionalProperties": false,
+                    "description": "Exact calendar dependency selected by that rule.",
+                    "properties": {
+                      "id": {
+                        "description": "Nonzero reference identity.",
+                        "maxLength": 32,
+                        "minLength": 32,
+                        "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "description": "Exact selected revision.",
+                        "maxLength": 20,
+                        "minLength": 1,
+                        "pattern": "^[1-9][0-9]{0,19}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision"
+                    ],
+                    "type": "object"
+                  },
+                  "known_at": {
+                    "additionalProperties": false,
+                    "description": "Actual local receipt of the rule.",
+                    "properties": {
+                      "nanos": {
+                        "description": "Nanosecond fraction, never rounded to milliseconds.",
+                        "format": "uint32",
+                        "maximum": 999999999,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "seconds": {
+                        "description": "Signed Unix seconds within Gregorian years 1..9999.",
+                        "format": "int64",
+                        "maximum": 253402300799,
+                        "minimum": -62135596800,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nanos",
+                      "seconds"
+                    ],
+                    "type": "object"
+                  },
+                  "source": {
+                    "description": "Rule source authority identity.",
+                    "maxLength": 32,
+                    "minLength": 32,
+                    "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                    "type": "string"
+                  },
+                  "source_sha256": {
+                    "description": "SHA-256 of retained source bytes, not a bearer grant or proof of authenticity.",
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "additionalProperties": false,
+                    "description": "Exact bucket-rule identity/revision, not the feed's general semantic revision.",
+                    "properties": {
+                      "id": {
+                        "description": "Nonzero reference identity.",
+                        "maxLength": 32,
+                        "minLength": 32,
+                        "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "description": "Exact selected revision.",
+                        "maxLength": 20,
+                        "minLength": 1,
+                        "pattern": "^[1-9][0-9]{0,19}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "calendar",
+                  "known_at",
+                  "source",
+                  "source_sha256",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "source_date": {
+                "description": "Provider's native Gregorian label, never expanded into a precise source event.",
+                "maxLength": 10,
+                "minLength": 10,
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "type": "string"
+              },
+              "timezone": {
+                "description": "Label timezone under the qualified profile.",
+                "oneOf": [
+                  {
+                    "const": "America/New_York",
+                    "description": "The current US equity profile; other zones require explicit qualification.",
+                    "type": "string"
+                  }
+                ]
+              },
+              "tzdata_revision": {
+                "description": "Bounded named timezone-data revision, not the library's current default.",
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              "version": {
+                "description": "Independent immutable value format.",
+                "oneOf": [
+                  {
+                    "const": "edgeagent.evidence.date-only-time.v1",
+                    "description": "Exact native label and explicit reviewed UTC bucket derivation.",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "bucket",
+              "calendar",
+              "derived_at",
+              "received_at",
+              "rule",
+              "source_date",
+              "timezone",
+              "tzdata_revision",
+              "version"
+            ],
+            "type": "object"
+          },
+          "volume": {
+            "additionalProperties": false,
+            "description": "Exact nonnegative reported shares, not inferred consolidated volume.",
+            "properties": {
+              "coefficient": {
+                "description": "0 or 1..28 base-ten digits, with no leading zero/sign/exponent.",
+                "maxLength": 28,
+                "minLength": 1,
+                "pattern": "^(0|[1-9][0-9]{0,27})$",
+                "type": "string"
+              },
+              "scale": {
+                "description": "Fractional scale; volume additionally requires <=6.",
+                "format": "uint8",
+                "maximum": 8,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "coefficient",
+              "scale"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "ohlc",
+          "time",
+          "volume"
+        ],
+        "type": "object"
+      },
+      "maxItems": 252,
+      "minItems": 1,
+      "type": "array"
+    },
+    "scope": {
+      "additionalProperties": false,
+      "description": "Exact authenticated admission scope and request digest.",
+      "properties": {
+        "account": {
+          "description": "Data-only provider account.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "audience": {
+          "description": "Permitted audience.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Exact reviewed endpoint catalog identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "instrument": {
+          "description": "Canonical instrument.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "listing": {
+          "description": "Canonical listing.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "principal": {
+          "description": "Authenticated principal.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "request": {
+          "description": "Immutable acquisition ID.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "request_sha256": {
+          "description": "Digest of the immutable admitted request record, verified by its owner.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source": {
+          "description": "Market source/feed identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "storage": {
+          "description": "Permitted storage location/security scope.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "audience",
+        "endpoint",
+        "instrument",
+        "listing",
+        "principal",
+        "request",
+        "request_sha256",
+        "source",
+        "storage"
+      ],
+      "type": "object"
+    },
+    "selection_sha256": {
+      "description": "Exact selected routing configuration fingerprint.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "semantics": {
+      "additionalProperties": false,
+      "description": "Reviewed feed semantics; does not grant entitlement.",
+      "properties": {
+        "id": {
+          "description": "Nonzero reference identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Exact selected revision.",
+          "maxLength": 20,
+          "minLength": 1,
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "description": "Independent object discriminator.",
+      "oneOf": [
+        {
+          "const": "edgeagent.evidence.date-only-daily-capture.v1",
+          "description": "Unadjusted USD/share provider-day capture with explicit temporal witnesses.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": [
+    "range",
+    "response_sha256",
+    "rows",
+    "scope",
+    "selection_sha256",
+    "semantics",
+    "version"
+  ],
+  "title": "DateOnlyDailyCapture",
+  "type": "object"
+}

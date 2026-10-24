@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 pub struct JsonDocument {
     root: Box<RawValue>,
     bytes: Vec<u8>,
+    pub(crate) received: Option<edgeagent_market_data_domain::UtcInstant>,
+    pub(crate) received_monotonic: Option<tokio::time::Instant>,
 }
 impl std::fmt::Debug for JsonDocument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,7 +33,12 @@ impl JsonDocument {
         }
         let root: Box<RawValue> = serde_json::from_slice(&bytes).map_err(|_| K::InvalidJson)?;
         validate(&root, 0, &mut 65_536)?;
-        Ok(Self { root, bytes })
+        Ok(Self {
+            root,
+            bytes,
+            received: None,
+            received_monotonic: None,
+        })
     }
     /// Exact validated JSON; provider DTOs must borrow RawValue fields, not floats or Value numbers.
     #[must_use]
@@ -42,6 +49,24 @@ impl JsonDocument {
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
+    }
+    /// Actual complete HTTP body receipt, anchored to the trusted session clock.
+    /// Plain offline `parse` has no receipt; confirmation retries preserve this sample.
+    #[must_use]
+    pub const fn received_at(&self) -> Option<edgeagent_market_data_domain::UtcInstant> {
+        self.received
+    }
+    pub(crate) fn derived_at(&self) -> Result<edgeagent_market_data_domain::UtcInstant, HttpError> {
+        let received = self.received.ok_or(K::Configuration)?;
+        let elapsed = self.received_monotonic.ok_or(K::Configuration)?.elapsed();
+        let elapsed = i64::try_from(elapsed.as_millis()).map_err(|_| K::Deadline)?;
+        edgeagent_market_data_domain::UtcInstant::from_unix_millis(
+            received
+                .unix_millis()
+                .checked_add(elapsed)
+                .ok_or(K::Deadline)?,
+        )
+        .map_err(|_| K::Deadline.into())
     }
 }
 fn validate(raw: &RawValue, depth: u8, remaining: &mut usize) -> Result<(), HttpError> {

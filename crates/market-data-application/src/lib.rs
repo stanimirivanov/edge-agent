@@ -6,6 +6,8 @@ mod admission;
 mod authority;
 mod budget;
 mod date_only;
+mod date_only_source;
+pub use date_only_source::DateOnlySchedule;
 mod dispatch;
 pub use admission::{AcquisitionLimits, AdmissionRecord};
 pub use budget::{

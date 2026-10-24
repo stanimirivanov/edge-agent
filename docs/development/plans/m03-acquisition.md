@@ -37,9 +37,10 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 4 | M03-DATE | Native date-only temporal contract and reviewed bucket provenance | PR3, PR6 | C |
 | 5 | M03-PR11D | Conditional Twelve Data daily adapter and offline protocol conformance | PR11B, PR11C, M03-CREDITS, M03-DATE, semantics/rights review | D |
 | 5 | M03-PR11E | Conditional Alpaca historical daily adapter | PR11B, PR11C, M03-CREDITS, M03-DATE, semantics/rights review | D |
+| 6 | M03-PR11F | Native-date whole-series acceptance, scoped storage and terminal publication | PR11D, PR10, PR12 | E |
 | 4 | M03-PR13 | Offline-only daily worker with pinned invented profile | PR11A, PR11B, PR11C, PR12 | C |
 | 6 | M03-PR14 | Worker/process death, acknowledgement loss and quota isolation proofs | PR13 | E |
-| 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, PR11D, PR11E, activation review, account/rights approval | F |
+| 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, PR11D, PR11E, PR11F, activation review, account/rights approval | F |
 | Extension 1 | M03-PR16 | Finite streaming authority, session budgets and account connection fencing | PR11B, PR11C, profile decisions | G |
 | Extension 2 | M03-PR17 | Versioned immutable streaming segments and atomic checkpoints/outbox | PR16, PR12 | H |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
@@ -55,6 +56,11 @@ adds an independently versioned temporal value, not a fabricated precise source
 instant. PR11D must integrate it into a new date-only observation/object path with
 consumer format dispatch; old daily-v1 publication/storage remain unchanged and
 must never silently accept date-only input. PR11E reuses that integration.
+PR11D delivers that capture/object path and protected `twelve-data-conformance`
+proofs, not activation of the precise-only worker. Before PR15, native
+acceptance PR11F must integrate whole-series quality, scoped storage and terminal
+publication with explicit consumer compatibility. PR11E can reuse capture in
+parallel; live qualification cannot proceed without native acceptance integration.
 The [daily-credit prerequisite](../acquisition-ledger.md#reviewed-daily-credits)
 must precede adapters. It extends the existing ledger, requires an exclusive
 owner-reviewed allocation, known opening debit and maximum endpoint prices, and

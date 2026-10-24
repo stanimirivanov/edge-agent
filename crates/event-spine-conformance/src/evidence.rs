@@ -170,6 +170,10 @@ pub fn artifacts() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Erro
     }
     let artifact = fixture()?;
     files.insert(
+        "fixtures/evidence-date-only-v1/daily-capture.json".into(),
+        date_only_daily_fixture()?.bytes().to_vec(),
+    );
+    files.insert(
         "fixtures/evidence-date-only-v1/time.json".into(),
         date_only_fixture()?.bytes().to_vec(),
     );
@@ -193,6 +197,25 @@ pub fn artifacts() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Erro
         files.insert(format!("fixtures/evidence-v1/{name}.json"), bytes);
     }
     Ok(files)
+}
+/// Invented native daily capture; never provider data or whole-series quality approval.
+pub fn date_only_daily_fixture() -> Result<DateOnlyDailyArtifact, EvidenceContractError> {
+    let precise = fixture()?;
+    let d = precise.data();
+    let bar = d.bars.first().ok_or(EvidenceContractError)?;
+    DateOnlyDailyArtifact::new(DateOnlyDailyCapture {
+        version: DateOnlyDailyFormat::V1,
+        scope: d.scope.clone(),
+        semantics: d.semantics.clone(),
+        selection_sha256: DailyEvidenceArtifact::hash(b"invented-selection"),
+        response_sha256: DailyEvidenceArtifact::hash(b"invented-response"),
+        range: d.range.clone(),
+        rows: vec![DateOnlyDailyRow {
+            time: date_only_fixture()?.data().clone(),
+            ohlc: bar.ohlc.clone(),
+            volume: bar.volume.clone(),
+        }],
+    })
 }
 /// Verify byte freshness, exact inventories and regular files; never resolve schema URIs.
 pub fn verify(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
