@@ -10,6 +10,28 @@ publish = false
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-service-runtime.workspace = true
+edgeagent-market-data-application.workspace = true
+edgeagent-market-data-domain.workspace = true
+edgeagent-market-data-replay.workspace = true
+edgeagent-market-data-postgres.workspace = true
+edgeagent-market-data-object-store.workspace = true
+edgeagent-simulation-domain.workspace = true
+edgeagent-inbox-postgres.workspace = true
+edgeagent-outbox-postgres.workspace = true
+edgeagent-outbox-relay.workspace = true
+edgeagent-messaging.workspace = true
+edgeagent-messaging-nats.workspace = true
+async-nats.workspace = true
+chrono.workspace = true
+object_store.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["signal", "time"] }
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["process"] }
+futures-util.workspace = true
 
 [lints]
 workspace = true

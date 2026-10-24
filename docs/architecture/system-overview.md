@@ -50,8 +50,9 @@ M03 acquisition authority lives in `market-data-application`, inward of provider
 adapters and outside pure market values. It checks reviewed rights/capabilities
 before and after acquisition and defines bounded provider, storage and publication
 ports. Separate HTTP, object-store and PostgreSQL adapters supply bounded I/O,
-durable budgets and atomic terminal publication. The bootstrap service/worker is
-not activated. See [acquisition authority](../development/market-data-acquisition.md)
+durable budgets and atomic terminal publication. MarketData composes these only as
+a finite [offline worker](../development/offline-worker.md); vendors remain disabled.
+See [acquisition authority](../development/market-data-acquisition.md)
 and [terminal publication](../development/acquisition-publication.md).
 
 The [retention boundary](../development/evidence-retention.md) inventories objects

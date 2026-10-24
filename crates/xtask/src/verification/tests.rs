@@ -10,6 +10,16 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "offline-worker-contracts",
+            vec![
+                "offline::tests::offline_mode_rejects_vendor_and_live_flags_before_infrastructure",
+                "offline::tests::compiled_profile_is_pinned_and_cancellation_cannot_activate_a_source",
+                "offline::tests::cleanup_never_infers_account_or_write_quiescence",
+                "offline::tests::profile_lock_excludes_a_second_owner_and_refuses_reinitialization",
+                "offline::tests::compiled_profile_passes_quality_and_creates_a_scoped_artifact",
+            ],
+        ),
+        (
             "offline-source-isolation",
             vec![
                 "offline_mode_is_default_and_live_or_malformed_flags_fail_closed",
@@ -45,6 +55,7 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             "acquisition-budget-contracts",
             vec![
                 "admission_canonical_digest_binds_complete_inputs_and_current_authority",
+                "configuration_v2_roundtrips_without_reinterpreting_legacy_admissions",
                 "admission_decode_rejects_noncanonical_unknown_duplicate_and_tampered_records",
                 "attempt_call_page_and_byte_budgets_survive_state_recovery",
                 "account_limits_spacing_window_and_pending_permits_span_commands",
@@ -444,6 +455,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "option-analytics-contracts",
             "account-audit-contracts",
             "frozen-evaluation-contracts",
+            "offline-worker-contracts",
             "offline-source-isolation",
             "instrument-selection-routing",
             "market-data-quality",

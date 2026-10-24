@@ -698,8 +698,27 @@ dependencies = [
 name = "edgeagent-market-data"
 version = "0.1.0"
 dependencies = [
+ "async-nats",
+ "chrono",
  "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
+ "edgeagent-market-data-application",
+ "edgeagent-market-data-domain",
+ "edgeagent-market-data-object-store",
+ "edgeagent-market-data-postgres",
+ "edgeagent-market-data-replay",
+ "edgeagent-messaging",
+ "edgeagent-messaging-nats",
+ "edgeagent-outbox-postgres",
+ "edgeagent-outbox-relay",
  "edgeagent-service-runtime",
+ "edgeagent-simulation-domain",
+ "futures-util",
+ "object_store",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "url",
 ]
 
 [[package]]

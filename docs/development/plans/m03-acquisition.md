@@ -35,9 +35,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 3 | M03-PR12 | Retention, immediate revocation denial and orphan cleanup | PR10 | B |
 | 4 | M03-PR11D | First selected daily-provider adapter and offline protocol conformance | PR11B, PR11C, vendor decision | C |
 | 4 | M03-PR11E | Second interchangeable daily-provider adapter | PR11B, PR11C, vendor decision | C |
-| 5 | M03-PR13 | Offline-first daily worker with explicit provider registry | PR11D, PR11E, PR12 | D |
+| 4 | M03-PR13 | Offline-only daily worker with pinned invented profile | PR11A, PR11B, PR11C, PR12 | C |
 | 6 | M03-PR14 | Worker/process death, acknowledgement loss and quota isolation proofs | PR13 | E |
-| 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, account/rights approval | F |
+| 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, PR11D, PR11E, activation review, account/rights approval | F |
 | Extension 1 | M03-PR16 | Finite streaming authority, session budgets and account connection fencing | PR11B, PR11C, profile decisions | G |
 | Extension 2 | M03-PR17 | Versioned immutable streaming segments and atomic checkpoints/outbox | PR16, PR12 | H |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
@@ -49,7 +49,8 @@ Each implementation ships focused negative tests and docs with its behavior.
 PR11A's [source guide](../offline-market-data.md) describes its finite synthetic
 contract. It reuses P04/P05; it does not create a new workflow engine or authenticate
 the supplied fixture/reference provenance. Daily quality remains a later acceptance
-step after source fetch. Product services remain bootstrap programs until composition.
+step after source fetch. PR13 composes MarketData only for invented offline data;
+other services remain bootstrap programs until their own composition.
 
 PR11B extends the existing ledger; it adds no parallel limiter. Every external
 page, failure and uncertain call remains charged across restarts. Keep the daily
@@ -68,7 +69,8 @@ ITCH connector is implied. Unknown mappings fail readiness rather than accepting
 The [selection guide](../instrument-selection.md) describes the implemented frozen
 catalogs, narrowed request/source construction and invented header adapter. It
 does not persist watchlists or configure live subscriptions. PR13 must pin the
-chosen configuration durably; admission-v1 has no selection fields.
+chosen configuration durably; admission-v2 binds its compiled profile and selection
+without changing legacy admission-v1 meaning.
 
 PR12's [retention boundary](../evidence-retention.md) covers scoped objects and
 licensed private metadata/fingerprints with opaque denial tombstones and
@@ -78,7 +80,11 @@ gates; no timeout can stand in for worker fencing. PR13 composes
 existing authority, metering, conformance, quality and atomic terminal publication;
 ACK only after confirmed commit. Minimal startup/readiness/shutdown are
 **[Prerequisite from M10]**; M10 retains full operational qualification. PR14 tests
-real owned process faults. PR15 remains opt-in, credential-safe and rights-gated;
+real owned process faults. The [offline worker](../offline-worker.md) is local-only;
+it does not qualify distributed fencing, authenticated live catalogs or cloud restore.
+PR11D/PR11E remain prerequisites for vendor activation, not offline composition.
+Activation additionally requires reviewed runtime authority and fencing; installing
+an adapter does not enable it. PR15 remains opt-in, credential-safe and rights-gated;
 missing prerequisites report not-run/nonzero, never passing live qualification.
 
 The original daily M03 completion condition remains synthetic plus one qualified
@@ -98,7 +104,9 @@ Run `cargo xtask verify` for each implementation. PR11A adds the protected porta
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.
 PR11B adds the protected `metered-provider-dispatch` gate. PR11C adds
 `instrument-selection-routing` and selected-source replay proofs. PR14's
-process-recovery gates remain unimplemented.
+process-recovery gates remain unimplemented. PR13 adds protected
+`offline-worker-contracts` and local-platform `offline-worker-processes`; clean
+process restart does not qualify injected worker death or acknowledgement loss.
 Streaming adds protocol,
 segment/checkpoint atomicity and bounded recovery proofs alongside implementation.
 

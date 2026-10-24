@@ -45,7 +45,10 @@ impl AdmissionRecord {
             SessionDate::new(y, mn, d).map_err(|_| Error::new(Kind::Invalid))
         };
         let convert = |_| Error::new(Kind::Invalid);
-        if get("format")? != "edgeagent.admission.daily.v1" {
+        if !matches!(
+            get("format")?,
+            "edgeagent.admission.daily.v1" | "edgeagent.admission.daily.v2"
+        ) {
             return Err(Error::new(Kind::Invalid));
         }
         let request = AcquisitionRequest {
@@ -172,11 +175,22 @@ fn validate_fields(m: &BTreeMap<String, String>) -> Result<(), Error> {
         "rights",
         "review",
     ];
-    if m.len() != ids.len() + integers.len() + rest.len()
+    let bound = m
+        .get("format")
+        .is_some_and(|v| v == "edgeagent.admission.daily.v2");
+    if bound {
+        edgeagent_contracts::evidence::EvidenceDigest::new(
+            m.get("configuration_sha256")
+                .ok_or_else(|| Error::new(Kind::Invalid))?,
+        )
+        .map_err(|_| Error::new(Kind::Invalid))?;
+    }
+    if m.len() != ids.len() + integers.len() + rest.len() + usize::from(bound)
         || m.keys().any(|k| {
             !ids.contains(&k.as_str())
                 && !integers.contains(&k.as_str())
                 && !rest.contains(&k.as_str())
+                && !(bound && k == "configuration_sha256")
         })
     {
         return Err(Error::new(Kind::Invalid));

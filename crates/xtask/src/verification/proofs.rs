@@ -63,6 +63,11 @@ const EVENT_SPINE: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
     Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
 ];
+const OFFLINE_WORKER: Target = Target {
+    package: "edgeagent-market-data",
+    name: "offline_worker",
+    identities: &["offline_processes_commit_recover_relay_and_retire_without_provider_calls"],
+};
 const BROKER_RESTART: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
     Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
@@ -224,6 +229,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "offline-worker-processes",
+            &OFFLINE_WORKER,
+            EVENT_SPINE,
+            "Real offline worker processes: immutable terminal recovery, outbox relay and quiescence-gated cleanup; no vendor calls, worker death or ACK-loss qualification.",
+        ),
         suite(
             "evidence-retention-postgres",
             &EVIDENCE_RETENTION,
@@ -514,6 +525,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACQUISITION_LEDGER,
         ACQUISITION_TERMINAL,
         EVIDENCE_RETENTION,
+        OFFLINE_WORKER,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -711,7 +723,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 32);
+        assert_eq!(checks.len(), 33);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -726,8 +738,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 85);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 85);
+        assert_eq!(inventory.len(), 86);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 86);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

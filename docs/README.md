@@ -45,6 +45,10 @@ continuations, read [offline market data](development/offline-market-data.md),
 [ADR-0050](decisions/0050-isolate-invented-daily-sources-and-reuse-frozen-replay.md)
 and the [M03 acquisition plan](development/plans/m03-acquisition.md).
 
+For local-only daily runtime composition, configuration, receipt recovery and
+owner-confirmed maintenance, read the [offline worker](development/offline-worker.md)
+and [ADR-0054](decisions/0054-compose-an-offline-only-acquisition-worker.md).
+
 For M03 atomic terminal receipt/inbox/outbox publication and correction fencing, read
 [acquisition publication](development/acquisition-publication.md) and
 [ADR-0049](decisions/0049-commit-terminal-acquisition-publication-atomically.md).
