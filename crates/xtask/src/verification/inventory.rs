@@ -305,6 +305,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic frozen-run replay and one-factor fee/latency/liquidity sensitivity; no empirical market or statistical performance claim.",
         ),
         check(
+            "offline-worker-contracts",
+            "T2",
+            &["verify", "test", "offline-ingestion"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data",
+                "--bin",
+                "edgeagent-market-data",
+                "--",
+            ],
+            "Offline-only composition configuration, pinned replay and non-inferred cleanup authority; process recovery is separate.",
+        ),
+        check(
             "offline-source-isolation",
             "T2",
             &["verify", "test", "offline-ingestion"],
@@ -763,6 +779,21 @@ pub(super) fn checks() -> Vec<Check> {
                     ignored: false,
                 });
             }
+            "offline-worker-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "offline::tests::offline_mode_rejects_vendor_and_live_flags_before_infrastructure",
+                        "offline::tests::compiled_profile_is_pinned_and_cancellation_cannot_activate_a_source",
+                        "offline::tests::cleanup_never_infers_account_or_write_quiescence",
+                        "offline::tests::profile_lock_excludes_a_second_owner_and_refuses_reinitialization",
+                        "offline::tests::compiled_profile_passes_quality_and_creates_a_scoped_artifact",
+                    ],
+                    ignored: false,
+                });
+            }
             "acquisition-budget-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -770,6 +801,7 @@ pub(super) fn checks() -> Vec<Check> {
                     args,
                     expected: vec![
                         "admission_canonical_digest_binds_complete_inputs_and_current_authority",
+                        "configuration_v2_roundtrips_without_reinterpreting_legacy_admissions",
                         "admission_decode_rejects_noncanonical_unknown_duplicate_and_tampered_records",
                         "attempt_call_page_and_byte_budgets_survive_state_recovery",
                         "account_limits_spacing_window_and_pending_permits_span_commands",

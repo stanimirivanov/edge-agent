@@ -13,6 +13,48 @@ fn limits() -> AcquisitionLimits {
         starts_per_minute: 4,
     }
 }
+
+#[test]
+fn configuration_v2_roundtrips_without_reinterpreting_legacy_admissions() -> TestResult {
+    let fixture = Fixture::new()?;
+    let legacy = record(&fixture)?;
+    let digest = DailyEvidenceArtifact::hash(b"selected offline configuration");
+    let bound = legacy.clone().with_configuration(&digest)?;
+    assert_eq!(legacy.configuration(), None);
+    assert_eq!(bound.configuration(), Some(digest.as_str()));
+    assert_ne!(
+        legacy.command().request_sha256,
+        bound.command().request_sha256
+    );
+    assert_eq!(
+        AdmissionRecord::decode(legacy.bytes(), legacy.command())?,
+        legacy
+    );
+    assert_eq!(
+        AdmissionRecord::decode(bound.bytes(), bound.command())?,
+        bound
+    );
+    let cancel = Cancellation::default();
+    let authority = fixture
+        .catalogs()
+        .admit(&fixture.request, now()?, &cancel)?;
+    bound.verify_authority(&authority)?;
+    assert!(bound.clone().with_configuration(&digest).is_err());
+    for format in [
+        "edgeagent.admission.daily.v1",
+        "edgeagent.admission.daily.v3",
+    ] {
+        let mut fields: std::collections::BTreeMap<String, String> =
+            serde_json::from_slice(bound.bytes())?;
+        fields.insert("format".into(), format.into());
+        let mut bytes = serde_json::to_vec(&fields)?;
+        bytes.push(b'\n');
+        let mut command = bound.command().clone();
+        command.request_sha256 = DailyEvidenceArtifact::hash(&bytes);
+        assert!(AdmissionRecord::decode(&bytes, &command).is_err());
+    }
+    Ok(())
+}
 fn record(f: &Fixture) -> Result<AdmissionRecord> {
     Ok(AdmissionRecord::new(
         &f.catalogs()

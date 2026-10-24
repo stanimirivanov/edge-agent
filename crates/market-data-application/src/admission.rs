@@ -1,4 +1,4 @@
-//! Canonical owner-private admission v1. A digest is identity, never authority.
+//! Canonical owner-private admission v1/v2. A digest is identity, never authority.
 use super::budget::{BudgetError as Error, BudgetErrorKind as Kind};
 use crate::*;
 use edgeagent_contracts::evidence::{AcquireEvidence, DailyEvidenceArtifact, EvidenceId};
@@ -43,6 +43,29 @@ impl std::fmt::Debug for AdmissionRecord {
     }
 }
 impl AdmissionRecord {
+    /// Pin the complete owner-selected configuration before durable admission.
+    /// V2 adds this digest to the immutable command identity; v1 remains readable.
+    /// # Errors
+    /// Rejects repinning an already bound record or an oversized encoding.
+    pub fn with_configuration(
+        self,
+        digest: &edgeagent_contracts::evidence::EvidenceDigest,
+    ) -> Result<Self, Error> {
+        if self.fields.contains_key("configuration_sha256") {
+            return Err(Error::new(Kind::Conflict));
+        }
+        let mut fields = self.fields;
+        fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+        fields.insert("configuration_sha256".into(), digest.as_str().into());
+        Self::seal(self.request, self.limits, fields)
+    }
+
+    /// Owner-selected configuration pin, absent on legacy unbound admissions.
+    #[must_use]
+    pub fn configuration(&self) -> Option<&str> {
+        self.fields.get("configuration_sha256").map(String::as_str)
+    }
+
     /// Seal explicit request, listing, quality and reviewed authority before persistence.
     /// # Errors
     /// Rejects invalid limits, authority bindings or an over-8-KiB encoding.
@@ -178,6 +201,10 @@ impl AdmissionRecord {
         let candidate = Self::new(admitted, self.limits, listing, quality)?;
         // A later current-rights check can shorten, but never extend, retained expiry.
         let mut fields = candidate.fields;
+        if let Some(configuration) = self.configuration() {
+            fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+            fields.insert("configuration_sha256".into(), configuration.into());
+        }
         fields.insert(
             "delete_ms".into(),
             self.fields

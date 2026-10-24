@@ -213,7 +213,15 @@ PACKAGE_RULES = {
     "services/market-data": PackageRule(
         "edgeagent-market-data",
         "bin",
-        SERVICE_DEPENDENCIES,
+        SERVICE_DEPENDENCIES | frozenset({
+            "edgeagent-market-data-application", "edgeagent-market-data-domain",
+            "edgeagent-market-data-replay", "edgeagent-market-data-postgres",
+            "edgeagent-market-data-object-store", "edgeagent-simulation-domain",
+            "edgeagent-inbox-postgres", "edgeagent-outbox-postgres", "edgeagent-outbox-relay",
+            "edgeagent-messaging", "edgeagent-messaging-nats", "async-nats", "chrono",
+            "object_store", "serde_json", "sqlx", "tokio", "url",
+        }),
+        frozenset({"tokio", "futures-util"}),
     ),
     "services/research": PackageRule(
         "edgeagent-research",
