@@ -68,6 +68,15 @@ const OFFLINE_WORKER: Target = Target {
     name: "offline_worker",
     identities: &["offline_processes_commit_recover_relay_and_retire_without_provider_calls"],
 };
+const OFFLINE_RECOVERY: Target = Target {
+    package: "edgeagent-market-data",
+    name: "worker_recovery",
+    identities: &[
+        "killed_worker_before_terminal_commit_recovers_one_terminal_transition",
+        "ack_loss_and_same_store_broker_restart_preserve_completed_receipts",
+        "quota_process_death_preserves_shared_account_fences_and_offline_isolation",
+    ],
+};
 const BROKER_RESTART: &[Requirement] = &[
     Requirement::Environment("EDGEAGENT_NATS_URL"),
     Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
@@ -229,6 +238,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "offline-worker-recovery",
+            &OFFLINE_RECOVERY,
+            PROCESS_DEPENDENCIES,
+            "Owned process death before terminal COMMIT and after commit before ACK; request/confirmation loss, same-store broker restart, independent shared-account quota fencing and zero offline provider charges. No vendor calls or cloud/HA qualification.",
+        ),
         suite(
             "offline-worker-processes",
             &OFFLINE_WORKER,
@@ -486,6 +501,10 @@ fn suite(
         // retain every scenario's internal contention and original deadlines.
         args.push("--test-threads=2");
     }
+    if id == "offline-worker-recovery" {
+        // Each case owns child processes, a file broker and a private schema.
+        args.push("--test-threads=1");
+    }
     let mut discovery_args = args.clone();
     discovery_args.push("--list");
     Check {
@@ -526,6 +545,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACQUISITION_TERMINAL,
         EVIDENCE_RETENTION,
         OFFLINE_WORKER,
+        OFFLINE_RECOVERY,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -543,6 +563,44 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn offline_recovery_census_and_resource_bounds_cannot_silently_shrink() -> Result<(), String> {
+        let check = super::checks()
+            .into_iter()
+            .find(|c| c.id == "offline-worker-recovery")
+            .ok_or("recovery gate")?;
+        assert_eq!(check.profiles, ["local-platform"]);
+        assert!(matches!(
+            check.prerequisites,
+            [
+                super::Requirement::Environment("EDGEAGENT_POSTGRES_URL"),
+                super::Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER")
+            ]
+        ));
+        assert!(check.command.args.contains(&"--test-threads=1"));
+        let census = check.discovery.ok_or("recovery census")?;
+        assert_eq!(census.expected, super::OFFLINE_RECOVERY.identities);
+        assert_eq!(census.expected.len(), 3);
+        let complete = census
+            .expected
+            .iter()
+            .map(|n| format!("{n}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&census, complete.as_bytes())?;
+        for n in &census.expected {
+            for changed in [
+                complete.replace(&format!("{n}: test\n"), ""),
+                complete.replace(n, "renamed_recovery"),
+                format!("{complete}{n}: test\n"),
+                format!("{complete}extra: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&census, changed.as_bytes()).is_err()
+                );
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn retention_census_rejects_missing_renamed_duplicate_and_extra_proofs() -> Result<(), String> {
         let check = super::checks()
@@ -723,7 +781,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 33);
+        assert_eq!(checks.len(), 34);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -738,8 +796,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 86);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 86);
+        assert_eq!(inventory.len(), 89);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 89);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

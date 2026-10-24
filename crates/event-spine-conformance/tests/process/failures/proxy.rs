@@ -31,6 +31,7 @@ struct State {
 pub struct Proxy {
     pub url: String,
     state: Arc<Mutex<State>>,
+    changed: Arc<tokio::sync::Notify>,
     task: JoinHandle<TestResult>,
 }
 
@@ -48,6 +49,8 @@ impl Proxy {
             evidence: Evidence::default(),
         }));
         let observed = state.clone();
+        let changed = Arc::new(tokio::sync::Notify::new());
+        let notified = changed.clone();
         let task = tokio::spawn(async move {
             let (downstream, _) = listener.accept().await?;
             let upstream = TcpStream::connect(("127.0.0.1", port)).await?;
@@ -57,7 +60,9 @@ impl Proxy {
             let mut server_read = BufReader::new(server_read);
             let from_client = async {
                 while let Some(frame) = Frame::read(&mut client_read).await? {
-                    if client_drop(&frame, &observed)? {
+                    let drop_frame = client_drop(&frame, &observed)?;
+                    notified.notify_one();
+                    if drop_frame {
                         continue;
                     }
                     server_write.write_all(&frame.line).await?;
@@ -67,7 +72,9 @@ impl Proxy {
             };
             let from_server = async {
                 while let Some(frame) = Frame::read(&mut server_read).await? {
-                    if server_drop(&frame, &observed)? {
+                    let drop_frame = server_drop(&frame, &observed)?;
+                    notified.notify_one();
+                    if drop_frame {
                         continue;
                     }
                     client_write.write_all(&frame.line).await?;
@@ -79,11 +86,53 @@ impl Proxy {
             // both halves; never leave a detached forwarding task or listener.
             tokio::select! { result = from_client => result, result = from_server => result }
         });
-        Ok(Self { url, state, task })
+        Ok(Self {
+            url,
+            state,
+            changed,
+            task,
+        })
+    }
+
+    #[allow(
+        dead_code,
+        reason = "M03 observes the wire barrier before killing the real worker"
+    )]
+    pub async fn observed(&self) -> Result<Evidence, TestError> {
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                let notified = self.changed.notified();
+                {
+                    let state = self.state.lock().map_err(|_| "proxy evidence poisoned")?;
+                    if state.evidence.requests > 0
+                        && (matches!(state.loss, Loss::Request)
+                            || state.evidence.confirmations_dropped > 0)
+                    {
+                        return Ok(state.evidence);
+                    }
+                }
+                notified.await;
+            }
+        })
+        .await?
     }
 
     pub async fn finish(mut self) -> Result<Evidence, TestError> {
-        tokio::time::timeout(std::time::Duration::from_secs(5), &mut self.task).await???;
+        let result =
+            tokio::time::timeout(std::time::Duration::from_secs(5), &mut self.task).await??;
+        // TerminateProcess/SIGKILL can produce reset/broken-pipe instead of EOF.
+        // Accept only socket teardown, never framing/authentication failures.
+        if let Err(error) = result {
+            let closed = error.downcast_ref::<std::io::Error>().is_some_and(|error| {
+                matches!(
+                    error.kind(),
+                    std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+                )
+            });
+            if !closed {
+                return Err(error);
+            }
+        }
         Ok(self
             .state
             .lock()

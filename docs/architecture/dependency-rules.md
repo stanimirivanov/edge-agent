@@ -79,6 +79,9 @@ dependencies between workspace packages:
 
 Development-only compositions support adapter and recovery conformance:
 
+- `edgeagent-market-data` may use `edgeagent-event-spine-conformance` only in
+  development, to reuse owned broker/process fault fixtures; production imports
+  of conformance tooling remain forbidden;
 - `edgeagent-market-data-object-store` uses `edgeagent-market-data-domain` for
   synthetic authorization clocks; it does not expose domain implementation types;
 
@@ -89,7 +92,7 @@ Development-only compositions support adapter and recovery conformance:
   dependency.
 
 The conformance tooling binary uses the exact normal adapter/application edges
-above to launch independent proof processes. No service imports conformance
+above to launch independent proof processes. No service runtime imports conformance
 tooling; these edges authorize no production domain dependency or OCI deployable.
 [ADR-0026](../decisions/0026-compose-durable-acceptance-in-independent-processes.md)
 records this composition boundary and restricted fixture runtime identities.

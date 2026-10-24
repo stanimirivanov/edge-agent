@@ -30,7 +30,8 @@ tokio = { workspace = true, features = ["signal", "time"] }
 url.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["process"] }
+edgeagent-event-spine-conformance = { path = "../../crates/event-spine-conformance" }
+tokio = { workspace = true, features = ["process", "io-util", "net", "sync"] }
 futures-util.workspace = true
 
 [lints]

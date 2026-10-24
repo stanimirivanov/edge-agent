@@ -91,6 +91,34 @@ or initialize a fresh invented profile. Never rewrite persisted admissions.
 `cargo xtask verify --check offline-worker-contracts` protects portable mode,
 pinning, cancellation and quiescence. `cargo xtask verify --check offline-worker-processes`
 uses existing local PostgreSQL/NATS endpoints and real binaries in owned fixtures:
-receipt-first restart, one object, relay, revocation and explicit cleanup. PR14 still
-owns injected worker death, broker restart and ACK-loss proofs. M10 retains full
+receipt-first restart, one object, relay, revocation and explicit cleanup.
+
+`cargo xtask verify --check offline-worker-recovery` requires loopback
+`EDGEAGENT_POSTGRES_URL` and Docker (or pinned `EDGEAGENT_NATS_SERVER`). It owns
+each file-backed broker, private schema, temporary object root and child process;
+scenarios run serially with bounded deadlines and teardown on failures/panics.
+The owned broker is unsecured and binds only loopback, matching the current
+trusted-local worker connection factory. These are not broker-authentication proofs;
+M02's authenticated permission fixtures remain separate and unchanged.
+Missing prerequisites fail, never silently skip. CI discovers this local-platform
+gate and protects all three ignored proof identities before execution.
+
+- A PostgreSQL wire gate holds terminal COMMIT before forwarding it. Killing the
+  actual worker rolls back receipt/inbox/outbox together; redelivery prepares again
+  and commits one transition. Uncommitted preparation can leave inventoried orphans.
+- Separate NATS faults withhold an ACK request or only its confirmation. Request
+  loss plus worker death and same-store broker restart retains pending delivery;
+  receipt-first redelivery skips preparation. Confirmation loss reports uncertainty
+  while broker pending is zero; a logical duplicate recovers identical receipt bytes.
+  Tests retain the production thirty-second ACK wait, not a shortened test profile.
+- Independent ledger processes contend for one account while a second account
+  progresses. Forced death preserves pending permits and conservative byte/call
+  charges; new external dispatch stays blocked until explicit owner-confirmed quiescence.
+  Synthetic work progresses without clearing that pending permit or consuming quota.
+  Confirmation never refunds unknown usage; resumed synthetic work consumes zero
+  external calls/bytes. No provider is contacted by these quota actors.
+
+Fault interception exists only in integration fixtures, not production switches.
+This proves committed transition uniqueness, not exactly-once transport/external
+effects, PostgreSQL server crash recovery or distributed writer fencing. M10 retains full
 operational readiness, authenticated live authority and restore qualification.

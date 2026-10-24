@@ -221,7 +221,7 @@ PACKAGE_RULES = {
             "edgeagent-messaging", "edgeagent-messaging-nats", "async-nats", "chrono",
             "object_store", "serde_json", "sqlx", "tokio", "url",
         }),
-        frozenset({"tokio", "futures-util"}),
+        frozenset({"tokio", "futures-util", "edgeagent-event-spine-conformance"}),
     ),
     "services/research": PackageRule(
         "edgeagent-research",

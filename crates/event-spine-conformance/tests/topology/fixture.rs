@@ -46,7 +46,7 @@ impl Broker {
         })
     }
 
-    async fn start(&mut self, plan: &TopologyPlan) -> TestResult {
+    async fn start(&mut self, plan: &TopologyPlan, authenticated: bool) -> TestResult {
         let mut users = vec![
             format!(
                 "{{ user: provisioner, password: fixture-only, permissions: {} }}",
@@ -86,8 +86,12 @@ impl Broker {
         fs::write(
             self.directory.join("nats.conf"),
             format!(
-                "jetstream {{ store_dir: {store:?}, max_memory_store: 64MB, max_file_store: 256MB }}\nauthorization {{ users: [{}] }}\n",
-                users.join(",\n")
+                "jetstream {{ store_dir: {store:?}, max_memory_store: 64MB, max_file_store: 256MB }}\n{}\n",
+                if authenticated {
+                    format!("authorization {{ users: [{}] }}", users.join(",\n"))
+                } else {
+                    String::new()
+                }
             ),
         )?;
         if let Some(executable) = native {
@@ -295,10 +299,43 @@ where
     F: FnOnce(std::sync::Arc<tokio::sync::Mutex<Broker>>) -> Fut,
     Fut: Future<Output = TestResult>,
 {
+    controlled_broker(plan, Duration::from_secs(90), true, body).await
+}
+
+// M03 retains the product's 30s ACK wait rather than M02's accelerated fixture.
+// Its finite multi-worker scenarios need a correspondingly explicit deadline.
+#[allow(
+    dead_code,
+    reason = "Shared M03 fixture, not used by authenticated M02 proof targets"
+)]
+pub async fn with_offline_broker<F, Fut>(
+    plan: &TopologyPlan,
+    deadline: Duration,
+    body: F,
+) -> TestResult
+where
+    F: FnOnce(std::sync::Arc<tokio::sync::Mutex<Broker>>) -> Fut,
+    Fut: Future<Output = TestResult>,
+{
+    // Trusted-local offline composition has no authenticated NATS factory.
+    // This dedicated loopback broker never weakens M02 permission proofs.
+    controlled_broker(plan, deadline, false, body).await
+}
+
+async fn controlled_broker<F, Fut>(
+    plan: &TopologyPlan,
+    deadline: Duration,
+    authenticated: bool,
+    body: F,
+) -> TestResult
+where
+    F: FnOnce(std::sync::Arc<tokio::sync::Mutex<Broker>>) -> Fut,
+    Fut: Future<Output = TestResult>,
+{
     let broker = std::sync::Arc::new(tokio::sync::Mutex::new(Broker::new()?));
     let outcome = AssertUnwindSafe(async {
-        broker.lock().await.start(plan).await?;
-        tokio::time::timeout(Duration::from_secs(90), body(broker.clone())).await?
+        broker.lock().await.start(plan, authenticated).await?;
+        tokio::time::timeout(deadline, body(broker.clone())).await?
     })
     .catch_unwind()
     .await;

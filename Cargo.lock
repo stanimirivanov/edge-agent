@@ -701,6 +701,7 @@ dependencies = [
  "async-nats",
  "chrono",
  "edgeagent-contracts",
+ "edgeagent-event-spine-conformance",
  "edgeagent-inbox-postgres",
  "edgeagent-market-data-application",
  "edgeagent-market-data-domain",

@@ -172,7 +172,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
             "edgeagent-messaging",
             "edgeagent-messaging-nats",
         ],
-        development: NONE,
+        development: &["edgeagent-event-spine-conformance"],
         build: NONE,
     },
     PackagePolicy {
