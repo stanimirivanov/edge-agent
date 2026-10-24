@@ -23,7 +23,9 @@ pub trait AcquisitionLedger: Send + Sync {
         command: &AcquireEvidence,
         attempt: u8,
     ) -> impl Future<Output = Result<BudgetSnapshot>> + Send;
-    /// Persist call/byte charges and the exclusive account permit before dispatch.
+    /// Persist reviewed daily credits, call/byte charges and the exclusive account permit
+    /// before dispatch. Missing/expired/unknown-cost policies deny external calls.
+    /// Synthetic providers must not invoke this operation or consume external quotas.
     fn start_call(
         &self,
         command: &AcquireEvidence,

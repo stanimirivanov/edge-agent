@@ -109,6 +109,7 @@ async fn competing_replicas_restart_and_lost_completion_preserve_permits_and_cha
             .await?;
         left.begin_attempt(r.command(), 1).await?;
         right.begin_attempt(s.command(), 1).await?;
+        h.configure_credits().await?;
         let (a, b) = tokio::join!(
             left.start_call(r.command(), None),
             right.start_call(s.command(), None)
@@ -206,6 +207,7 @@ async fn expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutatio
             )
             .await?;
         ledger.begin_attempt(record.command(), 1).await?;
+        h.configure_credits().await?;
         let permit = ledger.start_call(record.command(), None).await?;
         let before = ledger.load(record.command()).await?.1;
         let saved: Vec<u8> =
@@ -243,5 +245,61 @@ async fn expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutatio
     })
     .catch_unwind()
     .await;
+    h.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn daily_credits_commit_with_permits_and_survive_contention_rollback_and_restart() -> Result {
+    let h = Harness::new().await?;
+    let result = AssertUnwindSafe(async {
+        let left = PostgresAcquisitionLedger::new(h.pool.clone());
+        let mut commands = Vec::new();
+        for id in [1, 2] {
+            let f = Case::new(h.now, id)?;
+            let r = f.record()?;
+            left.admit(&r, &f.catalogs().admit(&f.request, f.request.admitted_at, &Cancellation::default())?).await?;
+            left.begin_attempt(r.command(), 1).await?;
+            commands.push(r.command().clone());
+        }
+        let (a, b) = match commands.as_slice() { [a, b] => (a, b), _ => return Err("two commands".into()) };
+        let account = ProviderAccountId::new(1)?;
+        assert_eq!(left.daily_credit_usage(account).await?, None);
+        kind(left.start_call(a, None).await, BudgetErrorKind::Denied)?;
+        let policy = DailyCreditPolicy::new(1, 5, h.now + 86_400_000, &[(edgeagent_market_data_domain::ReferenceId::new(1)?, 2)])?;
+        left.configure_daily_credits(account, policy.clone(), 3).await?;
+        // Fail the second write: neither command reservation nor account credits may commit.
+        sqlx::raw_sql("CREATE FUNCTION reject_account() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic account write failure'; END $$;
+            CREATE TRIGGER reject_account BEFORE UPDATE ON edgeagent_acquisition_accounts FOR EACH ROW EXECUTE FUNCTION reject_account();")
+            .execute(&h.pool).await?;
+        kind(left.start_call(a, None).await, BudgetErrorKind::Storage)?;
+        assert_eq!(left.load(a).await?.1.calls, 0);
+        assert_eq!(left.daily_credit_usage(account).await?.ok_or("usage")?.charged, 3);
+        sqlx::raw_sql("DROP TRIGGER reject_account ON edgeagent_acquisition_accounts; DROP FUNCTION reject_account();").execute(&h.pool).await?;
+        let pool = h.reconnect().await?;
+        let right = PostgresAcquisitionLedger::new(pool.clone());
+        let (one, two) = tokio::join!(left.start_call(a, None), right.start_call(b, None));
+        let permit = match (one, two) {
+            (Ok(p), Err(e)) | (Err(e), Ok(p)) if e.kind() == BudgetErrorKind::Busy => p,
+            _ => return Err("one committed permit, one fenced competitor".into()),
+        };
+        assert_eq!(right.daily_credit_usage(account).await?.ok_or("usage")?.charged, 5);
+        drop(right);
+        pool.close().await;
+        let pool = h.reconnect().await?;
+        let restarted = PostgresAcquisitionLedger::new(pool.clone());
+        assert_eq!(restarted.configure_daily_credits(account, policy.clone(), 3).await?.charged, 5);
+        kind(restarted.configure_daily_credits(account, policy, 0).await, BudgetErrorKind::Conflict)?;
+        assert_eq!(restarted.load(permit.command()).await?.1.pending.as_ref(), Some(&permit));
+        restarted.complete_call(&permit, CallCompletion::QuiescedUnknown).await?;
+        restarted.complete_call(&permit, CallCompletion::QuiescedUnknown).await?;
+        h.age_rate_history().await?;
+        let other = if permit.command() == a { b } else { a };
+        kind(restarted.start_call(other, None).await, BudgetErrorKind::Exhausted)?;
+        assert_eq!(restarted.load(other).await?.1.calls, 0);
+        assert_eq!(restarted.daily_credit_usage(account).await?.ok_or("usage")?.charged, 5);
+        pool.close().await;
+        Ok(())
+    }).catch_unwind().await;
     h.finish(result).await
 }

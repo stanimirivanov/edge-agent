@@ -39,6 +39,7 @@ const ACQUISITION_LEDGER: Target = Target {
         "duplicate_and_conflicting_admission_preserve_original_deadline_and_bytes",
         "competing_replicas_restart_and_lost_completion_preserve_permits_and_charges",
         "expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutation",
+        "daily_credits_commit_with_permits_and_survive_contention_rollback_and_restart",
     ],
 };
 const ACCOUNT_ADMISSION: Target = Target {
@@ -690,6 +691,7 @@ mod tests {
             "duplicate_and_conflicting_admission_preserve_original_deadline_and_bytes",
             "competing_replicas_restart_and_lost_completion_preserve_permits_and_charges",
             "expired_cancelled_and_corrupt_state_fail_closed_without_partial_mutation",
+            "daily_credits_commit_with_permits_and_survive_contention_rollback_and_restart",
         ];
         expected.sort_unstable();
         let mut actual = discovery.expected.clone();
@@ -796,8 +798,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 89);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 89);
+        assert_eq!(inventory.len(), 90);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 90);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

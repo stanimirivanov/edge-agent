@@ -4,6 +4,19 @@ use std::num::NonZeroU32;
 pub type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub const DAY: i64 = 86_400_000;
 pub const NOW: i64 = 2 * DAY;
+#[allow(
+    dead_code,
+    reason = "Shared fixture; only accounting and terminal suites need an account."
+)]
+pub fn account(limits: AcquisitionLimits) -> Result<AccountBudget> {
+    let mut account = AccountBudget::new(limits)?;
+    account.configure_daily_credits(
+        DailyCreditPolicy::new(1, 100, NOW + 2 * DAY, &[(ReferenceId::new(1)?, 1)])?,
+        0,
+        NOW,
+    )?;
+    Ok(account)
+}
 pub fn at(ms: i64) -> Result<UtcInstant> {
     Ok(UtcInstant::from_unix_millis(ms)?)
 }

@@ -58,7 +58,7 @@ fn configuration_v2_roundtrips_without_reinterpreting_legacy_admissions() -> Tes
 fn record(f: &Fixture) -> Result<AdmissionRecord> {
     Ok(AdmissionRecord::new(
         &f.catalogs()
-            .admit(&f.request, now()?, &Cancellation::default())?,
+            .admit(&f.request, f.request.admitted_at, &Cancellation::default())?,
         limits(),
         ListingId::new(1)?,
         DailyQualityPolicy::new(TransformationRevision::new(1)?, 60000, 1000, 100)?,
@@ -150,7 +150,7 @@ fn attempt_call_page_and_byte_budgets_survive_state_recovery() -> TestResult {
     let f = Fixture::new()?;
     let r = record(&f)?;
     let mut b = AcquisitionBudget::default();
-    let mut a = AccountBudget::new(limits())?;
+    let mut a = support::account(limits())?;
     b.begin_attempt(&r, 1, NOW)?;
     let page = EvidenceId::new(&format!("{:032x}", 1))?;
     for i in 0..4 {
@@ -205,7 +205,7 @@ fn attempt_call_page_and_byte_budgets_survive_state_recovery() -> TestResult {
         BudgetErrorKind::Exhausted,
     )?;
     let mut b = AcquisitionBudget::default();
-    let mut a = AccountBudget::new(limits())?;
+    let mut a = support::account(limits())?;
     b.begin_attempt(&r, 1, NOW)?;
     for i in 0..8 {
         let t = NOW + i * 15000;
@@ -226,7 +226,7 @@ fn account_limits_spacing_window_and_pending_permits_span_commands() -> TestResu
     let mut other = Fixture::new()?;
     other.request.id = AcquisitionId::new(2)?;
     let r2 = record(&other)?;
-    let mut a = AccountBudget::new(limits())?;
+    let mut a = support::account(limits())?;
     let mut b = AcquisitionBudget::default();
     let mut c = AcquisitionBudget::default();
     b.begin_attempt(&r, 1, NOW)?;
@@ -289,7 +289,7 @@ fn account_limits_spacing_window_and_pending_permits_span_commands() -> TestResu
 fn cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release() -> TestResult {
     let r = record(&Fixture::new()?)?;
     let mut b = AcquisitionBudget::default();
-    let mut a = AccountBudget::new(limits())?;
+    let mut a = support::account(limits())?;
     b.begin_attempt(&r, 1, NOW)?;
     let p = b.start(&mut a, &r, None, NOW)?;
     let snapshot = b.snapshot();
@@ -313,6 +313,8 @@ fn cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release() -> Test
     )?;
     assert_eq!(b.snapshot().charged_bytes, 1_048_576);
     let mut b = AcquisitionBudget::default();
+    // A separate deadline scenario starts at NOW, not backwards on the completed account.
+    let mut a = support::account(limits())?;
     kind(
         b.begin_attempt(&r, 1, NOW + 300000),
         BudgetErrorKind::Deadline,
@@ -339,7 +341,7 @@ fn cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release() -> Test
 fn completion_replay_is_immutable_and_old_fences_cannot_release_new_work() -> TestResult {
     let r = record(&Fixture::new()?)?;
     let mut b = AcquisitionBudget::default();
-    let mut a = AccountBudget::new(limits())?;
+    let mut a = support::account(limits())?;
     b.begin_attempt(&r, 1, NOW)?;
     let p = b.start(&mut a, &r, None, NOW)?;
     let first = CallCompletion::Observed {
@@ -392,5 +394,171 @@ fn completion_replay_is_immutable_and_old_fences_cannot_release_new_work() -> Te
     let error = BudgetError::storage(std::io::Error::other("private-source-sentinel"));
     assert!(!format!("{error} {error:?}").contains("private-source-sentinel"));
     assert!(error.source().is_some());
+    Ok(())
+}
+
+#[test]
+fn daily_policy_bootstrap_and_legacy_accounts_fail_closed_without_reset() -> TestResult {
+    let r = record(&Fixture::new()?)?;
+    let endpoint = ReferenceId::new(1)?;
+    let policy = DailyCreditPolicy::new(7, 3, NOW + DAY, &[(endpoint, 2)])?;
+    for (revision, allocation, expiry, costs) in [
+        (0, 3, NOW + DAY, vec![(endpoint, 2)]),
+        (7, 0, NOW + DAY, vec![(endpoint, 2)]),
+        (7, 3, 0, vec![(endpoint, 2)]),
+        (7, 3, NOW + DAY, vec![(endpoint, 0)]),
+        (7, 3, NOW + DAY, vec![(endpoint, 4)]),
+        (7, 3, NOW + DAY, vec![(endpoint, 1), (endpoint, 2)]),
+        (7, 3, NOW + DAY, vec![]),
+    ] {
+        assert!(DailyCreditPolicy::new(revision, allocation, expiry, &costs).is_err());
+    }
+    let mut a = AccountBudget::new(limits())?;
+    let legacy = a.encode()?;
+    a = AccountBudget::decode(&legacy)?;
+    assert_eq!(a.encode()?, legacy);
+    let mut b = AcquisitionBudget::default();
+    b.begin_attempt(&r, 1, NOW)?;
+    kind(b.start(&mut a, &r, None, NOW), BudgetErrorKind::Denied)?;
+    assert_eq!(b.snapshot().calls, 0);
+    a.configure_daily_credits(policy.clone(), 1, NOW)?;
+    let permit = b.start(&mut a, &r, None, NOW)?;
+    b.complete(&mut a, &r, &permit, CallCompletion::QuiescedUnknown, NOW)?;
+    a.configure_daily_credits(policy.clone(), 1, NOW + 15000)?;
+    assert_eq!(a.daily_usage().ok_or("usage")?.charged, 3);
+    kind(
+        a.configure_daily_credits(policy, 0, NOW),
+        BudgetErrorKind::Conflict,
+    )?;
+    let before = (a.encode()?, b.encode()?);
+    kind(
+        b.start(&mut a, &r, None, NOW + 15000),
+        BudgetErrorKind::Exhausted,
+    )?;
+    assert_eq!((a.encode()?, b.encode()?), before);
+    for value in [serde_json::json!(null), serde_json::json!({})] {
+        let mut raw: serde_json::Value = serde_json::from_slice(&a.encode()?)?;
+        raw["daily"] = value;
+        assert!(AccountBudget::decode(&serde_json::to_vec(&raw)?).is_err());
+    }
+    let mut raw: serde_json::Value = serde_json::from_slice(&a.encode()?)?;
+    raw["version"] = 1.into();
+    assert!(AccountBudget::decode(&serde_json::to_vec(&raw)?).is_err());
+    assert!(
+        !format!(
+            "{:?}",
+            DailyCreditPolicy::new(1, 3, NOW + DAY, &[(endpoint, 1)])?
+        )
+        .contains(&format!("{:032x}", endpoint.get()))
+    );
+    Ok(())
+}
+
+#[test]
+fn daily_credits_roll_at_utc_midnight_without_releasing_pending_or_refunding() -> TestResult {
+    let mut f = Fixture::new()?;
+    let start = NOW + DAY - 20000;
+    f.request.admitted_at = at(start)?;
+    f.request.deadline = at(start + 300000)?;
+    let r = record(&f)?;
+    let mut a = AccountBudget::new(limits())?;
+    a.configure_daily_credits(
+        DailyCreditPolicy::new(1, 4, NOW + 2 * DAY, &[(ReferenceId::new(1)?, 2)])?,
+        2,
+        start,
+    )?;
+    let mut b = AcquisitionBudget::default();
+    b.begin_attempt(&r, 1, start)?;
+    let p = b.start(&mut a, &r, None, start)?;
+    a = AccountBudget::decode(&a.encode()?)?;
+    b = AcquisitionBudget::decode(&b.encode()?)?;
+    let midnight = NOW + DAY;
+    let before = a.encode()?;
+    kind(b.start(&mut a, &r, None, midnight), BudgetErrorKind::Busy)?;
+    assert_eq!(a.encode()?, before);
+    b.complete(&mut a, &r, &p, CallCompletion::QuiescedUnknown, midnight)?;
+    assert_eq!(a.daily_usage().ok_or("usage")?.charged, 2);
+    let next = b.start(&mut a, &r, None, midnight)?;
+    assert_eq!(a.daily_usage().ok_or("usage")?.utc_day, 3);
+    assert_eq!(a.daily_usage().ok_or("usage")?.charged, 4);
+    let outcome = CallCompletion::Observed {
+        decoded_bytes: 0,
+        retry_after_ms: None,
+    };
+    b.complete(&mut a, &r, &next, outcome, midnight)?;
+    b.complete(&mut a, &r, &next, outcome, midnight)?;
+    assert_eq!(a.daily_usage().ok_or("usage")?.charged, 4);
+    kind(
+        b.start(&mut a, &r, None, midnight + 15000),
+        BudgetErrorKind::Exhausted,
+    )?;
+    a.confirm_retired_daily_credits(midnight + DAY);
+    assert_eq!(a.daily_usage().ok_or("retired usage")?.charged, 4);
+    assert_eq!(a.daily_usage().ok_or("retired usage")?.utc_day, 4);
+    // A call conclusively closed before midnight does not consume the next day twice.
+    let mut quiet = AccountBudget::new(limits())?;
+    quiet.configure_daily_credits(
+        DailyCreditPolicy::new(1, 2, NOW + 2 * DAY, &[(ReferenceId::new(1)?, 2)])?,
+        0,
+        start,
+    )?;
+    let mut next_day = AcquisitionBudget::default();
+    next_day.begin_attempt(&r, 1, start)?;
+    let closed = next_day.start(&mut quiet, &r, None, start)?;
+    next_day.complete(
+        &mut quiet,
+        &r,
+        &closed,
+        CallCompletion::QuiescedUnknown,
+        start,
+    )?;
+    next_day.start(&mut quiet, &r, None, midnight)?;
+    assert_eq!(quiet.daily_usage().ok_or("rolled usage")?.charged, 2);
+    Ok(())
+}
+
+#[test]
+fn daily_unknown_prices_expiry_clock_regression_and_overflow_deny_without_mutation() -> TestResult {
+    let r = record(&Fixture::new()?)?;
+    for (endpoint, expiry, opening, now, expected) in [
+        (2, NOW + DAY, 0, NOW, BudgetErrorKind::Denied),
+        (1, NOW + 1000, 0, NOW + 1000, BudgetErrorKind::Denied),
+        (1, NOW + DAY, 0, NOW, BudgetErrorKind::Invalid),
+        (1, NOW + DAY, u32::MAX, NOW, BudgetErrorKind::Exhausted),
+    ] {
+        let mut a = AccountBudget::new(limits())?;
+        a.configure_daily_credits(
+            DailyCreditPolicy::new(1, u32::MAX, expiry, &[(ReferenceId::new(endpoint)?, 2)])?,
+            opening,
+            NOW + i64::from(expected == BudgetErrorKind::Invalid),
+        )?;
+        let mut b = AcquisitionBudget::default();
+        b.begin_attempt(&r, 1, NOW)?;
+        let before = (a.encode()?, b.encode()?);
+        kind(b.start(&mut a, &r, None, now), expected)?;
+        assert_eq!((a.encode()?, b.encode()?), before);
+    }
+    let mut a = AccountBudget::new(limits())?;
+    a.configure_daily_credits(
+        DailyCreditPolicy::new(1, 2, NOW + 1, &[(ReferenceId::new(1)?, 2)])?,
+        0,
+        NOW,
+    )?;
+    let mut b = AcquisitionBudget::default();
+    b.begin_attempt(&r, 1, NOW)?;
+    let permit = b.start(&mut a, &r, None, NOW)?;
+    b.complete(
+        &mut a,
+        &r,
+        &permit,
+        CallCompletion::QuiescedUnknown,
+        NOW + 2,
+    )?;
+    a = AccountBudget::decode(&a.encode()?)?;
+    assert_eq!(a.daily_usage().ok_or("expired usage")?.charged, 2);
+    kind(
+        b.start(&mut a, &r, None, NOW + 15000),
+        BudgetErrorKind::Denied,
+    )?;
     Ok(())
 }

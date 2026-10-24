@@ -85,6 +85,21 @@ impl Harness {
             .await?;
         Ok(())
     }
+    pub async fn configure_credits(&self) -> Result {
+        edgeagent_market_data_postgres::PostgresAcquisitionLedger::new(self.pool.clone())
+            .configure_daily_credits(
+                ProviderAccountId::new(1)?,
+                DailyCreditPolicy::new(
+                    1,
+                    100,
+                    self.now + 86_400_000,
+                    &[(ReferenceId::new(1)?, 1)],
+                )?,
+                0,
+            )
+            .await?;
+        Ok(())
+    }
     pub async fn finish(self, result: std::thread::Result<Result>) -> Result {
         self.pool.close().await;
         // Same owner-generated identifier used for CREATE; never user-supplied SQL.

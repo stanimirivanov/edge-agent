@@ -61,6 +61,9 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "account_limits_spacing_window_and_pending_permits_span_commands",
                 "cancellation_deadlines_and_uncertain_calls_do_not_refund_or_release",
                 "completion_replay_is_immutable_and_old_fences_cannot_release_new_work",
+                "daily_policy_bootstrap_and_legacy_accounts_fail_closed_without_reset",
+                "daily_credits_roll_at_utc_midnight_without_releasing_pending_or_refunding",
+                "daily_unknown_prices_expiry_clock_regression_and_overflow_deny_without_mutation",
             ],
         ),
         (
