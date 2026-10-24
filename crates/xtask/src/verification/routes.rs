@@ -124,7 +124,11 @@ const ROUTES: &[Route] = &[
     Route {
         matcher: Matcher::Prefix("services/market-data/"),
         guides: &["docs/development/offline-worker.md"],
-        checks: &["offline-worker-contracts", "offline-worker-processes"],
+        checks: &[
+            "offline-worker-contracts",
+            "offline-worker-processes",
+            "offline-worker-recovery",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("crates/market-data-replay/"),

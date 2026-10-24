@@ -104,7 +104,11 @@ Run `cargo xtask verify` for each implementation. PR11A adds the protected porta
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.
 PR11B adds the protected `metered-provider-dispatch` gate. PR11C adds
 `instrument-selection-routing` and selected-source replay proofs. PR14's
-process-recovery gates remain unimplemented. PR13 adds protected
+process-recovery gate is `offline-worker-recovery`: actual worker death before
+terminal COMMIT and after commit before ACK, request/confirmation loss, owned
+same-store broker restart and cross-process account quota isolation. It retains
+uncertain charges until owner-confirmed quiescence and proves zero external quota
+for synthetic work; it does not qualify vendors, distributed fencing or HA. PR13 adds protected
 `offline-worker-contracts` and local-platform `offline-worker-processes`; clean
 process restart does not qualify injected worker death or acknowledgement loss.
 Streaming adds protocol,

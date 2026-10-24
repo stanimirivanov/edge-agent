@@ -664,6 +664,19 @@ fn every_declared_guide_and_check_exists_in_the_repository() -> Result<(), Strin
 }
 
 #[test]
+fn market_data_changes_require_owned_recovery_proofs() -> Result<(), String> {
+    for path in [
+        "services/market-data/src/offline/handling.rs",
+        "services/market-data/tests/recovery/postgres.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+        assert!(advice.checks.contains("offline-worker-recovery"));
+    }
+    Ok(())
+}
+
+#[test]
 fn process_composition_and_adapters_route_the_protected_process_proof() -> Result<(), String> {
     for path in [
         "crates/event-spine-conformance/src/worker/persistence.rs",
