@@ -10,6 +10,16 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "twelve-data-conformance",
+            vec![
+                "tests::twelve_data::twelve_data_selected_request_is_raw_header_only_and_exact_native_capture_round_trips",
+                "tests::twelve_data::twelve_data_foreign_null_duplicate_incomplete_and_imprecise_responses_fail_closed",
+                "tests::twelve_data::twelve_data_errors_cancellation_and_authority_denial_never_retry_or_bypass_quota",
+                "tests::twelve_data::twelve_data_lost_confirmation_releases_original_receipt_without_refetch",
+                "tests::twelve_data::twelve_data_configuration_and_native_format_cannot_weaken_authority",
+            ],
+        ),
+        (
             "date-only-evidence",
             vec![
                 "native_dates_preserve_reviewed_dst_buckets_and_exact_local_receipts",
@@ -480,6 +490,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "evidence-contracts",
             "evidence-freezing",
             "date-only-evidence",
+            "twelve-data-conformance",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",

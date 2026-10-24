@@ -47,7 +47,9 @@ impl AdmissionRecord {
         let convert = |_| Error::new(Kind::Invalid);
         if !matches!(
             get("format")?,
-            "edgeagent.admission.daily.v1" | "edgeagent.admission.daily.v2"
+            "edgeagent.admission.daily.v1"
+                | "edgeagent.admission.daily.v2"
+                | "edgeagent.admission.date-only.v1"
         ) {
             return Err(Error::new(Kind::Invalid));
         }
@@ -83,6 +85,9 @@ impl AdmissionRecord {
                     .map_err(convert)?,
                 ),
                 match get("precision")? {
+                    "date" if get("format")? == "edgeagent.admission.date-only.v1" => {
+                        TimestampPrecision::DateOnly
+                    }
                     "ms" => TimestampPrecision::Milliseconds,
                     "us" => TimestampPrecision::Microseconds,
                     "ns" => TimestampPrecision::Nanoseconds,
@@ -111,6 +116,11 @@ impl AdmissionRecord {
                 command_bytes: positive("command_bytes")?,
             },
         };
+        if (get("format")? == "edgeagent.admission.date-only.v1")
+            != (request.contract.rules().1 == TimestampPrecision::DateOnly)
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
         request
             .validate(request.admitted_at, &Cancellation::default())
             .map_err(|_| Error::new(Kind::Invalid))?;
@@ -175,9 +185,10 @@ fn validate_fields(m: &BTreeMap<String, String>) -> Result<(), Error> {
         "rights",
         "review",
     ];
-    let bound = m
-        .get("format")
-        .is_some_and(|v| v == "edgeagent.admission.daily.v2");
+    let bound = m.get("format").is_some_and(|v| {
+        v == "edgeagent.admission.daily.v2"
+            || (v == "edgeagent.admission.date-only.v1" && m.contains_key("configuration_sha256"))
+    });
     if bound {
         edgeagent_contracts::evidence::EvidenceDigest::new(
             m.get("configuration_sha256")

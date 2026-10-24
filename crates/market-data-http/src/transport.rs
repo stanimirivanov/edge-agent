@@ -65,13 +65,16 @@ impl HttpTransport {
     /// # Errors
     /// Rejects invalid bindings/credentials/limits or an unavailable native trust store.
     pub fn new(config: HttpConfig<'_>) -> Result<Self, HttpError> {
-        Self::build(config, false)
+        Self::build(config, false, "Bearer")
     }
     #[cfg(test)]
     pub(crate) fn for_loopback(config: HttpConfig<'_>) -> Result<Self, HttpError> {
-        Self::build(config, true)
+        Self::build(config, true, "Bearer")
     }
-    fn build(config: HttpConfig<'_>, loopback: bool) -> Result<Self, HttpError> {
+    pub(crate) fn api_key(config: HttpConfig<'_>, loopback: bool) -> Result<Self, HttpError> {
+        Self::build(config, loopback, "apikey")
+    }
+    fn build(config: HttpConfig<'_>, loopback: bool, scheme: &str) -> Result<Self, HttpError> {
         if config.connect_ms.get() > 5000 || config.cancellation_poll_ms.get() > 100 {
             return Err(K::Configuration.into());
         }
@@ -85,7 +88,7 @@ impl HttpTransport {
                 {
                     return Err(K::Configuration);
                 }
-                let mut header = header::HeaderValue::from_str(&format!("Bearer {token}"))
+                let mut header = header::HeaderValue::from_str(&format!("{scheme} {token}"))
                     .map_err(|_| K::Configuration)?;
                 header.set_sensitive(true);
                 Ok(header)
@@ -336,7 +339,20 @@ impl HttpSession<'_> {
             body.extend_from_slice(&chunk);
         }
         self.usage.response_observed = true;
-        JsonDocument::from_body(body)
+        let received_monotonic = Instant::now();
+        let elapsed = i64::try_from(self.started.elapsed().as_millis()).map_err(|_| K::Deadline)?;
+        let received = self
+            .trusted_at
+            .unix_millis()
+            .checked_add(elapsed)
+            .ok_or(K::Deadline)?;
+        let received =
+            UtcInstant::from_unix_millis(received.max(self.last_checked_at.unix_millis()))
+                .map_err(|_| K::Deadline)?;
+        let mut document = JsonDocument::from_body(body)?;
+        document.received = Some(received);
+        document.received_monotonic = Some(received_monotonic);
+        Ok(document)
     }
     fn retry_after(&self, header: &header::HeaderValue) -> Result<u32, HttpError> {
         let value = header

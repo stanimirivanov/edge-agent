@@ -1,4 +1,19 @@
 use super::*;
+#[test]
+fn native_daily_adapter_routes_protected_protocol_evidence() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/twelve_data.rs",
+        "crates/market-data-application/src/date_only_source.rs",
+        "docs/development/twelve-data.md",
+    ] {
+        assert!(
+            advise(&[path.into()])?
+                .checks
+                .contains("twelve-data-conformance")
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn retention_routes_require_model_storage_and_database_evidence() -> Result<(), String> {

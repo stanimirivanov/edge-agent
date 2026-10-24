@@ -3,7 +3,7 @@ use crate::*;
 use edgeagent_contracts::evidence::{AcquireEvidence, EvidenceId};
 use edgeagent_market_data_application::*;
 use std::{sync::atomic::Ordering, time::Duration};
-mod support;
+pub(super) mod support;
 use support::*;
 
 #[tokio::test(start_paused = true)]

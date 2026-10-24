@@ -307,7 +307,25 @@ const ROUTES: &[Route] = &[
             "docs/development/provider-http.md",
             "docs/development/market-data-acquisition.md",
         ],
-        checks: &["provider-http-contracts", "metered-provider-dispatch"],
+        checks: &[
+            "provider-http-contracts",
+            "metered-provider-dispatch",
+            "twelve-data-conformance",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/date_only_source.rs"),
+        guides: &["docs/development/twelve-data.md"],
+        checks: &[
+            "twelve-data-conformance",
+            "date-only-evidence",
+            "evidence-contracts",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/twelve-data.md"),
+        guides: &["docs/development/twelve-data.md"],
+        checks: &["twelve-data-conformance"],
     },
     Route {
         matcher: Matcher::Exact("docs/development/provider-http.md"),

@@ -475,6 +475,8 @@ pub(super) fn checks() -> Vec<Check> {
                 "--",
                 "--skip",
                 "tests::metered::",
+                "--skip",
+                "tests::twelve_data::",
             ],
             "Loopback-only exact JSON and bounded HTTP authority, streaming, cancellation, deadline, status and TLS-failure proofs; not vendor qualification.",
         ),
@@ -547,6 +549,22 @@ pub(super) fn checks() -> Vec<Check> {
                 "--",
             ],
             "Native labels, reviewed DST/core coverage, precise local receipt and bounded canonical provenance. No source timestamp conversion, provider I/O or publication activation.",
+        ),
+        check(
+            "twelve-data-conformance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "tests::twelve_data::",
+                "--",
+            ],
+            "Invented loopback daily protocol, exact native-date capture, authority/credit fencing and accounting-only confirmation. No provider calls or credentials.",
         ),
         check(
             "messaging-error-contracts",
@@ -918,6 +936,21 @@ pub(super) fn checks() -> Vec<Check> {
                         "native_dates_preserve_reviewed_dst_buckets_and_exact_local_receipts",
                         "date_only_construction_rejects_unreviewed_or_conflicting_calendar_and_chronology",
                         "date_only_wire_decode_is_bounded_canonical_versioned_and_payload_safe",
+                    ],
+                    ignored: false,
+                });
+            }
+            "twelve-data-conformance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "tests::twelve_data::twelve_data_selected_request_is_raw_header_only_and_exact_native_capture_round_trips",
+                        "tests::twelve_data::twelve_data_foreign_null_duplicate_incomplete_and_imprecise_responses_fail_closed",
+                        "tests::twelve_data::twelve_data_errors_cancellation_and_authority_denial_never_retry_or_bypass_quota",
+                        "tests::twelve_data::twelve_data_lost_confirmation_releases_original_receipt_without_refetch",
+                        "tests::twelve_data::twelve_data_configuration_and_native_format_cannot_weaken_authority",
                     ],
                     ignored: false,
                 });

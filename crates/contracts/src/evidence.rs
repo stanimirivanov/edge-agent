@@ -2,12 +2,14 @@
 //! Hashes identify bytes, never authenticity, entitlement or a bearer location.
 mod artifact;
 mod date_only;
+mod date_only_daily;
 mod messages;
 mod model;
 #[cfg(feature = "schema")]
 pub mod schemas;
 pub use artifact::DailyEvidenceArtifact;
 pub use date_only::*;
+pub use date_only_daily::*;
 pub use messages::*;
 pub use model::*;
 

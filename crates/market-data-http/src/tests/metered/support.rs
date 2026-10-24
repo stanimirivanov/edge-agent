@@ -41,6 +41,9 @@ pub struct Ledger {
 }
 impl Ledger {
     pub fn new(f: &Fixture) -> TestResult<Self> {
+        Self::with_opening_debit(f, 0)
+    }
+    pub fn with_opening_debit(f: &Fixture, opening_debit: u32) -> TestResult<Self> {
         use edgeagent_market_data_domain::*;
         let record = AdmissionRecord::new(
             &f.admit(&Cancellation::default())?,
@@ -57,7 +60,7 @@ impl Ledger {
         let mut account = AccountBudget::new(record.limits())?;
         account.configure_daily_credits(
             DailyCreditPolicy::new(1, 100, NOW + 86_400_000, &[(ReferenceId::new(1)?, 1)])?,
-            0,
+            opening_debit,
             NOW,
         )?;
         Ok(Self {
