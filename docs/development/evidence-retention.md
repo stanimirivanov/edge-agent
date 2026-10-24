@@ -54,6 +54,11 @@ are unchanged. `account_block` reports the generation, not proof of quiescence.
 `confirm_retired_account` requires trusted confirmation of all older provider work
 and updates only that exact generation. Stale confirmation cannot clear a newer
 block. Deleted requests never revive, and clearing a block never refunds calls.
+For accounts with [reviewed daily credits](acquisition-ledger.md#reviewed-daily-credits),
+confirmation also closes the whole confirmation-day allocation in that transaction:
+retirement erased the endpoint price, so a delayed remote debit must not be guessed
+away. A stale generation rolls back this charge, and an identical already-cleared
+confirmation cannot charge a later day again. Rate/retry history remains unchanged.
 
 ## Physical cleanup and recovery
 

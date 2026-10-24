@@ -4,8 +4,11 @@ use edgeagent_contracts::evidence::{AcquireEvidence, EvidenceId};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt};
 
+mod daily;
 mod error;
 mod port;
+use daily::DailyCredits;
+pub use daily::{DailyCreditPolicy, DailyCreditUsage};
 pub use error::{BudgetError, BudgetErrorKind};
 pub use port::AcquisitionLedger;
 
@@ -89,9 +92,44 @@ fn required<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
 ) -> std::result::Result<T, D::Error> {
     T::deserialize(decoder)
 }
-state!(AccountBudget, AccountData, "Service-owned account accounting, locked before command state.", {
-    version:u8, spacing_ms:u32, starts_per_minute:u8, starts:Vec<i64>, pending:Option<CallPermit>, not_before:i64
-});
+/// Service-owned account accounting, locked before command state.
+#[derive(Clone, Serialize)]
+pub struct AccountBudget {
+    version: u8,
+    spacing_ms: u32,
+    starts_per_minute: u8,
+    starts: Vec<i64>,
+    pending: Option<CallPermit>,
+    not_before: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    daily: Option<DailyCredits>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AccountData {
+    version: u8,
+    spacing_ms: u32,
+    starts_per_minute: u8,
+    starts: Vec<i64>,
+    #[serde(deserialize_with = "required")]
+    pending: Option<CallPermit>,
+    not_before: i64,
+    #[serde(default)]
+    daily: Option<DailyCredits>,
+}
+impl From<AccountData> for AccountBudget {
+    fn from(raw: AccountData) -> Self {
+        Self {
+            version: raw.version,
+            spacing_ms: raw.spacing_ms,
+            starts_per_minute: raw.starts_per_minute,
+            starts: raw.starts,
+            pending: raw.pending,
+            not_before: raw.not_before,
+            daily: raw.daily,
+        }
+    }
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ClosedCall {
@@ -137,8 +175,12 @@ macro_rules! codec {
 fn valid_permit(p: &CallPermit) -> bool {
     (1..=12).contains(&p.ordinal) && (1..=1_048_576).contains(&p.reserved_bytes)
 }
-codec!(AccountBudget, AccountData, |s: &AccountBudget| s.version
+codec!(AccountBudget, AccountData, |s: &AccountBudget| ((s
+    .version
     == 1
+    && s.daily.is_none())
+    || (s.version == 2
+        && s.daily.as_ref().is_some_and(DailyCredits::valid)))
     && (15000..=300000).contains(&s.spacing_ms)
     && (1..=4).contains(&s.starts_per_minute)
     && s.starts.len() <= 4
@@ -216,7 +258,59 @@ impl AccountBudget {
             starts: Vec::new(),
             pending: None,
             not_before: i64::MIN,
+            daily: None,
         })
+    }
+    /// Install an immutable reviewed allocation after owner-confirmed quiescence.
+    /// `already_charged` MUST cover all consumption today before this installation,
+    /// including other consumers. Unknown usage/exclusivity forbids installation.
+    /// Identical retries retain all charges; policy changes/resets are unsupported.
+    /// # Errors
+    /// Denies pending work, conflicting reviews, invalid time or understated known starts.
+    pub fn configure_daily_credits(
+        &mut self,
+        policy: DailyCreditPolicy,
+        already_charged: u32,
+        now: i64,
+    ) -> Result<()> {
+        self.validate()?;
+        if let Some(daily) = &self.daily {
+            return if daily.matches(&policy, already_charged) {
+                Ok(())
+            } else {
+                Err(BudgetError::new(K::Conflict))
+            };
+        }
+        if self.pending.is_some() {
+            return Err(BudgetError::new(K::Busy));
+        }
+        let known = self
+            .starts
+            .iter()
+            .filter(|at| at.div_euclid(86_400_000) == now.div_euclid(86_400_000))
+            .count();
+        if self.starts.last().is_some_and(|at| *at > now)
+            || u64::from(already_charged) < known as u64
+        {
+            return Err(BudgetError::new(K::Invalid));
+        }
+        let daily = DailyCredits::new(policy, already_charged, now)?;
+        self.daily = Some(daily);
+        self.version = 2;
+        Ok(())
+    }
+    /// Persisted redacted usage; absence denies external dispatch, never means unlimited.
+    #[must_use]
+    pub fn daily_usage(&self) -> Option<DailyCreditUsage> {
+        self.daily.as_ref().map(DailyCredits::usage)
+    }
+    /// Preserve conservative credits when confirming an opaque retired-call block.
+    /// Caller MUST atomically check the exact blocked generation and owner quiescence.
+    /// Closes the confirmation-day allocation because retirement erased the price.
+    pub fn confirm_retired_daily_credits(&mut self, now: i64) {
+        if let Some(daily) = &mut self.daily {
+            daily.confirm_retired(now);
+        }
     }
     /// New admissions may tighten shared limits, never relax previously reviewed limits.
     /// # Errors
@@ -369,6 +463,11 @@ impl AcquisitionBudget {
                 retry_at_ms: Some(earliest),
             });
         }
+        account
+            .daily
+            .as_mut()
+            .ok_or_else(|| BudgetError::new(K::Denied))?
+            .charge(r.request().scope.endpoint, now)?;
         let permit = CallPermit {
             command: r.command().clone(),
             ordinal: self.calls + 1,
@@ -412,15 +511,22 @@ impl AcquisitionBudget {
         {
             return Err(BudgetError::new(K::Conflict));
         }
+        if let CallCompletion::Observed { decoded_bytes, .. } = outcome
+            && decoded_bytes > permit.reserved_bytes
+        {
+            return Err(BudgetError::new(K::Invalid));
+        }
+        // Validate first, then carry a possibly delayed credit debit before releasing
+        // the matching fence. An old idempotent completion returned above cannot charge twice.
+        let deadline = r.valid_until_ms()?;
+        if let Some(daily) = &mut account.daily {
+            daily.complete(r.request().scope.endpoint, now)?;
+        }
         if let CallCompletion::Observed {
             decoded_bytes,
             retry_after_ms,
         } = outcome
         {
-            if decoded_bytes > permit.reserved_bytes {
-                return Err(BudgetError::new(K::Invalid));
-            }
-            let deadline = r.valid_until_ms()?;
             self.bytes -= permit.reserved_bytes - decoded_bytes;
             if let Some(delay) = retry_after_ms {
                 let until = now.saturating_add(i64::from(delay));

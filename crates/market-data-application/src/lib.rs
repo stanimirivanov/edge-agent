@@ -9,7 +9,7 @@ mod dispatch;
 pub use admission::{AcquisitionLimits, AdmissionRecord};
 pub use budget::{
     AccountBudget, AcquisitionBudget, AcquisitionLedger, BudgetError, BudgetErrorKind,
-    BudgetSnapshot, CallCompletion, CallPermit,
+    BudgetSnapshot, CallCompletion, CallPermit, DailyCreditPolicy, DailyCreditUsage,
 };
 pub use dispatch::{AcquisitionUsage, DispatchAuthority, DispatchCheck};
 mod evidence;

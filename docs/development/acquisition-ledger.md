@@ -1,5 +1,12 @@
 # Durable acquisition admission and budgets
 
+## TL;DR
+
+- Reserve reviewed daily credits with call/byte permits in one account transaction.
+- Deny missing, expired, unpriced or exhausted authority; never refund uncertainty.
+- Keep offline replay quota-free and pending-call recovery owner-confirmed.
+- Legacy account state remains readable but needs explicit daily installation for I/O.
+
 M03-PR9 implements admission/accounting. M03-PR10 adds atomic
 [terminal publication](acquisition-publication.md). No provider worker, model call
 or cloud deployment is enabled.
@@ -14,6 +21,49 @@ authority is checked before dispatch and data release. Usage reads confirmed
 ledger state without exposing permit or account identifiers.
 
 ## Ownership and recovery
+
+### Reviewed daily credits
+
+[ADR-0055](../decisions/0055-reserve-reviewed-daily-credits-with-account-permits.md)
+adds account-wide fixed UTC-day credit reservations. External dispatch now denies
+missing/expired policy, an unpriced endpoint or exhausted credits. Offline replay
+does not call `start_call` and consumes no external quota. Existing minute ceilings
+remain unchanged; a provider's advertised limit never raises them.
+
+After admission creates the account, trusted composition calls
+`PostgresAcquisitionLedger::configure_daily_credits` with a checked
+`DailyCreditPolicy` and explicit current-day opening debit. The review binds
+revision, positive allocation, exclusive expiry and up to 16 endpoint prices.
+Each price must cover the maximum allowed billable request shape, not merely a
+nominal URL: symbol counts and endpoint weights matter. Only reviewed 00:00 UTC
+reset schedules are supported. No guessed defaults exist.
+
+Installation requires confirmed worker quiescence and known prior/shared usage.
+Reserve the allocation exclusively for this ledger; fence other consumers or
+enforce disjoint allocations. Unknown sharing/usage means do not install or dispatch.
+Keys/replicas are not separate allowances. This API does not authenticate reviews
+or discover provider usage. An explicit zero is an owner assertion, never a default.
+Identical installation is idempotent without resetting usage; any changed policy
+or opening debit conflicts. Review replacement/renewal needs a later non-resetting
+owner protocol before long-lived activation.
+
+Credits commit with the call/byte permit under the same account lock. Failed SQL
+rolls everything back; errors/uncertainty/cancellation never refund committed
+credits. A new UTC day resets only a quiescent credit window, not minute history,
+Retry-After or pending work. Completion across midnight carries the endpoint price
+into that day too. Owner confirmation after retired endpoint erasure closes the
+entire confirmation-day allocation before releasing the exact opaque block.
+Clock regression behind committed accounting denies dispatch. Expiry still allows
+reconciliation, not new calls.
+
+`daily_credit_usage` reads persisted revision/day/charged/allocation/expiry without
+advancing a window or granting dispatch. Account-v1 remains readable but unconfigured;
+installation writes private v2. Admission/CloudEvents/SQL shapes stay unchanged.
+Older code rejects v2: disable dispatch for rollout/rollback and preserve all bytes;
+never downgrade/reset accounting. Provider activation and authenticated reviews
+remain separate. Local reservations cannot guarantee remote billing or zero 429s.
+
+### Account transactions and recovery
 
 The application owns `AdmissionRecord`, `AcquisitionLedger` and pure transitions.
 The SQLx adapter locks account before command, samples database time after locks
@@ -51,10 +101,10 @@ per worker, current-rights integration and process-kill qualification.
 
 ## Verification
 
-- `cargo xtask verify --check acquisition-budget-contracts`: six exact model proofs
+- `cargo xtask verify --check acquisition-budget-contracts`: ten exact model proofs
   in default verification, covering canonical records, counters, rate boundaries,
   cancellation and replay fences.
-- `cargo xtask verify --check acquisition-ledger-postgres`: three PostgreSQL proofs;
+- `cargo xtask verify --check acquisition-ledger-postgres`: four PostgreSQL proofs;
   requires the owned platform's `EDGEAGENT_POSTGRES_URL`. Isolated schemas clean up
   on success/error/panic. Separate pools prove contention/reconstruction, not real
   process termination. One fixture ages rate history to avoid sleeping; pure tests

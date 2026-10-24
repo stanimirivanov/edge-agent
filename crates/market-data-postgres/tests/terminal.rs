@@ -109,6 +109,7 @@ async fn ready_and_rejection_commit_once_and_terminal_recovery_skips_work() -> R
         )?;
         let (_, rejected) = admit(&h, 2).await?;
         ledger.begin_attempt(rejected.command(), 1).await?;
+        h.configure_credits().await?;
         // Seed another account-rate fixture only; no existing external call is released.
         let permit = ledger.start_call(rejected.command(), None).await?;
         ledger.cancel(rejected.command()).await?;

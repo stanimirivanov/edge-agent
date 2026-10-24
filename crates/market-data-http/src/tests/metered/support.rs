@@ -54,7 +54,12 @@ impl Ledger {
         )?;
         let mut budget = AcquisitionBudget::default();
         budget.begin_attempt(&record, 1, NOW)?;
-        let account = AccountBudget::new(record.limits())?;
+        let mut account = AccountBudget::new(record.limits())?;
+        account.configure_daily_credits(
+            DailyCreditPolicy::new(1, 100, NOW + 86_400_000, &[(ReferenceId::new(1)?, 1)])?,
+            0,
+            NOW,
+        )?;
         Ok(Self {
             record,
             state: Mutex::new((budget, account)),

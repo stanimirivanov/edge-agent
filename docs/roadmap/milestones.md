@@ -124,7 +124,10 @@ that the current Rust executor can consume those enqueued arguments.
 The [acquisition implementation plan](../development/plans/m03-acquisition.md)
 orders the remaining daily work and separately bounded streaming extension.
 M03-PR11A implements the invented offline source/P05 replay bridge, not service
-activation or live qualification. Provider selection remains deferred.
+activation or live qualification. The conditional daily-provider pair and its
+unmet qualification requirements are recorded in that plan. Durable reviewed
+daily-credit accounting must precede provider adapters; selection alone never
+authorizes live activation, credentials or data use.
 
 Work items:
 

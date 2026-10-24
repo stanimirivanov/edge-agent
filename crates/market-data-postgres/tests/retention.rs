@@ -141,6 +141,7 @@ async fn retiring_uncertain_calls_erases_fingerprints_but_preserves_fenced_accou
         let (_, other) = admit(&h, 2).await?;
         let ledger = PostgresAcquisitionLedger::new(h.pool.clone());
         ledger.begin_attempt(r.command(), 1).await?;
+        h.configure_credits().await?;
         let permit = ledger.start_call(r.command(), None).await?;
         // Age only the owner-private deadline fixture, not the machine clock or provider.
         sqlx::query("UPDATE edgeagent_acquisitions SET orphan_ms=0 WHERE request_id=$1")
@@ -208,18 +209,49 @@ async fn retiring_uncertain_calls_erases_fingerprints_but_preserves_fenced_accou
             restarted.account_block(&account).await?,
             Some(generation + 1)
         );
+        let unchanged: Vec<u8> = sqlx::query_scalar(
+            "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1",
+        )
+        .bind(account.as_str())
+        .fetch_one(&h.pool)
+        .await?;
+        assert_eq!(
+            unchanged, bytes,
+            "stale generation must also roll back credit changes"
+        );
         restarted
             .confirm_retired_account(&account, generation + 1, &Owner(true))
             .await?;
         assert_eq!(restarted.account_block(&account).await?, None);
-        // Unblocking preserves account rate history, not the erased command or its receipt.
+        // Unblocking preserves rate history, but conservatively closes today's credits
+        // because the erased endpoint no longer supplies a trustworthy carry-forward price.
         let after: Vec<u8> = sqlx::query_scalar(
             "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1",
         )
         .bind(account.as_str())
         .fetch_one(&h.pool)
         .await?;
-        assert_eq!(bytes, after);
+        let after_state = AccountBudget::decode(&after)?;
+        assert_eq!(after_state.daily_usage().ok_or("daily usage")?.charged, 100);
+        let mut before_json: serde_json::Value = serde_json::from_slice(&bytes)?;
+        let mut after_json: serde_json::Value = serde_json::from_slice(&after)?;
+        before_json
+            .as_object_mut()
+            .ok_or("account")?
+            .remove("daily");
+        after_json.as_object_mut().ok_or("account")?.remove("daily");
+        assert_eq!(before_json, after_json);
+        // Idempotent confirmation cannot close a later day's allocation a second time.
+        restarted
+            .confirm_retired_account(&account, generation + 1, &Owner(true))
+            .await?;
+        let repeated: Vec<u8> = sqlx::query_scalar(
+            "SELECT budget FROM edgeagent_acquisition_accounts WHERE account_id=$1",
+        )
+        .bind(account.as_str())
+        .fetch_one(&h.pool)
+        .await?;
+        assert_eq!(repeated, after);
         kind(restarted.load(r.command()).await, BudgetErrorKind::Denied)?;
         Ok(())
     })
@@ -356,7 +388,7 @@ async fn failed_retirement_rolls_back_denial_and_account_redaction_atomically() 
     let result=AssertUnwindSafe(async {
         let (_,r)=admit(&h,1).await?;
         let ledger=PostgresAcquisitionLedger::new(h.pool.clone());
-        ledger.begin_attempt(r.command(),1).await?; let permit=ledger.start_call(r.command(),None).await?;
+        ledger.begin_attempt(r.command(),1).await?; h.configure_credits().await?; let permit=ledger.start_call(r.command(),None).await?;
         sqlx::raw_sql("UPDATE edgeagent_acquisitions SET orphan_ms=0;
           CREATE FUNCTION deny_retire() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'invented retirement fault'; END $$;
           CREATE TRIGGER deny_retire BEFORE DELETE ON edgeagent_acquisitions FOR EACH ROW EXECUTE FUNCTION deny_retire();").execute(&h.pool).await?;

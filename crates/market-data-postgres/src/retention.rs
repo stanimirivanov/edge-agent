@@ -350,6 +350,30 @@ impl PostgresAcquisitionLedger {
         }
         owner.confirm_account_quiescent(account, generation)?;
         let mut tx = self.transaction().await?;
+        let row = sqlx::query!(
+            "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+            account.as_str()
+        ).fetch_optional(&mut *tx).await.map_err(Error::storage)?
+            .ok_or_else(|| Error::new(K::NotFound))?;
+        if row.blocked {
+            let mut shared = AccountBudget::decode(&row.budget)?;
+            let now = sqlx::query_scalar!(
+                r#"SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS "now!""#
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(Error::storage)?;
+            shared.confirm_retired_daily_credits(now);
+            let state = shared.encode()?;
+            sqlx::query!(
+                "UPDATE edgeagent_acquisition_accounts SET budget=$2 WHERE account_id=$1",
+                account.as_str(),
+                state
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(Error::storage)?;
+        }
         let result=sqlx::query!("UPDATE edgeagent_acquisition_accounts SET blocked=FALSE WHERE account_id=$1 AND block_generation=$2",account.as_str(),generation)
             .execute(&mut *tx).await.map_err(Error::storage)?;
         if result.rows_affected() != 1 {

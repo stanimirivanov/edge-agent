@@ -78,6 +78,13 @@ async fn admit(
         DailyQualityPolicy::new(TransformationRevision::new(1)?, 300_000, 1000, 100)?,
     )?;
     h.ledger().admit(&record, &authority).await?;
+    h.ledger()
+        .configure_daily_credits(
+            request.scope.account,
+            DailyCreditPolicy::new(1, 100, ms + 86_400_000, &[(request.scope.endpoint, 1)])?,
+            0,
+        )
+        .await?;
     Ok(record.command().clone())
 }
 
@@ -117,6 +124,21 @@ pub async fn prove(h: &mut Fixture) -> TestResult {
     h.kill(other).await?;
     let charged = h.ledger().load(winning_command).await?.1;
     let other_charged = h.ledger().load(&separate).await?.1;
+    let account = ProviderAccountId::new(1)?;
+    let daily = h
+        .ledger()
+        .daily_credit_usage(account)
+        .await?
+        .ok_or("daily usage")?;
+    assert_eq!(daily.charged, 1, "process death must retain daily credits");
+    assert_eq!(
+        h.ledger()
+            .daily_credit_usage(ProviderAccountId::new(2)?)
+            .await?
+            .ok_or("other daily usage")?
+            .charged,
+        1
+    );
     assert_eq!((charged.calls, charged.charged_bytes), (1, 1_048_576));
     assert_eq!(
         (other_charged.calls, other_charged.charged_bytes),
@@ -147,6 +169,11 @@ pub async fn prove(h: &mut Fixture) -> TestResult {
     );
     assert_eq!(h.counts().await?, (1, 1, 1));
     assert_eq!(h.ledger().load(winning_command).await?.1, charged);
+    assert_eq!(
+        h.ledger().daily_credit_usage(account).await?,
+        Some(daily),
+        "offline work must not consume daily credits"
+    );
     // Only after both actual processes have been killed AND joined may the owner confirm quiescence.
     h.ledger()
         .complete_call(permit, CallCompletion::QuiescedUnknown)
@@ -154,6 +181,15 @@ pub async fn prove(h: &mut Fixture) -> TestResult {
     h.ledger()
         .complete_call(other_permit, CallCompletion::QuiescedUnknown)
         .await?;
+    assert_eq!(
+        h.ledger()
+            .daily_credit_usage(account)
+            .await?
+            .ok_or("retained daily usage")?
+            .charged,
+        1,
+        "quiescence never refunds daily credits"
+    );
     h.publish(&offline, "quota-isolated-duplicate").await?;
     assert!(
         h.run(&["offline-worker"])

@@ -60,6 +60,8 @@ For M03 immutable object persistence and bounded integrity reads, read
 For durable admission and shared provider accounting, read the
 [acquisition ledger guide](development/acquisition-ledger.md) and
 [ADR-0048](decisions/0048-persist-acquisition-admission-and-call-budgets.md).
+For reviewed daily credit allocation, midnight recovery and fail-closed installation,
+also read [ADR-0055](decisions/0055-reserve-reviewed-daily-credits-with-account-permits.md).
 
 For M03 exact numeric provider parsing and bounded HTTP, read
 [provider HTTP](development/provider-http.md) and

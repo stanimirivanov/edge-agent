@@ -2,6 +2,7 @@ use edgeagent_contracts::evidence::{AcquireEvidence, EvidenceId};
 use edgeagent_market_data_application::{
     AccountBudget, AcquisitionBudget, AcquisitionLedger, AdmissionRecord, AuthorizedAcquisition,
     BudgetError as Error, BudgetErrorKind as Kind, BudgetSnapshot, CallCompletion, CallPermit,
+    DailyCreditPolicy, DailyCreditUsage, ProviderAccountId,
 };
 use sqlx::{PgPool, Postgres, Transaction};
 use std::fmt;
@@ -23,6 +24,70 @@ impl PostgresAcquisitionLedger {
     #[must_use]
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+    /// Install the owner's reviewed exclusive allocation, never inferred provider defaults.
+    /// The trusted composition must fence former workers/other consumers and confirm all
+    /// current-day charges. Unknown shared consumption must not be installed as zero.
+    /// Identical retries do not reset charges; changed reviews require a future migration.
+    /// # Errors
+    /// Rejects missing/blocked accounts, pending work, conflicts and invalid reviews.
+    pub async fn configure_daily_credits(
+        &self,
+        account: ProviderAccountId,
+        policy: DailyCreditPolicy,
+        already_charged: u32,
+    ) -> Result<DailyCreditUsage, Error> {
+        let account = format!("{:032x}", account.get());
+        let mut tx = self.transaction().await?;
+        let row = sqlx::query!(
+            "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+            account
+        ).fetch_optional(&mut *tx).await.map_err(Error::storage)?
+            .ok_or_else(|| Error::new(Kind::NotFound))?;
+        if row.blocked {
+            return Err(Error::new(Kind::Denied));
+        }
+        let mut shared = AccountBudget::decode(&row.budget)?;
+        let now = sqlx::query_scalar!(
+            r#"SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS "now!""#
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
+        shared.configure_daily_credits(policy, already_charged, now)?;
+        let usage = shared
+            .daily_usage()
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let state = shared.encode()?;
+        sqlx::query!(
+            "UPDATE edgeagent_acquisition_accounts SET budget=$2 WHERE account_id=$1",
+            account,
+            state
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
+        tx.commit().await.map_err(Error::storage)?;
+        Ok(usage)
+    }
+    /// Read persisted account usage, including blocked/expired accounts, without resetting it.
+    /// This owner-private projection is not permission to dispatch or release evidence.
+    /// # Errors
+    /// Rejects absent accounts, invalid private state and storage failures.
+    pub async fn daily_credit_usage(
+        &self,
+        account: ProviderAccountId,
+    ) -> Result<Option<DailyCreditUsage>, Error> {
+        let account = format!("{:032x}", account.get());
+        let mut tx = self.transaction().await?;
+        let row = sqlx::query!(
+            "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+            account
+        ).fetch_optional(&mut *tx).await.map_err(Error::storage)?
+            .ok_or_else(|| Error::new(Kind::NotFound))?;
+        let usage = AccountBudget::decode(&row.budget)?.daily_usage();
+        tx.commit().await.map_err(Error::storage)?;
+        Ok(usage)
     }
     pub(super) async fn transaction(&self) -> Result<Transaction<'_, Postgres>, Error> {
         let mut tx = self.pool.begin().await.map_err(Error::storage)?;
