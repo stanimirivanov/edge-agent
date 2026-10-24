@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_message_inbox WHERE consumer_name='market-data-acquisition' AND convert_from(envelope,'UTF8')::jsonb #>> '{data,request}'=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4df88e3fa1f6097bc8e8496ae7cbbe3e19d37b483390c9836c1324c4f2482bb2"
+}

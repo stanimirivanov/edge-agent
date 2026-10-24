@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.request_id FROM edgeagent_acquisitions a JOIN edgeagent_evidence_scopes s ON s.scope=a.retention_scope\n            WHERE s.revoked OR a.delete_ms<=floor(extract(epoch FROM clock_timestamp())*1000)::bigint\n            OR (a.orphan_ms<=floor(extract(epoch FROM clock_timestamp())*1000)::bigint\n                AND NOT EXISTS(SELECT 1 FROM edgeagent_acquisition_receipts r WHERE r.request_id=a.request_id))\n            ORDER BY a.request_id LIMIT $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5c33f7a923be03b06f7cbfc71ec64d4c3fa810bd89825ddff34ed45cbcbcc9d0"
+}

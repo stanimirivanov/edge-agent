@@ -28,6 +28,10 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 ## Route by task
 
+For evidence retirement, immediate durable denial, opaque account blocks and orphan
+deletion, read [evidence retention](development/evidence-retention.md) and
+[ADR-0053](decisions/0053-retire-evidence-with-opaque-denials-and-quiescent-cleanup.md).
+
 For pinned instrument selection, narrowed provider requests and header-first routing,
 read [instrument selection](development/instrument-selection.md) and
 [ADR-0052](decisions/0052-freeze-instrument-selection-and-route-headers-before-payloads.md).

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_evidence_ownership(request_id,series_key,observations) VALUES($1,$2,$3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46a2d544b848897aa1e6bb70501676470f96f9a85fa74803dfd9d490b74043ef"
+}

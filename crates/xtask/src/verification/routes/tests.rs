@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn retention_routes_require_model_storage_and_database_evidence() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/retention.rs",
+        "docs/development/evidence-retention.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        for check in [
+            "evidence-retention-contracts",
+            "evidence-retention-postgres",
+            "evidence-storage-contracts",
+        ] {
+            assert!(advice.checks.contains(check));
+        }
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/evidence-retention.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn selection_and_early_routing_sources_route_protected_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/selection.rs",

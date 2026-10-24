@@ -12,6 +12,16 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const EVIDENCE_RETENTION: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "retention",
+    identities: &[
+        "retiring_uncertain_calls_erases_fingerprints_but_preserves_fenced_account_blocks",
+        "ready_evidence_survives_orphan_sweep_then_revocation_erases_private_publication_state",
+        "failed_retirement_rolls_back_denial_and_account_redaction_atomically",
+        "retiring_old_snapshots_preserves_new_heads_and_shared_version_ownership",
+    ],
+};
 const ACQUISITION_TERMINAL: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "terminal",
@@ -214,6 +224,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "evidence-retention-postgres",
+            &EVIDENCE_RETENTION,
+            POSTGRES,
+            "Owned PostgreSQL proofs: orphan/live separation, immediate namespace denial, private metadata erasure, atomic rollback and opaque generation-fenced account recovery; no provider/cloud calls.",
+        ),
         suite(
             "acquisition-terminal-postgres",
             &ACQUISITION_TERMINAL,
@@ -497,6 +513,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACCOUNT_ADMISSION,
         ACQUISITION_LEDGER,
         ACQUISITION_TERMINAL,
+        EVIDENCE_RETENTION,
         OUTBOX,
         OUTBOX_RELAY_BOUNDARIES,
         OUTBOX_RECOVERY,
@@ -514,6 +531,40 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn retention_census_rejects_missing_renamed_duplicate_and_extra_proofs() -> Result<(), String> {
+        let check = super::checks()
+            .into_iter()
+            .find(|c| c.id == "evidence-retention-postgres")
+            .ok_or("retention gate")?;
+        let census = check.discovery.ok_or("retention census")?;
+        let expected = [
+            "retiring_uncertain_calls_erases_fingerprints_but_preserves_fenced_account_blocks",
+            "ready_evidence_survives_orphan_sweep_then_revocation_erases_private_publication_state",
+            "failed_retirement_rolls_back_denial_and_account_redaction_atomically",
+            "retiring_old_snapshots_preserves_new_heads_and_shared_version_ownership",
+        ];
+        assert_eq!(census.expected, expected);
+        assert_eq!(check.profiles, ["local-platform"]);
+        let complete = expected
+            .iter()
+            .map(|n| format!("{n}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&census, complete.as_bytes())?;
+        for n in expected {
+            for changed in [
+                complete.replace(&format!("{n}: test\n"), ""),
+                complete.replace(n, "renamed_retention"),
+                format!("{complete}{n}: test\n"),
+                format!("{complete}extra: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&census, changed.as_bytes()).is_err()
+                );
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn terminal_census_rejects_missing_renamed_duplicate_and_extra_proofs() -> Result<(), String> {
         let check = super::checks()
@@ -660,7 +711,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 31);
+        assert_eq!(checks.len(), 32);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -675,8 +726,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 81);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 81);
+        assert_eq!(inventory.len(), 85);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 85);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

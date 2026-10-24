@@ -2,8 +2,8 @@ use edgeagent_contracts::evidence::{
     DailyEvidenceArtifact, EvidenceObject, EvidenceReferenceKind, MAX_EVIDENCE_BYTES,
 };
 use edgeagent_market_data_application::{
-    EvidenceAccess, EvidenceStorage, EvidenceStorageError as Error,
-    EvidenceStorageErrorKind as Kind,
+    CleanupAuthority, EvidenceAccess, EvidenceDeletion, EvidenceStorage,
+    EvidenceStorageError as Error, EvidenceStorageErrorKind as Kind,
 };
 use futures_util::TryStreamExt;
 use object_store::{ObjectStore, ObjectStoreExt, PutMode, path::Path};
@@ -19,6 +19,33 @@ mod tests;
 pub struct ImmutableEvidenceStore {
     backend: Arc<dyn ObjectStore>,
     timeout: Duration,
+}
+impl EvidenceDeletion for ImmutableEvidenceStore {
+    async fn delete(
+        &self,
+        request: &edgeagent_contracts::evidence::EvidenceId,
+        object: &EvidenceObject,
+        owner: &impl CleanupAuthority,
+    ) -> Result<(), Error> {
+        owner
+            .authorize_deletion(request, object)
+            .map_err(|e| Error::with_source(Kind::Denied, e))?;
+        owner
+            .confirm_writes_quiescent(request)
+            .map_err(|e| Error::with_source(Kind::Denied, e))?;
+        // Denial is already durable. Deletion is outside SQL and is safe to repeat after lost replies.
+        tokio::time::timeout(self.timeout, async {
+            match self.backend.delete(&key(object)).await {
+                Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+                Err(error) => Err(backend_error(error)),
+            }
+        })
+        .await
+        .map_err(|e| Error::with_source(Kind::Deadline, e))??;
+        owner
+            .confirm_writes_quiescent(request)
+            .map_err(|e| Error::with_source(Kind::Denied, e))
+    }
 }
 impl fmt::Debug for ImmutableEvidenceStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

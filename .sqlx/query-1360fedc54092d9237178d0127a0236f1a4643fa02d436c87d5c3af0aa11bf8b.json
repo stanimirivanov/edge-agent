@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT o.descriptor,a.delete_ms,s.revoked,\n              floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS \"now!\",\n              (EXISTS(SELECT 1 FROM edgeagent_acquisition_receipts r WHERE r.request_id=a.request_id)\n                OR a.orphan_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint) AS \"usable!\"\n            FROM edgeagent_evidence_objects o JOIN edgeagent_acquisitions a USING(request_id)\n            JOIN edgeagent_evidence_scopes s ON s.scope=a.retention_scope WHERE o.object_key=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "descriptor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_objects",
+            "name": "descriptor"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delete_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "delete_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "revoked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_scopes",
+            "name": "revoked"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "now!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "usable!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "1360fedc54092d9237178d0127a0236f1a4643fa02d436c87d5c3af0aa11bf8b"
+}

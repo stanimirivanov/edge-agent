@@ -19,7 +19,7 @@ temporalio-macros = "=1.0.0"
 temporalio-sdk = { version = "=1.0.0", default-features = false }
 temporalio-sdk-core = { version = "=0.9.0", default-features = false, features = ["tls-ring"] }
 temporalio-workflow = "=1.0.0"
-tokio = { version = "=1.53.1", features = ["macros", "process", "rt-multi-thread", "time"] }
+tokio = { version = "=1.53.3", features = ["macros", "process", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
 flate2 = "=1.1.10"

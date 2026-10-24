@@ -115,7 +115,7 @@ pub async fn prepare(
     record: &AdmissionRecord,
     admitted: &AuthorizedAcquisition<'_>,
     catalogs: AuthorityCatalogs<'_>,
-    storage: &Storage,
+    storage: &impl EvidenceStorage,
     access: &Access,
     previous: Option<&DailyEvidenceArtifact>,
     price: i128,

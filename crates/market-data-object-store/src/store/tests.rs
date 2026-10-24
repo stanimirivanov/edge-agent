@@ -14,6 +14,77 @@ use std::{
 };
 
 type TestResult = Result<(), Box<dyn StdError>>;
+struct CleanupOwner(bool, EvidenceObject);
+impl CleanupAuthority for CleanupOwner {
+    fn authorize_deletion(
+        &self,
+        request: &EvidenceId,
+        object: &EvidenceObject,
+    ) -> Result<(), edgeagent_market_data_application::BudgetError> {
+        self.confirm_writes_quiescent(request)?;
+        if object == &self.1 {
+            Ok(())
+        } else {
+            Err(edgeagent_market_data_application::BudgetError::new(
+                edgeagent_market_data_application::BudgetErrorKind::Denied,
+            ))
+        }
+    }
+    fn confirm_writes_quiescent(
+        &self,
+        _: &EvidenceId,
+    ) -> Result<(), edgeagent_market_data_application::BudgetError> {
+        if self.0 {
+            Ok(())
+        } else {
+            Err(edgeagent_market_data_application::BudgetError::new(
+                edgeagent_market_data_application::BudgetErrorKind::Denied,
+            ))
+        }
+    }
+    fn confirm_account_quiescent(
+        &self,
+        id: &EvidenceId,
+        _: i64,
+    ) -> Result<(), edgeagent_market_data_application::BudgetError> {
+        self.confirm_writes_quiescent(id)
+    }
+}
+#[tokio::test(start_paused = true)]
+async fn quiescent_deletion_is_scoped_idempotent_and_recovers_after_timeout() -> TestResult {
+    let memory = Arc::new(InMemory::new());
+    let slow = Arc::new(ThrottledStore::new(
+        memory.clone(),
+        ThrottleConfig::default(),
+    ));
+    let store = adapter(slow.clone())?;
+    let a = fixture()?;
+    let o = descriptor(&a)?;
+    let id = &a.data().scope.request;
+    store.put(&a, &Access::new(o.clone())).await?;
+    let mut other = o.clone();
+    other.audience = EvidenceId::new(&"3".repeat(32))?;
+    memory.put(&key(&other), a.bytes().to_vec().into()).await?;
+    assert_kind(
+        store.delete(id, &o, &CleanupOwner(false, o.clone())).await,
+        Kind::Denied,
+    )?;
+    assert!(memory.head(&key(&o)).await.is_ok());
+    slow.config_mut(|c| c.wait_delete_per_call = Duration::from_secs(2));
+    assert_kind(
+        store.delete(id, &o, &CleanupOwner(true, o.clone())).await,
+        Kind::Deadline,
+    )?;
+    slow.config_mut(|c| c.wait_delete_per_call = Duration::ZERO);
+    let restarted = adapter(memory.clone())?;
+    let owner = CleanupOwner(true, o.clone());
+    assert_kind(restarted.delete(id, &other, &owner).await, Kind::Denied)?;
+    restarted.delete(id, &o, &owner).await?;
+    restarted.delete(id, &o, &owner).await?;
+    assert!(memory.head(&key(&o)).await.is_err());
+    assert!(memory.head(&key(&other)).await.is_ok());
+    Ok(())
+}
 fn assert_kind<T>(result: Result<T, Error>, kind: Kind) -> TestResult {
     assert_eq!(result.err().ok_or("expected storage failure")?.kind(), kind);
     Ok(())

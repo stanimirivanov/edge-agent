@@ -55,7 +55,19 @@ async fn ready_and_rejection_commit_once_and_terminal_recovery_skips_work() -> R
         let token = case
             .catalogs()
             .admit(&case.request, case.request.admitted_at, &c)?;
-        let proposal = prepare(&r, &token, case.catalogs(), &objects, &access, None, 100).await?;
+        let proposal = prepare(
+            &r,
+            &token,
+            case.catalogs(),
+            &RetainedEvidenceStorage::new(
+                &objects,
+                &PostgresAcquisitionLedger::new(h.pool.clone()),
+            ),
+            &access,
+            None,
+            100,
+        )
+        .await?;
         let ledger = PostgresAcquisitionLedger::new(h.pool.clone());
         let d = delivery(r.command(), "command")?;
         assert!(ledger.recover(&d).await?.is_none());
@@ -135,7 +147,7 @@ async fn receipt_write_failure_rolls_back_inbox_outbox_heads_and_observations() 
     let h = Harness::new().await?;
     let result=AssertUnwindSafe(async {
         let (case,r)=admit(&h,1).await?;let access=Access::new(h.now)?;let objects=Storage::default();let c=Cancellation::default();
-        let proposal=prepare(&r,&case.catalogs().admit(&case.request,case.request.admitted_at,&c)?,case.catalogs(),&objects,&access,None,100).await?;
+        let proposal=prepare(&r,&case.catalogs().admit(&case.request,case.request.admitted_at,&c)?,case.catalogs(),&RetainedEvidenceStorage::new(&objects,&PostgresAcquisitionLedger::new(h.pool.clone())),&access,None,100).await?;
         sqlx::raw_sql("CREATE FUNCTION reject_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic receipt rollback'; END $$;
             CREATE TRIGGER reject_receipt BEFORE INSERT ON edgeagent_acquisition_receipts FOR EACH ROW EXECUTE FUNCTION reject_receipt();")
             .execute(&h.pool).await?;
@@ -205,7 +217,10 @@ async fn concurrent_corrections_fence_heads_and_changed_observation_versions() -
                 .catalogs()
                 .admit(&case.request, case.request.admitted_at, &c)?,
             case.catalogs(),
-            &objects,
+            &RetainedEvidenceStorage::new(
+                &objects,
+                &PostgresAcquisitionLedger::new(h.pool.clone()),
+            ),
             &access,
             None,
             100,
@@ -229,7 +244,10 @@ async fn concurrent_corrections_fence_heads_and_changed_observation_versions() -
                 .catalogs()
                 .admit(&left.request, left.request.admitted_at, &c)?,
             left.catalogs(),
-            &objects,
+            &RetainedEvidenceStorage::new(
+                &objects,
+                &PostgresAcquisitionLedger::new(h.pool.clone()),
+            ),
             &access,
             Some(&previous),
             100,
@@ -241,7 +259,10 @@ async fn concurrent_corrections_fence_heads_and_changed_observation_versions() -
                 .catalogs()
                 .admit(&right.request, right.request.admitted_at, &c)?,
             right.catalogs(),
-            &objects,
+            &RetainedEvidenceStorage::new(
+                &objects,
+                &PostgresAcquisitionLedger::new(h.pool.clone()),
+            ),
             &access,
             Some(&previous),
             100,
@@ -278,7 +299,10 @@ async fn concurrent_corrections_fence_heads_and_changed_observation_versions() -
                 .catalogs()
                 .admit(&case.request, case.request.admitted_at, &c)?,
             case.catalogs(),
-            &objects,
+            &RetainedEvidenceStorage::new(
+                &objects,
+                &PostgresAcquisitionLedger::new(h.pool.clone()),
+            ),
             &access,
             Some(&current),
             101,

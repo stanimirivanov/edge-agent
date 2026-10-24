@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_observation_versions v WHERE identity=ANY($1) AND NOT EXISTS(SELECT 1 FROM edgeagent_evidence_ownership o WHERE v.identity=ANY(o.observations))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "450161921b2a83d277bd208073a6aa4355ba16f67c142927e07a88b0d693fb0e"
+}

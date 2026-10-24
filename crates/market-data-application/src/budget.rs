@@ -189,6 +189,21 @@ fn valid_receipts(s: &AcquisitionBudget) -> bool {
     total == s.bytes
 }
 impl AccountBudget {
+    /// Erase a retiring command's content fingerprint without releasing its safety requirement.
+    /// The caller MUST persist an opaque account block atomically when this returns true.
+    #[must_use = "Persist an opaque account block atomically when a pending permit was erased."]
+    pub fn retire_pending(&mut self, request: &EvidenceId) -> bool {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|p| &p.command.request == request)
+        {
+            self.pending = None;
+            true
+        } else {
+            false
+        }
+    }
     /// Create an explicitly limited account; no permissive provider defaults.
     /// # Errors
     /// Rejects limits outside the supported local ceilings.

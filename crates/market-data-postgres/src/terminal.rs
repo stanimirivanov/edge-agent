@@ -102,6 +102,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
         if receipt.is_some() {
             inbox(&mut tx, delivery).await?;
         }
+        crate::retention::guard_request(&mut tx, &command.request).await?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(receipt)
     }
@@ -120,11 +121,15 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
                 return Err(Error::new(K::Conflict));
             }
             inbox(&mut tx, delivery).await?;
+            crate::retention::guard_request(&mut tx, &command.request).await?;
             tx.commit().await.map_err(Error::storage)?;
             return Ok(receipt);
         }
         let (now, stamp) = time(&mut tx).await?;
         proposal.verify(&record, &budget.snapshot(), now)?;
+        if let EvidenceOutcome::Ready { object } = &proposal.decision().data().outcome {
+            crate::retention::registered(&mut tx, &record, object).await?;
+        }
         authorize(&record, proposal, access)?;
         if inbox(&mut tx, delivery).await? != DeliveryDisposition::FirstDelivery {
             return Err(Error::new(K::Invalid)); // A marker without its terminal receipt is corruption.
@@ -219,7 +224,10 @@ async fn advance(
     if conflict {
         return Err(Error::new(K::Conflict));
     }
-    sqlx::query!("UPDATE edgeagent_evidence_heads SET digest=$2,captured_ms=$3,cutoff_ms=$4 WHERE series_key=$1",
-        head.key.as_str(),head.digest.as_str(),captured,cutoff).execute(&mut **tx).await.map_err(Error::storage)?;
+    sqlx::query!("UPDATE edgeagent_evidence_heads SET digest=$2,captured_ms=$3,cutoff_ms=$4,owner_request=$5 WHERE series_key=$1",
+        head.key.as_str(),head.digest.as_str(),captured,cutoff,proposal.decision().data().request.request.as_str()).execute(&mut **tx).await.map_err(Error::storage)?;
+    sqlx::query!("INSERT INTO edgeagent_evidence_ownership(request_id,series_key,observations) VALUES($1,$2,$3)",
+        proposal.decision().data().request.request.as_str(),head.key.as_str(),&keys as &[&str])
+        .execute(&mut **tx).await.map_err(Error::storage)?;
     Ok(())
 }

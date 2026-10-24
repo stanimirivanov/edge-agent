@@ -21,7 +21,12 @@ pub use selection::{
     RouteDecision, RoutingDirectory, RoutingKey, RoutingScope, SelectedDailyProvider,
     SelectedRequest, SelectionContext, SelectionError, SelectionPlan,
 };
+mod retention;
 mod storage;
+pub use retention::{
+    CleanupAuthority, EvidenceCleanup, EvidenceDeletion, EvidenceRetention,
+    RetainedEvidenceStorage, RetentionScope, cleanup_evidence,
+};
 mod terminal;
 pub use authority::{
     AccessScope, Permission, ProviderReview, ReviewStatus, RightsRecord, UsePermissions,

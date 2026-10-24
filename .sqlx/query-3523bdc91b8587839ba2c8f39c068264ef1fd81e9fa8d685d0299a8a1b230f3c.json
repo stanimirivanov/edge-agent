@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH chosen AS (\n            SELECT request_id FROM edgeagent_acquisition_denials WHERE NOT cleaned\n            ORDER BY cleanup_order LIMIT $1 FOR UPDATE SKIP LOCKED)\n            UPDATE edgeagent_acquisition_denials d SET cleanup_order=nextval('edgeagent_evidence_cleanup_order')\n            FROM chosen WHERE d.request_id=chosen.request_id RETURNING d.request_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_denials",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3523bdc91b8587839ba2c8f39c068264ef1fd81e9fa8d685d0299a8a1b230f3c"
+}

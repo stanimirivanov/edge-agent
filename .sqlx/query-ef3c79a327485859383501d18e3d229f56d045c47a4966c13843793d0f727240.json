@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT retention_scope,delete_ms,floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS \"now!\" FROM edgeagent_acquisitions WHERE request_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "retention_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "retention_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delete_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisitions",
+            "name": "delete_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "now!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "ef3c79a327485859383501d18e3d229f56d045c47a4966c13843793d0f727240"
+}

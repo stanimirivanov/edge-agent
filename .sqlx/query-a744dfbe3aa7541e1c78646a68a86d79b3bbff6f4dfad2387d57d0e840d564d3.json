@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_message_outbox WHERE message_source='urn:edgeagent:component:market-data' AND message_id='evidence-decision-'||$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a744dfbe3aa7541e1c78646a68a86d79b3bbff6f4dfad2387d57d0e840d564d3"
+}

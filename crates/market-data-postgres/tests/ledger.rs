@@ -7,8 +7,17 @@ mod support;
 use edgeagent_market_data_application::*;
 use edgeagent_market_data_postgres::PostgresAcquisitionLedger;
 use futures_util::FutureExt;
-use std::panic::AssertUnwindSafe;
+use std::{error::Error as _, panic::AssertUnwindSafe};
 use support::*;
+
+fn is_lock_timeout(error: &BudgetError) -> bool {
+    error.kind() == BudgetErrorKind::Storage
+        && error
+            .source()
+            .and_then(|cause| cause.downcast_ref::<sqlx::Error>())
+            .and_then(sqlx::Error::as_database_error)
+            .is_some_and(|cause| cause.code().as_deref() == Some("55P03"))
+}
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
@@ -24,7 +33,27 @@ async fn duplicate_and_conflicting_admission_preserve_original_deadline_and_byte
             ledger.admit(&record, &authority),
             ledger.admit(&record, &authority)
         );
-        assert_eq!(one?, two?);
+        // Contending admissions may hit the bounded database lock timeout.
+        // Both calls have returned: retry only that known rollback, never
+        // conceal arbitrary storage failures or reset the admitted identity.
+        for outcome in [one, two] {
+            let admitted = match outcome {
+                Err(error) if is_lock_timeout(&error) => ledger.admit(&record, &authority).await?,
+                result => result?,
+            };
+            assert_eq!(admitted, record);
+        }
+        // Force the recovery branch even on fast hosts. Release the blocker
+        // before checking the outcome so an unexpected result cannot hold it.
+        let mut blocker = h.pool.begin().await?;
+        sqlx::query("SELECT scope FROM edgeagent_evidence_scopes FOR UPDATE")
+            .execute(&mut *blocker)
+            .await?;
+        let blocked = ledger.admit(&record, &authority).await;
+        blocker.rollback().await?;
+        let error = blocked.err().ok_or("expected bounded lock timeout")?;
+        assert!(is_lock_timeout(&error));
+        assert_eq!(ledger.admit(&record, &authority).await?, record);
         ledger.begin_attempt(record.command(), 1).await?;
         assert_eq!(ledger.begin_attempt(record.command(), 1).await?.attempts, 1);
         let again = ledger.admit(&record, &authority).await?;

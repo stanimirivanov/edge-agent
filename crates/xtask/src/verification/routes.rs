@@ -230,6 +230,44 @@ const ROUTES: &[Route] = &[
         checks: &["evidence-storage-contracts"],
     },
     Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/retention.rs"),
+        guides: &["docs/development/evidence-retention.md"],
+        checks: &[
+            "evidence-retention-contracts",
+            "evidence-retention-postgres",
+            "evidence-storage-contracts",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/evidence-retention.md"),
+        guides: &["docs/development/evidence-retention.md"],
+        checks: &[
+            "evidence-retention-contracts",
+            "evidence-retention-postgres",
+            "evidence-storage-contracts",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/retention.rs"),
+        guides: &["docs/development/evidence-retention.md"],
+        checks: &["evidence-retention-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/src/retention"),
+        guides: &["docs/development/evidence-retention.md"],
+        checks: &[
+            "evidence-retention-contracts",
+            "evidence-retention-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/tests/retention.rs"),
+        guides: &["docs/development/evidence-retention.md"],
+        checks: &["evidence-retention-postgres"],
+    },
+    Route {
         matcher: Matcher::Exact("crates/market-data-application/src/storage.rs"),
         guides: &["docs/development/evidence-storage.md"],
         checks: &["evidence-storage-contracts"],

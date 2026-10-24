@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_evidence_scopes(scope,revoked) VALUES($1,TRUE) ON CONFLICT(scope) DO UPDATE SET revoked=TRUE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df56e8f23b40dc788377c79dbb38739b59d016bdb2bacd79d1e8e890e9d0fd9e"
+}

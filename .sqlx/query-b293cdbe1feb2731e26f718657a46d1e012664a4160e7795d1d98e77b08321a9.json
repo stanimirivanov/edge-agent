@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "budget"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blocked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "blocked"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b293cdbe1feb2731e26f718657a46d1e012664a4160e7795d1d98e77b08321a9"
+}

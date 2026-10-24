@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_acquisition_accounts SET budget=$2,blocked=blocked OR $3,block_generation=block_generation+CASE WHEN $3 THEN 1 ELSE 0 END WHERE account_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0c2f14245d0c06d36b2fd030270591ec954a78839ab44c354c1da71fb08b3b02"
+}

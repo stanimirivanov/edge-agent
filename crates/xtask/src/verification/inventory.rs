@@ -413,6 +413,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical admission and accounting: original deadlines, conservative uncertainty, replay and account rate fences. Synthetic model, not SQL atomicity.",
         ),
         check(
+            "evidence-retention-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "retention",
+                "--",
+            ],
+            "Durable denial surrounds I/O; cleanup requires explicit write quiescence and preserves inventory after uncertain deletion. Synthetic model, not physical media erasure.",
+        ),
+        check(
             "evidence-storage-contracts",
             "T2",
             &["verify", "test"],
@@ -425,7 +441,7 @@ pub(super) fn checks() -> Vec<Check> {
                 "--lib",
                 "--",
             ],
-            "Synthetic create-only storage, uncertain-write recovery, scoped authority, bounded integrity reads and local reopen; not cloud durability or physical deletion.",
+            "Synthetic create-only storage, uncertain-write recovery, scoped authority, bounded integrity reads, local reopen and scoped idempotent deletion; not cloud or media erasure.",
         ),
         check(
             "provider-http-contracts",
@@ -763,6 +779,18 @@ pub(super) fn checks() -> Vec<Check> {
                     ignored: false,
                 });
             }
+            "evidence-retention-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "durable_denial_checks_surround_storage_and_never_release_revoked_bytes",
+                        "cleanup_requires_quiescence_and_keeps_inventory_after_uncertain_deletion",
+                    ],
+                    ignored: false,
+                });
+            }
             "evidence-storage-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -775,6 +803,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "store::tests::current_authority_and_exclusive_expiry_are_rechecked_after_io",
                         "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
                         "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
+                        "store::tests::quiescent_deletion_is_scoped_idempotent_and_recovers_after_timeout",
                     ],
                     ignored: false,
                 });
