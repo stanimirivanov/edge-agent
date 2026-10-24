@@ -5,12 +5,14 @@
 mod admission;
 mod authority;
 mod budget;
+mod date_only;
 mod dispatch;
 pub use admission::{AcquisitionLimits, AdmissionRecord};
 pub use budget::{
     AccountBudget, AcquisitionBudget, AcquisitionLedger, BudgetError, BudgetErrorKind,
     BudgetSnapshot, CallCompletion, CallPermit, DailyCreditPolicy, DailyCreditUsage,
 };
+pub use date_only::freeze_date_only_time;
 pub use dispatch::{AcquisitionUsage, DispatchAuthority, DispatchCheck};
 mod evidence;
 mod provider;

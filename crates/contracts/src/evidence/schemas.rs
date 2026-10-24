@@ -4,6 +4,8 @@ use serde_json::Value;
 /// Complete v1 local artifact/message schema census.
 #[derive(Clone, Copy, Debug)]
 pub enum EvidenceSchema {
+    /// Independent date-only temporal value; not a daily-v1 object.
+    DateOnlyTime,
     /// Canonical daily object.
     Artifact,
     /// Identity-only command.
@@ -13,11 +15,17 @@ pub enum EvidenceSchema {
 }
 impl EvidenceSchema {
     /// Fixed current schema inventory.
-    pub const ALL: [Self; 3] = [Self::Artifact, Self::Acquire, Self::Decision];
+    pub const ALL: [Self; 4] = [
+        Self::Artifact,
+        Self::Acquire,
+        Self::Decision,
+        Self::DateOnlyTime,
+    ];
     /// Exact immutable schema identifier.
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
+            Self::DateOnlyTime => "urn:edgeagent:schema:market-data:date-only-time:v1",
             Self::Artifact => "urn:edgeagent:schema:market-data:evidence-artifact:v1",
             Self::Acquire => DEFINITIONS[0].data_schema(),
             Self::Decision => DEFINITIONS[1].data_schema(),
@@ -27,6 +35,7 @@ impl EvidenceSchema {
     #[must_use]
     pub const fn filename(self) -> &'static str {
         match self {
+            Self::DateOnlyTime => "date-only-time-v1.json",
             Self::Artifact => "daily-v1.json",
             Self::Acquire => "acquire-v1.json",
             Self::Decision => "decided-v1.json",
@@ -41,6 +50,7 @@ impl EvidenceSchema {
             schemars::generate::SchemaSettings::draft2020_12().with(|s| s.inline_subschemas = true);
         let generator = settings.into_generator();
         let schema = match self {
+            Self::DateOnlyTime => generator.into_root_schema_for::<DateOnlyTimeData>(),
             Self::Artifact => generator.into_root_schema_for::<DailyEvidence>(),
             Self::Acquire => generator.into_root_schema_for::<AcquireEvidence>(),
             Self::Decision => generator.into_root_schema_for::<EvidenceDecisionData>(),

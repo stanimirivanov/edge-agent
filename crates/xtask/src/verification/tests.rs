@@ -10,6 +10,14 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "date-only-evidence",
+            vec![
+                "native_dates_preserve_reviewed_dst_buckets_and_exact_local_receipts",
+                "date_only_construction_rejects_unreviewed_or_conflicting_calendar_and_chronology",
+                "date_only_wire_decode_is_bounded_canonical_versioned_and_payload_safe",
+            ],
+        ),
+        (
             "offline-worker-contracts",
             vec![
                 "offline::tests::offline_mode_rejects_vendor_and_live_flags_before_infrastructure",
@@ -471,6 +479,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "metered-provider-dispatch",
             "evidence-contracts",
             "evidence-freezing",
+            "date-only-evidence",
             "messaging-error-contracts",
             "relay-observation-contracts",
             "relay-policy-contracts",

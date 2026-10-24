@@ -121,6 +121,16 @@ fn provider_transport_routes_exact_http_contracts() -> Result<(), String> {
 #[test]
 fn evidence_sources_schemas_and_fixtures_route_protected_contracts() -> Result<(), String> {
     for path in [
+        "crates/contracts/src/evidence/date_only.rs",
+        "crates/market-data-domain/src/date_only.rs",
+        "crates/market-data-application/src/date_only.rs",
+        "crates/market-data-application/tests/date_only.rs",
+        "crates/contracts/fixtures/evidence-date-only-v1/time.json",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("date-only-evidence"));
+    }
+    for path in [
         "crates/contracts/src/evidence/artifact.rs",
         "crates/contracts/schemas/evidence/daily-v1.json",
         "crates/contracts/fixtures/evidence-v1/daily.json",

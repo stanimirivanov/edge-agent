@@ -1,0 +1,363 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:date-only-time:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Untrusted date-only temporal DTO. Only `DateOnlyTimeEvidence` seals invariants.",
+  "properties": {
+    "bucket": {
+      "description": "Explicit half-open derived UTC bucket; never core-session/midnight defaults.",
+      "items": {
+        "additionalProperties": false,
+        "description": "Lossless UTC seconds/nanoseconds, independent from event/receipt semantics.",
+        "properties": {
+          "nanos": {
+            "description": "Nanosecond fraction, never rounded to milliseconds.",
+            "format": "uint32",
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seconds": {
+            "description": "Signed Unix seconds within Gregorian years 1..9999.",
+            "format": "int64",
+            "maximum": 253402300799,
+            "minimum": -62135596800,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nanos",
+          "seconds"
+        ],
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "calendar": {
+      "additionalProperties": false,
+      "description": "Required exact dated calendar witness, not proof by a calendar ID alone.",
+      "properties": {
+        "date": {
+          "description": "Required effective date for calendar/action roles, null for the others.",
+          "maxLength": 10,
+          "minLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Reference role.",
+          "oneOf": [
+            {
+              "const": "mapping",
+              "description": "Dated identity mapping.",
+              "type": "string"
+            },
+            {
+              "const": "calendar",
+              "description": "Explicit open/closed calendar coverage.",
+              "type": "string"
+            },
+            {
+              "const": "action",
+              "description": "Supported corporate-action annotation.",
+              "type": "string"
+            },
+            {
+              "const": "action_coverage",
+              "description": "Complete action catalog coverage.",
+              "type": "string"
+            },
+            {
+              "const": "rights",
+              "description": "Current acquisition rights review.",
+              "type": "string"
+            },
+            {
+              "const": "provider_review",
+              "description": "Current provider capability review.",
+              "type": "string"
+            }
+          ]
+        },
+        "known_at": {
+          "additionalProperties": false,
+          "description": "Actual knowledge time.",
+          "properties": {
+            "nanos": {
+              "description": "Nanosecond fraction, never rounded to milliseconds.",
+              "format": "uint32",
+              "maximum": 999999999,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seconds": {
+              "description": "Signed Unix seconds within Gregorian years 1..9999.",
+              "format": "int64",
+              "maximum": 253402300799,
+              "minimum": -62135596800,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "nanos",
+            "seconds"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "description": "Source authority identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "source_sha256": {
+          "description": "Source-byte digest; full referenced records must be retained for replay.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "additionalProperties": false,
+          "description": "Selected identity/revision.",
+          "properties": {
+            "id": {
+              "description": "Nonzero reference identity.",
+              "maxLength": 32,
+              "minLength": 32,
+              "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+              "type": "string"
+            },
+            "revision": {
+              "description": "Exact selected revision.",
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[1-9][0-9]{0,19}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "date",
+        "kind",
+        "known_at",
+        "source",
+        "source_sha256",
+        "version"
+      ],
+      "type": "object"
+    },
+    "derived_at": {
+      "additionalProperties": false,
+      "description": "Actual local derivation time, at or after receipt and both reference witnesses.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nanos",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "received_at": {
+      "additionalProperties": false,
+      "description": "Actual local receipt, not historical knowledge inferred from the label.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nanos",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": false,
+      "description": "Required reviewed bucket rule and retained source provenance.",
+      "properties": {
+        "calendar": {
+          "additionalProperties": false,
+          "description": "Exact calendar dependency selected by that rule.",
+          "properties": {
+            "id": {
+              "description": "Nonzero reference identity.",
+              "maxLength": 32,
+              "minLength": 32,
+              "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+              "type": "string"
+            },
+            "revision": {
+              "description": "Exact selected revision.",
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[1-9][0-9]{0,19}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "type": "object"
+        },
+        "known_at": {
+          "additionalProperties": false,
+          "description": "Actual local receipt of the rule.",
+          "properties": {
+            "nanos": {
+              "description": "Nanosecond fraction, never rounded to milliseconds.",
+              "format": "uint32",
+              "maximum": 999999999,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seconds": {
+              "description": "Signed Unix seconds within Gregorian years 1..9999.",
+              "format": "int64",
+              "maximum": 253402300799,
+              "minimum": -62135596800,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "nanos",
+            "seconds"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "description": "Rule source authority identity.",
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+          "type": "string"
+        },
+        "source_sha256": {
+          "description": "SHA-256 of retained source bytes, not a bearer grant or proof of authenticity.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "additionalProperties": false,
+          "description": "Exact bucket-rule identity/revision, not the feed's general semantic revision.",
+          "properties": {
+            "id": {
+              "description": "Nonzero reference identity.",
+              "maxLength": 32,
+              "minLength": 32,
+              "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+              "type": "string"
+            },
+            "revision": {
+              "description": "Exact selected revision.",
+              "maxLength": 20,
+              "minLength": 1,
+              "pattern": "^[1-9][0-9]{0,19}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "calendar",
+        "known_at",
+        "source",
+        "source_sha256",
+        "version"
+      ],
+      "type": "object"
+    },
+    "source_date": {
+      "description": "Provider's native Gregorian label, never expanded into a precise source event.",
+      "maxLength": 10,
+      "minLength": 10,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": "string"
+    },
+    "timezone": {
+      "description": "Label timezone under the qualified profile.",
+      "oneOf": [
+        {
+          "const": "America/New_York",
+          "description": "The current US equity profile; other zones require explicit qualification.",
+          "type": "string"
+        }
+      ]
+    },
+    "tzdata_revision": {
+      "description": "Bounded named timezone-data revision, not the library's current default.",
+      "maxLength": 32,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "type": "string"
+    },
+    "version": {
+      "description": "Independent immutable value format.",
+      "oneOf": [
+        {
+          "const": "edgeagent.evidence.date-only-time.v1",
+          "description": "Exact native label and explicit reviewed UTC bucket derivation.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": [
+    "bucket",
+    "calendar",
+    "derived_at",
+    "received_at",
+    "rule",
+    "source_date",
+    "timezone",
+    "tzdata_revision",
+    "version"
+  ],
+  "title": "DateOnlyTimeData",
+  "type": "object"
+}
