@@ -134,8 +134,21 @@ pub struct NativeFixture {
 }
 impl NativeFixture {
     pub fn new(request: u128) -> Result<Self> {
+        Self::at(request, NOW)
+    }
+    pub fn at(request: u128, ms: i64) -> Result<Self> {
+        Self::with_start(request, ms, 30)
+    }
+    pub fn with_start(request: u128, ms: i64, first_day: u32) -> Result<Self> {
+        let now = || at(ms);
+        let known = at(ms - NOW)?;
         let mut f = Fixture::new()?;
         f.request.id = AcquisitionId::new(request)?;
+        f.request.admitted_at = now()?;
+        f.request.deadline = at(ms + 300_000)?;
+        f.right.effective = EffectiveInterval::new(known, at(ms + 2 * DAY)?)?;
+        f.right.delete_by = at(ms + 3 * DAY)?;
+        f.review.effective = f.right.effective;
         f.request.contract = EvidenceContract::new(
             EvidenceKind::RawBar(BarCoverage::ProviderDay),
             MarketScope::Consolidated,
@@ -143,7 +156,7 @@ impl NativeFixture {
             TimestampPrecision::DateOnly,
         )?;
         f.request.range = DateRange::new(
-            SessionDate::new(1969, 12, 30)?,
+            SessionDate::new(1969, 12, first_day)?,
             SessionDate::new(1970, 1, 2)?,
         )?;
         f.right.contract = f.request.contract;
@@ -153,13 +166,13 @@ impl NativeFixture {
             DeliveryCapability::Snapshots,
             KnowledgeCapability::CaptureOnly,
         );
-        f.rights = ReferenceHistory::new(vec![version(1, 1, at(0)?, f.right)?])?;
-        f.providers = ReferenceHistory::new(vec![version(1, 1, at(0)?, f.review)?])?;
+        f.rights = ReferenceHistory::new(vec![version(1, 1, known, f.right)?])?;
+        f.providers = ReferenceHistory::new(vec![version(1, 1, known, f.review)?])?;
         let symbol = Symbol::new("INVENTED")?;
         let mapping = version(
             4,
             1,
-            at(0)?,
+            known,
             InstrumentMapping::new(
                 f.request.instrument(),
                 ListingId::new(1)?,
@@ -173,11 +186,11 @@ impl NativeFixture {
             feed: FeedId::new(1)?,
             epoch: FeedEpoch::new(1)?,
         };
-        let effective = EffectiveInterval::new(at(0)?, at(NOW + DAY)?)?;
+        let effective = EffectiveInterval::new(known, at(ms + DAY)?)?;
         let directories = ReferenceHistory::new(vec![version(
             5,
             1,
-            at(0)?,
+            known,
             RoutingDirectory::new(
                 scope,
                 effective,
@@ -190,7 +203,7 @@ impl NativeFixture {
         let selections = ReferenceHistory::new(vec![version(
             6,
             1,
-            at(0)?,
+            known,
             InstrumentSelection::new(effective, &[f.request.instrument()])?,
         )?])?;
         let plan = SelectionPlan::resolve(
@@ -209,13 +222,16 @@ impl NativeFixture {
         let mut buckets = Vec::new();
         let mut rows = Vec::new();
         let mut versions = Vec::new();
-        for (offset, day) in [(0, 30), (1, 31)] {
+        for (offset, day) in [(0, 30), (1, 31)]
+            .into_iter()
+            .filter(|(_, day)| *day >= first_day)
+        {
             let date = SessionDate::new(1969, 12, day)?;
             let start = -2 * DAY + offset * DAY;
             let calendar = version(
                 u128::from(day),
                 1,
-                at(0)?,
+                known,
                 CalendarDay::new(
                     Venue::Xnys,
                     date,
@@ -229,7 +245,7 @@ impl NativeFixture {
             buckets.push(version(
                 u128::from(day) + 100,
                 1,
-                at(0)?,
+                known,
                 DateOnlyBucket::new(
                     date,
                     EvidenceInterval::new(
@@ -254,7 +270,7 @@ impl NativeFixture {
         calendars.push(version(
             40,
             1,
-            at(0)?,
+            known,
             CalendarDay::new(
                 Venue::Xnys,
                 SessionDate::new(1970, 1, 1)?,
@@ -289,8 +305,8 @@ impl NativeFixture {
         let coverage = version(
             50,
             1,
-            at(0)?,
-            ActionCoverage::new(f.request.instrument(), f.request.range, at(NOW + DAY)?),
+            known,
+            ActionCoverage::new(f.request.instrument(), f.request.range, at(ms + DAY)?),
         )?;
         Ok(Self {
             f,

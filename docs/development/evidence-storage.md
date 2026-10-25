@@ -28,6 +28,12 @@ checks after I/O. Retained descriptors do not bypass current revocation.
 
 ## Storage and integrity contract
 
+Accepted native-date objects use the same opaque key/descriptor convention and shared
+integrity mechanics through explicit `NativeEvidenceStorage` methods. Their embedded
+format is not precise daily-v1. Typed readers reject other formats and raw native
+captures. Compose durable preparation and retention as described in
+[native daily acceptance](native-daily-acceptance.md#persistence-recovery-and-retirement).
+
 The owner-private key format is:
 
 ```text

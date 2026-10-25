@@ -553,6 +553,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Complete native-date quality, original provenance, current authority, owner lineage and independent canonical accepted format; no storage/publication or provider calls.",
         ),
         check(
+            "native-publication-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "native_publication",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Native preparation recovery, exact frozen identity, authorized predecessor reads and current durable denial; model proof, not PostgreSQL or live activation.",
+        ),
+        check(
             "date-only-evidence",
             "T2",
             &["verify", "test"],
@@ -913,6 +931,8 @@ pub(super) fn checks() -> Vec<Check> {
                         "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
                         "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
                         "store::tests::quiescent_deletion_is_scoped_idempotent_and_recovers_after_timeout",
+                        "store::tests::native::native_uncertain_create_recovers_exact_bytes_and_rejects_other_formats",
+                        "store::tests::native::native_reads_recheck_authority_expiry_scope_and_quiescent_cleanup",
                     ],
                     ignored: false,
                 });
@@ -961,6 +981,18 @@ pub(super) fn checks() -> Vec<Check> {
                         "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
                         "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
                         "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+                    ],
+                    ignored: false,
+                });
+            }
+            "native-publication-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "native_preparation_recovers_original_acceptance_after_uncertain_put",
+                        "native_publication_requires_authorized_predecessor_and_current_durable_denial",
                     ],
                     ignored: false,
                 });

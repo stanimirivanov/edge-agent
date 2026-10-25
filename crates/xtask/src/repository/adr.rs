@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 59] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 60] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -316,6 +316,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 59] = [
         number: 59,
         path: "docs/decisions/0059-accept-native-daily-evidence-with-explicit-owner-lineage.md",
         title: "Accept native daily evidence with explicit owner lineage",
+    },
+    PublishedIdentity {
+        number: 60,
+        path: "docs/decisions/0060-persist-native-preparations-and-publish-through-shared-terminal-fences.md",
+        title: "Persist native preparations and publish through shared terminal fences",
     },
 ];
 

@@ -10,6 +10,13 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "native-publication-contracts",
+            vec![
+                "native_preparation_recovers_original_acceptance_after_uncertain_put",
+                "native_publication_requires_authorized_predecessor_and_current_durable_denial",
+            ],
+        ),
+        (
             "native-daily-acceptance",
             vec![
                 "native_acceptance_preserves_labels_receipts_values_and_complete_provenance",
@@ -123,6 +130,8 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "store::tests::durable_local_store_reopens_and_licensed_namespaces_do_not_alias",
                 "store::tests::storage_errors_and_adapter_debug_redact_paths_hashes_and_payloads",
                 "store::tests::quiescent_deletion_is_scoped_idempotent_and_recovers_after_timeout",
+                "store::tests::native::native_uncertain_create_recovers_exact_bytes_and_rejects_other_formats",
+                "store::tests::native::native_reads_recheck_authority_expiry_scope_and_quiescent_cleanup",
             ],
         ),
         (
@@ -512,6 +521,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "evidence-contracts",
             "evidence-freezing",
             "native-daily-acceptance",
+            "native-publication-contracts",
             "date-only-evidence",
             "twelve-data-conformance",
             "messaging-error-contracts",

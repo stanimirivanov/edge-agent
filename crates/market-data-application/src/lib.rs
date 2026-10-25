@@ -36,7 +36,7 @@ mod retention;
 mod storage;
 pub use retention::{
     CleanupAuthority, EvidenceCleanup, EvidenceDeletion, EvidenceRetention,
-    RetainedEvidenceStorage, RetentionScope, cleanup_evidence,
+    NativeEvidenceRetention, RetainedEvidenceStorage, RetentionScope, cleanup_evidence,
 };
 mod terminal;
 pub use authority::{
@@ -49,6 +49,7 @@ pub use request::{AcquisitionRequest, Cancellation, KnowledgeMode, RawRetention,
 use std::num::NonZeroU128;
 pub use storage::{
     EvidenceAccess, EvidenceStorage, EvidenceStorageError, EvidenceStorageErrorKind,
+    NativeEvidenceStorage,
 };
 pub use terminal::{
     AcquisitionPublication, PublicationAuthority, PublicationHead, TerminalProposal,

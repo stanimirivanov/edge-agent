@@ -31,6 +31,8 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 For native daily quality, explicit owner observation lineage and accepted object
 compatibility, read [native daily acceptance](development/native-daily-acceptance.md)
 and [ADR-0059](decisions/0059-accept-native-daily-evidence-with-explicit-owner-lineage.md).
+For native preparation recovery, scoped storage and shared terminal transactions,
+also read [ADR-0060](decisions/0060-persist-native-preparations-and-publish-through-shared-terminal-fences.md).
 
 For evidence retirement, immediate durable denial, opaque account blocks and orphan
 deletion, read [evidence retention](development/evidence-retention.md) and

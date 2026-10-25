@@ -192,6 +192,31 @@ fn bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics
 #[test]
 fn evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes() -> Result {
     registry()?;
+    let native = edgeagent_event_spine_conformance::evidence::native_daily_fixture()?;
+    let command = AcquireEvidence {
+        request: native.data().capture.scope.request.clone(),
+        request_sha256: native.data().capture.scope.request_sha256.clone(),
+    };
+    let accepted = EvidenceDecision::ready_native(command.clone(), &native)?;
+    let payload = serde_json::to_value(&accepted)?;
+    assert!(jsonschema::validator_for(&EvidenceSchema::Decision.generate()?)?.is_valid(&payload));
+    assert_eq!(
+        serde_json::from_value::<EvidenceDecision>(payload)?,
+        accepted
+    );
+    let mut foreign = command;
+    foreign.request_sha256 = DailyEvidenceArtifact::hash(b"foreign-native-admission");
+    assert!(EvidenceDecision::ready_native(foreign, &native).is_err());
+    let text = serde_json::to_string(&accepted)?;
+    for forbidden in [
+        "ohlc",
+        "source_date",
+        "coefficient",
+        "references",
+        "lineage",
+    ] {
+        assert!(!text.contains(forbidden));
+    }
     let files = artifacts()?;
     for (name, index, kind) in [
         ("acquire", 0, EvidenceSchema::Acquire),

@@ -144,6 +144,25 @@ impl From<EvidenceDecision> for EvidenceDecisionData {
     }
 }
 impl EvidenceDecision {
+    /// Bind a native accepted artifact to the unchanged reference-only terminal contract.
+    /// Consumers must dispatch the retrieved object's explicit format; raw captures are ineligible.
+    /// # Errors
+    /// Rejects a request inconsistent with the accepted artifact.
+    pub fn ready_native(
+        request: AcquireEvidence,
+        artifact: &NativeDailyArtifact,
+    ) -> Result<Self, EvidenceContractError> {
+        let scope = &artifact.data().capture.scope;
+        if request.request != scope.request || request.request_sha256 != scope.request_sha256 {
+            return Err(EvidenceContractError);
+        }
+        Self::try_from(EvidenceDecisionData {
+            request,
+            outcome: EvidenceOutcome::Ready {
+                object: artifact.object()?,
+            },
+        })
+    }
     /// Decode only authoritative MarketData outcomes on the matching acquisition partition.
     /// # Errors
     /// Rejects wrong producer/type/schema/partition or invalid terminal data.
@@ -205,5 +224,28 @@ impl EvidenceDecision {
     #[must_use]
     pub const fn data(&self) -> &EvidenceDecisionData {
         &self.0
+    }
+}
+
+impl NativeDailyArtifact {
+    /// Exact scoped descriptor; neither the descriptor nor its digest grants access.
+    /// # Errors
+    /// Rejects an internally missing rights witness or invalid encoded length.
+    pub fn object(&self) -> Result<EvidenceObject, EvidenceContractError> {
+        let data = self.data();
+        let rights = data
+            .references
+            .iter()
+            .find(|r| r.kind == EvidenceReferenceKind::Rights)
+            .ok_or(EvidenceContractError)?;
+        Ok(EvidenceObject {
+            sha256: self.digest().clone(),
+            bytes: u32::try_from(self.bytes().len()).map_err(|_| EvidenceContractError)?,
+            storage: data.capture.scope.storage.clone(),
+            audience: data.capture.scope.audience.clone(),
+            rights: rights.version.clone(),
+            delete_by: data.delete_by,
+            replaces: data.replaces.clone(),
+        })
     }
 }

@@ -64,10 +64,12 @@ PR11D delivers that capture/object path and protected `twelve-data-conformance`
 proofs, not activation of the precise-only worker. Before PR15, native
 acceptance is split by maintainer approval: PR11F-A provides whole-series quality,
 explicit owner lineage and the separately versioned accepted-native artifact;
-PR11F-B must integrate scoped storage, retention and atomic terminal publication
-with explicit consumer compatibility. The [native acceptance guide](../native-daily-acceptance.md)
+PR11F-B integrates scoped storage, durable preparation/retention and atomic terminal
+publication with explicit consumer compatibility. The [native acceptance guide](../native-daily-acceptance.md)
 and [ADR-0059](../../decisions/0059-accept-native-daily-evidence-with-explicit-owner-lineage.md)
-define this boundary. PR11F-A is not storage/publication or activation completion.
+define this boundary. Native publication requires migration 0004, retained preparation
+recovery and format-aware consumers; the existing offline worker stays precise-only.
+Neither slice constitutes vendor activation completion.
 PR11E reuses precise canonical
 observations plus common metering/selection in parallel, with protected
 `alpaca-conformance` proofs. Neither adapter activates the worker. Live qualification

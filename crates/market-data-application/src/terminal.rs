@@ -1,4 +1,5 @@
 //! Prepare outside transactions; commit terminal facts through an owner-owned port.
+mod native;
 mod receipt;
 use crate::*;
 use edgeagent_contracts::evidence::*;

@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn native_storage_and_publication_route_their_protected_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/terminal/native.rs",
+        "crates/market-data-application/src/storage.rs",
+        "crates/market-data-application/src/retention.rs",
+        "crates/market-data-postgres/tests/native.rs",
+        "crates/market-data-object-store/src/store.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(advice.checks.contains("native-publication-postgres"));
+        if !path.contains("market-data-postgres") {
+            assert!(advice.checks.contains("native-publication-contracts"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn native_quality_and_contract_paths_select_protected_acceptance() -> Result<(), String> {
     for path in [
         "crates/market-data-domain/src/daily/native.rs",

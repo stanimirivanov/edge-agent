@@ -88,6 +88,11 @@ request IDs, scope IDs or object keys. Runtime export/scheduling is PR13 work.
 
 ## Migration, backup and rollback
 
+Migration 0004 adds one exact accepted-native preparation per admission, inventoried
+before PUT and recovered under current denial/access checks. Admission retirement
+cascades its licensed byte erasure; the independent exact-key deletion inventory
+survives until quiescent cleanup. See [native persistence](native-daily-acceptance.md#persistence-recovery-and-retirement).
+
 Apply `market-data-postgres::MIGRATIONS` in order with inbox/outbox tables in the same
 private schema. Migration 0003 backfills canonical admission retention indexes. It
 refuses nonempty legacy head/version tables: stop ingress, inventory/export legacy
