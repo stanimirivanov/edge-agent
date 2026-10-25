@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 60] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 61] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -321,6 +321,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 60] = [
         number: 60,
         path: "docs/decisions/0060-persist-native-preparations-and-publish-through-shared-terminal-fences.md",
         title: "Persist native preparations and publish through shared terminal fences",
+    },
+    PublishedIdentity {
+        number: 61,
+        path: "docs/decisions/0061-separate-owner-reviewed-qualification-preflight-from-execution.md",
+        title: "Separate owner-reviewed qualification preflight from execution",
     },
 ];
 

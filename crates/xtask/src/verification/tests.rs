@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "qualification-preflight",
+            vec![
+                "qualification_profiles_are_bounded_canonical_strict_and_payload_safe",
+                "qualification_preflight_covers_both_profiles_without_enabling_or_mutating_execution",
+                "qualification_preflight_requires_independent_current_owner_opt_in",
+                "qualification_preflight_rejects_changed_bindings_semantics_authority_and_cancellation",
+                "qualification_preflight_requires_every_current_credential_and_lifecycle_control",
+                "qualification_preflight_preserves_uncertainty_and_never_resets_or_guesses_credits",
+            ],
+        ),
+        (
             "native-publication-contracts",
             vec![
                 "native_preparation_recovers_original_acceptance_after_uncertain_put",
@@ -522,6 +533,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "evidence-freezing",
             "native-daily-acceptance",
             "native-publication-contracts",
+            "qualification-preflight",
             "date-only-evidence",
             "twelve-data-conformance",
             "messaging-error-contracts",

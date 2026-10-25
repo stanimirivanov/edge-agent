@@ -571,6 +571,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Native preparation recovery, exact frozen identity, authorized predecessor reads and current durable denial; model proof, not PostgreSQL or live activation.",
         ),
         check(
+            "qualification-preflight",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "activation",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Offline exact-profile owner review, current authority, account uncertainty and non-resetting credits. Never enables dispatch or qualifies a live provider.",
+        ),
+        check(
             "date-only-evidence",
             "T2",
             &["verify", "test"],
@@ -981,6 +999,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
                         "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
                         "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+                    ],
+                    ignored: false,
+                });
+            }
+            "qualification-preflight" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "qualification_profiles_are_bounded_canonical_strict_and_payload_safe",
+                        "qualification_preflight_covers_both_profiles_without_enabling_or_mutating_execution",
+                        "qualification_preflight_requires_independent_current_owner_opt_in",
+                        "qualification_preflight_rejects_changed_bindings_semantics_authority_and_cancellation",
+                        "qualification_preflight_requires_every_current_credential_and_lifecycle_control",
+                        "qualification_preflight_preserves_uncertainty_and_never_resets_or_guesses_credits",
                     ],
                     ignored: false,
                 });

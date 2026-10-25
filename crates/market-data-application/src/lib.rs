@@ -2,6 +2,14 @@
 //! Review catalogs must be authenticated outside this crate. Tokens are short-lived checks,
 //! not credentials; recheck current catalogs before accepting results or using retained data.
 #![deny(missing_docs)]
+mod activation;
+mod canonical;
+pub use activation::{
+    QualificationAccountState, QualificationAssessment, QualificationAuthority,
+    QualificationControl, QualificationControlReview, QualificationPreflight, QualificationProfile,
+    QualificationProfileData, QualificationProfileFormat, QualificationProvider,
+    preflight_qualification,
+};
 mod native_evidence;
 pub use native_evidence::{NativeEvidenceFreeze, freeze_native_evidence};
 mod admission;

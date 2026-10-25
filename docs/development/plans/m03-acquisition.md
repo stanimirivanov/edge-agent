@@ -41,7 +41,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 6 | M03-PR11F-B | Native-date scoped storage, retention and atomic terminal publication | PR11F-A, PR10, PR12 | F |
 | 4 | M03-PR13 | Offline-only daily worker with pinned invented profile | PR11A, PR11B, PR11C, PR12 | C |
 | 6 | M03-PR14 | Worker/process death, acknowledgement loss and quota isolation proofs | PR13 | E |
-| 7 | M03-PR15 | Authorized opt-in live daily qualification and cleanup | PR14, PR11D, PR11E, PR11F-B, activation review, account/rights approval | G |
+| 7 | M03-PR15A | Owner-approved finite profiles and fail-closed offline preflight | PR14, PR11D, PR11E, PR11F-B | G |
+| 8 | M03-PR15B | Authenticated bounded vendor runtime, fencing, recovery and cleanup | PR15A, activation review, account/rights approval | H |
+| 9 | M03-PR15C | Separately authorized opt-in live daily qualification and cleanup evidence | PR15B, explicit live opt-in | I |
 | Extension 1 | M03-PR16 | Finite streaming authority, session budgets and account connection fencing | PR11B, PR11C, profile decisions | G |
 | Extension 2 | M03-PR17 | Versioned immutable streaming segments and atomic checkpoints/outbox | PR16, PR12 | H |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
@@ -49,6 +51,20 @@ Each implementation ships focused negative tests and docs with its behavior.
 | Extension 4 | M03-PR20 | Fair bounded multi-source supervision, readiness and recovery | PR17, PR19, PR13 | J |
 
 ## Acceptance boundaries
+
+Maintainer-approved PR15 split: [PR15A](../qualification-preflight.md) implements
+library-only exact-profile checks and an independent owner-assessment port. No production
+approving adapter, credential access, provider request or dispatch capability ships.
+A passing report is not live qualification, a reservation or permission to execute.
+Initial profiles stay inside one current UTC credit day, require worst-case remaining
+call credits, discard raw responses and cover the original licensed retention ceiling.
+PR15B must authenticate actual owner/configuration/reference inputs independently,
+compose bounded vendor workers with durable per-dispatch account/cancellation/authority
+rechecks, recover uncertain work and integrate scoped accepted storage, atomic terminal
+publication, maintenance and restore readiness. It cannot activate from profile hashes
+or self-approved DTOs. PR15C alone runs explicitly authorized live qualification with
+data-only credentials, finite budgets and cleanup evidence; missing prerequisites remain
+not-run/nonzero. PR15A verification remains entirely offline.
 
 The conditional provider pair is Twelve Data first and Alpaca historical data
 second; neither selection authorizes credentials, live calls or data use.

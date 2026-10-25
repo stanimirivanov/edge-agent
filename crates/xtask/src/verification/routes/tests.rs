@@ -786,3 +786,23 @@ fn process_composition_and_adapters_route_the_protected_process_proof() -> Resul
     assert!(advice.checks.contains("sqlx-metadata"));
     Ok(())
 }
+#[test]
+fn qualification_routes_include_protected_preflight_and_shared_canonical_consumers()
+-> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/activation.rs",
+        "crates/market-data-application/src/activation/profile.rs",
+        "crates/market-data-application/tests/activation/fixture.rs",
+        "crates/market-data-application/src/budget/daily.rs",
+        "docs/development/qualification-preflight.md",
+        "crates/market-data-application/src/canonical.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(advice.checks.contains("qualification-preflight"));
+        if path.ends_with("canonical.rs") {
+            assert!(advice.checks.contains("native-publication-contracts"));
+            assert!(advice.checks.contains("acquisition-terminal-contracts"));
+        }
+    }
+    Ok(())
+}
