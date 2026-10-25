@@ -96,8 +96,8 @@ run the canonical [SQLx metadata proof](sqlx-metadata.md).
 Stop intake before rollback: older binaries ignore grants and must not receive protected
 work credentials. Keep a compatible binary/schema for outstanding work and retention.
 
-PR15B2 must still authenticate full frozen reference/configuration inputs, fence actual
-provider/write workers, compose both bounded vendor paths with recovery/publication,
-authorize cleanup and prove process lifecycle. The offline worker stays invented-only.
-Neither provider is activated or live-qualified here. See [the plan](plans/m03-acquisition.md)
+PR15B2's [runtime](qualification-runtime.md) supplies complete owner input, durable
+provider/write ownership, both finite daily protocols, recovery/publication and exact
+owner-approved cleanup. The offline worker stays invented-only. These offline proofs
+do not live-qualify either provider. See [the plan](plans/m03-acquisition.md)
 and [ADR-0062](../decisions/0062-require-independent-postgresql-owner-grants-for-qualification.md).

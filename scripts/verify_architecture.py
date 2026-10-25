@@ -217,6 +217,7 @@ PACKAGE_RULES = {
             "edgeagent-market-data-application", "edgeagent-market-data-domain",
             "edgeagent-market-data-replay", "edgeagent-market-data-postgres",
             "edgeagent-market-data-object-store", "edgeagent-simulation-domain",
+            "edgeagent-market-data-http",
             "edgeagent-inbox-postgres", "edgeagent-outbox-postgres", "edgeagent-outbox-relay",
             "edgeagent-messaging", "edgeagent-messaging-nats", "async-nats", "chrono",
             "object_store", "serde_json", "sqlx", "tokio", "url",

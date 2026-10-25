@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.budget,a.blocked,a.block_generation FROM edgeagent_acquisition_accounts a JOIN edgeagent_acquisitions q ON q.account_id=a.account_id WHERE q.request_id=$1 FOR SHARE OF a",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "budget",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "budget"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blocked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "blocked"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "block_generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_acquisition_accounts",
+            "name": "block_generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e1684bc7f458ce790d728ab4202dd0618a28bf27e722712e1893f618b842ba21"
+}

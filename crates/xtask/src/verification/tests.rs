@@ -75,6 +75,9 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "offline::tests::cleanup_never_infers_account_or_write_quiescence",
                 "offline::tests::profile_lock_excludes_a_second_owner_and_refuses_reinitialization",
                 "offline::tests::compiled_profile_passes_quality_and_creates_a_scoped_artifact",
+                "qualification::tests::both_complete_owner_inputs_round_trip_and_reject_changed_or_unknown_values",
+                "qualification::tests::owner_input_errors_redact_payload_and_profile_requires_explicit_arguments",
+                "qualification::tests::precise_preparation_rehydrates_original_time_and_passes_quality_again",
             ],
         ),
         (

@@ -73,7 +73,7 @@ dependencies between workspace packages:
 | `edgeagent-outbox-postgres` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-messaging-nats` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-service-runtime` | `edgeagent-contracts` |
-| `edgeagent-market-data` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-market-data-replay`, `edgeagent-market-data-postgres`, `edgeagent-market-data-object-store`, `edgeagent-simulation-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
+| `edgeagent-market-data` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-market-data-replay`, `edgeagent-market-data-postgres`, `edgeagent-market-data-object-store`, `edgeagent-market-data-http`, `edgeagent-simulation-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
 | Other service composition roots | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |
 

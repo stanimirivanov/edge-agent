@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT generation,request_id,active FROM edgeagent_qualification_workers WHERE account_id=$1 FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_workers",
+            "name": "generation"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_workers",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_workers",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3118ee7cf32e32c0c136f684b8053660be9ecaf23c29df67911015923d762ed"
+}

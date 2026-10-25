@@ -129,6 +129,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
         }
         let (now, stamp) = time(&mut tx).await?;
         crate::qualification::guard(&mut tx, self.qualification.as_ref(), &record, None).await?;
+        self.guard_qualification_worker(&mut tx, &record).await?;
         proposal.verify(&record, &budget.snapshot(), now)?;
         if let EvidenceOutcome::Ready { object } = &proposal.decision().data().outcome {
             crate::retention::registered(&mut tx, &record, object).await?;

@@ -44,6 +44,30 @@ async fn retiring_old_snapshots_preserves_new_heads_and_shared_version_ownership
             .first()
             .cloned()
             .ok_or("original")?;
+        ledger.stage_precise_preparation(&previous).await?;
+        assert_eq!(
+            ledger
+                .recover_precise_preparation(r.command(), &access)
+                .await?
+                .ok_or("precise preparation")?,
+            previous
+        );
+        let reconnected = PostgresAcquisitionLedger::new(h.reconnect().await?);
+        assert_eq!(
+            reconnected
+                .recover_precise_preparation(r.command(), &access)
+                .await?
+                .ok_or("restarted preparation")?,
+            previous
+        );
+        let mut changed = previous.data().clone();
+        changed.bars.first_mut().ok_or("bar")?.volume.coefficient = "1".into();
+        kind(
+            ledger
+                .stage_precise_preparation(&DailyEvidenceArtifact::new(changed)?)
+                .await,
+            BudgetErrorKind::Conflict,
+        )?;
         let t2 = c2
             .catalogs()
             .admit(&c2.request, c2.request.admitted_at, &cancel)?;

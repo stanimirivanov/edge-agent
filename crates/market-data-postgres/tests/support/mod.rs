@@ -90,6 +90,10 @@ impl Harness {
             GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO {role};
             REVOKE ALL ON {schema}.edgeagent_qualification_grants FROM {role};
             GRANT SELECT ON {schema}.edgeagent_qualification_grants TO {role};
+            REVOKE ALL ON {schema}.edgeagent_qualification_inputs,{schema}.edgeagent_qualification_cleanup FROM {role};
+            GRANT SELECT ON {schema}.edgeagent_qualification_inputs,{schema}.edgeagent_qualification_cleanup TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input_role() TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input(TEXT) TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_qualification_grant(TEXT),{schema}.edgeagent_qualification_role() TO {role};",schema=self.schema)))
             .execute(&self.root).await?;
         let pool = PgPoolOptions::new()
@@ -279,6 +283,9 @@ impl Case {
         }
     }
     pub fn record(&self) -> Result<AdmissionRecord> {
+        self.record_with_spacing(15000)
+    }
+    pub fn record_with_spacing(&self, spacing_ms: u32) -> Result<AdmissionRecord> {
         let cancel = Cancellation::default();
         let admitted = self
             .catalogs()
@@ -287,7 +294,7 @@ impl Case {
             &admitted,
             AcquisitionLimits {
                 attempts: 3,
-                spacing_ms: 15000,
+                spacing_ms,
                 starts_per_minute: 4,
             },
             ListingId::new(1)?,

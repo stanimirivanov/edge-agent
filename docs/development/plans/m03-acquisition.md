@@ -74,6 +74,12 @@ with actual restricted logins. It adds no vendor worker or automatic cleanup aut
 PR15B2 must consume this boundary, authenticate complete reference/configuration input,
 implement actual worker/write fencing, compose provider recovery and accepted publication,
 and authorize retention cleanup. PR15B1 does not complete PR15B or authorize PR15C.
+PR15B2's [runtime composition](../qualification-runtime.md) adds independent complete
+input loading, finite vendor intake, accepted-preparation recovery, durable process claims,
+terminal publication/relay and exact owner-approved cleanup. Crashes retain uncertainty;
+incomplete page traversals require reconciliation and a separately admitted run, not
+automatic refetch. PR15C still requires explicit live opt-in and actual rights, credential,
+restore/consumer and licensed-copy cleanup evidence.
 
 The conditional provider pair is Twelve Data first and Alpaca historical data
 second; neither selection authorizes credentials, live calls or data use.

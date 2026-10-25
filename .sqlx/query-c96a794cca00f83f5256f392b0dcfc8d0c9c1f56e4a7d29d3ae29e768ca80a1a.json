@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT inventory FROM edgeagent_qualification_cleanup WHERE request_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inventory",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_cleanup",
+            "name": "inventory"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c96a794cca00f83f5256f392b0dcfc8d0c9c1f56e4a7d29d3ae29e768ca80a1a"
+}

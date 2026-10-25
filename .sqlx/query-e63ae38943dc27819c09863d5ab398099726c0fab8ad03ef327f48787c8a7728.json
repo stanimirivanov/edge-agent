@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT reviews AS \"reviews!\" FROM edgeagent_lock_qualification_grant($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reviews!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e63ae38943dc27819c09863d5ab398099726c0fab8ad03ef327f48787c8a7728"
+}
