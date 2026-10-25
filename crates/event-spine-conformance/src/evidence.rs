@@ -162,6 +162,10 @@ pub fn envelope<T: serde::Serialize>(
 /// Generate the complete finite current schema/golden census, with repository-relative paths.
 pub fn artifacts() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Error>> {
     let mut files = BTreeMap::new();
+    files.insert(
+        "fixtures/evidence-date-only-v1/native-accepted.json".into(),
+        native_daily_fixture()?.bytes().to_vec(),
+    );
     for schema in EvidenceSchema::ALL {
         files.insert(
             format!("schemas/evidence/{}", schema.filename()),
@@ -215,6 +219,28 @@ pub fn date_only_daily_fixture() -> Result<DateOnlyDailyArtifact, EvidenceContra
             ohlc: bar.ohlc.clone(),
             volume: bar.volume.clone(),
         }],
+    })
+}
+/// Invented accepted native object; source records and authority are not certified by this fixture.
+pub fn native_daily_fixture() -> Result<NativeDailyArtifact, EvidenceContractError> {
+    let precise = fixture()?;
+    let d = precise.data();
+    let b = d.bars.first().ok_or(EvidenceContractError)?;
+    NativeDailyArtifact::new(NativeDailyEvidence {
+        version: NativeDailyFormat::V1,
+        capture: date_only_daily_fixture()?.data().clone(),
+        captured_at: d.captured_at,
+        delete_by: d.delete_by,
+        quality: d.quality.clone(),
+        references: d.references.clone(),
+        lineage: vec![NativeDailyLineage {
+            observation: b.observation.clone(),
+            predecessor: b.predecessor.clone(),
+            transformation: b.transformation.clone(),
+            mapping: b.mapping.clone(),
+            actions: b.actions.clone(),
+        }],
+        replaces: None,
     })
 }
 /// Verify byte freshness, exact inventories and regular files; never resolve schema URIs.

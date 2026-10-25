@@ -53,8 +53,9 @@ pub use continuity::{
     FeedScope, IngestOutcome, RecoveryTicket,
 };
 pub use daily::{
-    ActionCoverage, CheckedDailyDay, CheckedDailySeries, DailyQualityError, DailyQualityPolicy,
-    DailyReferences, DailySeriesSpec,
+    ActionCoverage, CheckedDailyDay, CheckedDailySeries, CheckedNativeDailyDay,
+    CheckedNativeDailySeries, DailyQualityError, DailyQualityPolicy, DailyReferences,
+    DailySeriesSpec, NativeDailyObservation,
 };
 pub use date_only::{DateOnlyBucket, DateOnlyTime};
 pub use derivative::{

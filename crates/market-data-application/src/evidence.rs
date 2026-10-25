@@ -42,29 +42,29 @@ impl From<EvidenceContractError> for EvidenceFreezeError {
         Self::Contract
     }
 }
-fn id(value: u128) -> Result<EvidenceId, EvidenceContractError> {
+pub(super) fn id(value: u128) -> Result<EvidenceId, EvidenceContractError> {
     EvidenceId::new(&format!("{value:032x}"))
 }
-fn revision(value: u64) -> Result<EvidenceRevision, EvidenceContractError> {
+pub(super) fn revision(value: u64) -> Result<EvidenceRevision, EvidenceContractError> {
     EvidenceRevision::new(&value.to_string())
 }
-fn version(id_value: u128, rev: u64) -> Result<EvidenceVersion, EvidenceContractError> {
+pub(super) fn version(id_value: u128, rev: u64) -> Result<EvidenceVersion, EvidenceContractError> {
     Ok(EvidenceVersion {
         id: id(id_value)?,
         revision: revision(rev)?,
     })
 }
-fn time(value: PreciseInstant) -> Result<EvidenceTime, EvidenceContractError> {
+pub(super) fn time(value: PreciseInstant) -> Result<EvidenceTime, EvidenceContractError> {
     let (seconds, nanos) = value.unix_parts();
     Ok(EvidenceTime {
         seconds,
         nanos: u32::try_from(nanos).map_err(|_| EvidenceContractError)?,
     })
 }
-fn millis(value: UtcInstant) -> Result<EvidenceTime, EvidenceContractError> {
+pub(super) fn millis(value: UtcInstant) -> Result<EvidenceTime, EvidenceContractError> {
     time(PreciseInstant::from_millis(value))
 }
-fn date(value: SessionDate) -> Result<EvidenceDate, EvidenceContractError> {
+pub(super) fn date(value: SessionDate) -> Result<EvidenceDate, EvidenceContractError> {
     let (y, m, d) = value.ymd();
     EvidenceDate::new(&format!("{y:04}-{m:02}-{d:02}"))
 }
@@ -74,7 +74,7 @@ fn decimal(value: (i128, u32)) -> Result<EvidenceDecimal, EvidenceContractError>
         scale: u8::try_from(value.1).map_err(|_| EvidenceContractError)?,
     })
 }
-fn witness<T>(
+pub(super) fn witness<T>(
     kind: EvidenceReferenceKind,
     v: &ReferenceVersion<T>,
     at: Option<SessionDate>,

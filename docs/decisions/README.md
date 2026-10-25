@@ -170,3 +170,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0056](0056-preserve-native-dates-with-reviewed-bucket-provenance.md) | Accepted | Preserve native dates with reviewed bucket provenance. |
 | [ADR-0057](0057-capture-native-daily-provider-responses-under-durable-permits.md) | Superseded | Capture native daily provider responses under durable permits. |
 | [ADR-0058](0058-preserve-alpaca-source-instants-and-bound-historical-sip-pages.md) | Accepted | Preserve Alpaca source instants and bound historical SIP pages. |
+| [ADR-0059](0059-accept-native-daily-evidence-with-explicit-owner-lineage.md) | Accepted | Accept native daily evidence with explicit owner lineage. |

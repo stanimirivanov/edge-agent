@@ -7,6 +7,8 @@
 - Require a pinned native admission, reviewed rights and durable daily credits.
 - Run `cargo xtask verify --check twelve-data-conformance`; no provider is contacted.
 - Native captures cannot enter the precise daily-v1 worker/storage/publisher.
+- PR11F-A adds separate [native quality acceptance](native-daily-acceptance.md);
+  PR11F-B still owns native storage, retention and terminal publication.
 
 ## Trusted construction and flow
 
@@ -59,8 +61,10 @@ native captures versus precise quality-approved evidence. Unknown, noncanonical,
 duplicate-key, digest-mismatched and oversized objects fail closed.
 
 Captures do not imply corporate-action completeness, outlier acceptance, retained
-historical knowledge, licensed storage or a terminal ready decision. Before PR15,
-add native whole-series quality, scoped storage and terminal-message integration,
+historical knowledge, licensed storage or a terminal ready decision. PR11F-A's
+`freeze_native_evidence` rechecks complete quality and explicit owner lineage into
+an independent accepted artifact; this is not storage/publication completion. Before PR15,
+PR11F-B must add native scoped storage, retention and terminal-message integration,
 authenticated runtime catalogs/fencing, non-resetting credit-policy renewal where
 needed, and account-specific rights/coverage qualification. The existing worker
 remains offline-only and cannot activate the adapter.

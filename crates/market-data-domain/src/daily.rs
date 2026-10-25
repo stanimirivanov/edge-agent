@@ -1,5 +1,7 @@
 //! Whole-series acceptance; acquisition authority and latest-request selection stay outside.
+mod native;
 mod selection;
+pub use native::{CheckedNativeDailyDay, CheckedNativeDailySeries, NativeDailyObservation};
 
 use crate::{
     CalendarDay, CanonicalObservation, CorporateAction, DateRange, EvidenceInterval, InstrumentId,

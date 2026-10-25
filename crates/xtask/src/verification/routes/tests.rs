@@ -1,4 +1,27 @@
 use super::*;
+
+#[test]
+fn native_quality_and_contract_paths_select_protected_acceptance() -> Result<(), String> {
+    for path in [
+        "crates/market-data-domain/src/daily/native.rs",
+        "crates/market-data-application/src/native_evidence.rs",
+        "crates/market-data-application/tests/native_acceptance/fixture.rs",
+        "crates/contracts/src/evidence/native_daily.rs",
+        "docs/development/native-daily-acceptance.md",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert!(
+            advice.checks.contains("native-daily-acceptance"),
+            "missing native proof for {path}"
+        );
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/native-daily-acceptance.md")
+        );
+    }
+    Ok(())
+}
 #[test]
 fn alpaca_sources_route_protected_precise_protocol_proofs() -> Result<(), String> {
     for path in [
