@@ -126,6 +126,8 @@ impl DateOnlyDailyArtifact {
 /// Consumer dispatch explicitly distinguishes accepted precise evidence from native captures.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DailyObject {
+    /// Quality-approved native evidence; still not a read or publication grant.
+    NativeAccepted(NativeDailyArtifact),
     /// Existing quality-approved daily-v1 object.
     Precise(DailyEvidenceArtifact),
     /// Native-date capture still requiring native-date quality/runtime activation.
@@ -146,6 +148,9 @@ impl DailyObject {
         let header: Header<'_> =
             serde_json::from_slice(bytes).map_err(|_| EvidenceContractError)?;
         match header.version {
+            "edgeagent.evidence.native-daily.v1" => {
+                NativeDailyArtifact::decode(bytes, expected).map(Self::NativeAccepted)
+            }
             "edgeagent.evidence.date-only-daily-capture.v1" => {
                 DateOnlyDailyArtifact::decode(bytes, expected).map(Self::DateOnly)
             }

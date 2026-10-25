@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "native-daily-acceptance",
+            vec![
+                "native_acceptance_preserves_labels_receipts_values_and_complete_provenance",
+                "native_acceptance_rejects_gaps_closed_days_and_changed_capture_bindings",
+                "native_acceptance_enforces_reference_freshness_actions_and_exact_outlier_thresholds",
+                "native_acceptance_rechecks_authority_cancellation_and_original_admission",
+                "native_acceptance_requires_explicit_revision_chains_and_same_scoped_predecessor",
+                "native_artifact_decode_rejects_noncanonical_tampered_and_unaccepted_formats",
+            ],
+        ),
+        (
             "alpaca-conformance",
             vec![
                 "tests::alpaca::alpaca_raw_sip_binding_preserves_exact_provider_instants_and_receipts",
@@ -500,6 +511,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "metered-provider-dispatch",
             "evidence-contracts",
             "evidence-freezing",
+            "native-daily-acceptance",
             "date-only-evidence",
             "twelve-data-conformance",
             "messaging-error-contracts",

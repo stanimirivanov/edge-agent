@@ -535,6 +535,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Checked authority and whole-series quality bridge to immutable scoped evidence; no I/O or publication.",
         ),
         check(
+            "native-daily-acceptance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "native_acceptance",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Complete native-date quality, original provenance, current authority, owner lineage and independent canonical accepted format; no storage/publication or provider calls.",
+        ),
+        check(
             "date-only-evidence",
             "T2",
             &["verify", "test"],
@@ -943,6 +961,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "bounded_canonical_decode_rejects_tampering_duplicates_and_payload_diagnostics",
                         "evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes",
                         "local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls",
+                    ],
+                    ignored: false,
+                });
+            }
+            "native-daily-acceptance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "native_acceptance_preserves_labels_receipts_values_and_complete_provenance",
+                        "native_acceptance_rejects_gaps_closed_days_and_changed_capture_bindings",
+                        "native_acceptance_enforces_reference_freshness_actions_and_exact_outlier_thresholds",
+                        "native_acceptance_rechecks_authority_cancellation_and_original_admission",
+                        "native_acceptance_requires_explicit_revision_chains_and_same_scoped_predecessor",
+                        "native_artifact_decode_rejects_noncanonical_tampered_and_unaccepted_formats",
                     ],
                     ignored: false,
                 });

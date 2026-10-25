@@ -3,21 +3,20 @@ use crate::*;
 use edgeagent_contracts::evidence::*;
 use edgeagent_market_data_domain::*;
 use std::collections::BTreeMap;
+type ReviewedDay = (
+    ReferenceVersion<DateOnlyBucket>,
+    ReferenceVersion<CalendarDay>,
+);
 
 /// Complete owner-reviewed calendar and provider-bucket schedule for one selected request.
 /// Authentication and source-byte verification remain owner obligations, not provider claims.
 #[derive(Clone)]
 pub struct DateOnlySchedule {
+    calendars: Vec<ReferenceVersion<CalendarDay>>,
     request: AcquisitionRequest,
     mapping: ReferenceVersion<InstrumentMapping>,
     selection: EvidenceDigest,
-    days: BTreeMap<
-        SessionDate,
-        (
-            ReferenceVersion<DateOnlyBucket>,
-            ReferenceVersion<CalendarDay>,
-        ),
-    >,
+    days: BTreeMap<SessionDate, ReviewedDay>,
 }
 impl std::fmt::Debug for DateOnlySchedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -25,6 +24,15 @@ impl std::fmt::Debug for DateOnlySchedule {
     }
 }
 impl DateOnlySchedule {
+    // Acceptance can inspect frozen witnesses, but cannot mutate them behind their digest.
+    pub(crate) fn reviewed_days(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&SessionDate, &ReviewedDay)> {
+        self.days.iter()
+    }
+    pub(crate) fn reviewed_calendars(&self) -> &[ReferenceVersion<CalendarDay>] {
+        &self.calendars
+    }
     /// Bind complete explicit dated calendars (including closed days) and one bucket per open day.
     /// # Errors
     /// Rejects non-native/capture requests, incomplete/duplicate/future-known references,
@@ -132,6 +140,7 @@ impl DateOnlySchedule {
             );
         }
         Ok(Self {
+            calendars: calendars.to_vec(),
             request: *r,
             mapping: mapping.clone(),
             days,

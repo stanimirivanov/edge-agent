@@ -4,6 +4,8 @@ use serde_json::Value;
 /// Complete v1 local artifact/message schema census.
 #[derive(Clone, Copy, Debug)]
 pub enum EvidenceSchema {
+    /// Independent accepted-native snapshot; never a raw capture or precise object.
+    NativeDaily,
     /// Independent native-date capture; not quality-approved precise daily evidence.
     DateOnlyDaily,
     /// Independent date-only temporal value; not a daily-v1 object.
@@ -17,7 +19,8 @@ pub enum EvidenceSchema {
 }
 impl EvidenceSchema {
     /// Fixed current schema inventory.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
+        Self::NativeDaily,
         Self::DateOnlyDaily,
         Self::Artifact,
         Self::Acquire,
@@ -28,6 +31,7 @@ impl EvidenceSchema {
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
+            Self::NativeDaily => "urn:edgeagent:schema:market-data:native-daily:v1",
             Self::DateOnlyDaily => "urn:edgeagent:schema:market-data:date-only-daily-capture:v1",
             Self::DateOnlyTime => "urn:edgeagent:schema:market-data:date-only-time:v1",
             Self::Artifact => "urn:edgeagent:schema:market-data:evidence-artifact:v1",
@@ -39,6 +43,7 @@ impl EvidenceSchema {
     #[must_use]
     pub const fn filename(self) -> &'static str {
         match self {
+            Self::NativeDaily => "native-daily-v1.json",
             Self::DateOnlyDaily => "date-only-daily-capture-v1.json",
             Self::DateOnlyTime => "date-only-time-v1.json",
             Self::Artifact => "daily-v1.json",
@@ -55,6 +60,7 @@ impl EvidenceSchema {
             schemars::generate::SchemaSettings::draft2020_12().with(|s| s.inline_subschemas = true);
         let generator = settings.into_generator();
         let schema = match self {
+            Self::NativeDaily => generator.into_root_schema_for::<NativeDailyEvidence>(),
             Self::DateOnlyDaily => generator.into_root_schema_for::<DateOnlyDailyCapture>(),
             Self::DateOnlyTime => generator.into_root_schema_for::<DateOnlyTimeData>(),
             Self::Artifact => generator.into_root_schema_for::<DailyEvidence>(),

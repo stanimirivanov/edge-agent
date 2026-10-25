@@ -122,6 +122,39 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/evidence.rs"),
+        guides: &[
+            "docs/development/native-daily-acceptance.md",
+            "docs/development/evidence-artifacts.md",
+        ],
+        checks: &["native-daily-acceptance", "evidence-freezing"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-domain/src/daily"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-daily-acceptance", "market-data-quality"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/native_evidence"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-daily-acceptance"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/native_acceptance"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-daily-acceptance"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/contracts/src/evidence/native_daily.rs"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-daily-acceptance", "evidence-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/native-daily-acceptance.md"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-daily-acceptance", "evidence-contracts"],
+    },
+    Route {
         matcher: Matcher::Exact("crates/market-data-domain/src/date_only.rs"),
         guides: &["docs/development/evidence-artifacts.md"],
         checks: &["date-only-evidence", "evidence-contracts"],
@@ -326,8 +359,12 @@ const ROUTES: &[Route] = &[
     },
     Route {
         matcher: Matcher::Exact("crates/market-data-application/src/date_only_source.rs"),
-        guides: &["docs/development/twelve-data.md"],
+        guides: &[
+            "docs/development/twelve-data.md",
+            "docs/development/native-daily-acceptance.md",
+        ],
         checks: &[
+            "native-daily-acceptance",
             "twelve-data-conformance",
             "date-only-evidence",
             "evidence-contracts",
