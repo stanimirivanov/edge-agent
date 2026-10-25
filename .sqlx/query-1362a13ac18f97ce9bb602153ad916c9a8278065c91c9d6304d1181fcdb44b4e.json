@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_qualification_grants(request_id,profile,reviews,approved) VALUES($1,$2,$3,TRUE) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1362a13ac18f97ce9bb602153ad916c9a8278065c91c9d6304d1181fcdb44b4e"
+}

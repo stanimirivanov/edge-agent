@@ -12,6 +12,16 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const QUALIFICATION_OWNER: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "qualification",
+    identities: &[
+        "qualification_roles_require_independent_owner_and_exact_current_profile",
+        "qualification_withdrawal_and_terminal_failure_roll_back_all_effects",
+        "qualification_retirement_erases_grants_without_owner_reconciliation_bypass",
+        "qualification_withdrawal_races_and_policy_mismatches_leave_atomic_account_state",
+    ],
+};
 const NATIVE_PUBLICATION: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "native",
@@ -248,6 +258,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "qualification-owner-postgres",
+            &QUALIFICATION_OWNER,
+            POSTGRES,
+            "Authenticated owner/worker SQL roles, exact current profile, withdrawal/reservation races, terminal rollback/recovery and retirement erasure; no vendor I/O or runtime qualification.",
+        ),
         suite(
             "native-publication-postgres",
             &NATIVE_PUBLICATION,
@@ -559,6 +575,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACCOUNT_ADMISSION,
         ACQUISITION_LEDGER,
         ACQUISITION_TERMINAL,
+        QUALIFICATION_OWNER,
         NATIVE_PUBLICATION,
         EVIDENCE_RETENTION,
         OFFLINE_WORKER,
@@ -580,6 +597,40 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn qualification_owner_census_rejects_removed_renamed_duplicate_and_extra_proofs()
+    -> Result<(), String> {
+        let check = super::checks()
+            .into_iter()
+            .find(|c| c.id == "qualification-owner-postgres")
+            .ok_or("qualification proof")?;
+        let census = check.discovery.ok_or("qualification census")?;
+        let expected = [
+            "qualification_roles_require_independent_owner_and_exact_current_profile",
+            "qualification_withdrawal_and_terminal_failure_roll_back_all_effects",
+            "qualification_retirement_erases_grants_without_owner_reconciliation_bypass",
+            "qualification_withdrawal_races_and_policy_mismatches_leave_atomic_account_state",
+        ];
+        assert_eq!(census.expected, expected);
+        let complete = expected
+            .iter()
+            .map(|n| format!("{n}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&census, complete.as_bytes())?;
+        for n in expected {
+            for changed in [
+                complete.replace(&format!("{n}: test\n"), ""),
+                complete.replace(n, "renamed_qualification"),
+                format!("{complete}{n}: test\n"),
+                format!("{complete}extra: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&census, changed.as_bytes()).is_err()
+                );
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn native_publication_census_cannot_silently_shrink() -> Result<(), String> {
         let check = super::checks()
@@ -831,7 +882,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 35);
+        assert_eq!(checks.len(), 36);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -846,8 +897,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 93);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 93);
+        assert_eq!(inventory.len(), 97);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 97);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

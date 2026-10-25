@@ -42,8 +42,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 4 | M03-PR13 | Offline-only daily worker with pinned invented profile | PR11A, PR11B, PR11C, PR12 | C |
 | 6 | M03-PR14 | Worker/process death, acknowledgement loss and quota isolation proofs | PR13 | E |
 | 7 | M03-PR15A | Owner-approved finite profiles and fail-closed offline preflight | PR14, PR11D, PR11E, PR11F-B | G |
-| 8 | M03-PR15B | Authenticated bounded vendor runtime, fencing, recovery and cleanup | PR15A, activation review, account/rights approval | H |
-| 9 | M03-PR15C | Separately authorized opt-in live daily qualification and cleanup evidence | PR15B, explicit live opt-in | I |
+| 8 | M03-PR15B1 | Independent PostgreSQL owner grants and atomic reservation/publication guards | PR15A | H |
+| 9 | M03-PR15B2 | Authenticated bounded vendor worker, fencing, recovery and authorized cleanup composition | PR15B1, activation review, account/rights approval | I |
+| 10 | M03-PR15C | Separately authorized opt-in live daily qualification and cleanup evidence | PR15B2, explicit live opt-in | J |
 | Extension 1 | M03-PR16 | Finite streaming authority, session budgets and account connection fencing | PR11B, PR11C, profile decisions | G |
 | Extension 2 | M03-PR17 | Versioned immutable streaming segments and atomic checkpoints/outbox | PR16, PR12 | H |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
@@ -65,6 +66,14 @@ publication, maintenance and restore readiness. It cannot activate from profile 
 or self-approved DTOs. PR15C alone runs explicitly authorized live qualification with
 data-only credentials, finite budgets and cleanup evidence; missing prerequisites remain
 not-run/nonzero. PR15A verification remains entirely offline.
+
+PR15B is split at the security boundary: [PR15B1](../qualification-owner.md) implements
+the maintainer-approved independent PostgreSQL owner role, exact durable grants and
+transactional reservation/publication checks. Role and transaction proofs run offline
+with actual restricted logins. It adds no vendor worker or automatic cleanup authority.
+PR15B2 must consume this boundary, authenticate complete reference/configuration input,
+implement actual worker/write fencing, compose provider recovery and accepted publication,
+and authorize retention cleanup. PR15B1 does not complete PR15B or authorize PR15C.
 
 The conditional provider pair is Twelve Data first and Alpaca historical data
 second; neither selection authorizes credentials, live calls or data use.

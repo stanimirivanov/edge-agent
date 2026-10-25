@@ -71,6 +71,65 @@ impl Harness {
             .connect_with(self.options.clone())
             .await?)
     }
+    #[allow(
+        dead_code,
+        reason = "Used by qualification role proofs; other targets share this fixture."
+    )]
+    pub async fn worker(&self) -> Result<(PgPool, String)> {
+        static NEXT_WORKER: AtomicUsize = AtomicUsize::new(0);
+        let role = format!(
+            "qualification_worker_{}_{}",
+            std::process::id(),
+            NEXT_WORKER.fetch_add(1, Ordering::SeqCst)
+        );
+        // Invented, issue-owned LOGIN role: test actual authentication, not SET ROLE
+        // on an administrator session that could RESET ROLE back to the owner.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE ROLE {role} LOGIN PASSWORD '{role}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT;
+            GRANT USAGE ON SCHEMA {schema} TO {role};
+            GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA {schema} TO {role};
+            GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO {role};
+            REVOKE ALL ON {schema}.edgeagent_qualification_grants FROM {role};
+            GRANT SELECT ON {schema}.edgeagent_qualification_grants TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_qualification_grant(TEXT),{schema}.edgeagent_qualification_role() TO {role};",schema=self.schema)))
+            .execute(&self.root).await?;
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(self.options.clone().username(&role).password(&role))
+            .await?;
+        Ok((pool, role))
+    }
+    #[allow(
+        dead_code,
+        reason = "Used by qualification role proofs; other targets share this fixture."
+    )]
+    pub async fn drop_worker(&self, pool: PgPool, role: &str) -> Result {
+        pool.close().await;
+        if !role.starts_with("qualification_worker_")
+            || !role.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
+            return Err("invalid owned worker role".into());
+        }
+        let reviewer = format!("{role}_reviewer");
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)")
+                .bind(&reviewer)
+                .fetch_one(&self.root)
+                .await?;
+        if exists {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "DROP OWNED BY {reviewer}; DROP ROLE {reviewer};"
+            )))
+            .execute(&self.root)
+            .await?;
+        }
+        // Only the unique role created above owns these grants; no shared role is touched.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "DROP OWNED BY {role}; DROP ROLE {role};"
+        )))
+        .execute(&self.root)
+        .await?;
+        Ok(())
+    }
     pub async fn age_rate_history(&self) -> Result {
         // Advance the persisted rate fixture, not production time or command counters.
         let bytes: Vec<u8> =
@@ -123,6 +182,9 @@ pub struct Case {
 }
 impl Case {
     pub fn new(ms: i64, id: u128) -> Result<Self> {
+        Self::with_precision(ms, id, TimestampPrecision::Milliseconds)
+    }
+    pub fn with_precision(ms: i64, id: u128, precision: TimestampPrecision) -> Result<Self> {
         let at = |value| UtcInstant::from_unix_millis(value);
         let scope = AccessScope {
             principal: PrincipalId::new(1)?,
@@ -137,7 +199,7 @@ impl Case {
             EvidenceKind::RawBar(BarCoverage::ProviderDay),
             MarketScope::Consolidated,
             SemanticReference::new(ReferenceId::new(1)?, ReferenceRevision::new(1)?),
-            TimestampPrecision::Milliseconds,
+            precision,
         )?;
         let interval = EffectiveInterval::new(at(ms - 1000)?, at(ms + 86_400_000)?)?;
         let right = RightsRecord {

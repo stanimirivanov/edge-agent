@@ -144,6 +144,9 @@ pub(super) struct DailyCredits {
     charged: u32,
 }
 impl DailyCredits {
+    pub(super) fn matches_policy(&self, policy: &DailyCreditPolicy) -> bool {
+        &self.policy == policy
+    }
     pub(super) fn new(policy: DailyCreditPolicy, opening_charge: u32, now: i64) -> Result<Self> {
         let state = Self {
             policy,

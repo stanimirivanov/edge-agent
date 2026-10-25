@@ -7,11 +7,18 @@ use edgeagent_market_data_application::{
 use sqlx::{PgPool, Postgres, Transaction};
 use std::fmt;
 
+enum MutationAuthority {
+    Ordinary,
+    Qualification,
+    OwnerConfirmation,
+}
+
 /// PostgreSQL ledger. Bind a service-private schema and explicit pool bounds at composition.
 /// Mutations lock scope, account then command, use database time and commit before return.
 #[derive(Clone)]
 pub struct PostgresAcquisitionLedger {
     pool: PgPool,
+    pub(super) qualification: Option<edgeagent_market_data_application::QualificationProfile>,
 }
 impl fmt::Debug for PostgresAcquisitionLedger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -23,7 +30,32 @@ impl PostgresAcquisitionLedger {
     /// Bind an explicitly configured owner pool; performs no connection or migration.
     #[must_use]
     pub const fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            qualification: None,
+        }
+    }
+    /// Bind one exact independently owner-approved profile. Performs no approval or I/O.
+    /// Reservation and first publication reject privileged/self-approving worker roles.
+    #[must_use]
+    pub fn for_qualification(
+        pool: PgPool,
+        profile: edgeagent_market_data_application::QualificationProfile,
+    ) -> Self {
+        Self {
+            pool,
+            qualification: Some(profile),
+        }
+    }
+    pub(super) fn bind(&self, command: &AcquireEvidence) -> Result<(), Error> {
+        if self
+            .qualification
+            .as_ref()
+            .is_some_and(|p| &p.data().admission != command)
+        {
+            return Err(Error::new(Kind::Conflict));
+        }
+        Ok(())
     }
     /// Install the owner's reviewed exclusive allocation, never inferred provider defaults.
     /// The trusted composition must fence former workers/other consumers and confirm all
@@ -39,6 +71,7 @@ impl PostgresAcquisitionLedger {
     ) -> Result<DailyCreditUsage, Error> {
         let account = format!("{:032x}", account.get());
         let mut tx = self.transaction().await?;
+        crate::qualification::require_owner(&mut tx).await?;
         let row = sqlx::query!(
             "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
             account
@@ -104,6 +137,7 @@ impl PostgresAcquisitionLedger {
         &self,
         command: &AcquireEvidence,
         allow_terminal: bool,
+        authority: MutationAuthority,
         change: impl FnOnce(
             &AdmissionRecord,
             &mut AcquisitionBudget,
@@ -111,7 +145,11 @@ impl PostgresAcquisitionLedger {
             i64,
         ) -> Result<T, Error>,
     ) -> Result<T, Error> {
+        self.bind(command)?;
         let mut tx = self.transaction().await?;
+        if matches!(authority, MutationAuthority::OwnerConfirmation) {
+            crate::qualification::require_owner(&mut tx).await?;
+        }
         crate::retention::guard_request(&mut tx, &command.request).await?;
         let account = sqlx::query!(
             "SELECT account_id FROM edgeagent_acquisitions WHERE request_id=$1",
@@ -148,8 +186,32 @@ impl PostgresAcquisitionLedger {
         .fetch_one(&mut *tx)
         .await
         .map_err(Error::storage)?;
+        if matches!(authority, MutationAuthority::Qualification) {
+            crate::qualification::guard(
+                &mut tx,
+                self.qualification.as_ref(),
+                &record,
+                Some((&budget, &shared)),
+            )
+            .await?;
+        }
+        // Approval contention must not preserve the earlier accounting sample.
+        let now = if matches!(authority, MutationAuthority::Qualification) {
+            sqlx::query_scalar!(
+                r#"SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS "now!""#
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(Error::storage)?
+        } else {
+            now
+        };
         let result = change(&record, &mut budget, &mut shared, now)?;
         save(&mut tx, command, &account.account_id, &budget, &shared).await?;
+        if matches!(authority, MutationAuthority::Qualification) {
+            crate::qualification::guard(&mut tx, self.qualification.as_ref(), &record, None)
+                .await?;
+        }
         tx.commit().await.map_err(Error::storage)?;
         Ok(result)
     }
@@ -213,6 +275,7 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         record: &AdmissionRecord,
         authority: &AuthorizedAcquisition<'_>,
     ) -> Result<AdmissionRecord, Error> {
+        self.bind(record.command())?;
         record.verify_authority(authority)?;
         let account = format!("{:032x}", record.request().scope.account.get());
         let shared = AccountBudget::new(record.limits())?.encode()?;
@@ -286,6 +349,7 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         &self,
         command: &AcquireEvidence,
     ) -> Result<(AdmissionRecord, BudgetSnapshot), Error> {
+        self.bind(command)?;
         let mut tx = self.transaction().await?;
         let (record, state) = load(&mut tx, command).await?;
         tx.commit().await.map_err(Error::storage)?;
@@ -296,10 +360,15 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         command: &AcquireEvidence,
         attempt: u8,
     ) -> Result<BudgetSnapshot, Error> {
-        self.mutate(command, false, |r, b, _, now| {
-            b.begin_attempt(r, attempt, now)?;
-            Ok(b.snapshot())
-        })
+        self.mutate(
+            command,
+            false,
+            MutationAuthority::Qualification,
+            |r, b, _, now| {
+                b.begin_attempt(r, attempt, now)?;
+                Ok(b.snapshot())
+            },
+        )
         .await
     }
     async fn start_call(
@@ -307,22 +376,32 @@ impl AcquisitionLedger for PostgresAcquisitionLedger {
         command: &AcquireEvidence,
         traversal: Option<&EvidenceId>,
     ) -> Result<CallPermit, Error> {
-        self.mutate(command, false, |r, b, a, now| b.start(a, r, traversal, now))
-            .await
+        self.mutate(
+            command,
+            false,
+            MutationAuthority::Qualification,
+            |r, b, a, now| b.start(a, r, traversal, now),
+        )
+        .await
     }
     async fn complete_call(
         &self,
         permit: &CallPermit,
         outcome: CallCompletion,
     ) -> Result<BudgetSnapshot, Error> {
-        self.mutate(permit.command(), true, |r, b, a, now| {
+        let authority = if outcome == CallCompletion::QuiescedUnknown {
+            MutationAuthority::OwnerConfirmation
+        } else {
+            MutationAuthority::Ordinary
+        };
+        self.mutate(permit.command(), true, authority, |r, b, a, now| {
             b.complete(a, r, permit, outcome, now)?;
             Ok(b.snapshot())
         })
         .await
     }
     async fn cancel(&self, command: &AcquireEvidence) -> Result<BudgetSnapshot, Error> {
-        self.mutate(command, false, |_, b, _, _| {
+        self.mutate(command, false, MutationAuthority::Ordinary, |_, b, _, _| {
             b.cancel();
             Ok(b.snapshot())
         })

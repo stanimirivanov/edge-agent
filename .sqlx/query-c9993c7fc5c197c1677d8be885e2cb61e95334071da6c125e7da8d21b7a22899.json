@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT profile,reviews,approved FROM edgeagent_qualification_grants WHERE request_id=$1 FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_grants",
+            "name": "profile"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reviews",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_grants",
+            "name": "reviews"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "approved",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_grants",
+            "name": "approved"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c9993c7fc5c197c1677d8be885e2cb61e95334071da6c125e7da8d21b7a22899"
+}

@@ -173,3 +173,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0059](0059-accept-native-daily-evidence-with-explicit-owner-lineage.md) | Accepted | Accept native daily evidence with explicit owner lineage. |
 | [ADR-0060](0060-persist-native-preparations-and-publish-through-shared-terminal-fences.md) | Accepted | Persist native preparations and publish through shared terminal fences. |
 | [ADR-0061](0061-separate-owner-reviewed-qualification-preflight-from-execution.md) | Accepted | Separate owner-reviewed qualification preflight from execution. |
+| [ADR-0062](0062-require-independent-postgresql-owner-grants-for-qualification.md) | Accepted | Require independent PostgreSQL owner grants for qualification. |

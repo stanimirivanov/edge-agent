@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn owner_control_paths_route_real_role_proofs_and_metadata() -> Result<(), String> {
+    for path in [
+        "crates/market-data-postgres/src/qualification.rs",
+        "crates/market-data-postgres/src/ledger.rs",
+        "crates/market-data-postgres/src/terminal.rs",
+        "crates/market-data-postgres/src/retention.rs",
+        "crates/market-data-postgres/migrations/0005_qualification_owner.sql",
+        "crates/market-data-postgres/tests/qualification.rs",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.checks.contains("qualification-owner-postgres"));
+        assert!(advice.checks.contains("sqlx-metadata"));
+    }
+    Ok(())
+}
+
+#[test]
 fn native_storage_and_publication_route_their_protected_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/terminal/native.rs",

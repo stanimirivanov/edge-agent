@@ -20,10 +20,11 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         normal: &[
             "edgeagent-contracts",
             "edgeagent-market-data-application",
+            "edgeagent-market-data-domain",
             "edgeagent-inbox-postgres",
             "edgeagent-outbox-postgres",
         ],
-        development: &["edgeagent-market-data-domain"],
+        development: NONE,
         build: NONE,
     },
     PackagePolicy {

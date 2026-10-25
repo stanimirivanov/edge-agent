@@ -304,6 +304,18 @@ impl AccountBudget {
     pub fn daily_usage(&self) -> Option<DailyCreditUsage> {
         self.daily.as_ref().map(DailyCredits::usage)
     }
+    /// Whether the complete installed policy matches; revision alone cannot establish prices.
+    #[must_use]
+    pub fn matches_daily_policy(&self, policy: &DailyCreditPolicy) -> bool {
+        self.daily
+            .as_ref()
+            .is_some_and(|daily| daily.matches_policy(policy))
+    }
+    /// Account-wide unresolved call, including other commands; never permission to clear it.
+    #[must_use]
+    pub const fn has_pending_call(&self) -> bool {
+        self.pending.is_some()
+    }
     /// Preserve conservative credits when confirming an opaque retired-call block.
     /// Caller MUST atomically check the exact blocked generation and owner quiescence.
     /// Closes the confirmation-day allocation because retirement erased the price.

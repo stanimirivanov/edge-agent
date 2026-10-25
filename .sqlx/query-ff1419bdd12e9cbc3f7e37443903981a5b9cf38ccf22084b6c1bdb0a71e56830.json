@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_qualification_grants SET approved=FALSE WHERE request_id=$1 AND profile=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ff1419bdd12e9cbc3f7e37443903981a5b9cf38ccf22084b6c1bdb0a71e56830"
+}

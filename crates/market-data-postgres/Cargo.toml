@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-market-data-application.workspace = true
+edgeagent-market-data-domain.workspace = true
 edgeagent-inbox-postgres.workspace = true
 edgeagent-outbox-postgres.workspace = true
 sqlx.workspace = true
@@ -17,7 +18,6 @@ serde_json.workspace = true
 
 [dev-dependencies]
 futures-util.workspace = true
-edgeagent-market-data-domain.workspace = true
 tokio.workspace = true
 
 [lints]

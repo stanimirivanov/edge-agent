@@ -61,7 +61,7 @@ dependencies between workspace packages:
 | `edgeagent-market-data-http` | `edgeagent-contracts`, `edgeagent-market-data-application`, `edgeagent-market-data-domain` |
 | `edgeagent-market-data-object-store` | `edgeagent-contracts`, `edgeagent-market-data-application` |
 | `edgeagent-market-data-application` | `edgeagent-contracts`, `edgeagent-market-data-domain` |
-| `edgeagent-market-data-postgres` | `edgeagent-contracts`, `edgeagent-market-data-application`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres` |
+| `edgeagent-market-data-postgres` | `edgeagent-contracts`, `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres` |
 | `edgeagent-simulation-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-event-spine-conformance` | `edgeagent-audit-domain`, `edgeagent-contracts`, `edgeagent-inbox-handler`, `edgeagent-inbox-postgres`, `edgeagent-market-data-domain`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-simulation-domain`, `edgeagent-simulation-postgres`, `edgeagent-telemetry` |
 | `edgeagent-messaging` | `edgeagent-contracts` |
