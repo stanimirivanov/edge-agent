@@ -46,6 +46,29 @@ impl fmt::Debug for DailyCreditPolicy {
     }
 }
 impl DailyCreditPolicy {
+    pub(crate) fn covers_qualification(
+        &self,
+        endpoint: ReferenceId,
+        usage: DailyCreditUsage,
+        now: i64,
+        until: i64,
+        calls: u32,
+    ) -> bool {
+        let cost = self.costs.get(&format!("{:032x}", endpoint.get()));
+        self.valid()
+            && calls > 0
+            && now < until
+            && until <= self.expires_ms
+            && usage.revision == self.revision
+            && usage.allocation == self.allocation
+            && usage.expires_ms == self.expires_ms
+            && usage.charged <= self.allocation
+            && usage.utc_day == now.div_euclid(DAY_MS)
+            && now.div_euclid(DAY_MS) == (until - 1).div_euclid(DAY_MS)
+            && cost
+                .and_then(|c| c.checked_mul(calls))
+                .is_some_and(|needed| needed <= self.allocation - usage.charged)
+    }
     /// Review a positive daily allocation, exclusive expiry and 1..=16 endpoint costs.
     /// Costs must conservatively cover the maximum billable request shape, including
     /// symbols/weights; adapters must not dispatch a more expensive shape under that ID.

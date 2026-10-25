@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For owner-reviewed finite daily qualification profiles and fail-closed offline checks,
+read [qualification preflight](development/qualification-preflight.md) and
+[ADR-0061](decisions/0061-separate-owner-reviewed-qualification-preflight-from-execution.md).
+
 For unattended M02 crash/restart/wire-ACK qualification, use the focused
 [qualification guide](development/m02-qualification.md).
 
