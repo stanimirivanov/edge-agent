@@ -168,4 +168,5 @@ How will the assumptions and consequences be verified?
 | [ADR-0054](0054-compose-an-offline-only-acquisition-worker.md) | Accepted | Compose an offline-only acquisition worker. |
 | [ADR-0055](0055-reserve-reviewed-daily-credits-with-account-permits.md) | Accepted | Reserve reviewed daily credits with account permits. |
 | [ADR-0056](0056-preserve-native-dates-with-reviewed-bucket-provenance.md) | Accepted | Preserve native dates with reviewed bucket provenance. |
-| [ADR-0057](0057-capture-native-daily-provider-responses-under-durable-permits.md) | Accepted | Capture native daily provider responses under durable permits. |
+| [ADR-0057](0057-capture-native-daily-provider-responses-under-durable-permits.md) | Superseded | Capture native daily provider responses under durable permits. |
+| [ADR-0058](0058-preserve-alpaca-source-instants-and-bound-historical-sip-pages.md) | Accepted | Preserve Alpaca source instants and bound historical SIP pages. |

@@ -21,6 +21,19 @@ SPEC.loader.exec_module(verify_architecture)
 
 
 class VerifyArchitectureTests(unittest.TestCase):
+    def test_alpaca_time_parser_edge_is_confined_to_http_normal_dependencies(self) -> None:
+        rules = verify_architecture.PACKAGE_RULES
+        http = rules["crates/market-data-http"]
+        self.assertIn("chrono", http.dependencies)
+        for label, allowed in [
+            ("crates/market-data-http [dev-dependencies]", http.dev_dependencies),
+            ("crates/market-data-http [build-dependencies]", http.build_dependencies),
+            ("crates/market-data-application", rules["crates/market-data-application"].dependencies),
+        ]:
+            problems = verify_architecture.check_dependencies(label, {*allowed, "chrono"}, allowed)
+            self.assertEqual(1, len(problems))
+            self.assertIn("chrono", problems[0].message)
+
     def test_current_workspace_satisfies_architecture_rules(self) -> None:
         root = Path(__file__).parents[1]
 

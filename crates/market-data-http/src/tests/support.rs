@@ -37,6 +37,15 @@ impl Fixture {
     pub fn native(account: u128) -> TestResult<Self> {
         Self::with_precision(account, TimestampPrecision::DateOnly)
     }
+    pub fn precise(account: u128) -> TestResult<Self> {
+        let mut f = Self::with_precision(account, TimestampPrecision::Nanoseconds)?;
+        f.request.range = DateRange::new(
+            SessionDate::new(1969, 12, 30)?,
+            SessionDate::new(1970, 1, 1)?,
+        )?;
+        f.request.deadline = at(NOW + 60000)?;
+        Ok(f)
+    }
     fn with_precision(account: u128, precision: TimestampPrecision) -> TestResult<Self> {
         let scope = AccessScope {
             principal: PrincipalId::new(1)?,
@@ -49,7 +58,7 @@ impl Fixture {
         };
         let contract = EvidenceContract::new(
             EvidenceKind::RawBar(BarCoverage::ProviderDay),
-            if precision == TimestampPrecision::DateOnly {
+            if precision != TimestampPrecision::Milliseconds {
                 MarketScope::Consolidated
             } else {
                 MarketScope::Venue(Venue::Xnys)
@@ -159,6 +168,13 @@ pub struct Server {
 }
 impl Server {
     pub async fn start(reply: Vec<u8>, stall: bool) -> TestResult<Self> {
+        Self::sequence(vec![reply], stall).await
+    }
+    pub async fn sequence(replies: Vec<Vec<u8>>, stall: bool) -> TestResult<Self> {
+        if replies.is_empty() {
+            return Err("empty scripted fixture".into());
+        }
+        let replies = Arc::new(replies);
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
         let url = format!("http://{}/data?symbol=INVENTED", listener.local_addr()?);
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -168,10 +184,11 @@ impl Server {
             let mut connections = JoinSet::new();
             loop {
                 tokio::select! {
-                    result=listener.accept()=>{let Ok((mut socket,_))=result else{break;};let reply=reply.clone();let records=records.clone();let signal=signal.clone();
+                    result=listener.accept()=>{let Ok((mut socket,_))=result else{break;};let replies=replies.clone();let records=records.clone();let signal=signal.clone();
                         connections.spawn(async move {let mut request=Vec::new();let mut buf=[0;1024];
                             while request.len()<8192&&!request.windows(4).any(|w|w==b"\r\n\r\n") { match socket.read(&mut buf).await{Ok(0)|Err(_)=>return,Ok(n)=>request.extend_from_slice(&buf[..n])} }
-                            if let Ok(mut records)=records.lock(){records.push(request);}signal.notify_one();
+                            let reply=if let Ok(mut records)=records.lock(){let index=records.len();records.push(request);replies.get(index).or_else(||replies.last()).cloned()}else{None};signal.notify_one();
+                            let Some(reply)=reply else{return;};
                             if socket.write_all(&reply).await.is_ok()&&stall {std::future::pending::<()>().await;}
                         });
                     }

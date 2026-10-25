@@ -20,6 +20,7 @@ pub struct DispatchCheck {
     at: UtcInstant,
     until: i64,
     embargo_ms: u32,
+    provider: edgeagent_market_data_domain::ProviderCapability,
 }
 impl std::fmt::Debug for DispatchCheck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,6 +59,7 @@ impl DispatchCheck {
             at: now,
             until,
             embargo_ms: checked.authority().0.value().embargo_ms,
+            provider: checked.authority().1.value().capability,
         })
     }
     /// Check the assessment belongs to this exact immutable admission.
@@ -74,6 +76,11 @@ impl DispatchCheck {
     #[must_use]
     pub const fn embargo_ms(&self) -> u32 {
         self.embargo_ms
+    }
+    /// Currently reviewed source declaration, not a vendor self-report.
+    #[must_use]
+    pub const fn provider(&self) -> edgeagent_market_data_domain::ProviderCapability {
+        self.provider
     }
     /// Original exclusive deadline/retention bound; later checks cannot extend it.
     #[must_use]

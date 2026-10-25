@@ -477,6 +477,8 @@ pub(super) fn checks() -> Vec<Check> {
                 "tests::metered::",
                 "--skip",
                 "tests::twelve_data::",
+                "--skip",
+                "tests::alpaca::",
             ],
             "Loopback-only exact JSON and bounded HTTP authority, streaming, cancellation, deadline, status and TLS-failure proofs; not vendor qualification.",
         ),
@@ -581,6 +583,24 @@ pub(super) fn checks() -> Vec<Check> {
                 "--",
             ],
             "Explicit payload-safe public error target retained from CI, with a protected named-test census.",
+        ),
+        check(
+            "alpaca-conformance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "tests::alpaca::",
+                "--features",
+                "serde_json/preserve_order,compression-unification-test",
+                "--",
+            ],
+            "Invented historical SIP pages preserve precise source times and exact values; prove permit-bound paging, confirmation recovery, current authority and no feed fallback. No provider calls.",
         ),
         check(
             "relay-observation-contracts",
@@ -951,6 +971,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "tests::twelve_data::twelve_data_errors_cancellation_and_authority_denial_never_retry_or_bypass_quota",
                         "tests::twelve_data::twelve_data_lost_confirmation_releases_original_receipt_without_refetch",
                         "tests::twelve_data::twelve_data_configuration_and_native_format_cannot_weaken_authority",
+                    ],
+                    ignored: false,
+                });
+            }
+            "alpaca-conformance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "tests::alpaca::alpaca_raw_sip_binding_preserves_exact_provider_instants_and_receipts",
+                        "tests::alpaca::alpaca_pages_charge_separately_and_confirmation_loss_never_refetches",
+                        "tests::alpaca::alpaca_manual_rate_rejection_never_sleeps_or_consumes_another_call",
+                        "tests::alpaca::alpaca_malformed_foreign_duplicate_and_truncated_pages_fail_closed",
+                        "tests::alpaca::alpaca_credentials_authority_historical_delay_and_spent_credits_deny_before_io",
+                        "tests::alpaca::alpaca_errors_cancellation_and_uncertain_start_never_trigger_feed_fallback",
                     ],
                     ignored: false,
                 });
