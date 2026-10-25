@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 61] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 62] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -326,6 +326,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 61] = [
         number: 61,
         path: "docs/decisions/0061-separate-owner-reviewed-qualification-preflight-from-execution.md",
         title: "Separate owner-reviewed qualification preflight from execution",
+    },
+    PublishedIdentity {
+        number: 62,
+        path: "docs/decisions/0062-require-independent-postgresql-owner-grants-for-qualification.md",
+        title: "Require independent PostgreSQL owner grants for qualification",
     },
 ];
 

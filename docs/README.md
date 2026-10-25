@@ -16,6 +16,9 @@
 For owner-reviewed finite daily qualification profiles and fail-closed offline checks,
 read [qualification preflight](development/qualification-preflight.md) and
 [ADR-0061](decisions/0061-separate-owner-reviewed-qualification-preflight-from-execution.md).
+For independent PostgreSQL owner grants and atomic worker mutation guards, read
+[qualification owner control](development/qualification-owner.md) and
+[ADR-0062](decisions/0062-require-independent-postgresql-owner-grants-for-qualification.md).
 
 For unattended M02 crash/restart/wire-ACK qualification, use the focused
 [qualification guide](development/m02-qualification.md).

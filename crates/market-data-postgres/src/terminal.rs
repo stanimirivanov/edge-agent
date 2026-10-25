@@ -96,6 +96,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
     async fn recover(&self, delivery: &MessageEnvelope) -> Result<Option<TerminalReceipt>, Error> {
         let command =
             AcquireEvidence::from_envelope(delivery).map_err(|_| Error::new(K::Invalid))?;
+        self.bind(&command)?;
         let mut tx = self.transaction().await?;
         ledger::load(&mut tx, &command).await?; // Serialize with starts, terminal decisions and reconciliation.
         let receipt = retained(&mut tx, &command).await?;
@@ -114,6 +115,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
     ) -> Result<TerminalReceipt, Error> {
         let command =
             AcquireEvidence::from_envelope(delivery).map_err(|_| Error::new(K::Invalid))?;
+        self.bind(&command)?;
         let mut tx = self.transaction().await?;
         let (record, budget) = ledger::load(&mut tx, &command).await?;
         if let Some(receipt) = retained(&mut tx, &command).await? {
@@ -126,6 +128,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
             return Ok(receipt);
         }
         let (now, stamp) = time(&mut tx).await?;
+        crate::qualification::guard(&mut tx, self.qualification.as_ref(), &record, None).await?;
         proposal.verify(&record, &budget.snapshot(), now)?;
         if let EvidenceOutcome::Ready { object } = &proposal.decision().data().outcome {
             crate::retention::registered(&mut tx, &record, object).await?;
@@ -159,6 +162,7 @@ impl AcquisitionPublication for PostgresAcquisitionLedger {
         .map_err(Error::storage)?;
         // Lock waits/DB work must not make ready evidence valid beyond its initial deadline.
         proposal.verify(&record, &budget.snapshot(), time(&mut tx).await?.0)?;
+        crate::qualification::guard(&mut tx, self.qualification.as_ref(), &record, None).await?;
         authorize(&record, proposal, access)?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(receipt)

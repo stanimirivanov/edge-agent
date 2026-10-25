@@ -448,6 +448,8 @@ impl PostgresAcquisitionLedger {
         }
         owner.confirm_account_quiescent(account, generation)?;
         let mut tx = self.transaction().await?;
+        // A worker-provided trait implementation cannot manufacture owner confirmation.
+        crate::qualification::require_owner(&mut tx).await?;
         let row = sqlx::query!(
             "SELECT budget,blocked FROM edgeagent_acquisition_accounts WHERE account_id=$1 FOR UPDATE",
             account.as_str()

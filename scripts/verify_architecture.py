@@ -98,8 +98,8 @@ PACKAGE_RULES = {
         }),
     ),
     "crates/market-data-postgres": PackageRule(
-        "edgeagent-market-data-postgres", "lib", frozenset({CONTRACTS, "edgeagent-market-data-application", "edgeagent-inbox-postgres", "edgeagent-outbox-postgres", "serde_json", "sqlx"}),
-        frozenset({"edgeagent-market-data-domain", "futures-util", "tokio"}),
+        "edgeagent-market-data-postgres", "lib", frozenset({CONTRACTS, "edgeagent-market-data-application", "edgeagent-market-data-domain", "edgeagent-inbox-postgres", "edgeagent-outbox-postgres", "serde_json", "sqlx"}),
+        frozenset({"futures-util", "tokio"}),
     ),
     "crates/market-data-object-store": PackageRule(
         "edgeagent-market-data-object-store", "lib", frozenset({

@@ -85,36 +85,9 @@ pub fn preflight_qualification(
         return Err(error(K::Cancelled));
     }
     let data = profile.data();
-    if data.admission != *record.command()
-        || record.configuration() != Some(data.configuration_sha256.as_str())
-    {
-        return Err(error(K::Conflict));
-    }
-    let start = instant(data.not_before)?;
+    profile.validate_admission(record, now)?;
     let until = instant(data.expires_at)?;
-    if start < record.request().admitted_at
-        || now < start
-        || now >= until
-        || until.unix_millis() > record.valid_until_ms()?
-    {
-        return Err(error(K::Deadline));
-    }
     let request = record.request();
-    let precision = match data.provider {
-        QualificationProvider::TwelveDataDaily => TimestampPrecision::DateOnly,
-        QualificationProvider::AlpacaHistoricalSipDaily => TimestampPrecision::Nanoseconds,
-    };
-    if request.contract.shape()
-        != (
-            EvidenceKind::RawBar(BarCoverage::ProviderDay),
-            MarketScope::Consolidated,
-        )
-        || request.contract.rules().1 != precision
-        || request.knowledge != KnowledgeMode::Capture
-        || request.raw != RawRetention::Discard
-    {
-        return Err(error(K::Invalid));
-    }
     let current = catalogs.admit(request, now, cancel).map_err(|e| {
         let kind = match e {
             AcquisitionError::Deadline => K::Deadline,
@@ -140,38 +113,101 @@ pub fn preflight_qualification(
         return Err(error(K::Denied));
     }
     assessment.validate_controls(now, record.delete_by_ms()?)?;
-    if assessment.account_state != QualificationAccountState::Quiescent
-        || assessment.budget.pending.is_some()
-    {
+    if assessment.account_state != QualificationAccountState::Quiescent {
         return Err(error(K::Busy));
     }
-    if assessment.budget.cancelled || cancel.is_cancelled() {
+    if cancel.is_cancelled() {
         return Err(error(K::Cancelled));
     }
-    let calls = request
-        .budget
-        .calls
-        .get()
-        .checked_sub(assessment.budget.calls)
-        .filter(|n| *n > 0)
-        .ok_or_else(|| error(K::Exhausted))?;
-    if assessment.budget.attempts > record.limits().attempts
-        || assessment.budget.charged_bytes >= request.budget.command_bytes.get()
-    {
-        return Err(error(K::Exhausted));
-    }
-    if !data.credits.covers_qualification(
-        request.scope.endpoint,
-        assessment.usage,
-        now.unix_millis(),
-        until.unix_millis(),
-        calls,
-    ) {
-        return Err(error(K::Exhausted));
-    }
+    profile.validate_remaining_budget(record, &assessment.budget, assessment.usage, now)?;
     Ok(QualificationPreflight {
         provider: data.provider,
         checked_at: now,
         until,
     })
+}
+
+impl QualificationProfile {
+    /// Check immutable binding, supported protocol and current run window, without granting authority.
+    /// # Errors
+    /// Rejects changed admission/configuration, incompatible semantics and expired/future windows.
+    pub fn validate_admission(
+        &self,
+        record: &AdmissionRecord,
+        now: UtcInstant,
+    ) -> Result<(), BudgetError> {
+        let data = self.data();
+        if data.admission != *record.command()
+            || record.configuration() != Some(data.configuration_sha256.as_str())
+        {
+            return Err(error(K::Conflict));
+        }
+        let start = instant(data.not_before)?;
+        let until = instant(data.expires_at)?;
+        if start < record.request().admitted_at
+            || now < start
+            || now >= until
+            || until.unix_millis() > record.valid_until_ms()?
+        {
+            return Err(error(K::Deadline));
+        }
+        let request = record.request();
+        let precision = match data.provider {
+            QualificationProvider::TwelveDataDaily => TimestampPrecision::DateOnly,
+            QualificationProvider::AlpacaHistoricalSipDaily => TimestampPrecision::Nanoseconds,
+        };
+        if request.contract.shape()
+            != (
+                EvidenceKind::RawBar(BarCoverage::ProviderDay),
+                MarketScope::Consolidated,
+            )
+            || request.contract.rules().1 != precision
+            || request.knowledge != KnowledgeMode::Capture
+            || request.raw != RawRetention::Discard
+        {
+            return Err(error(K::Invalid));
+        }
+        Ok(())
+    }
+    /// Check fresh persisted command/credit counters. Never reserves, resets or refunds usage.
+    /// # Errors
+    /// Rejects pending/cancelled/exhausted work and changed, stale or insufficient daily usage.
+    pub fn validate_remaining_budget(
+        &self,
+        record: &AdmissionRecord,
+        budget: &BudgetSnapshot,
+        usage: DailyCreditUsage,
+        now: UtcInstant,
+    ) -> Result<(), BudgetError> {
+        self.validate_admission(record, now)?;
+        let request = record.request();
+        if budget.pending.is_some() {
+            return Err(error(K::Busy));
+        }
+        if budget.cancelled {
+            return Err(error(K::Cancelled));
+        }
+        let calls = request
+            .budget
+            .calls
+            .get()
+            .checked_sub(budget.calls)
+            .filter(|n| *n > 0)
+            .ok_or_else(|| error(K::Exhausted))?;
+        if budget.attempts > record.limits().attempts
+            || budget.charged_bytes >= request.budget.command_bytes.get()
+        {
+            return Err(error(K::Exhausted));
+        }
+        if !self.data().credits.covers_qualification(
+            request.scope.endpoint,
+            usage,
+            now.unix_millis(),
+            instant(self.data().expires_at)?.unix_millis(),
+            calls,
+        ) {
+            return Err(error(K::Exhausted));
+        }
+        Ok(())
+    }
 }

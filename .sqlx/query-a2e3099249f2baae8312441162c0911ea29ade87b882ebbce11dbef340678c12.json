@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT NOT worker_allowed AS \"capable!\" FROM edgeagent_qualification_role()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "capable!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a2e3099249f2baae8312441162c0911ea29ade87b882ebbce11dbef340678c12"
+}
