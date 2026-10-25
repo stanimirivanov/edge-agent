@@ -19,6 +19,7 @@ pub struct DispatchCheck {
     command: edgeagent_contracts::evidence::AcquireEvidence,
     at: UtcInstant,
     until: i64,
+    embargo_ms: u32,
 }
 impl std::fmt::Debug for DispatchCheck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,6 +57,7 @@ impl DispatchCheck {
             command: record.command().clone(),
             at: now,
             until,
+            embargo_ms: checked.authority().0.value().embargo_ms,
         })
     }
     /// Check the assessment belongs to this exact immutable admission.
@@ -67,6 +69,11 @@ impl DispatchCheck {
     #[must_use]
     pub const fn at(&self) -> UtcInstant {
         self.at
+    }
+    /// Current reviewed minimum age of a completed source bucket before use.
+    #[must_use]
+    pub const fn embargo_ms(&self) -> u32 {
+        self.embargo_ms
     }
     /// Original exclusive deadline/retention bound; later checks cannot extend it.
     #[must_use]

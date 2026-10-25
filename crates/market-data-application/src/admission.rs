@@ -1,4 +1,4 @@
-//! Canonical owner-private admission v1/v2. A digest is identity, never authority.
+//! Canonical owner-private precise v1/v2 and native-date admission. Digests are not authority.
 use super::budget::{BudgetError as Error, BudgetErrorKind as Kind};
 use crate::*;
 use edgeagent_contracts::evidence::{AcquireEvidence, DailyEvidenceArtifact, EvidenceId};
@@ -55,7 +55,9 @@ impl AdmissionRecord {
             return Err(Error::new(Kind::Conflict));
         }
         let mut fields = self.fields;
-        fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+        if self.request.contract.rules().1 != TimestampPrecision::DateOnly {
+            fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+        }
         fields.insert("configuration_sha256".into(), digest.as_str().into());
         Self::seal(self.request, self.limits, fields)
     }
@@ -91,6 +93,9 @@ impl AdmissionRecord {
             };
         }
         field!("format", "edgeagent.admission.daily.v1");
+        if r.contract.rules().1 == TimestampPrecision::DateOnly {
+            field!("format", "edgeagent.admission.date-only.v1");
+        }
         id!("request", r.id);
         id!("principal", r.scope.principal);
         id!("account", r.scope.account);
@@ -106,6 +111,7 @@ impl AdmissionRecord {
         field!(
             "precision",
             match precision {
+                TimestampPrecision::DateOnly => "date",
                 TimestampPrecision::Milliseconds => "ms",
                 TimestampPrecision::Microseconds => "us",
                 TimestampPrecision::Nanoseconds => "ns",
@@ -202,7 +208,9 @@ impl AdmissionRecord {
         // A later current-rights check can shorten, but never extend, retained expiry.
         let mut fields = candidate.fields;
         if let Some(configuration) = self.configuration() {
-            fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+            if self.request.contract.rules().1 != TimestampPrecision::DateOnly {
+                fields.insert("format".into(), "edgeagent.admission.daily.v2".into());
+            }
             fields.insert("configuration_sha256".into(), configuration.into());
         }
         fields.insert(
@@ -255,6 +263,17 @@ impl AdmissionRecord {
     #[must_use]
     pub const fn request(&self) -> &AcquisitionRequest {
         &self.request
+    }
+    /// Exact original listing; alias text cannot substitute for this identity.
+    /// # Errors
+    /// Rejects malformed retained listing metadata.
+    pub fn listing(&self) -> Result<ListingId, Error> {
+        let text = self
+            .fields
+            .get("listing")
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        ListingId::new(u128::from_str_radix(text, 16).map_err(|_| Error::new(Kind::Invalid))?)
+            .map_err(|_| Error::new(Kind::Invalid))
     }
     /// Exact configured lower limits.
     #[must_use]

@@ -3,7 +3,8 @@
 ## TL;DR
 
 - `us-equity-daily-v1` targets bounded, USD-denominated U.S. equity/ETF evidence.
-- Provider selection is deferred; no vendor or data license is committed.
+- The conditional provider pair is Twelve Data and Alpaca; no live activation or
+  data license follows from protocol implementation.
 - Default tests and public demonstrations use synthetic, redistribution-safe data.
 - Historical prices fetched now establish capture-time evidence, not historical
   knowledge. Unknown rights, calendar coverage or provenance fail closed.
@@ -26,9 +27,9 @@ Normative terms follow [CONTRIBUTING](../../CONTRIBUTING.md#policy-language-and-
 | Identity | Service-owned instrument and listing IDs; provider symbol, venue, security type, currency and effective mapping interval are attributes, never the primary identity. Reject ambiguous symbol reuse. |
 | Request | One instrument, at most 252 expected sessions within 366 calendar days. The 3–20-session research horizon does not define acquisition lookback. |
 | Bar scope | Explicit provider-day aggregate and provider trade-eligibility revision; never label it regular-session-only. Core-session-only, intraday and overnight reconstruction are unsupported. |
-| Basis | Unadjusted OHLC and reported share volume only. Request `adjusted=false` explicitly; reject a contradictory response. No dividend, split-adjusted or total-return series in v1. |
+| Basis | Unadjusted OHLC and reported share volume only. Request the explicit vendor raw mode (`adjust=none` or qualified equivalent); reject contradictions. No dividend, split-adjusted or total-return series in v1. |
 | Numbers | Parse numeric tokens exactly, not through binary floating point. Maximum 28 significant digits, price scale 8 and share-volume scale 6; no silent rounding. OHLC must be positive and internally ordered; volume nonnegative. |
-| Time | UTC instants plus exchange-local session date and `America/New_York` timezone rules. Preserve the provider aggregate timestamp separately; it is not a receipt or availability timestamp. |
+| Time | Explicit UTC bucket bounds plus exchange-local session date and reviewed `America/New_York` timezone rules. Preserve a supplied source instant separately from receipt/availability. Native date-only sources retain their label and reviewed derivation provenance; never invent a source instant. |
 | Exclusions | OTC, options, crypto, non-USD, leveraged/inverse products, unsupported listings, automatic universe discovery, fabricated missing bars and live trading. |
 
 The adapter MUST establish the aggregate's actual interval and eligible-session
@@ -52,7 +53,9 @@ The bounded integer representation implements no decimal parser or arithmetic
 engine; adapters must parse source tokens exactly before constructing values.
 Dates alone prove neither session membership nor timezone conversion; source
 IDs/revisions alone prove neither entitlement nor historical availability.
-Provider token parsing remains a later M03 slice. Wire DTOs now live separately
+The [Twelve Data protocol adapter](twelve-data.md) currently narrows this profile
+to Common Stock captures; ETF qualification and native whole-series acceptance
+remain separate work. Wire DTOs live separately
 in [evidence contracts](evidence-artifacts.md); the pure domain does not make
 the bootstrap service acquire evidence.
 

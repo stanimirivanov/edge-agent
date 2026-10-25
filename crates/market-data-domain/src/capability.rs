@@ -57,6 +57,9 @@ pub enum EvidenceKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum TimestampPrecision {
+    /// Native local date only. It never accepts a precise source instant;
+    /// consumers must use `DateOnlyTime`, not `EvidenceTimes`.
+    DateOnly,
     /// Exact whole milliseconds.
     Milliseconds,
     /// Exact whole microseconds.
@@ -67,6 +70,7 @@ pub enum TimestampPrecision {
 impl TimestampPrecision {
     pub(crate) fn accepts(self, at: PreciseInstant) -> bool {
         match self {
+            Self::DateOnly => false,
             Self::Milliseconds => at.submillis() == 0,
             Self::Microseconds => at.submillis().is_multiple_of(1000),
             Self::Nanoseconds => true,
@@ -97,6 +101,8 @@ impl EvidenceContract {
     ) -> Result<Self, ObservationError> {
         if (kind == EvidenceKind::IndexLevel) != (scope == MarketScope::IndexPublisher)
             || (kind == EvidenceKind::OptionSnapshot && matches!(scope, MarketScope::Venue(_)))
+            || (precision == TimestampPrecision::DateOnly
+                && kind != EvidenceKind::RawBar(BarCoverage::ProviderDay))
         {
             return Err(ObservationError::Contract);
         }

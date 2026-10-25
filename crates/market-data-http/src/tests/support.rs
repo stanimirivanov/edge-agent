@@ -32,6 +32,12 @@ impl Fixture {
         }
     }
     pub fn new(account: u128) -> TestResult<Self> {
+        Self::with_precision(account, TimestampPrecision::Milliseconds)
+    }
+    pub fn native(account: u128) -> TestResult<Self> {
+        Self::with_precision(account, TimestampPrecision::DateOnly)
+    }
+    fn with_precision(account: u128, precision: TimestampPrecision) -> TestResult<Self> {
         let scope = AccessScope {
             principal: PrincipalId::new(1)?,
             account: ProviderAccountId::new(account)?,
@@ -43,9 +49,13 @@ impl Fixture {
         };
         let contract = EvidenceContract::new(
             EvidenceKind::RawBar(BarCoverage::ProviderDay),
-            MarketScope::Venue(Venue::Xnys),
+            if precision == TimestampPrecision::DateOnly {
+                MarketScope::Consolidated
+            } else {
+                MarketScope::Venue(Venue::Xnys)
+            },
             SemanticReference::new(ReferenceId::new(1)?, ReferenceRevision::new(1)?),
-            TimestampPrecision::Milliseconds,
+            precision,
         )?;
         let effective = EffectiveInterval::new(at(0)?, at(NOW + 86_400_000)?)?;
         let right = RightsRecord {
