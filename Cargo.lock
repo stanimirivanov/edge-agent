@@ -744,6 +744,7 @@ dependencies = [
 name = "edgeagent-market-data-http"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "edgeagent-contracts",
  "edgeagent-market-data-application",
  "edgeagent-market-data-domain",

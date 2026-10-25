@@ -33,6 +33,7 @@ pub struct HttpTransport {
     connect_ms: NonZeroU32,
     poll: Duration,
     authorization: Option<header::HeaderValue>,
+    data_headers: header::HeaderMap,
 }
 /// Local conservative observations; `MeteredSession` projects authoritative ledger usage.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -73,6 +74,29 @@ impl HttpTransport {
     }
     pub(crate) fn api_key(config: HttpConfig<'_>, loopback: bool) -> Result<Self, HttpError> {
         Self::build(config, loopback, "apikey")
+    }
+    pub(crate) fn alpaca(
+        config: HttpConfig<'_>,
+        id: &str,
+        secret: &str,
+        loopback: bool,
+    ) -> Result<Self, HttpError> {
+        if config.bearer.is_some() {
+            return Err(K::Configuration.into());
+        }
+        let mut client = Self::build(config, loopback, "Bearer")?;
+        for (name, value) in [("apca-api-key-id", id), ("apca-api-secret-key", secret)] {
+            if value.is_empty()
+                || value.len() > 4096
+                || !value.bytes().all(|b| b.is_ascii_graphic())
+            {
+                return Err(K::Configuration.into());
+            }
+            let mut header = header::HeaderValue::from_str(value).map_err(|_| K::Configuration)?;
+            header.set_sensitive(true);
+            client.data_headers.insert(name, header);
+        }
+        Ok(client)
     }
     fn build(config: HttpConfig<'_>, loopback: bool, scheme: &str) -> Result<Self, HttpError> {
         if config.connect_ms.get() > 5000 || config.cancellation_poll_ms.get() > 100 {
@@ -138,6 +162,7 @@ impl HttpTransport {
             connect_ms: config.connect_ms,
             poll: Duration::from_millis(config.cancellation_poll_ms.get().into()),
             authorization,
+            data_headers: header::HeaderMap::new(),
         })
     }
     /// Start one local traversal from admitted *remaining* budgets and a trusted UTC clock sample.
@@ -272,6 +297,7 @@ impl HttpSession<'_> {
             .get(url)
             .header(header::ACCEPT, "application/json")
             .header(header::ACCEPT_ENCODING, "identity");
+        request = request.headers(self.transport.data_headers.clone());
         if let Some(token) = &self.transport.authorization {
             request = request.header(header::AUTHORIZATION, token.clone());
         }

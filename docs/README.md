@@ -65,6 +65,7 @@ also read [ADR-0055](decisions/0055-reserve-reviewed-daily-credits-with-account-
 
 For M03 exact numeric provider parsing and bounded HTTP, read
 the [Twelve Data native protocol](development/twelve-data.md),
+the [Alpaca precise historical protocol](development/alpaca.md),
 [provider HTTP](development/provider-http.md) and
 [ADR-0046](decisions/0046-bound-provider-http-and-preserve-exact-json-tokens.md).
 

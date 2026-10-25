@@ -5,7 +5,9 @@
 //! use edgeagent_market_data_http::HttpSession;
 //! ```
 #![deny(missing_docs)]
+mod alpaca;
 mod endpoint;
+pub use alpaca::{AlpacaDaily, AlpacaDailyConfig, AlpacaProgress, AlpacaSession};
 mod error;
 mod json;
 mod metered;

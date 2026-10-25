@@ -7,7 +7,12 @@ mod authority;
 mod budget;
 mod date_only;
 mod date_only_source;
+mod precise_daily;
 pub use date_only_source::DateOnlySchedule;
+pub use precise_daily::{
+    DailyObservationSlot, DailyPageReceipt, DailySourceCapture, PreciseDailyRow,
+    PreciseDailySchedule,
+};
 mod dispatch;
 pub use admission::{AcquisitionLimits, AdmissionRecord};
 pub use budget::{

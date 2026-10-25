@@ -1,11 +1,11 @@
 # ADR-0057: Capture native daily provider responses under durable permits
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-10-24
 - Milestone: M03 - Market data fabric
 - Deciders: EdgeAgent maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: ADR-0058
 
 ## TL;DR
 

@@ -311,7 +311,18 @@ const ROUTES: &[Route] = &[
             "provider-http-contracts",
             "metered-provider-dispatch",
             "twelve-data-conformance",
+            "alpaca-conformance",
         ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/precise_daily"),
+        guides: &["docs/development/alpaca.md"],
+        checks: &["alpaca-conformance", "market-data-conformance"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/alpaca.md"),
+        guides: &["docs/development/alpaca.md"],
+        checks: &["alpaca-conformance"],
     },
     Route {
         matcher: Matcher::Exact("crates/market-data-application/src/date_only_source.rs"),

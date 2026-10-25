@@ -1,5 +1,21 @@
 use super::*;
 #[test]
+fn alpaca_sources_route_protected_precise_protocol_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/alpaca.rs",
+        "crates/market-data-application/src/precise_daily.rs",
+        "crates/market-data-application/src/precise_daily/encoding.rs",
+        "docs/development/alpaca.md",
+    ] {
+        assert!(
+            advise(&[path.into()])?
+                .checks
+                .contains("alpaca-conformance")
+        );
+    }
+    Ok(())
+}
+#[test]
 fn native_daily_adapter_routes_protected_protocol_evidence() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/twelve_data.rs",

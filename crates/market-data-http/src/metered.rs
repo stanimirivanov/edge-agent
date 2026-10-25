@@ -107,6 +107,9 @@ fn denied(kind: BudgetErrorKind) -> DispatchError {
     BudgetError::new(kind).into()
 }
 impl<L: AcquisitionLedger, A: DispatchAuthority> MeteredSession<'_, L, A> {
+    pub(crate) fn idle(&self) -> bool {
+        matches!(self.state, State::Idle)
+    }
     fn check(&mut self, cancel: &Cancellation) -> Result<(), DispatchError> {
         if cancel.is_cancelled() {
             return Err(denied(BudgetErrorKind::Cancelled));

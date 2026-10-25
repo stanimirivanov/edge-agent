@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 57] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 58] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -306,6 +306,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 57] = [
         number: 57,
         path: "docs/decisions/0057-capture-native-daily-provider-responses-under-durable-permits.md",
         title: "Capture native daily provider responses under durable permits",
+    },
+    PublishedIdentity {
+        number: 58,
+        path: "docs/decisions/0058-preserve-alpaca-source-instants-and-bound-historical-sip-pages.md",
+        title: "Preserve Alpaca source instants and bound historical SIP pages",
     },
 ];
 

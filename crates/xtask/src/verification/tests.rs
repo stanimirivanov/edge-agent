@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "alpaca-conformance",
+            vec![
+                "tests::alpaca::alpaca_raw_sip_binding_preserves_exact_provider_instants_and_receipts",
+                "tests::alpaca::alpaca_pages_charge_separately_and_confirmation_loss_never_refetches",
+                "tests::alpaca::alpaca_manual_rate_rejection_never_sleeps_or_consumes_another_call",
+                "tests::alpaca::alpaca_malformed_foreign_duplicate_and_truncated_pages_fail_closed",
+                "tests::alpaca::alpaca_credentials_authority_historical_delay_and_spent_credits_deny_before_io",
+                "tests::alpaca::alpaca_errors_cancellation_and_uncertain_start_never_trigger_feed_fallback",
+            ],
+        ),
+        (
             "twelve-data-conformance",
             vec![
                 "tests::twelve_data::twelve_data_selected_request_is_raw_header_only_and_exact_native_capture_round_trips",
@@ -492,6 +503,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "date-only-evidence",
             "twelve-data-conformance",
             "messaging-error-contracts",
+            "alpaca-conformance",
             "relay-observation-contracts",
             "relay-policy-contracts",
             "contracts-preserve-order",
