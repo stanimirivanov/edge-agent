@@ -122,6 +122,64 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/terminal"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/native_publication"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-publication-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/support/native_store"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &["native-publication-postgres"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-object-store/"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/retention.rs"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/storage.rs"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/native-daily-acceptance.md"),
+        guides: &["docs/development/native-daily-acceptance.md"],
+        checks: &[
+            "native-publication-contracts",
+            "native-publication-postgres",
+        ],
+    },
+    Route {
         matcher: Matcher::Exact("crates/market-data-application/src/evidence.rs"),
         guides: &[
             "docs/development/native-daily-acceptance.md",

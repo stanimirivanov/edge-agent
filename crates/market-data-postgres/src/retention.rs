@@ -3,7 +3,7 @@ use crate::{PostgresAcquisitionLedger, ledger};
 use edgeagent_contracts::evidence::*;
 use edgeagent_market_data_application::{
     AccountBudget, AdmissionRecord, BudgetError as Error, BudgetErrorKind as K, CleanupAuthority,
-    EvidenceCleanup, EvidenceRetention, RetentionScope,
+    EvidenceAccess, EvidenceCleanup, EvidenceRetention, NativeEvidenceRetention, RetentionScope,
 };
 use sqlx::{Postgres, Transaction};
 
@@ -102,20 +102,17 @@ pub(super) async fn guard_request(
     Ok(())
 }
 
-impl EvidenceRetention for PostgresAcquisitionLedger {
-    async fn stage(&self, artifact: &DailyEvidenceArtifact) -> Result<(), Error> {
-        let data = artifact.data();
-        let command = AcquireEvidence {
-            request: data.scope.request.clone(),
-            request_sha256: data.scope.request_sha256.clone(),
-        };
-        let decision = EvidenceDecision::ready(command.clone(), artifact).map_err(invalid)?;
-        let EvidenceOutcome::Ready { object } = &decision.data().outcome else {
-            return Err(Error::new(K::Invalid));
-        };
+impl PostgresAcquisitionLedger {
+    async fn stage_object(
+        &self,
+        command: AcquireEvidence,
+        object: &EvidenceObject,
+        verify: impl FnOnce(&AdmissionRecord) -> Result<(), Error> + Send,
+        preparation: Option<&NativeDailyArtifact>,
+    ) -> Result<(), Error> {
         let mut tx = self.transaction().await?;
         let (record, _) = ledger::load(&mut tx, &command).await?;
-        record.verify_artifact(artifact)?;
+        verify(&record)?;
         let until = record.valid_until_ms()?;
         let valid = sqlx::query_scalar!(
             r#"SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint < $1 AS "valid!""#,
@@ -154,7 +151,38 @@ impl EvidenceRetention for PostgresAcquisitionLedger {
             sqlx::query!("INSERT INTO edgeagent_evidence_objects(object_key,request_id,descriptor) VALUES($1,$2,$3)",key,command.request.as_str(),bytes)
                 .execute(&mut *tx).await.map_err(Error::storage)?;
         }
+        if let Some(artifact) = preparation {
+            sqlx::query!("INSERT INTO edgeagent_native_preparations(request_id,digest,artifact) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",command.request.as_str(),artifact.digest().as_str(),artifact.bytes())
+                .execute(&mut *tx).await.map_err(Error::storage)?;
+            let retained = sqlx::query!(
+                "SELECT digest,artifact FROM edgeagent_native_preparations WHERE request_id=$1",
+                command.request.as_str()
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(Error::storage)?;
+            if retained.digest != artifact.digest().as_str()
+                || retained.artifact != artifact.bytes()
+            {
+                return Err(Error::new(K::Conflict));
+            }
+        }
         tx.commit().await.map_err(Error::storage)
+    }
+}
+impl EvidenceRetention for PostgresAcquisitionLedger {
+    async fn stage(&self, artifact: &DailyEvidenceArtifact) -> Result<(), Error> {
+        let data = artifact.data();
+        let command = AcquireEvidence {
+            request: data.scope.request.clone(),
+            request_sha256: data.scope.request_sha256.clone(),
+        };
+        let decision = EvidenceDecision::ready(command.clone(), artifact).map_err(invalid)?;
+        let EvidenceOutcome::Ready { object } = &decision.data().outcome else {
+            return Err(Error::new(K::Invalid));
+        };
+        self.stage_object(command, object, |r| r.verify_artifact(artifact), None)
+            .await
     }
     async fn check(&self, object: &EvidenceObject) -> Result<(), Error> {
         let mut tx = self.transaction().await?;
@@ -238,6 +266,76 @@ impl EvidenceRetention for PostgresAcquisitionLedger {
         .await
         .map_err(Error::storage)?;
         tx.commit().await.map_err(Error::storage)
+    }
+}
+impl NativeEvidenceRetention for PostgresAcquisitionLedger {
+    async fn stage_native(&self, artifact: &NativeDailyArtifact) -> Result<(), Error> {
+        let scope = &artifact.data().capture.scope;
+        let command = AcquireEvidence {
+            request: scope.request.clone(),
+            request_sha256: scope.request_sha256.clone(),
+        };
+        self.stage_object(
+            command,
+            &artifact.object().map_err(invalid)?,
+            |r| r.verify_native_artifact(artifact),
+            Some(artifact),
+        )
+        .await
+    }
+    async fn recover_native(
+        &self,
+        command: &AcquireEvidence,
+        access: &impl EvidenceAccess,
+    ) -> Result<Option<NativeDailyArtifact>, Error> {
+        let mut tx = self.transaction().await?;
+        let (record, _) = ledger::load(&mut tx, command).await?;
+        let row = sqlx::query!(
+            "SELECT digest,artifact FROM edgeagent_native_preparations WHERE request_id=$1",
+            command.request.as_str()
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
+        let artifact = row
+            .map(|r| {
+                NativeDailyArtifact::decode(
+                    &r.artifact,
+                    &EvidenceDigest::new(&r.digest).map_err(invalid)?,
+                )
+                .map_err(invalid)
+            })
+            .transpose()?;
+        if let Some(a) = &artifact {
+            record.verify_native_artifact(a)?;
+            let object = a.object().map_err(invalid)?;
+            access
+                .authorize(&object)
+                .map_err(|e| Error::with_source(K::Denied, e))?;
+            let now = i128::from(access.now().unix_millis());
+            if now
+                >= i128::from(object.delete_by.seconds) * 1000
+                    + i128::from(object.delete_by.nanos / 1_000_000)
+            {
+                return Err(Error::new(K::Deadline));
+            }
+        }
+        crate::retention::guard_request(&mut tx, &command.request).await?;
+        tx.commit().await.map_err(Error::storage)?;
+        if let Some(a) = &artifact {
+            let object = a.object().map_err(invalid)?;
+            self.check(&object).await?;
+            access
+                .authorize(&object)
+                .map_err(|e| Error::with_source(K::Denied, e))?;
+            if i128::from(access.now().unix_millis())
+                >= i128::from(object.delete_by.seconds) * 1000
+                    + i128::from(object.delete_by.nanos / 1_000_000)
+            {
+                return Err(Error::new(K::Deadline));
+            }
+        }
+        Ok(artifact)
     }
 }
 impl PostgresAcquisitionLedger {

@@ -12,6 +12,15 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const NATIVE_PUBLICATION: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "native",
+    identities: &[
+        "native_preparation_survives_restart_and_terminal_ack_loss_without_new_identity",
+        "native_terminal_rollback_and_concurrent_corrections_preserve_atomic_fences",
+        "native_revocation_denies_recovery_and_retirement_erases_preparations_not_cleanup_keys",
+    ],
+};
 const EVIDENCE_RETENTION: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "retention",
@@ -239,6 +248,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "native-publication-postgres",
+            &NATIVE_PUBLICATION,
+            POSTGRES,
+            "Owned PostgreSQL native preparation restart, exact uncertain PUT recovery, terminal rollback/ACK loss, competing heads and revocation/retirement erasure; no provider calls or process-death qualification.",
+        ),
         suite(
             "offline-worker-recovery",
             &OFFLINE_RECOVERY,
@@ -544,6 +559,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACCOUNT_ADMISSION,
         ACQUISITION_LEDGER,
         ACQUISITION_TERMINAL,
+        NATIVE_PUBLICATION,
         EVIDENCE_RETENTION,
         OFFLINE_WORKER,
         OFFLINE_RECOVERY,
@@ -564,6 +580,38 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_publication_census_cannot_silently_shrink() -> Result<(), String> {
+        let check = super::checks()
+            .into_iter()
+            .find(|c| c.id == "native-publication-postgres")
+            .ok_or("native gate")?;
+        let census = check.discovery.ok_or("native census")?;
+        let expected = [
+            "native_preparation_survives_restart_and_terminal_ack_loss_without_new_identity",
+            "native_terminal_rollback_and_concurrent_corrections_preserve_atomic_fences",
+            "native_revocation_denies_recovery_and_retirement_erases_preparations_not_cleanup_keys",
+        ];
+        assert_eq!(census.expected, expected);
+        let complete = expected
+            .iter()
+            .map(|n| format!("{n}: test\n"))
+            .collect::<String>();
+        super::super::runner::verify_discovery(&census, complete.as_bytes())?;
+        for n in expected {
+            for changed in [
+                complete.replace(&format!("{n}: test\n"), ""),
+                complete.replace(n, "renamed_native"),
+                format!("{complete}{n}: test\n"),
+                format!("{complete}extra: test\n"),
+            ] {
+                assert!(
+                    super::super::runner::verify_discovery(&census, changed.as_bytes()).is_err()
+                );
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn offline_recovery_census_and_resource_bounds_cannot_silently_shrink() -> Result<(), String> {
         let check = super::checks()
@@ -783,7 +831,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 34);
+        assert_eq!(checks.len(), 35);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -798,8 +846,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 90);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 90);
+        assert_eq!(inventory.len(), 93);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 93);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

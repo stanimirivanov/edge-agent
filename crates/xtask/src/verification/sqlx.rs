@@ -432,7 +432,7 @@ mod tests {
     fn acquisition_schema_assembly_includes_the_ledger_migration() -> Result<(), Box<dyn Error>> {
         let root = super::super::workspace_root();
         let paths = inbox_migrations(&root.join("crates/market-data-postgres/migrations"))?;
-        assert_eq!(paths.len(), 3);
+        assert_eq!(paths.len(), 4);
         assert_eq!(
             paths
                 .iter()
@@ -442,6 +442,7 @@ mod tests {
                 OsStr::new("0001_acquisition_ledger.sql"),
                 OsStr::new("0002_terminal_publication.sql"),
                 OsStr::new("0003_evidence_retention.sql"),
+                OsStr::new("0004_native_preparation.sql"),
             ]
         );
         assert_eq!(
@@ -452,9 +453,10 @@ mod tests {
         assert!(library.contains("0001_acquisition_ledger.sql"));
         assert!(library.contains("0002_terminal_publication.sql"));
         assert!(library.contains("0003_evidence_retention.sql"));
+        assert!(library.contains("0004_native_preparation.sql"));
         assert_eq!(
             paths.last().and_then(|p| p.file_name()),
-            Some(OsStr::new("0003_evidence_retention.sql"))
+            Some(OsStr::new("0004_native_preparation.sql"))
         );
         Ok(())
     }

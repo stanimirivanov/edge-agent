@@ -1,6 +1,8 @@
 //! Retirement is a denial barrier, not a compensating transaction or a lease expiry.
 use crate::*;
-use edgeagent_contracts::evidence::{DailyEvidenceArtifact, EvidenceId, EvidenceObject};
+use edgeagent_contracts::evidence::{
+    AcquireEvidence, DailyEvidenceArtifact, EvidenceId, EvidenceObject, NativeDailyArtifact,
+};
 use std::{fmt, future::Future};
 
 /// Owner-private licensed namespace. Identities confer neither read nor administrative authority.
@@ -82,6 +84,23 @@ pub trait EvidenceRetention: Send + Sync {
     ) -> impl Future<Output = Result<(), BudgetError>> + Send;
 }
 
+/// Durable exact native preparation, independent from eventual object PUT/terminal COMMIT.
+/// Persist one immutable preparation per command and erase its licensed bytes on retirement.
+pub trait NativeEvidenceRetention: EvidenceRetention {
+    /// Inventory and persist the exact acceptance before PUT; changed retries must conflict.
+    fn stage_native(
+        &self,
+        artifact: &NativeDailyArtifact,
+    ) -> impl Future<Output = Result<(), BudgetError>> + Send;
+    /// Recover frozen acceptance time, lineage and references under current scoped permission.
+    /// Call before any new provider work or identity allocation; None permits first preparation.
+    fn recover_native(
+        &self,
+        command: &AcquireEvidence,
+        access: &impl EvidenceAccess,
+    ) -> impl Future<Output = Result<Option<NativeDailyArtifact>, BudgetError>> + Send;
+}
+
 /// Physical deletion port; uncertain completion must be retried under the same immutable identity.
 pub trait EvidenceDeletion: Send + Sync {
     /// Idempotently erase one exact scoped key after owner-confirmed write quiescence.
@@ -111,6 +130,18 @@ impl<S, R> fmt::Debug for RetainedEvidenceStorage<'_, S, R> {
             .finish_non_exhaustive()
     }
 }
+impl<S, R: NativeEvidenceRetention> RetainedEvidenceStorage<'_, S, R> {
+    /// Recover exact preparation before fetching source data or allocating new row versions.
+    /// # Errors
+    /// Denies retired/revoked/expired or foreign commands and changed current read authority.
+    pub async fn recover_native(
+        &self,
+        command: &AcquireEvidence,
+        access: &impl EvidenceAccess,
+    ) -> Result<Option<NativeDailyArtifact>, BudgetError> {
+        self.retention.recover_native(command, access).await
+    }
+}
 impl<S: EvidenceStorage, R: EvidenceRetention> EvidenceStorage
     for RetainedEvidenceStorage<'_, S, R>
 {
@@ -135,6 +166,40 @@ impl<S: EvidenceStorage, R: EvidenceRetention> EvidenceStorage
     ) -> Result<DailyEvidenceArtifact, EvidenceStorageError> {
         self.retention.check(object).await.map_err(storage_error)?;
         let artifact = self.storage.get(object, access).await?;
+        self.retention.check(object).await.map_err(storage_error)?;
+        live(object, access)?;
+        Ok(artifact)
+    }
+}
+
+impl<S: NativeEvidenceStorage, R: NativeEvidenceRetention> NativeEvidenceStorage
+    for RetainedEvidenceStorage<'_, S, R>
+{
+    async fn put_native(
+        &self,
+        artifact: &NativeDailyArtifact,
+        access: &impl EvidenceAccess,
+    ) -> Result<EvidenceObject, EvidenceStorageError> {
+        let expected = artifact
+            .object()
+            .map_err(|_| EvidenceStorageError::new(EvidenceStorageErrorKind::Invalid))?;
+        live(&expected, access)?;
+        self.retention
+            .stage_native(artifact)
+            .await
+            .map_err(storage_error)?;
+        let object = self.storage.put_native(artifact, access).await?;
+        self.retention.check(&object).await.map_err(storage_error)?;
+        live(&object, access)?;
+        Ok(object)
+    }
+    async fn get_native(
+        &self,
+        object: &EvidenceObject,
+        access: &impl EvidenceAccess,
+    ) -> Result<NativeDailyArtifact, EvidenceStorageError> {
+        self.retention.check(object).await.map_err(storage_error)?;
+        let artifact = self.storage.get_native(object, access).await?;
         self.retention.check(object).await.map_err(storage_error)?;
         live(object, access)?;
         Ok(artifact)

@@ -1,5 +1,5 @@
 //! Owner-private immutable evidence persistence; no public download capability.
-use edgeagent_contracts::evidence::{DailyEvidenceArtifact, EvidenceObject};
+use edgeagent_contracts::evidence::{DailyEvidenceArtifact, EvidenceObject, NativeDailyArtifact};
 use edgeagent_market_data_domain::UtcInstant;
 use std::{error::Error, fmt, future::Future};
 
@@ -99,4 +99,21 @@ pub trait EvidenceStorage: Send + Sync {
         object: &EvidenceObject,
         access: &impl EvidenceAccess,
     ) -> impl Future<Output = Result<DailyEvidenceArtifact, EvidenceStorageError>> + Send;
+}
+
+/// Explicit accepted-native operations. Raw date-only captures cannot enter this port.
+/// Implementations share precise storage's integrity, authorization and timeout mechanics.
+pub trait NativeEvidenceStorage: Send + Sync {
+    /// Create or verify exact accepted bytes; uncertainty is recovered with the same identity.
+    fn put_native(
+        &self,
+        artifact: &NativeDailyArtifact,
+        access: &impl EvidenceAccess,
+    ) -> impl Future<Output = Result<EvidenceObject, EvidenceStorageError>> + Send;
+    /// Authorize and verify an accepted-native object; reject every other format.
+    fn get_native(
+        &self,
+        object: &EvidenceObject,
+        access: &impl EvidenceAccess,
+    ) -> impl Future<Output = Result<NativeDailyArtifact, EvidenceStorageError>> + Send;
 }

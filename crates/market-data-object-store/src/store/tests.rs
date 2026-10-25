@@ -14,6 +14,7 @@ use std::{
 };
 
 type TestResult = Result<(), Box<dyn StdError>>;
+mod native;
 struct CleanupOwner(bool, EvidenceObject);
 impl CleanupAuthority for CleanupOwner {
     fn authorize_deletion(

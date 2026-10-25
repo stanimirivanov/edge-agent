@@ -9,6 +9,12 @@
 
 ## Application boundary
 
+Accepted native dates use `TerminalProposal::ready_native` with retained scoped storage
+and durable preparation, not conversion into precise daily-v1. They share this atomic
+terminal transaction but use distinct native series/observation identity lanes. Recover
+terminal receipts first, then exact preparation before source work or new IDs. See
+[native persistence](native-daily-acceptance.md#persistence-recovery-and-retirement).
+
 `finish_acquisition` first calls `AcquisitionPublication::recover`. A retained
 receipt skips the preparation closure entirely, including provider/storage work.
 Otherwise prepare outside the transaction and call `commit`. This finite operation

@@ -1,9 +1,10 @@
 use edgeagent_contracts::evidence::{
-    DailyEvidenceArtifact, EvidenceObject, EvidenceReferenceKind, MAX_EVIDENCE_BYTES,
+    DailyEvidenceArtifact, DailyObject, EvidenceObject, EvidenceReferenceKind, MAX_EVIDENCE_BYTES,
+    NativeDailyArtifact,
 };
 use edgeagent_market_data_application::{
     CleanupAuthority, EvidenceAccess, EvidenceDeletion, EvidenceStorage,
-    EvidenceStorageError as Error, EvidenceStorageErrorKind as Kind,
+    EvidenceStorageError as Error, EvidenceStorageErrorKind as Kind, NativeEvidenceStorage,
 };
 use futures_util::TryStreamExt;
 use object_store::{ObjectStore, ObjectStoreExt, PutMode, path::Path};
@@ -68,7 +69,7 @@ impl ImmutableEvidenceStore {
         &self,
         object: &EvidenceObject,
         access: &impl EvidenceAccess,
-    ) -> Result<DailyEvidenceArtifact, Error> {
+    ) -> Result<DailyObject, Error> {
         guard(object, access)?;
         let result = self
             .backend
@@ -82,6 +83,33 @@ impl ImmutableEvidenceStore {
         }
         collect(result.into_stream(), object, access).await
     }
+
+    async fn write(
+        &self,
+        object: EvidenceObject,
+        bytes: &[u8],
+        access: &impl EvidenceAccess,
+    ) -> Result<EvidenceObject, Error> {
+        guard(&object, access)?;
+        tokio::time::timeout(self.timeout, async {
+            match self
+                .backend
+                .put_opts(&key(&object), bytes.to_vec().into(), PutMode::Create.into())
+                .await
+            {
+                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => (),
+                Err(error) => return Err(backend_error(error)),
+            }
+            // Confirm exact canonical bytes even after a successful create acknowledgement.
+            let stored = self.read(&object, access).await?;
+            if accepted_bytes(&stored)? != bytes {
+                return Err(Error::new(Kind::Integrity));
+            }
+            Ok(object)
+        })
+        .await
+        .map_err(|e| Error::with_source(Kind::Deadline, e))?
+    }
 }
 impl EvidenceStorage for ImmutableEvidenceStore {
     async fn put(
@@ -89,30 +117,8 @@ impl EvidenceStorage for ImmutableEvidenceStore {
         artifact: &DailyEvidenceArtifact,
         access: &impl EvidenceAccess,
     ) -> Result<EvidenceObject, Error> {
-        let object = descriptor(artifact)?;
-        guard(&object, access)?;
-        tokio::time::timeout(self.timeout, async {
-            match self
-                .backend
-                .put_opts(
-                    &key(&object),
-                    artifact.bytes().to_vec().into(),
-                    PutMode::Create.into(),
-                )
-                .await
-            {
-                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => (),
-                Err(error) => return Err(backend_error(error)),
-            }
-            // Verify even after a successful PUT: ETags and acknowledgements are not evidence hashes.
-            let stored = self.read(&object, access).await?;
-            if stored.bytes() != artifact.bytes() {
-                return Err(Error::new(Kind::Integrity));
-            }
-            Ok(object)
-        })
-        .await
-        .map_err(|error| Error::with_source(Kind::Deadline, error))?
+        self.write(descriptor(artifact)?, artifact.bytes(), access)
+            .await
     }
 
     async fn get(
@@ -120,9 +126,45 @@ impl EvidenceStorage for ImmutableEvidenceStore {
         object: &EvidenceObject,
         access: &impl EvidenceAccess,
     ) -> Result<DailyEvidenceArtifact, Error> {
-        tokio::time::timeout(self.timeout, self.read(object, access))
+        let stored = tokio::time::timeout(self.timeout, self.read(object, access))
             .await
-            .map_err(|error| Error::with_source(Kind::Deadline, error))?
+            .map_err(|error| Error::with_source(Kind::Deadline, error))??;
+        match stored {
+            DailyObject::Precise(artifact) => Ok(artifact),
+            _ => Err(Error::new(Kind::Integrity)),
+        }
+    }
+}
+
+impl NativeEvidenceStorage for ImmutableEvidenceStore {
+    async fn put_native(
+        &self,
+        artifact: &NativeDailyArtifact,
+        access: &impl EvidenceAccess,
+    ) -> Result<EvidenceObject, Error> {
+        let object = artifact.object().map_err(|_| Error::new(Kind::Invalid))?;
+        self.write(object, artifact.bytes(), access).await
+    }
+    async fn get_native(
+        &self,
+        object: &EvidenceObject,
+        access: &impl EvidenceAccess,
+    ) -> Result<NativeDailyArtifact, Error> {
+        let stored = tokio::time::timeout(self.timeout, self.read(object, access))
+            .await
+            .map_err(|e| Error::with_source(Kind::Deadline, e))??;
+        match stored {
+            DailyObject::NativeAccepted(artifact) => Ok(artifact),
+            _ => Err(Error::new(Kind::Integrity)),
+        }
+    }
+}
+
+fn accepted_bytes(object: &DailyObject) -> Result<&[u8], Error> {
+    match object {
+        DailyObject::Precise(a) => Ok(a.bytes()),
+        DailyObject::NativeAccepted(a) => Ok(a.bytes()),
+        _ => Err(Error::new(Kind::Integrity)),
     }
 }
 
@@ -182,7 +224,7 @@ async fn collect(
     mut stream: futures_util::stream::BoxStream<'_, object_store::Result<bytes::Bytes>>,
     object: &EvidenceObject,
     access: &impl EvidenceAccess,
-) -> Result<DailyEvidenceArtifact, Error> {
+) -> Result<DailyObject, Error> {
     let limit = object.bytes as usize;
     let mut bytes = Vec::with_capacity(limit);
     while let Some(chunk) = stream.try_next().await.map_err(backend_error)? {
@@ -198,9 +240,14 @@ async fn collect(
     if bytes.len() != limit {
         return Err(Error::new(Kind::Integrity));
     }
-    let artifact = DailyEvidenceArtifact::decode(&bytes, &object.sha256)
-        .map_err(|_| Error::new(Kind::Integrity))?;
-    if descriptor(&artifact)? != *object {
+    let artifact =
+        DailyObject::decode(&bytes, &object.sha256).map_err(|_| Error::new(Kind::Integrity))?;
+    let actual = match &artifact {
+        DailyObject::Precise(a) => descriptor(a)?,
+        DailyObject::NativeAccepted(a) => a.object().map_err(|_| Error::new(Kind::Integrity))?,
+        _ => return Err(Error::new(Kind::Integrity)),
+    };
+    if actual != *object {
         return Err(Error::new(Kind::Integrity));
     }
     guard(object, access)?;

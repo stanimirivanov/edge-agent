@@ -326,7 +326,66 @@ impl AdmissionRecord {
     /// Denies foreign scope, changed rights pins or extended retention.
     pub fn verify_artifact(&self, artifact: &DailyEvidenceArtifact) -> Result<(), Error> {
         let data = artifact.data();
-        let s = &data.scope;
+        self.verify_object(&data.scope, &data.references, data.delete_by)
+    }
+    /// Bind accepted native preparation to the original native admission and frozen selection.
+    /// # Errors
+    /// Denies cross-format, scope, configuration, range, rights or retention changes.
+    pub fn verify_native_artifact(
+        &self,
+        artifact: &edgeagent_contracts::evidence::NativeDailyArtifact,
+    ) -> Result<(), Error> {
+        let data = artifact.data();
+        let capture = &data.capture;
+        let semantics = self.request.contract.rules().0.version();
+        let captured = i128::from(data.captured_at.seconds) * 1000
+            + i128::from(data.captured_at.nanos / 1_000_000);
+        let quality_matches = [
+            (
+                "quality_revision",
+                data.quality.revision.as_str().to_owned(),
+            ),
+            (
+                "reference_age_ms",
+                data.quality.reference_age_ms.as_str().to_owned(),
+            ),
+            (
+                "close_change_bps",
+                data.quality.close_change_bps.to_string(),
+            ),
+            (
+                "source_difference_bps",
+                data.quality.source_difference_bps.to_string(),
+            ),
+        ]
+        .iter()
+        .all(|(key, value)| self.fields.get(*key) == Some(value));
+        if self.request.contract.rules().1 != TimestampPrecision::DateOnly
+            || !quality_matches
+            || capture.semantics.id.as_str() != format!("{:032x}", semantics.0.get())
+            || capture.semantics.revision.as_str() != semantics.1.get().to_string()
+            || captured < i128::from(self.request.admitted_at.unix_millis())
+            || captured >= i128::from(self.valid_until_ms()?)
+            || self.configuration() != Some(capture.selection_sha256.as_str())
+            || capture.scope.listing.as_str() != format!("{:032x}", self.listing()?.get())
+            || capture.range
+                != [
+                    crate::evidence::date(self.request.range.bounds().0)
+                        .map_err(|_| Error::new(Kind::Invalid))?,
+                    crate::evidence::date(self.request.range.bounds().1)
+                        .map_err(|_| Error::new(Kind::Invalid))?,
+                ]
+        {
+            return Err(Error::new(Kind::Denied));
+        }
+        self.verify_object(&capture.scope, &data.references, data.delete_by)
+    }
+    fn verify_object(
+        &self,
+        s: &edgeagent_contracts::evidence::EvidenceScope,
+        references: &[edgeagent_contracts::evidence::EvidenceReference],
+        delete_by: edgeagent_contracts::evidence::EvidenceTime,
+    ) -> Result<(), Error> {
         let r = self.request.scope;
         let pairs = [
             (&s.principal, r.principal.get()),
@@ -337,8 +396,7 @@ impl AdmissionRecord {
             (&s.storage, r.storage.get()),
             (&s.audience, r.audience.get()),
         ];
-        let rights = data
-            .references
+        let rights = references
             .iter()
             .find(|p| p.kind == edgeagent_contracts::evidence::EvidenceReferenceKind::Rights)
             .ok_or_else(|| Error::new(Kind::Denied))?;
@@ -351,8 +409,7 @@ impl AdmissionRecord {
             rights.version.id.as_str(),
             rights.version.revision.as_str()
         );
-        let delete = i128::from(data.delete_by.seconds) * 1000
-            + i128::from(data.delete_by.nanos / 1_000_000);
+        let delete = i128::from(delete_by.seconds) * 1000 + i128::from(delete_by.nanos / 1_000_000);
         if s.request != self.command.request
             || s.request_sha256 != self.command.request_sha256
             || pairs
