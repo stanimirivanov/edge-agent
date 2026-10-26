@@ -46,10 +46,11 @@ Each implementation ships focused negative tests and docs with its behavior.
 | 9 | M03-PR15B2 | Authenticated bounded vendor worker, fencing, recovery and authorized cleanup composition | PR15B1, activation review, account/rights approval | I |
 | 10 | M03-PR15C | Separately authorized opt-in live daily qualification and cleanup evidence | PR15B2, explicit live opt-in | J |
 | Extension 1 | M03-PR16 | Finite streaming authority, session budgets and account connection fencing | PR11B, PR11C, profile decisions | G |
-| Extension 2 | M03-PR17 | Versioned immutable streaming segments and atomic checkpoints/outbox | PR16, PR12 | H |
+| Extension 2 | M03-PR17A | Bounded normalized streaming segments and scoped immutable storage | PR16, PR12 | H |
+| Extension 3 | M03-PR17B | Durable segment inventory/retirement and atomic checkpoints/outbox | PR17A, PR12 | I |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
 | Extension 3 | M03-PR19 | First selected underlying-stream adapter with exact subscriptions | PR18, PR11C | I |
-| Extension 4 | M03-PR20 | Fair bounded multi-source supervision, readiness and recovery | PR17, PR19, PR13 | J |
+| Extension 4 | M03-PR20 | Fair bounded multi-source supervision, readiness and recovery | PR17B, PR19, PR13 | J |
 
 ## Acceptance boundaries
 
@@ -186,6 +187,13 @@ also address scoped metadata retirement, restore/reference freshness and any act
 provider entitlement shared with HTTP. Daily PR15C live qualification remains not run.
 
 ## Harness and outstanding decisions
+
+Maintainer-approved PR17 split: [PR17A](../streaming-segments.md) supplies bounded
+normalized capture and scoped create-only storage, not readiness or publication.
+PR17B must inventory before PUT, verify current charged ranges/generations, atomically
+advance checkpoint/chain/outbox, and integrate durable denial, scoped metadata retirement
+and quiescent orphan cleanup before runtime use. PR18 remains parallel with PR17A;
+PR20 depends on PR17B. Both slices remain offline.
 
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.

@@ -176,3 +176,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0062](0062-require-independent-postgresql-owner-grants-for-qualification.md) | Accepted | Require independent PostgreSQL owner grants for qualification. |
 | [ADR-0063](0063-compose-owner-authorized-finite-vendor-qualification.md) | Accepted | Compose owner-authorized finite vendor qualification. |
 | [ADR-0064](0064-bound-streaming-sessions-with-durable-account-fences.md) | Accepted | Bound streaming sessions with durable account fences. |
+| [ADR-0065](0065-separate-stream-capture-segments-from-evidence-readiness.md) | Accepted | Separate stream capture segments from evidence readiness. |

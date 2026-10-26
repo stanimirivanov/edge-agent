@@ -305,6 +305,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic frozen-run replay and one-factor fee/latency/liquidity sensitivity; no empirical market or statistical performance claim.",
         ),
         check(
+            "streaming-segment-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "-p",
+                "edgeagent-market-data-object-store",
+                "--test",
+                "stream_segments",
+                "--",
+            ],
+            "Offline bounded normalized capture and scoped immutable storage; not checkpoints, readiness or vendor qualification.",
+        ),
+        check(
             "streaming-session-contracts",
             "T2",
             &["verify", "test"],
@@ -836,6 +854,22 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "streaming-segment-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "stream_segment_freezing_binds_session_scope_epoch_generation_and_retention",
+                        "stream_segment_codec_rejects_noncanonical_corrupt_and_unbounded_input",
+                        "stream_segment_values_preserve_cancellations_and_source_semantics",
+                        "stream_segment_store_is_create_only_scoped_and_reopens",
+                        "stream_segment_store_recovers_uncertain_put_and_denies_revocation_expiry",
+                        "stream_segment_store_rejects_descriptor_and_content_attacks",
+                    ],
+                    ignored: false,
+                });
+            }
             "streaming-session-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");

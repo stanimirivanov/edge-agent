@@ -10,6 +10,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "streaming-segment-contracts",
+            vec![
+                "stream_segment_freezing_binds_session_scope_epoch_generation_and_retention",
+                "stream_segment_codec_rejects_noncanonical_corrupt_and_unbounded_input",
+                "stream_segment_values_preserve_cancellations_and_source_semantics",
+                "stream_segment_store_is_create_only_scoped_and_reopens",
+                "stream_segment_store_recovers_uncertain_put_and_denies_revocation_expiry",
+                "stream_segment_store_rejects_descriptor_and_content_attacks",
+            ],
+        ),
+        (
             "streaming-session-contracts",
             vec![
                 "stream_admission_pins_complete_selection_and_current_authority",
@@ -570,6 +581,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "option-analytics-contracts",
             "account-audit-contracts",
             "frozen-evaluation-contracts",
+            "streaming-segment-contracts",
             "streaming-session-contracts",
             "offline-worker-contracts",
             "offline-source-isolation",

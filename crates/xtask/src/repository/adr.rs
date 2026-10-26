@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 64] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 65] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -341,6 +341,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 64] = [
         number: 64,
         path: "docs/decisions/0064-bound-streaming-sessions-with-durable-account-fences.md",
         title: "Bound streaming sessions with durable account fences",
+    },
+    PublishedIdentity {
+        number: 65,
+        path: "docs/decisions/0065-separate-stream-capture-segments-from-evidence-readiness.md",
+        title: "Separate stream capture segments from evidence readiness",
     },
 ];
 

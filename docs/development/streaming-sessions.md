@@ -72,7 +72,8 @@ run `cargo xtask verify --check streaming-session-postgres` and
 `cargo xtask sqlx-metadata` under its documented isolated metadata environment.
 Portable and PostgreSQL proof names are protected by the harness census.
 
-PR17 owns immutable segments, checkpoints, continuity and atomic publication; PR18
+Approved split: [PR17A](streaming-segments.md) adds immutable normalized capture/storage;
+PR17B owns charged-range fencing, checkpoints, lifecycle and atomic publication. PR18
 owns bounded WSS; PR19 owns a selected adapter; PR20 owns supervision/readiness and
 recovery. Scoped retirement of private streaming metadata, authenticated reference
 loading, restore fencing, physical disconnect evidence and provider-shared entitlement

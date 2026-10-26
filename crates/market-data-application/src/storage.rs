@@ -3,6 +3,45 @@ use edgeagent_contracts::evidence::{DailyEvidenceArtifact, EvidenceObject, Nativ
 use edgeagent_market_data_domain::UtcInstant;
 use std::{error::Error, fmt, future::Future};
 
+/// Trusted current streaming read/write authority, independent from daily acquisitions.
+/// Authenticate full retained session/selection/reviews and durable denial, not a digest
+/// or caller-asserted scope. Recheck original retention; a segment is not ready evidence.
+pub trait StreamSegmentAccess: Send + Sync {
+    /// Actual current UTC, sampled again after I/O.
+    fn now(&self) -> UtcInstant;
+    /// Authorize this complete expected descriptor for the authenticated actor.
+    /// # Errors
+    /// Deny unknown, revoked, retired, mismatched or unauthenticated authority.
+    fn authorize(
+        &self,
+        object: &edgeagent_contracts::evidence::StreamSegmentObject,
+    ) -> Result<(), EvidenceStorageError>;
+}
+/// Owner-private normalized streaming storage; no checkpoint/publication or cleanup grant.
+/// Uncertain PUTs retry the exact bytes/key, never compensate by deletion or new identity.
+pub trait StreamSegmentStorage: Send + Sync {
+    /// Conditional create plus exact canonical read-back under current authority.
+    /// # Errors
+    /// Returns classified authorization, integrity, expiry, backend or deadline failures.
+    fn put_segment(
+        &self,
+        segment: &edgeagent_contracts::evidence::StreamSegment,
+        access: &impl StreamSegmentAccess,
+    ) -> impl Future<
+        Output = Result<edgeagent_contracts::evidence::StreamSegmentObject, EvidenceStorageError>,
+    > + Send;
+    /// Bounded integrity-checked read; neither a historical descriptor nor hash grants access.
+    /// # Errors
+    /// Rejects denied, expired, corrupt, missing or unsupported objects and I/O failures.
+    fn get_segment(
+        &self,
+        object: &edgeagent_contracts::evidence::StreamSegmentObject,
+        access: &impl StreamSegmentAccess,
+    ) -> impl Future<
+        Output = Result<edgeagent_contracts::evidence::StreamSegment, EvidenceStorageError>,
+    > + Send;
+}
+
 /// Stable storage failure classification, independent from the storage SDK.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]

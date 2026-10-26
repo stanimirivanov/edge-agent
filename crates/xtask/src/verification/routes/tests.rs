@@ -826,6 +826,36 @@ fn every_declared_guide_and_check_exists_in_the_repository() -> Result<(), Strin
 }
 
 #[test]
+fn stream_segment_changes_route_codec_producer_and_storage_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/evidence.rs",
+        "crates/market-data-object-store/src/store.rs",
+        "crates/contracts/src/evidence/stream.rs",
+        "crates/contracts/src/evidence/stream/validate.rs",
+        "crates/market-data-application/src/streaming/segment.rs",
+        "crates/market-data-application/tests/stream_segments.rs",
+        "crates/market-data-application/tests/support/segment.rs",
+        "crates/market-data-application/src/storage.rs",
+        "crates/market-data-object-store/src/store/segment.rs",
+        "crates/market-data-object-store/tests/stream_segments.rs",
+        "docs/development/streaming-segments.md",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+        assert!(
+            advice.checks.contains("streaming-segment-contracts"),
+            "missing segment proof for {path}"
+        );
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/streaming-segments.md")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn market_data_changes_require_owned_recovery_proofs() -> Result<(), String> {
     for path in [
         "services/market-data/src/offline/handling.rs",

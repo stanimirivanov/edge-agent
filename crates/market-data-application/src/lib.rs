@@ -5,8 +5,9 @@
 mod activation;
 mod streaming;
 pub use streaming::{
-    StreamingAccountPolicy, StreamingArrival, StreamingConnection, StreamingFrame, StreamingLedger,
-    StreamingLimits, StreamingSession, StreamingSessionData, StreamingUsage,
+    CapturedStreamObservation, StreamSegmentInput, StreamingAccountPolicy, StreamingArrival,
+    StreamingConnection, StreamingFrame, StreamingLedger, StreamingLimits, StreamingSession,
+    StreamingSessionData, StreamingUsage, freeze_stream_segment,
 };
 mod canonical;
 pub use activation::{
@@ -62,7 +63,7 @@ pub use request::{AcquisitionRequest, Cancellation, KnowledgeMode, RawRetention,
 use std::num::NonZeroU128;
 pub use storage::{
     EvidenceAccess, EvidenceStorage, EvidenceStorageError, EvidenceStorageErrorKind,
-    NativeEvidenceStorage,
+    NativeEvidenceStorage, StreamSegmentAccess, StreamSegmentStorage,
 };
 pub use terminal::{
     AcquisitionPublication, PublicationAuthority, PublicationHead, TerminalProposal,
