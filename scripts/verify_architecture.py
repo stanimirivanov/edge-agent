@@ -110,7 +110,8 @@ PACKAGE_RULES = {
         "edgeagent-market-data-http", "lib", frozenset({
             CONTRACTS, "edgeagent-market-data-application", "edgeagent-market-data-domain", "metrics",
             "chrono", "httpdate", "reqwest", "rustls", "rustls-native-certs", "serde", "serde_json", "tokio", "url",
-        }), frozenset({"tokio"}),
+            "base64", "bytes", "fastwebsockets", "http-body-util", "hyper", "hyper-util", "sha1", "tokio-rustls",
+        }), frozenset({"tokio", "rcgen"}),
     ),
     "crates/market-data-application": PackageRule(
         "edgeagent-market-data-application", "lib", frozenset({CONTRACTS, "edgeagent-market-data-domain", "serde", "serde_json"}),

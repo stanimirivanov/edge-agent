@@ -7,9 +7,9 @@ mod streaming;
 pub use streaming::{
     CapturedStreamObservation, StreamCaptureBoundary, StreamCleanup, StreamDeletion,
     StreamDeletionAuthority, StreamPublication, StreamPublicationLedger, StreamSegmentInput,
-    StreamingAccountPolicy, StreamingArrival, StreamingConnection, StreamingFrame, StreamingLedger,
-    StreamingLimits, StreamingSession, StreamingSessionData, StreamingUsage, freeze_stream_segment,
-    publish_stream_segment, read_stream_segment,
+    StreamingAccountPolicy, StreamingArrival, StreamingAuthority, StreamingConnection,
+    StreamingFrame, StreamingLedger, StreamingLimits, StreamingSession, StreamingSessionData,
+    StreamingUsage, freeze_stream_segment, publish_stream_segment, read_stream_segment,
 };
 mod canonical;
 pub use activation::{

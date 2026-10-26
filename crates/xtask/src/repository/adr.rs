@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 66] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 67] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -351,6 +351,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 66] = [
         number: 66,
         path: "docs/decisions/0066-publish-stream-capture-through-durable-lifecycle-fences.md",
         title: "Publish stream capture through durable lifecycle fences",
+    },
+    PublishedIdentity {
+        number: 67,
+        path: "docs/decisions/0067-bound-wss-frames-before-provider-decoding.md",
+        title: "Bound WSS frames before provider decoding",
     },
 ];
 

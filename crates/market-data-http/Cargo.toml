@@ -8,6 +8,14 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+base64.workspace = true
+bytes.workspace = true
+fastwebsockets.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+sha1.workspace = true
+tokio-rustls.workspace = true
 chrono.workspace = true
 edgeagent-contracts.workspace = true
 edgeagent-market-data-application.workspace = true
@@ -19,10 +27,11 @@ rustls.workspace = true
 rustls-native-certs.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "net", "io-util", "sync"] }
 url.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "sync", "test-util"] }
 
 [lints]

@@ -298,7 +298,15 @@ impl StreamingLimits {
     }
 }
 
-/// Worker-owned substitution boundary for future transport; no owner approval or cleanup API.
+/// Trusted composition supplies current authenticated references and UTC time without I/O.
+pub trait StreamingAuthority: Send + Sync {
+    /// Current authenticated complete rights/provider histories, including withdrawals.
+    fn catalogs(&self) -> AuthorityCatalogs<'_>;
+    /// Trusted owner UTC time, never a provider timestamp or a message-supplied clock.
+    fn now(&self) -> UtcInstant;
+}
+
+/// Worker-owned substitution boundary for transport; no owner approval or cleanup API.
 pub trait StreamingLedger: Send + Sync {
     /// Commit capacity/start debit before dialing. Unknown results retain ownership.
     /// # Errors
