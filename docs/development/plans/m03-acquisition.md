@@ -80,6 +80,11 @@ terminal publication/relay and exact owner-approved cleanup. Crashes retain unce
 incomplete page traversals require reconciliation and a separately admitted run, not
 automatic refetch. PR15C still requires explicit live opt-in and actual rights, credential,
 restore/consumer and licensed-copy cleanup evidence.
+PR15C's [opt-in harness](../qualification-harness.md) is a separately approved offline
+preparation slice: reproducible file pins, bounded single-command supervision and private
+reports. It grants no approval and cannot certify command effects. Actual live daily
+qualification and cleanup evidence remain **not run** until separately authorized owner
+inputs, credentials and operational evidence are supplied; this does not complete PR15C.
 
 The conditional provider pair is Twelve Data first and Alpaca historical data
 second; neither selection authorizes credentials, live calls or data use.
