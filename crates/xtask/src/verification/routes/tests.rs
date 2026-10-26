@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn streaming_routes_authority_and_durable_account_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/streaming/authority.rs",
+        "crates/market-data-application/tests/streaming.rs",
+        "crates/market-data-application/tests/support/streaming.rs",
+        "crates/market-data-postgres/src/streaming/worker.rs",
+        "crates/market-data-postgres/tests/streaming.rs",
+        "crates/market-data-postgres/migrations/0007_streaming_sessions.sql",
+        "docs/development/streaming-sessions.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/streaming-sessions.md")
+        );
+        assert!(advice.checks.contains("streaming-session-contracts"));
+        assert!(advice.checks.contains("streaming-session-postgres"));
+        if path.contains("market-data-postgres") {
+            assert!(advice.checks.contains("sqlx-metadata"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn qualification_harness_routes_offline_supervision_tests() -> Result<(), String> {
     for path in [
         "scripts/qualify_daily.py",

@@ -3,6 +3,11 @@
 //! not credentials; recheck current catalogs before accepting results or using retained data.
 #![deny(missing_docs)]
 mod activation;
+mod streaming;
+pub use streaming::{
+    StreamingAccountPolicy, StreamingArrival, StreamingConnection, StreamingFrame, StreamingLedger,
+    StreamingLimits, StreamingSession, StreamingSessionData, StreamingUsage,
+};
 mod canonical;
 pub use activation::{
     QualificationAccountState, QualificationAssessment, QualificationAuthority,

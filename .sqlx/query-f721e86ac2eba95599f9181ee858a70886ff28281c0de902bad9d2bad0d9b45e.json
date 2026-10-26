@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_sessions s SET active=FALSE FROM edgeagent_stream_admissions a WHERE s.session_id=a.session_id AND a.account_id=$1 AND s.session_id=$2 AND s.generation=$3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f721e86ac2eba95599f9181ee858a70886ff28281c0de902bad9d2bad0d9b45e"
+}

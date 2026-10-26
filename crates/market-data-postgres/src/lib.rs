@@ -4,7 +4,9 @@
 mod ledger;
 mod qualification;
 mod runtime;
+mod streaming;
 pub use runtime::{QualificationCleanup, QualificationSnapshot, QualificationWorker};
+pub use streaming::{PostgresStreamingLedger, StreamingStatus};
 mod retention;
 mod terminal;
 pub use ledger::PostgresAcquisitionLedger;
@@ -17,11 +19,12 @@ pub const TERMINAL_MIGRATION_SQL: &str =
 /// Retirement inventory, opaque denial identities and account block generations.
 pub const RETENTION_MIGRATION_SQL: &str = include_str!("../migrations/0003_evidence_retention.sql");
 /// Ordered private migrations; retention refuses un-inventoried legacy publication metadata.
-pub const MIGRATIONS: [&str; 6] = [
+pub const MIGRATIONS: [&str; 7] = [
     MIGRATION_SQL,
     TERMINAL_MIGRATION_SQL,
     RETENTION_MIGRATION_SQL,
     include_str!("../migrations/0004_native_preparation.sql"),
     include_str!("../migrations/0005_qualification_owner.sql"),
     include_str!("../migrations/0006_qualification_runtime.sql"),
+    include_str!("../migrations/0007_streaming_sessions.sql"),
 ];

@@ -173,6 +173,18 @@ frame/byte, reconnect, selection and recovery budgets are required before activa
 Use bounded per-source queues/fair scheduling. Overload invalidates readiness;
 silent market-data dropping and unqualified gap-free claims are prohibited.
 
+PR16 implements the [finite session and account ledger](../streaming-sessions.md)
+offline-first with explicit limits and synthetic contracts/PostgreSQL proofs. Owner
+policy fixes lifetime starts/opening debit, concurrent unresolved connections, start
+spacing, expiry and duration; session budgets and frozen authority/selection survive
+reconnects. Only independent owner-confirmed exact-generation quiescence releases
+capacity, never process death, timeout or cancellation. It adds no transport, daemon
+mode, vendor activation or readiness claim. PR17 adds segment/checkpoint publication;
+PR18 enforces transport allocation/connect/idle limits; PR19 supplies the adapter;
+PR20 composes bounded supervision and recovery. Before activation, these slices must
+also address scoped metadata retirement, restore/reference freshness and any actual
+provider entitlement shared with HTTP. Daily PR15C live qualification remains not run.
+
 ## Harness and outstanding decisions
 
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable

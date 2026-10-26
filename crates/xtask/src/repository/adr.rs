@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 63] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 64] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -336,6 +336,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 63] = [
         number: 63,
         path: "docs/decisions/0063-compose-owner-authorized-finite-vendor-qualification.md",
         title: "Compose owner-authorized finite vendor qualification",
+    },
+    PublishedIdentity {
+        number: 64,
+        path: "docs/decisions/0064-bound-streaming-sessions-with-durable-account-fences.md",
+        title: "Bound streaming sessions with durable account fences",
     },
 ];
 

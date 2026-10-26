@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_sessions SET stopped=TRUE WHERE session_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b36631ac72acdd16e9bd466cc5a17a2e3f01651bca4438ed130ebef939815b8e"
+}

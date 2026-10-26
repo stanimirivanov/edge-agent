@@ -305,6 +305,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic frozen-run replay and one-factor fee/latency/liquidity sensitivity; no empirical market or statistical performance claim.",
         ),
         check(
+            "streaming-session-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "streaming",
+                "--",
+            ],
+            "Finite explicit selection/authority, session ceilings, sticky accounting and scoped generations; no provider I/O.",
+        ),
+        check(
             "offline-worker-contracts",
             "T2",
             &["verify", "test", "offline-ingestion"],
@@ -820,6 +836,21 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "streaming-session-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "stream_admission_pins_complete_selection_and_current_authority",
+                        "stream_windows_limits_and_delivery_never_inherit_daily_defaults",
+                        "stream_frame_receipts_charge_controls_and_stop_at_exact_limits",
+                        "stream_overages_and_invalid_state_cannot_refund_or_continue",
+                        "stream_connection_fences_bind_session_account_and_preserve_start_snapshot",
+                    ],
+                    ignored: false,
+                });
+            }
             "offline-source-network-denial" => {
                 entry.prerequisites = &[
                     Requirement::Executable("unshare"),

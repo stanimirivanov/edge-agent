@@ -122,6 +122,55 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/streaming"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &["streaming-session-contracts", "streaming-session-postgres"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/streaming"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &["streaming-session-contracts", "streaming-session-postgres"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/support/streaming.rs"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &["streaming-session-contracts", "streaming-session-postgres"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/src/streaming"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &[
+            "streaming-session-contracts",
+            "streaming-session-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/tests/streaming.rs"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &[
+            "streaming-session-contracts",
+            "streaming-session-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact(
+            "crates/market-data-postgres/migrations/0007_streaming_sessions.sql",
+        ),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &[
+            "streaming-session-contracts",
+            "streaming-session-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/streaming-sessions.md"),
+        guides: &["docs/development/streaming-sessions.md"],
+        checks: &["streaming-session-contracts", "streaming-session-postgres"],
+    },
+    Route {
         matcher: Matcher::Prefix("services/market-data/src/qualification/"),
         guides: &["docs/development/qualification-runtime.md"],
         checks: &[

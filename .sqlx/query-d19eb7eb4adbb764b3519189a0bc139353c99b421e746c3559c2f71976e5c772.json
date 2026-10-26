@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_stream_accounts(account_id,revision,connections,start_limit,session_ms,spacing_ms,expires_ms,opening_starts,charged_starts) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int4",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d19eb7eb4adbb764b3519189a0bc139353c99b421e746c3559c2f71976e5c772"
+}

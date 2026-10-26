@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_accounts SET withdrawn=TRUE WHERE account_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6e18c5108d22e7bccf4a91ec497fe8cf40f1e8f23ac3e7b49f724f62ae81b64d"
+}

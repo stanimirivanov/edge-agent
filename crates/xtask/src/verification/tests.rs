@@ -10,6 +10,16 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
 {
     for (id, expected) in [
         (
+            "streaming-session-contracts",
+            vec![
+                "stream_admission_pins_complete_selection_and_current_authority",
+                "stream_windows_limits_and_delivery_never_inherit_daily_defaults",
+                "stream_frame_receipts_charge_controls_and_stop_at_exact_limits",
+                "stream_overages_and_invalid_state_cannot_refund_or_continue",
+                "stream_connection_fences_bind_session_account_and_preserve_start_snapshot",
+            ],
+        ),
+        (
             "qualification-preflight",
             vec![
                 "qualification_profiles_are_bounded_canonical_strict_and_payload_safe",
@@ -210,6 +220,45 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             ] {
                 assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
             }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn streaming_postgres_census_rejects_missing_renamed_duplicate_and_extra_proofs()
+-> Result<(), String> {
+    let check = inventory::checks()
+        .into_iter()
+        .find(|c| c.id == "streaming-session-postgres")
+        .ok_or("streaming proof missing")?;
+    assert_eq!(check.tier, "T3");
+    assert_eq!(check.profiles, ["local-platform"]);
+    assert!(matches!(
+        check.prerequisites,
+        [Requirement::Environment("EDGEAGENT_POSTGRES_URL")]
+    ));
+    let census = check.discovery.ok_or("streaming census missing")?;
+    assert!(census.ignored);
+    let expected = [
+        "stream_replicas_serialize_capacity_and_fence_unresolved_connections",
+        "stream_usage_survives_confirmation_loss_reconnect_and_transaction_failure",
+        "stream_owner_authority_expiry_and_failed_start_never_reset_allocations",
+    ];
+    assert_eq!(census.expected, expected);
+    let complete = expected
+        .iter()
+        .map(|n| format!("{n}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(&census, complete.as_bytes())?;
+    for name in expected {
+        for changed in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, "renamed_streaming_proof"),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}extra_streaming_proof: test\n"),
+        ] {
+            assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
         }
     }
     Ok(())
@@ -521,6 +570,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "option-analytics-contracts",
             "account-audit-contracts",
             "frozen-evaluation-contracts",
+            "streaming-session-contracts",
             "offline-worker-contracts",
             "offline-source-isolation",
             "instrument-selection-routing",

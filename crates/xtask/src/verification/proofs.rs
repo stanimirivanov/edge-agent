@@ -12,6 +12,15 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const STREAMING: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "streaming",
+    identities: &[
+        "stream_replicas_serialize_capacity_and_fence_unresolved_connections",
+        "stream_usage_survives_confirmation_loss_reconnect_and_transaction_failure",
+        "stream_owner_authority_expiry_and_failed_start_never_reset_allocations",
+    ],
+};
 const QUALIFICATION_OWNER: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "qualification",
@@ -258,6 +267,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "streaming-session-postgres",
+            &STREAMING,
+            POSTGRES,
+            "Synthetic account contention, independent owner control, durable uncertainty, generations, frame confirmation loss and atomic failure; no provider or socket activation.",
+        ),
         suite(
             "qualification-owner-postgres",
             &QUALIFICATION_OWNER,
@@ -576,6 +591,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACQUISITION_LEDGER,
         ACQUISITION_TERMINAL,
         QUALIFICATION_OWNER,
+        STREAMING,
         NATIVE_PUBLICATION,
         EVIDENCE_RETENTION,
         OFFLINE_WORKER,
@@ -882,7 +898,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 36);
+        assert_eq!(checks.len(), 37);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -897,8 +913,8 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 97);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 97);
+        assert_eq!(inventory.len(), 100);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 100);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
