@@ -7,6 +7,8 @@
 - Workers cannot approve input, grant execution, reconcile unknown calls or authorize cleanup.
 - A crash leaves a durable account fence; only exact-generation owner quiescence permits recovery.
 - Verification is offline; PR15C needs separately authorized credentials and provider calls.
+- The [opt-in harness](qualification-harness.md) supervises one command and reports status,
+  not authorization or live qualification; its default performs no external work.
 
 ## Provisioning and commands
 

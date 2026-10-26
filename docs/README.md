@@ -22,6 +22,8 @@ For independent PostgreSQL owner grants and atomic worker mutation guards, read
 For bounded vendor workers, complete owner inputs, persistent fencing and exact approved
 cleanup, read [qualification runtime](development/qualification-runtime.md) and
 [ADR-0063](decisions/0063-compose-owner-authorized-finite-vendor-qualification.md).
+For opt-in command supervision, honest reports and the remaining private live evidence,
+read the [qualification harness](development/qualification-harness.md).
 
 For unattended M02 crash/restart/wire-ACK qualification, use the focused
 [qualification guide](development/m02-qualification.md).

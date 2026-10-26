@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn qualification_harness_routes_offline_supervision_tests() -> Result<(), String> {
+    for path in [
+        "scripts/qualify_daily.py",
+        "tests/test_qualify_daily.py",
+        "docs/development/qualification-harness.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/qualification-harness.md")
+        );
+        assert!(advice.checks.contains("harness-tests"));
+    }
+    Ok(())
+}
+
+#[test]
 fn qualification_runtime_routes_both_protocols_and_owner_proofs() -> Result<(), String> {
     let advice = advise(&["services/market-data/src/qualification/worker.rs".into()])?;
     assert!(

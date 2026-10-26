@@ -637,6 +637,21 @@ const ROUTES: &[Route] = &[
         checks: &[],
     },
     Route {
+        matcher: Matcher::Exact("scripts/qualify_daily.py"),
+        guides: &["docs/development/qualification-harness.md"],
+        checks: &["harness-tests"],
+    },
+    Route {
+        matcher: Matcher::Exact("tests/test_qualify_daily.py"),
+        guides: &["docs/development/qualification-harness.md"],
+        checks: &["harness-tests"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/qualification-harness.md"),
+        guides: &["docs/development/qualification-harness.md"],
+        checks: &["harness-tests"],
+    },
+    Route {
         matcher: Matcher::Exact("tests/test_verify_sqlx_query_policy.py"),
         guides: &["docs/development/sqlx-metadata.md"],
         checks: &[],
