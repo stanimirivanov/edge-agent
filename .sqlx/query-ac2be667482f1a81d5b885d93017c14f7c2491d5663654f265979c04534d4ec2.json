@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_stream_sessions(session_id) VALUES($1) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ac2be667482f1a81d5b885d93017c14f7c2491d5663654f265979c04534d4ec2"
+}

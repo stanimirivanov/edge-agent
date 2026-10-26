@@ -235,6 +235,24 @@ impl InstrumentRoute<'_> {
     }
 }
 impl<'a> SelectionPlan<'a> {
+    pub(crate) fn streaming_binding(
+        &self,
+        scopes: &[crate::AccessScope],
+        window: EffectiveInterval,
+        at: UtcInstant,
+    ) -> Result<Vec<u8>> {
+        let members: BTreeSet<_> = scopes.iter().map(|s| s.instrument).collect();
+        if members != self.selection.value().members
+            || scopes.iter().any(|s| s.source != self.context.scope.source)
+            || self.context.effective_at != window.bounds().0
+            || self.context.cutoff > at
+            || self.selection.value().effective.bounds().1 < window.bounds().1
+            || self.directory.value().effective.bounds().1 < window.bounds().1
+        {
+            return Err(SelectionError::Scope);
+        }
+        self.binding_bytes()
+    }
     /// Choose each requested record's latest known revision BEFORE checking scope/effectivity.
     /// # Errors
     /// Rejects missing/foreign/inactive revisions, future mapping receipts, ambiguous mappings

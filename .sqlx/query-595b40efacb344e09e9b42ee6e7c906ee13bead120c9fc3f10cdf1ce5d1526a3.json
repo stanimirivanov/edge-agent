@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT connections,start_limit,session_ms,spacing_ms,expires_ms,charged_starts,generation,last_start_ms,withdrawn FROM edgeagent_stream_accounts WHERE account_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connections",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "connections"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "start_limit",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "start_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "session_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "spacing_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "spacing_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "charged_starts",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "charged_starts"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "generation"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_start_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "last_start_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "withdrawn",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_accounts",
+            "name": "withdrawn"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "595b40efacb344e09e9b42ee6e7c906ee13bead120c9fc3f10cdf1ce5d1526a3"
+}

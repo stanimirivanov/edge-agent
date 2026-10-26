@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For finite offline streaming authority, explicit budgets and durable account slots,
+read [streaming sessions](development/streaming-sessions.md) and
+[ADR-0064](decisions/0064-bound-streaming-sessions-with-durable-account-fences.md).
+
 For owner-reviewed finite daily qualification profiles and fail-closed offline checks,
 read [qualification preflight](development/qualification-preflight.md) and
 [ADR-0061](decisions/0061-separate-owner-reviewed-qualification-preflight-from-execution.md).

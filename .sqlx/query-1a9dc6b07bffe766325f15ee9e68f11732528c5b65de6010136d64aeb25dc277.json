@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_accounts SET charged_starts=charged_starts+1,generation=$2,last_start_ms=$3 WHERE account_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1a9dc6b07bffe766325f15ee9e68f11732528c5b65de6010136d64aeb25dc277"
+}

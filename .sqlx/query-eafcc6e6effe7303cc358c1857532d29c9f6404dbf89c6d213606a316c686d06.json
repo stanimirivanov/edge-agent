@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT account_id=$2 AND admission=$3 AND NOT withdrawn AS \"same!\" FROM edgeagent_stream_admissions WHERE session_id=$1 FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "same!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eafcc6e6effe7303cc358c1857532d29c9f6404dbf89c6d213606a316c686d06"
+}

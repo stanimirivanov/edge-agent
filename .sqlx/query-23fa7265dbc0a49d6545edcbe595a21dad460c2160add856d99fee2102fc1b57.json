@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT starts,frames,bytes,last_frame_bytes,stopped,generation,active FROM edgeagent_stream_sessions WHERE session_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "starts",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "starts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "frames",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "frames"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "last_frame_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "last_frame_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "stopped",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "stopped"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "generation"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_sessions",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "23fa7265dbc0a49d6545edcbe595a21dad460c2160add856d99fee2102fc1b57"
+}

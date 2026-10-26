@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\" FROM edgeagent_stream_sessions s JOIN edgeagent_stream_admissions a USING(session_id) WHERE a.account_id=$1 AND s.active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "79a0952208225276c41ecd59814b5b2928ab1378f276a2d6990ea087abba1782"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_admissions SET withdrawn=TRUE WHERE account_id=$1 AND session_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efc8f0c0cff8a6178415b6be9721cbb183a001703ec90bf5c577640349c7d8e3"
+}
