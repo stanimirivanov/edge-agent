@@ -15,6 +15,12 @@ use edgeagent_market_data_postgres::PostgresAcquisitionLedger as Ledger;
 use futures_util::FutureExt;
 use std::{num::NonZeroU64, panic::AssertUnwindSafe};
 use support::*;
+async fn claimed(
+    ledger: Ledger,
+) -> Result<(Ledger, edgeagent_market_data_postgres::QualificationWorker)> {
+    let claim = ledger.claim_qualification_worker().await?;
+    Ok((ledger.bind_qualification_worker(&claim)?, claim))
+}
 
 fn time(ms: i64) -> Result<EvidenceTime> {
     Ok(EvidenceTime {
@@ -22,15 +28,17 @@ fn time(ms: i64) -> Result<EvidenceTime> {
         nanos: u32::try_from(ms.rem_euclid(1000))? * 1_000_000,
     })
 }
-async fn setup(
+async fn setup_with_calls(
     h: &Harness,
     id: u128,
+    calls: u32,
 ) -> Result<(
     AdmissionRecord,
     QualificationProfile,
     [QualificationControlReview; 5],
 )> {
-    let case = Case::with_precision(h.now, id, TimestampPrecision::Nanoseconds)?;
+    let mut case = Case::with_precision(h.now, id, TimestampPrecision::Nanoseconds)?;
+    case.request.budget.calls = std::num::NonZeroU32::new(calls).ok_or("calls")?;
     let record = case
         .record()?
         .with_configuration(&DailyEvidenceArtifact::hash(
@@ -92,6 +100,16 @@ async fn setup(
     .map_err(|_| "controls")?;
     Ok((record, profile, controls))
 }
+async fn setup(
+    h: &Harness,
+    id: u128,
+) -> Result<(
+    AdmissionRecord,
+    QualificationProfile,
+    [QualificationControlReview; 5],
+)> {
+    setup_with_calls(h, id, 12).await
+}
 async fn counts(h: &Harness) -> Result<(i64, i64, i64)> {
     Ok((
         sqlx::query_scalar("SELECT count(*) FROM edgeagent_acquisition_receipts")
@@ -142,6 +160,31 @@ async fn qualification_roles_require_independent_owner_and_exact_current_profile
         )?;
         owner.approve_qualification(&profile, &controls).await?;
         owner.approve_qualification(&profile, &controls).await?;
+        kind(worker.install_qualification_input(record.command(),b"{}").await,BudgetErrorKind::Denied)?;
+        owner.install_qualification_input(record.command(),b"{}").await?;
+        assert_eq!(worker.qualification_input().await?,b"{}");
+        kind(owner.install_qualification_input(record.command(),b"changed").await,BudgetErrorKind::Conflict)?;
+        let snapshot=worker.qualification_snapshot().await?;
+        assert!(snapshot.assess(&profile,&record,snapshot.at())?.is_some());
+        assert!(snapshot.assess(&profile,&record,UtcInstant::from_unix_millis(snapshot.at().unix_millis()+1)?).is_err());
+        let first=worker.claim_qualification_worker().await?;
+        let stale=worker.bind_qualification_worker(&first)?;
+        kind(worker.claim_qualification_worker().await,BudgetErrorKind::Busy)?;
+        // A dropped future/handle never releases a durable claim. Only the owner
+        // can assert physical quiescence, and stale generations cannot clear successors.
+        let account=EvidenceId::new(&format!("{:032x}",record.request().scope.account.get()))?;
+        kind(worker.confirm_qualification_worker_quiescent(&account,1).await,BudgetErrorKind::Denied)?;
+        kind(owner.confirm_qualification_worker_quiescent(&account,2).await,BudgetErrorKind::Conflict)?;
+        owner.confirm_qualification_worker_quiescent(&account,1).await?;
+        let second=worker.claim_qualification_worker().await?;
+        kind(stale.start_call(record.command(),None).await,BudgetErrorKind::Denied)?;
+        kind(worker.check_qualification_worker(&first).await,BudgetErrorKind::Denied)?;
+        worker.check_qualification_worker(&second).await?;
+        kind(owner.confirm_qualification_worker_quiescent(&account,1).await,BudgetErrorKind::Conflict)?;
+        owner.confirm_qualification_worker_quiescent(&account,2).await?;
+        // Early-bound input read cannot be replaced with worker-authored temp data.
+        sqlx::raw_sql("CREATE TEMP TABLE edgeagent_qualification_inputs(request_id TEXT,document BYTEA); INSERT INTO edgeagent_qualification_inputs VALUES('invented','\\x66616b65')").execute(&pool).await?;
+        assert_eq!(worker.qualification_input().await?,b"{}");
         // A connection-local temp table grants its creator INSERT/UPDATE, but
         // cannot become the independent owner's early-bound control relation.
         sqlx::raw_sql("CREATE TEMP TABLE edgeagent_qualification_grants(request_id TEXT, profile BYTEA, reviews BYTEA, approved BOOLEAN)").execute(&pool).await?;
@@ -188,6 +231,7 @@ async fn qualification_roles_require_independent_owner_and_exact_current_profile
                 .await,
             BudgetErrorKind::Conflict,
         )?;
+        let (worker,_claim)=claimed(worker).await?;
         worker.begin_attempt(record.command(), 1).await?;
         let permit = worker.start_call(record.command(), None).await?;
         let before = worker.load(record.command()).await?.1;
@@ -238,7 +282,7 @@ async fn qualification_withdrawal_and_terminal_failure_roll_back_all_effects() -
         kind(worker.commit(&delivery,&proposal,&access).await,BudgetErrorKind::Denied)?;
         assert_eq!(counts(&h).await?,(0,0,0));
         let (record,profile,controls)=setup(&h,2).await?;owner.approve_qualification(&profile,&controls).await?;
-        let worker=Ledger::for_qualification(pool.clone(),profile.clone());
+        let (worker,publication_claim)=claimed(Ledger::for_qualification(pool.clone(),profile.clone())).await?;
         let delivery=fixtures::delivery(record.command(),"qualification-approved")?;
         let proposal=TerminalProposal::rejected(record.command().clone(),EvidenceRejection::Provider);
         sqlx::raw_sql("CREATE FUNCTION fail_qualification_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'invented rollback'; END $$;
@@ -250,6 +294,27 @@ async fn qualification_withdrawal_and_terminal_failure_roll_back_all_effects() -
         owner.withdraw_qualification(&profile).await?;
         assert_eq!(worker.recover(&delivery).await?.ok_or("receipt")?.bytes(),receipt.bytes());
         assert_eq!(counts(&h).await?,(1,1,1));
+        worker.finish_qualification_worker(publication_claim).await?;
+        // Terminal/preparation recovery must not need another provider call.
+        let (last,profile,controls)=setup_with_calls(&h,3,1).await?;
+        owner.approve_qualification(&profile,&controls).await?;
+        let (worker,source_claim)=claimed(Ledger::for_qualification(pool.clone(),profile)).await?;
+        worker.begin_attempt(last.command(),1).await?;
+        let call=worker.start_call(last.command(),None).await?;
+        worker.complete_call(&call,CallCompletion::Observed{decoded_bytes:0,retry_after_ms:None}).await?;
+        kind(worker.qualification_snapshot().await,BudgetErrorKind::Exhausted)?;
+        let account=EvidenceId::new(&format!("{:032x}",last.request().scope.account.get()))?;
+        owner.confirm_qualification_worker_quiescent(&account,source_claim.generation()).await?;
+        let (worker,claim)=claimed(worker).await?;
+        let event=fixtures::delivery(last.command(),"last-call-publication")?;
+        worker.commit(&event,&TerminalProposal::rejected(last.command().clone(),EvidenceRejection::Provider),&access).await?;
+        worker.finish_qualification_worker(claim).await?;
+        kind(worker.claim_qualification_worker().await,BudgetErrorKind::Terminal)?;
+        let (cancelled,profile,controls)=setup(&h,4).await?;
+        owner.approve_qualification(&profile,&controls).await?;
+        let worker=Ledger::for_qualification(pool.clone(),profile);
+        worker.cancel(cancelled.command()).await?;
+        kind(worker.claim_qualification_worker().await,BudgetErrorKind::Cancelled)?;
         Ok(())
     }).catch_unwind().await;
     h.drop_worker(pool, &role).await?;
@@ -266,6 +331,7 @@ async fn qualification_retirement_erases_grants_without_owner_reconciliation_byp
         let owner = Ledger::new(h.pool.clone());
         owner.approve_qualification(&profile, &controls).await?;
         let worker = Ledger::for_qualification(pool.clone(), profile.clone());
+        let (worker, _claim) = claimed(worker).await?;
         worker.begin_attempt(record.command(), 1).await?;
         let _pending = worker.start_call(record.command(), None).await?;
         owner.withdraw_qualification(&profile).await?;
@@ -279,6 +345,40 @@ async fn qualification_retirement_erases_grants_without_owner_reconciliation_byp
                 .fetch_one(&h.pool)
                 .await?;
         assert_eq!(remaining, 0);
+        let item = owner
+            .pending_cleanup(16)
+            .await?
+            .into_iter()
+            .find(|i| i.request == record.command().request)
+            .ok_or("retired inventory")?;
+        let evidence = EvidenceVersion {
+            id: EvidenceId::new(&format!("{:032x}", 901))?,
+            revision: EvidenceRevision::new("1")?,
+        };
+        kind(
+            worker.approve_qualification_cleanup(&item, &evidence).await,
+            BudgetErrorKind::Denied,
+        )?;
+        kind(
+            owner.qualification_cleanup(&item.request).await,
+            BudgetErrorKind::Denied,
+        )?;
+        owner
+            .approve_qualification_cleanup(&item, &evidence)
+            .await?;
+        let authority = owner.qualification_cleanup(&item.request).await?;
+        authority.confirm_writes_quiescent(&item.request)?;
+        assert!(
+            authority
+                .confirm_writes_quiescent(&EvidenceId::new(&format!("{:032x}", 902))?)
+                .is_err()
+        );
+        owner.complete_cleanup(&item.request).await?;
+        let private: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM edgeagent_qualification_cleanup")
+                .fetch_one(&h.pool)
+                .await?;
+        assert_eq!(private, 0);
         let account = EvidenceId::new(&format!("{:032x}", record.request().scope.account.get()))?;
         let generation = owner.account_block(&account).await?.ok_or("block")?;
         assert!(NonZeroU64::new(u64::try_from(generation)?).is_some());
@@ -316,6 +416,7 @@ async fn qualification_withdrawal_races_and_policy_mismatches_leave_atomic_accou
         let owner = Ledger::new(h.pool.clone());
         owner.approve_qualification(&profile, &controls).await?;
         let worker = Ledger::for_qualification(pool.clone(), profile.clone());
+        let (worker, _claim) = claimed(worker).await?;
         worker.begin_attempt(record.command(), 1).await?;
         let (started, withdrawn) = tokio::join!(
             worker.start_call(record.command(), None),

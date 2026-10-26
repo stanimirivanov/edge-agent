@@ -19,6 +19,7 @@ enum MutationAuthority {
 pub struct PostgresAcquisitionLedger {
     pool: PgPool,
     pub(super) qualification: Option<edgeagent_market_data_application::QualificationProfile>,
+    pub(super) worker: Option<crate::runtime::WorkerBinding>,
 }
 impl fmt::Debug for PostgresAcquisitionLedger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -33,9 +34,12 @@ impl PostgresAcquisitionLedger {
         Self {
             pool,
             qualification: None,
+            worker: None,
         }
     }
-    /// Bind one exact independently owner-approved profile. Performs no approval or I/O.
+    /// Bind one exact independently owner-approved profile for assessment/recovery.
+    /// Claim and bind a qualification worker before protected mutations; this constructor
+    /// alone confers no execution capability. Performs no approval or I/O.
     /// Reservation and first publication reject privileged/self-approving worker roles.
     #[must_use]
     pub fn for_qualification(
@@ -45,6 +49,7 @@ impl PostgresAcquisitionLedger {
         Self {
             pool,
             qualification: Some(profile),
+            worker: None,
         }
     }
     pub(super) fn bind(&self, command: &AcquireEvidence) -> Result<(), Error> {
@@ -194,6 +199,7 @@ impl PostgresAcquisitionLedger {
                 Some((&budget, &shared)),
             )
             .await?;
+            self.guard_qualification_worker(&mut tx, &record).await?;
         }
         // Approval contention must not preserve the earlier accounting sample.
         let now = if matches!(authority, MutationAuthority::Qualification) {

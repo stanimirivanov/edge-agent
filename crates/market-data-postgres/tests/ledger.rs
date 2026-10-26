@@ -7,17 +7,8 @@ mod support;
 use edgeagent_market_data_application::*;
 use edgeagent_market_data_postgres::PostgresAcquisitionLedger;
 use futures_util::FutureExt;
-use std::{error::Error as _, panic::AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
 use support::*;
-
-fn is_lock_timeout(error: &BudgetError) -> bool {
-    error.kind() == BudgetErrorKind::Storage
-        && error
-            .source()
-            .and_then(|cause| cause.downcast_ref::<sqlx::Error>())
-            .and_then(sqlx::Error::as_database_error)
-            .is_some_and(|cause| cause.code().as_deref() == Some("55P03"))
-}
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
@@ -87,8 +78,12 @@ async fn competing_replicas_restart_and_lost_completion_preserve_permits_and_cha
     let result = AssertUnwindSafe(async {
         let f = Case::new(h.now, 1)?;
         let other = Case::new(h.now, 2)?;
-        let r = f.record()?;
-        let s = other.record()?;
+        // Reconnect and fault checks must not race a 15-second wall-clock window
+        // on a loaded host. Keep a two-minute window within the five-minute
+        // command deadline; age_rate_history below
+        // explicitly releases it without sleeping or changing production time.
+        let r = f.record_with_spacing(120000)?;
+        let s = other.record_with_spacing(120000)?;
         let left = PostgresAcquisitionLedger::new(h.pool.clone());
         let pool = h.reconnect().await?;
         let right = PostgresAcquisitionLedger::new(pool.clone());
@@ -118,7 +113,10 @@ async fn competing_replicas_restart_and_lost_completion_preserve_permits_and_cha
             (Ok(p), Err(e)) | (Err(e), Ok(p)) => (p, e),
             _ => return Err("expected one exclusive permit".into()),
         };
-        assert_eq!(loser.kind(), BudgetErrorKind::Busy);
+        assert!(
+            loser.kind() == BudgetErrorKind::Busy || is_lock_timeout(&loser),
+            "unexpected contender failure: {loser:?}"
+        );
         drop(left);
         drop(right);
         pool.close().await;
@@ -280,8 +278,10 @@ async fn daily_credits_commit_with_permits_and_survive_contention_rollback_and_r
         let right = PostgresAcquisitionLedger::new(pool.clone());
         let (one, two) = tokio::join!(left.start_call(a, None), right.start_call(b, None));
         let permit = match (one, two) {
-            (Ok(p), Err(e)) | (Err(e), Ok(p)) if e.kind() == BudgetErrorKind::Busy => p,
-            _ => return Err("one committed permit, one fenced competitor".into()),
+            // The configured SQL lock timeout is also a confirmed aborted loser;
+            // retain all subsequent exact credit/permit/restart assertions.
+            (Ok(p), Err(e)) | (Err(e), Ok(p)) if e.kind() == BudgetErrorKind::Busy || is_lock_timeout(&e) => p,
+            (a,b) => return Err(format!("expected one committed permit and one fenced competitor; got {a:?}, {b:?}").into()),
         };
         assert_eq!(right.daily_credit_usage(account).await?.ok_or("usage")?.charged, 5);
         drop(right);

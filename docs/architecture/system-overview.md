@@ -51,7 +51,11 @@ adapters and outside pure market values. It checks reviewed rights/capabilities
 before and after acquisition and defines bounded provider, storage and publication
 ports. Separate HTTP, object-store and PostgreSQL adapters supply bounded I/O,
 durable budgets and atomic terminal publication. MarketData composes these only as
-a finite [offline worker](../development/offline-worker.md); vendors remain disabled.
+a finite [offline worker](../development/offline-worker.md). Separate
+[qualification commands](../development/qualification-runtime.md) compose finite vendor
+acquisition only with independent owner approval, complete inputs and durable account
+ownership; offline selection cannot activate them. Actual live qualification remains
+separately authorized and is not established by synthetic tests.
 See [acquisition authority](../development/market-data-acquisition.md)
 and [terminal publication](../development/acquisition-publication.md).
 

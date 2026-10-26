@@ -50,6 +50,7 @@ edgeagent-market-data-application = { path = "crates/market-data-application" }
 edgeagent-market-data-replay = { path = "crates/market-data-replay" }
 edgeagent-market-data-postgres = { path = "crates/market-data-postgres" }
 edgeagent-market-data-object-store = { path = "crates/market-data-object-store" }
+edgeagent-market-data-http = { path = "crates/market-data-http" }
 edgeagent-simulation-domain = { path = "crates/simulation-domain" }
 edgeagent-simulation-postgres = { path = "crates/simulation-postgres" }
 edgeagent-inbox-postgres = { path = "crates/inbox-postgres" }

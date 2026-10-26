@@ -73,8 +73,8 @@ the existing ledger immediately before each dispatch. Current errors remain type
 ## Verification and remaining work
 
 [PR15B1 owner control](qualification-owner.md) adds independent SQL approvals and
-atomic mutation guards. PR15B2 still owns the production preflight authority adapter,
-authenticated full reference/configuration loading and actual vendor worker composition.
+atomic mutation guards. [PR15B2 runtime](qualification-runtime.md) supplies the production
+SQL assessment, authenticated complete input and separate finite vendor composition.
 Constructing a SQL grant remains an owner assertion, not verification of external facts.
 
 Run `cargo xtask verify --check qualification-preflight` for the six protected tests;

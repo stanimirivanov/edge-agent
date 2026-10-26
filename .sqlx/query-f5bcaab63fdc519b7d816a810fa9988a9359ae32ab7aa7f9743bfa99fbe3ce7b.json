@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_qualification_workers SET active=FALSE WHERE account_id=$1 AND generation=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5bcaab63fdc519b7d816a810fa9988a9359ae32ab7aa7f9743bfa99fbe3ce7b"
+}

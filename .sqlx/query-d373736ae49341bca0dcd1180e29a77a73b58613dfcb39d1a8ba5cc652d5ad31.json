@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_qualification_workers(account_id,generation,request_id,active) VALUES($1,1,$2,TRUE) ON CONFLICT(account_id) DO UPDATE SET generation=edgeagent_qualification_workers.generation+1,request_id=EXCLUDED.request_id,active=TRUE WHERE NOT edgeagent_qualification_workers.active RETURNING generation",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_workers",
+            "name": "generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d373736ae49341bca0dcd1180e29a77a73b58613dfcb39d1a8ba5cc652d5ad31"
+}

@@ -15,6 +15,7 @@ edgeagent-market-data-domain.workspace = true
 edgeagent-market-data-replay.workspace = true
 edgeagent-market-data-postgres.workspace = true
 edgeagent-market-data-object-store.workspace = true
+edgeagent-market-data-http.workspace = true
 edgeagent-simulation-domain.workspace = true
 edgeagent-inbox-postgres.workspace = true
 edgeagent-outbox-postgres.workspace = true

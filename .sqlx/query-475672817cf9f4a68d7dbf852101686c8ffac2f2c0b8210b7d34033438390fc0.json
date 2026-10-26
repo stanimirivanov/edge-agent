@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT document FROM edgeagent_qualification_inputs WHERE request_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_qualification_inputs",
+            "name": "document"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "475672817cf9f4a68d7dbf852101686c8ffac2f2c0b8210b7d34033438390fc0"
+}

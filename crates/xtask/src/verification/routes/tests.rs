@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn qualification_runtime_routes_both_protocols_and_owner_proofs() -> Result<(), String> {
+    let advice = advise(&["services/market-data/src/qualification/worker.rs".into()])?;
+    assert!(
+        advice
+            .guides
+            .contains("docs/development/qualification-runtime.md")
+    );
+    for id in [
+        "qualification-owner-postgres",
+        "twelve-data-conformance",
+        "alpaca-conformance",
+        "native-publication-postgres",
+    ] {
+        assert!(advice.checks.contains(id));
+    }
+    Ok(())
+}
+
+#[test]
 fn owner_control_paths_route_real_role_proofs_and_metadata() -> Result<(), String> {
     for path in [
         "crates/market-data-postgres/src/qualification.rs",

@@ -19,6 +19,9 @@ read [qualification preflight](development/qualification-preflight.md) and
 For independent PostgreSQL owner grants and atomic worker mutation guards, read
 [qualification owner control](development/qualification-owner.md) and
 [ADR-0062](decisions/0062-require-independent-postgresql-owner-grants-for-qualification.md).
+For bounded vendor workers, complete owner inputs, persistent fencing and exact approved
+cleanup, read [qualification runtime](development/qualification-runtime.md) and
+[ADR-0063](decisions/0063-compose-owner-authorized-finite-vendor-qualification.md).
 
 For unattended M02 crash/restart/wire-ACK qualification, use the focused
 [qualification guide](development/m02-qualification.md).

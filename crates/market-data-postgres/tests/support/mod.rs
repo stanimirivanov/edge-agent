@@ -5,6 +5,7 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::{
+    error::Error as _,
     num::NonZeroU32,
     str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
@@ -13,6 +14,18 @@ pub type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Sen
 pub fn kind<T>(r: std::result::Result<T, BudgetError>, expected: BudgetErrorKind) -> Result {
     assert_eq!(r.err().ok_or("expected budget failure")?.kind(), expected);
     Ok(())
+}
+#[allow(
+    dead_code,
+    reason = "Shared by contended admission and terminal proofs only."
+)]
+pub fn is_lock_timeout(error: &BudgetError) -> bool {
+    error.kind() == BudgetErrorKind::Storage
+        && error
+            .source()
+            .and_then(|cause| cause.downcast_ref::<sqlx::Error>())
+            .and_then(sqlx::Error::as_database_error)
+            .is_some_and(|cause| cause.code().as_deref() == Some("55P03"))
 }
 pub struct Harness {
     pub pool: PgPool,
@@ -90,6 +103,10 @@ impl Harness {
             GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO {role};
             REVOKE ALL ON {schema}.edgeagent_qualification_grants FROM {role};
             GRANT SELECT ON {schema}.edgeagent_qualification_grants TO {role};
+            REVOKE ALL ON {schema}.edgeagent_qualification_inputs,{schema}.edgeagent_qualification_cleanup FROM {role};
+            GRANT SELECT ON {schema}.edgeagent_qualification_inputs,{schema}.edgeagent_qualification_cleanup TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input_role() TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input(TEXT) TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_qualification_grant(TEXT),{schema}.edgeagent_qualification_role() TO {role};",schema=self.schema)))
             .execute(&self.root).await?;
         let pool = PgPoolOptions::new()
@@ -279,6 +296,9 @@ impl Case {
         }
     }
     pub fn record(&self) -> Result<AdmissionRecord> {
+        self.record_with_spacing(15000)
+    }
+    pub fn record_with_spacing(&self, spacing_ms: u32) -> Result<AdmissionRecord> {
         let cancel = Cancellation::default();
         let admitted = self
             .catalogs()
@@ -287,7 +307,7 @@ impl Case {
             &admitted,
             AcquisitionLimits {
                 attempts: 3,
-                spacing_ms: 15000,
+                spacing_ms,
                 starts_per_minute: 4,
             },
             ListingId::new(1)?,

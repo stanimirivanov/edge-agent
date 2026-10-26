@@ -112,6 +112,12 @@ impl PostgresAcquisitionLedger {
     ) -> Result<(), Error> {
         let mut tx = self.transaction().await?;
         let (record, _) = ledger::load(&mut tx, &command).await?;
+        self.bind(&command)?;
+        self.guard_qualification_worker(&mut tx, &record).await?;
+        if self.qualification.is_some() {
+            crate::qualification::guard(&mut tx, self.qualification.as_ref(), &record, None)
+                .await?;
+        }
         verify(&record)?;
         let until = record.valid_until_ms()?;
         let valid = sqlx::query_scalar!(
@@ -251,6 +257,13 @@ impl EvidenceRetention for PostgresAcquisitionLedger {
         if retired.is_none() {
             return Err(Error::new(K::Denied));
         }
+        sqlx::query!(
+            "DELETE FROM edgeagent_qualification_cleanup WHERE request_id=$1",
+            id.as_str()
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
         sqlx::query!(
             "DELETE FROM edgeagent_evidence_objects WHERE request_id=$1",
             id.as_str()

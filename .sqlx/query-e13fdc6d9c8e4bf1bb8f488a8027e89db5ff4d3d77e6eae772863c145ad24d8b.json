@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT descriptor FROM edgeagent_evidence_objects WHERE request_id=$1 ORDER BY object_key FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "descriptor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_evidence_objects",
+            "name": "descriptor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e13fdc6d9c8e4bf1bb8f488a8027e89db5ff4d3d77e6eae772863c145ad24d8b"
+}

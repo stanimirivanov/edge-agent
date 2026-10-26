@@ -705,6 +705,7 @@ dependencies = [
  "edgeagent-inbox-postgres",
  "edgeagent-market-data-application",
  "edgeagent-market-data-domain",
+ "edgeagent-market-data-http",
  "edgeagent-market-data-object-store",
  "edgeagent-market-data-postgres",
  "edgeagent-market-data-replay",

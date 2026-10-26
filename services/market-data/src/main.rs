@@ -6,6 +6,7 @@ use edgeagent_contracts::{Component, ServiceDescriptor};
 use edgeagent_service_runtime::run;
 use std::process::ExitCode;
 mod offline;
+mod qualification;
 
 const DESCRIPTOR: ServiceDescriptor = ServiceDescriptor::new(
     Component::MarketData,
@@ -15,6 +16,20 @@ const DESCRIPTOR: ServiceDescriptor = ServiceDescriptor::new(
 
 fn main() -> ExitCode {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if args
+        .first()
+        .and_then(|a| a.to_str())
+        .is_some_and(|a| a.starts_with("qualification-"))
+    {
+        return match args
+            .into_iter()
+            .map(std::ffi::OsString::into_string)
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(args) => qualification::run(&args),
+            Err(_) => ExitCode::from(2),
+        };
+    }
     if args
         .first()
         .and_then(|arg| arg.to_str())

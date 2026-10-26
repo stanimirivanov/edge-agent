@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_precise_preparations(request_id,digest,artifact) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b4e688502eb37fc5b2d5966a8d12b8b6f06b5a85f5a620d1a24e022317fe8762"
+}

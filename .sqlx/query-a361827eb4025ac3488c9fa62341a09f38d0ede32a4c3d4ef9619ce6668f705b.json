@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_qualification_cleanup WHERE request_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a361827eb4025ac3488c9fa62341a09f38d0ede32a4c3d4ef9619ce6668f705b"
+}

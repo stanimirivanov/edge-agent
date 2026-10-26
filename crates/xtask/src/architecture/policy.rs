@@ -166,6 +166,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
             "edgeagent-market-data-replay",
             "edgeagent-market-data-postgres",
             "edgeagent-market-data-object-store",
+            "edgeagent-market-data-http",
             "edgeagent-simulation-domain",
             "edgeagent-inbox-postgres",
             "edgeagent-outbox-postgres",
