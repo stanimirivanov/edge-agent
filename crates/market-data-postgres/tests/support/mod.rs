@@ -5,6 +5,7 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::{
+    error::Error as _,
     num::NonZeroU32,
     str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
@@ -13,6 +14,18 @@ pub type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Sen
 pub fn kind<T>(r: std::result::Result<T, BudgetError>, expected: BudgetErrorKind) -> Result {
     assert_eq!(r.err().ok_or("expected budget failure")?.kind(), expected);
     Ok(())
+}
+#[allow(
+    dead_code,
+    reason = "Shared by contended admission and terminal proofs only."
+)]
+pub fn is_lock_timeout(error: &BudgetError) -> bool {
+    error.kind() == BudgetErrorKind::Storage
+        && error
+            .source()
+            .and_then(|cause| cause.downcast_ref::<sqlx::Error>())
+            .and_then(sqlx::Error::as_database_error)
+            .is_some_and(|cause| cause.code().as_deref() == Some("55P03"))
 }
 pub struct Harness {
     pub pool: PgPool,

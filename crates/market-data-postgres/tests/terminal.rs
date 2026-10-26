@@ -177,13 +177,22 @@ async fn competing_terminal_outcomes_and_changed_inbox_identity_fail_closed() ->
         let p = TerminalProposal::rejected(r.command().clone(), EvidenceRejection::Provider);
         let q = TerminalProposal::rejected(r.command().clone(), EvidenceRejection::Budget);
         let (one, two) = tokio::join!(a.commit(&d, &p, &access), b.commit(&d, &q, &access));
-        let winner = match (one, two) {
-            (Ok(r), Err(e)) | (Err(e), Ok(r)) => {
-                assert_eq!(e.kind(), BudgetErrorKind::Conflict);
-                r
-            }
+        let (winner, loser, proposal) = match (one, two) {
+            (Ok(r), Err(e)) => (r, e, &q),
+            (Err(e), Ok(r)) => (r, e, &p),
             _ => return Err("expected one terminal winner".into()),
         };
+        // Both contenders returned, so the winner committed and any lock-timeout
+        // loser rolled back. Retry only that explicit SQLSTATE, then require the
+        // original losing proposal to conflict; arbitrary storage errors fail.
+        if is_lock_timeout(&loser) {
+            kind(
+                a.commit(&d, proposal, &access).await,
+                BudgetErrorKind::Conflict,
+            )?;
+        } else {
+            assert_eq!(loser.kind(), BudgetErrorKind::Conflict);
+        }
         assert_eq!(counts(&h).await?, (1, 1, 1));
         assert_eq!(
             a.recover(&d).await?.ok_or("receipt")?.bytes(),

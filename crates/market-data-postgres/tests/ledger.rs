@@ -7,17 +7,8 @@ mod support;
 use edgeagent_market_data_application::*;
 use edgeagent_market_data_postgres::PostgresAcquisitionLedger;
 use futures_util::FutureExt;
-use std::{error::Error as _, panic::AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
 use support::*;
-
-fn is_lock_timeout(error: &BudgetError) -> bool {
-    error.kind() == BudgetErrorKind::Storage
-        && error
-            .source()
-            .and_then(|cause| cause.downcast_ref::<sqlx::Error>())
-            .and_then(sqlx::Error::as_database_error)
-            .is_some_and(|cause| cause.code().as_deref() == Some("55P03"))
-}
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
