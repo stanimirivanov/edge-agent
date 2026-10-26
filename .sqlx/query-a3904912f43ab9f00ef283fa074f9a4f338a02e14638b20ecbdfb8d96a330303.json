@@ -1,0 +1,109 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(preparation=$3,FALSE) AS \"same!\",published,retired,event,history_start,history_retired,reconnect,skipped FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "same!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "published",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "published"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "retired",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "retired"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "event",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "history_start",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "history_start"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "history_retired",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "history_retired"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "reconnect",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "reconnect"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "skipped",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "skipped"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a3904912f43ab9f00ef283fa074f9a4f338a02e14638b20ecbdfb8d96a330303"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            (NOT EXISTS(SELECT 1 FROM edgeagent_stream_heads WHERE session_id=$1 AND instrument=$2) AND $3::text IS NULL)\n            OR EXISTS(SELECT 1 FROM edgeagent_stream_heads h JOIN edgeagent_stream_publications p USING(publication_id)\n                WHERE h.session_id=$1 AND h.instrument=$2 AND frame<$4 AND captured_ms<=$5\n                AND ((digest=$3 AND p.delete_ms >= $6) OR (digest IS NULL AND $3 IS NULL))) AS \"valid!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "valid!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9af4f022aa9991850e59b3f00f7bf35c43dc9c75bf6e207b01b95e1f7d173cc2"
+}

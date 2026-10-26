@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_retention SET writers_quiet=TRUE WHERE session_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db4018a840cf5ccb5641079c06a26971678654abc69af377f98dcf10b054bb13"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_publications SET published=TRUE,event=$2,history_start=$3,reconnect=$4,skipped=$5,history_retired=$6 WHERE publication_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b44e3216be1837b8512515110a63a4e29c6b4a138e0cf2062affa6cfd3228f4b"
+}

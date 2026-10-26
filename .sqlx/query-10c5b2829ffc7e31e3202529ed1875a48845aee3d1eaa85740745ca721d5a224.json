@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_admissions a SET admission=decode('00','hex') WHERE session_id=$1 AND withdrawn AND NOT EXISTS(SELECT 1 FROM edgeagent_stream_publications p WHERE p.session_id=a.session_id AND NOT p.retired)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "10c5b2829ffc7e31e3202529ed1875a48845aee3d1eaa85740745ca721d5a224"
+}

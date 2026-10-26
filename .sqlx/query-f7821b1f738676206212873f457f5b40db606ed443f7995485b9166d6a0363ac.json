@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT writers_quiet FROM edgeagent_stream_retention WHERE session_id=$1 FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "writers_quiet",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_retention",
+            "name": "writers_quiet"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f7821b1f738676206212873f457f5b40db606ed443f7995485b9166d6a0363ac"
+}

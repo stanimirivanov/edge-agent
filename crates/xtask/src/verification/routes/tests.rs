@@ -916,3 +916,18 @@ fn qualification_routes_include_protected_preflight_and_shared_canonical_consume
     }
     Ok(())
 }
+#[test]
+fn stream_publication_changes_route_atomic_and_storage_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-postgres/migrations/0008_stream_publication.sql",
+        "crates/market-data-postgres/src/streaming/publication.rs",
+        "crates/market-data-postgres/src/streaming/lifecycle.rs",
+        "crates/market-data-postgres/tests/stream_publication.rs",
+        "crates/market-data-application/src/streaming/publication.rs",
+        "crates/market-data-application/src/streaming/publication/validation.rs",
+    ] {
+        let advice = super::advise(&[path.to_owned()])?;
+        assert!(advice.checks.contains("streaming-publication-postgres"));
+    }
+    Ok(())
+}

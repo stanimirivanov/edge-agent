@@ -190,9 +190,12 @@ provider entitlement shared with HTTP. Daily PR15C live qualification remains no
 
 Maintainer-approved PR17 split: [PR17A](../streaming-segments.md) supplies bounded
 normalized capture and scoped create-only storage, not readiness or publication.
-PR17B must inventory before PUT, verify current charged ranges/generations, atomically
-advance checkpoint/chain/outbox, and integrate durable denial, scoped metadata retirement
-and quiescent orphan cleanup before runtime use. PR18 remains parallel with PR17A;
+PR17B inventories before PUT, verifies current charged ranges/generations, atomically
+advances capture checkpoint/chain/outbox, and integrates durable denial, scoped metadata
+retirement and independently quiescent orphan cleanup. Stop/cancel preserves published
+reads until original licensed expiry; withdrawal denies them immediately. Capture heads
+explicitly record reconnects, skipped frames and first/retired history, never continuity.
+Notifications carry only opaque IDs. PR18 remains parallel with PR17A;
 PR20 depends on PR17B. Both slices remain offline.
 
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable

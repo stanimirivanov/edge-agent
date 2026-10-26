@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_stream_heads h USING edgeagent_stream_admissions a WHERE h.session_id=a.session_id AND a.session_id=$1 AND a.withdrawn AND NOT EXISTS(SELECT 1 FROM edgeagent_stream_publications p WHERE p.session_id=a.session_id AND NOT p.retired)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46c9f3cb0bad0a24b955dbc60bcd2d5bce9457e5c9b507184c775db0352bcd37"
+}

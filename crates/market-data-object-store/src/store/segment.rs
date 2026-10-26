@@ -1,7 +1,27 @@
 //! Separate stream namespace and typed decoder; daily I/O/retirement is unchanged.
 use super::*;
 use edgeagent_contracts::evidence::{MAX_STREAM_SEGMENT_BYTES, StreamSegment, StreamSegmentObject};
+use edgeagent_market_data_application::{StreamCleanup, StreamDeletion, StreamDeletionAuthority};
 use edgeagent_market_data_application::{StreamSegmentAccess, StreamSegmentStorage};
+
+impl StreamDeletion for ImmutableEvidenceStore {
+    async fn delete_segment(
+        &self,
+        cleanup: &StreamCleanup,
+        authority: &impl StreamDeletionAuthority,
+    ) -> Result<(), Error> {
+        authority.confirm_storage_quiescent(cleanup)?;
+        tokio::time::timeout(self.timeout, async {
+            match self.backend.delete(&key(&cleanup.object)).await {
+                Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+                Err(e) => Err(backend_error(e)),
+            }
+        })
+        .await
+        .map_err(|e| Error::with_source(Kind::Deadline, e))??;
+        authority.confirm_storage_quiescent(cleanup)
+    }
+}
 
 impl StreamSegmentStorage for ImmutableEvidenceStore {
     async fn put_segment(

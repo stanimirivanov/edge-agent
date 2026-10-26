@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT digest,frame,generation,epoch,captured_ms FROM edgeagent_stream_heads WHERE session_id=$1 AND instrument=$2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_heads",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "frame",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_heads",
+            "name": "frame"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_heads",
+            "name": "generation"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_heads",
+            "name": "epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "captured_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_heads",
+            "name": "captured_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "664edf83fb5256f74ab39170f2c7ae2b4c5cd1f822966cea28058773b6c70a61"
+}

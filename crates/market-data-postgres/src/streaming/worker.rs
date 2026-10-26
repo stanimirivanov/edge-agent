@@ -43,7 +43,7 @@ impl StreamingLedger for PostgresStreamingLedger {
             .ok_or_else(|| Error::new(K::Exhausted))?;
         let starts = i64::from(usage.starts) + 1;
         sqlx::query!("UPDATE edgeagent_stream_accounts SET charged_starts=charged_starts+1,generation=$2,last_start_ms=$3 WHERE account_id=$1",account,generation,at.unix_millis()).execute(&mut *tx).await.map_err(Error::storage)?;
-        sqlx::query!("UPDATE edgeagent_stream_sessions SET starts=$2,generation=$3,active=TRUE WHERE session_id=$1",session.data().id.as_str(),starts,generation).execute(&mut *tx).await.map_err(Error::storage)?;
+        sqlx::query!("UPDATE edgeagent_stream_sessions SET starts=$2,generation=$3,active=TRUE,generation_start=frames+1 WHERE session_id=$1",session.data().id.as_str(),starts,generation).execute(&mut *tx).await.map_err(Error::storage)?;
         session.recheck(catalogs, now(&mut tx).await?, cancellation)?;
         tx.commit().await.map_err(Error::storage)?;
         StreamingConnection::from_committed(

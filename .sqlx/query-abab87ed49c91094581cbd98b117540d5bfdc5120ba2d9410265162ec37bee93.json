@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_stream_heads(session_id,instrument,publication_id,digest,frame,generation,epoch,captured_ms) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(session_id,instrument) DO UPDATE SET publication_id=excluded.publication_id,digest=excluded.digest,frame=excluded.frame,generation=excluded.generation,epoch=excluded.epoch,captured_ms=excluded.captured_ms",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abab87ed49c91094581cbd98b117540d5bfdc5120ba2d9410265162ec37bee93"
+}

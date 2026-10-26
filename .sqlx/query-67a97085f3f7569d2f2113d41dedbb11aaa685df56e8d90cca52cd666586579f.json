@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT preparation=$3 AS \"same!\",event,history_start,history_retired,reconnect,skipped,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND published AND NOT retired",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "same!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "event",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "event"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "history_start",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "history_start"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "history_retired",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "history_retired"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "reconnect",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "reconnect"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "skipped",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "skipped"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "delete_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "delete_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "67a97085f3f7569d2f2113d41dedbb11aaa685df56e8d90cca52cd666586579f"
+}

@@ -8,6 +8,35 @@ use super::{
 #[test]
 fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() -> Result<(), String>
 {
+    let publication = inventory::checks()
+        .into_iter()
+        .find(|c| c.id == "streaming-publication-postgres")
+        .ok_or("publication proof missing")?;
+    let census = publication.discovery.ok_or("publication census missing")?;
+    assert_eq!(
+        census.expected,
+        [
+            "stream_preparation_and_atomic_publication_survive_result_loss_and_rollback",
+            "stream_publication_fences_generations_charged_ranges_and_chain_forks",
+            "stream_stop_preserves_reads_withdrawal_denies_and_cleanup_requires_writer_quiescence",
+        ]
+    );
+    let complete = census
+        .expected
+        .iter()
+        .map(|n| format!("{n}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(&census, complete.as_bytes())?;
+    for name in &census.expected {
+        for changed in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, "renamed_publication"),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}unregistered_publication: test\n"),
+        ] {
+            assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
+        }
+    }
     for (id, expected) in [
         (
             "streaming-segment-contracts",
@@ -15,6 +44,9 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "stream_segment_freezing_binds_session_scope_epoch_generation_and_retention",
                 "stream_segment_codec_rejects_noncanonical_corrupt_and_unbounded_input",
                 "stream_segment_values_preserve_cancellations_and_source_semantics",
+                "stream_publication_recovery_preserves_exact_bytes_and_opaque_event",
+                "stream_retained_authority_outlives_capture_not_original_rights",
+                "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                 "stream_segment_store_is_create_only_scoped_and_reopens",
                 "stream_segment_store_recovers_uncertain_put_and_denies_revocation_expiry",
                 "stream_segment_store_rejects_descriptor_and_content_attacks",
