@@ -122,6 +122,61 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/evidence.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-object-store/src/store.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/contracts/src/evidence/stream"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/contracts/src/evidence.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/streaming/segment"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/stream_segments"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/support/segment.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-object-store/src/store/segment"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-object-store/tests/stream_segments.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/storage.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/streaming-segments.md"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/src/streaming"),
         guides: &["docs/development/streaming-sessions.md"],
         checks: &["streaming-session-contracts", "streaming-session-postgres"],

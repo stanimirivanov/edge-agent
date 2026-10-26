@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For bounded normalized streaming capture (not evidence readiness), read
+[streaming segments](development/streaming-segments.md) and
+[ADR-0065](decisions/0065-separate-stream-capture-segments-from-evidence-readiness.md).
+
 For finite offline streaming authority, explicit budgets and durable account slots,
 read [streaming sessions](development/streaming-sessions.md) and
 [ADR-0064](decisions/0064-bound-streaming-sessions-with-durable-account-fences.md).

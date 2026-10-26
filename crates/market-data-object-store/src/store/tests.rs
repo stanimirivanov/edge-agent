@@ -308,11 +308,20 @@ async fn durable_local_store_reopens_and_licensed_namespaces_do_not_alias() -> T
     let artifact = fixture()?;
     let object = descriptor(&artifact)?;
     let access = Access::new(object.clone());
+    // This proof exercises real filesystem persistence, not a one-second latency SLA.
+    // Keep the production maximum; memory/virtual-time deadline proofs retain their short budget.
+    let local_timeout = Duration::from_secs(15);
     {
-        let store = adapter(Arc::new(LocalFileSystem::new_with_prefix(&root)?))?;
+        let store = ImmutableEvidenceStore::new(
+            Arc::new(LocalFileSystem::new_with_prefix(&root)?),
+            local_timeout,
+        )?;
         store.put(&artifact, &access).await?;
     }
-    let store = adapter(Arc::new(LocalFileSystem::new_with_prefix(&root)?))?;
+    let store = ImmutableEvidenceStore::new(
+        Arc::new(LocalFileSystem::new_with_prefix(&root)?),
+        local_timeout,
+    )?;
     assert_eq!(store.get(&object, &access).await?, artifact);
     for variant in 0..4 {
         let mut other = object.clone();

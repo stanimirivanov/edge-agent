@@ -68,7 +68,7 @@ pub(super) fn date(value: SessionDate) -> Result<EvidenceDate, EvidenceContractE
     let (y, m, d) = value.ymd();
     EvidenceDate::new(&format!("{y:04}-{m:02}-{d:02}"))
 }
-fn decimal(value: (i128, u32)) -> Result<EvidenceDecimal, EvidenceContractError> {
+pub(super) fn decimal(value: (i128, u32)) -> Result<EvidenceDecimal, EvidenceContractError> {
     Ok(EvidenceDecimal {
         coefficient: value.0.to_string(),
         scale: u8::try_from(value.1).map_err(|_| EvidenceContractError)?,
