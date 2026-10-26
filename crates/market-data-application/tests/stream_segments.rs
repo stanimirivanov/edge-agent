@@ -3,6 +3,107 @@
 #[path = "support/segment.rs"]
 mod fixture;
 use edgeagent_contracts::evidence::*;
+use edgeagent_contracts::{Component, MessageMetadata};
+
+fn publication() -> Result<StreamPublication> {
+    publication_with(segment()?)
+}
+fn publication_with(segment: StreamSegment) -> Result<StreamPublication> {
+    let id = EvidenceId::new(&format!("{:032x}", 0xabc))?;
+    Ok(StreamPublication::new(
+        id.clone(),
+        segment,
+        MessageMetadata {
+            id: format!("stream-publication-{}", id.as_str()),
+            source: Component::MarketData.source_uri().into(),
+            message_type: STREAM_PUBLISHED.message_type().into(),
+            subject: "stream/00000000000000000000000000000001".into(),
+            time: "2026-10-26T00:00:00Z".into(),
+            data_schema: STREAM_PUBLISHED.data_schema().into(),
+            correlation_id: id.as_str().into(),
+            causation_id: "00000000000000000000000000000001".into(),
+            idempotency_key: id.as_str().into(),
+            partition_key: "stream/00000000000000000000000000000001".into(),
+            trace_parent: "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01".into(),
+            trace_state: None,
+        },
+    )?)
+}
+#[test]
+fn stream_publication_recovery_preserves_exact_bytes_and_opaque_event() -> Result {
+    let p = publication()?;
+    let bytes = p.bytes()?;
+    let recovered = StreamPublication::decode(&bytes)?;
+    let f = Fixture::new(AT, 1)?;
+    let s = f.session(1)?;
+    recovered.recheck_capture(&s, f.catalogs(), at(AT + 100)?, &Cancellation::default())?;
+    let mut wrong = p.segment().data().clone();
+    wrong.semantics.revision = EvidenceRevision::new("2")?;
+    assert!(
+        publication_with(StreamSegment::new(wrong)?)?
+            .recheck_capture(&s, f.catalogs(), at(AT + 100)?, &Cancellation::default())
+            .is_err()
+    );
+    let mut wrong = p.segment().data().clone();
+    wrong.records.first_mut().ok_or("record")?.value = Some(StreamValue::Index {
+        points: EvidenceDecimal {
+            coefficient: "1".into(),
+            scale: 0,
+        },
+    });
+    assert!(
+        publication_with(StreamSegment::new(wrong)?)?
+            .recheck_capture(&s, f.catalogs(), at(AT + 100)?, &Cancellation::default())
+            .is_err()
+    );
+    assert_eq!(recovered.bytes()?, bytes);
+    assert_eq!(recovered.segment().bytes(), p.segment().bytes());
+    let payload: serde_json::Value = recovered.envelope().payload()?;
+    assert_eq!(
+        payload
+            .as_object()
+            .ok_or("object")?
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>(),
+        ["publication".to_owned(), "session".to_owned()].into()
+    );
+    let mut changed = bytes.clone();
+    changed.push(b' ');
+    assert!(StreamPublication::decode(&changed).is_err());
+    let mut data: serde_json::Value = serde_json::from_slice(&bytes)?;
+    data[0] = format!("{:032x}", 0xdef).into();
+    assert!(StreamPublication::decode(&serde_json::to_vec(&data)?).is_err());
+    assert!(!format!("{p:?}").contains(p.segment().digest().as_str()));
+    Ok(())
+}
+#[test]
+fn stream_retained_authority_outlives_capture_not_original_rights() -> Result {
+    let f = Fixture::new(AT, 1)?;
+    let s = f.session(1)?;
+    let after = at(AT + 3_600_001)?;
+    assert!(
+        s.recheck(f.catalogs(), after, &Cancellation::default())
+            .is_err()
+    );
+    s.recheck_retained(f.catalogs(), after)?;
+    let revoked = f.revoked()?;
+    assert!(
+        s.recheck_retained(
+            AuthorityCatalogs {
+                rights: &revoked,
+                providers: &f.providers
+            },
+            after
+        )
+        .is_err()
+    );
+    assert!(
+        s.recheck_retained(f.catalogs(), at(AT + 86_400_000)?)
+            .is_err()
+    );
+    Ok(())
+}
 use edgeagent_market_data_application::*;
 use fixture::*;
 

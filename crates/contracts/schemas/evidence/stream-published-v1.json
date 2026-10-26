@@ -1,0 +1,28 @@
+{
+  "$id": "urn:edgeagent:schema:market-data:stream-segment-published:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "No licensed fingerprint, source, instrument, location or observation leaves the owner.",
+  "properties": {
+    "publication": {
+      "description": "Opaque owner-assigned publication intent, stable across recovery.",
+      "maxLength": 32,
+      "minLength": 32,
+      "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+      "type": "string"
+    },
+    "session": {
+      "description": "Opaque owner-assigned session intent.",
+      "maxLength": 32,
+      "minLength": 32,
+      "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "publication",
+    "session"
+  ],
+  "title": "StreamPublished",
+  "type": "object"
+}

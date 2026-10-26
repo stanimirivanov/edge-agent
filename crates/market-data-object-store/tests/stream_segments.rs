@@ -20,6 +20,46 @@ use std::{
     time::Duration,
 };
 type K = EvidenceStorageErrorKind;
+struct WriterQuiet(bool);
+impl StreamDeletionAuthority for WriterQuiet {
+    fn confirm_storage_quiescent(
+        &self,
+        _: &StreamCleanup,
+    ) -> std::result::Result<(), EvidenceStorageError> {
+        if self.0 {
+            Ok(())
+        } else {
+            Err(EvidenceStorageError::new(K::Denied))
+        }
+    }
+}
+#[tokio::test]
+async fn stream_deletion_requires_quiescence_and_preserves_other_namespaces() -> Result {
+    let backend = Arc::new(InMemory::new());
+    let store = adapter(backend.clone())?;
+    let capture = segment()?;
+    let object = capture.object();
+    let access = Access::new(object.clone());
+    store.put_segment(&capture, &access).await?;
+    let unrelated = Path::from("evidence/daily-v1/unrelated.json");
+    backend
+        .put(&unrelated, b"invented unrelated object".to_vec().into())
+        .await?;
+    let cleanup = StreamCleanup {
+        publication: EvidenceId::new(&format!("{:032x}", 0xabc))?,
+        object: object.clone(),
+    };
+    kind(
+        store.delete_segment(&cleanup, &WriterQuiet(false)).await,
+        K::Denied,
+    )?;
+    assert_eq!(store.get_segment(&object, &access).await?, capture);
+    store.delete_segment(&cleanup, &WriterQuiet(true)).await?;
+    store.delete_segment(&cleanup, &WriterQuiet(true)).await?;
+    kind(store.get_segment(&object, &access).await, K::NotFound)?;
+    assert!(backend.head(&unrelated).await.is_ok());
+    Ok(())
+}
 struct Access {
     object: StreamSegmentObject,
     allowed: AtomicBool,

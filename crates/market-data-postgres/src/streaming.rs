@@ -8,6 +8,8 @@ use edgeagent_market_data_application::{
 };
 use edgeagent_market_data_domain::UtcInstant;
 use sqlx::{PgPool, Postgres, Transaction};
+mod lifecycle;
+mod publication;
 mod worker;
 type Result<T> = std::result::Result<T, Error>;
 fn invalid() -> Error {
@@ -183,6 +185,13 @@ impl PostgresStreamingLedger {
         .execute(&mut *tx)
         .await
         .map_err(Error::storage)?;
+        sqlx::query!(
+            "INSERT INTO edgeagent_stream_retention(session_id) VALUES($1) ON CONFLICT DO NOTHING",
+            session.data().id.as_str()
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(Error::storage)?;
         tx.commit().await.map_err(Error::storage)
     }
     /// Permanently stop one admission without freeing slots or refunding any usage.
@@ -203,6 +212,7 @@ impl PostgresStreamingLedger {
         .execute(&mut *tx)
         .await
         .map_err(Error::storage)?;
+        lifecycle::erase_closed_metadata(&mut tx, id).await?;
         tx.commit().await.map_err(Error::storage)
     }
     /// Stop every admission under an account; withdrawal cannot reset or renew its allocation.

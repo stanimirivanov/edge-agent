@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT writers_quiet AS \"quiet!\" FROM edgeagent_lock_stream_retention($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quiet!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "561a49cb2c2a1dce1a2dda9f7523e94dad371b5fc51d7add38ceb7f3ce01a4fb"
+}

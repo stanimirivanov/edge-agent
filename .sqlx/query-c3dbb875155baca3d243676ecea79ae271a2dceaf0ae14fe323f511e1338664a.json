@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT preparation,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND NOT retired",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "preparation",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "preparation"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delete_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "delete_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "c3dbb875155baca3d243676ecea79ae271a2dceaf0ae14fe323f511e1338664a"
+}

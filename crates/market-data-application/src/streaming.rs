@@ -1,5 +1,6 @@
 //! Finite capture admission and accounting, not a vendor transport or readiness grant.
 mod authority;
+mod publication;
 mod segment;
 use crate::{
     AccessScope, AuthorityCatalogs, BudgetError as Error, BudgetErrorKind as K, Cancellation,
@@ -9,6 +10,7 @@ use edgeagent_contracts::evidence::{EvidenceDigest, EvidenceId};
 use edgeagent_market_data_domain::{
     DeliveryCapability, EffectiveInterval, EvidenceContract, UtcInstant,
 };
+pub use publication::*;
 pub use segment::{CapturedStreamObservation, StreamSegmentInput, freeze_stream_segment};
 use std::{
     future::Future,
@@ -131,6 +133,16 @@ impl StreamingSession {
         if !self.data.window.contains(at) {
             return Err(Error::new(K::Deadline));
         }
+        if authority::reviews(&self.data, catalogs, at)? != self.authority {
+            return Err(Error::new(K::Denied));
+        }
+        Ok(())
+    }
+    /// Recheck retained-data rights without renewing the original capture window.
+    /// Capture cancellation is deliberately not a retained-data withdrawal.
+    /// # Errors
+    /// Denies changed, revoked or unavailable current reviews.
+    pub fn recheck_retained(&self, catalogs: AuthorityCatalogs<'_>, at: UtcInstant) -> Result<()> {
         if authority::reviews(&self.data, catalogs, at)? != self.authority {
             return Err(Error::new(K::Denied));
         }

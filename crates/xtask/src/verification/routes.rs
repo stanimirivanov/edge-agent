@@ -177,6 +177,40 @@ const ROUTES: &[Route] = &[
         checks: &["streaming-segment-contracts"],
     },
     Route {
+        matcher: Matcher::Exact(
+            "crates/market-data-postgres/migrations/0008_stream_publication.sql",
+        ),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/src/streaming/"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+            "streaming-session-postgres",
+            "sqlx-metadata",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/tests/stream_publication.rs"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &["streaming-publication-postgres"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/streaming/publication"),
+        guides: &["docs/development/streaming-segments.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/src/streaming"),
         guides: &["docs/development/streaming-sessions.md"],
         checks: &["streaming-session-contracts", "streaming-session-postgres"],

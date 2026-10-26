@@ -6,7 +6,7 @@
 - Explicit segment limits supplement PR16 frame/account budgets; no defaults.
 - Store exact create-only bytes in a separate licensed namespace.
 - Retry uncertainty with the same identity; never repair or compensate by deletion.
-- PR17B integrates inventory, retirement and checkpoint/outbox before runtime use.
+- Durable inventory, capture checkpoints/outbox and scoped retirement precede runtime use.
 
 ## Capture and encoding
 
@@ -63,20 +63,51 @@ Trusted access must enforce original rights on reconstructed writes/reads.
 
 Timeouts or dropped futures may leave objects. Retry exact bytes/key under current
 authority; never overwrite collisions, choose replacement identities or compensate
-by deleting. PR17A has no inventory, checkpoint, outbox, cleanup grant or runtime.
-PR17B must inventory before PUT, verify charged ranges/current generations,
-serialize chain/checkpoint/outbox, integrate durable denial and erase scoped metadata
-only after independent write quiescence. Deadlines do not imply quiescence.
-Licensed activation remains blocked pending these lifecycle and restore gates.
+by deleting. `publish_stream_segment` inventories before PUT, verifies charged
+ranges/current generations and serializes chain/checkpoint/receipt/outbox. Recover
+the original preparation with `pending_segment` (session/instrument discovery) or
+`recover_segment` (known opaque ID); never refreeze it after a restart.
+Committed result recovery skips PUT. Notifications contain only opaque IDs.
+
+Apply migration 0008 after 0007. Legacy active generations have no known starting
+ordinal: publication fails closed until independently confirmed connection quiescence
+and a fresh reservation. Never reset counters or release slots during migration.
+Provision `edgeagent_stream_retention` through the independent owner only; workers
+receive SELECT and EXECUTE on `edgeagent_lock_stream_retention(TEXT)`, never control
+DML. Other publication/head tables use trusted application worker DML.
+
+Cancellation stops new capture/publication, not previously published reads. Current
+exact rights and original expiry still govern retained access beyond the capture
+window. `withdraw_stream_data` immediately denies reads/publication. The read
+coordinator checks durable denial before and after bounded object I/O.
+
+Retire expired or withdrawn published objects, or unpublished preparations from stopped
+sessions. Stop alone cannot retire unexpired published objects. Retirement atomically
+erases private preparation/receipt/head digest/outbox and retains a deletion descriptor.
+Active lanes retain a hash-free capture position: retiring history cannot spend
+charged frames again. Unpublished uncertain work holds its lane until capture stops.
+Once stopped with every segment retired, erase lane metadata and full admission.
+`confirm_stream_writers_quiescent` is an independent irreversible owner assertion
+about outstanding PUTs; it stops writers but does not free provider connection slots.
+`cleanup_stream_segments` handles 1..16 exact descriptors outside SQL and requires
+independent per-object confirmation before and after deletion. Unknown deletions
+retain inventory. Final cleanup erases licensed admission witnesses while preserving
+opaque denial, usage and unresolved capacity. Deadlines never prove quiescence.
+Successor fingerprints cannot outlive their predecessor's licensed deadline. Cleanup
+preserves opaque intent tombstones to prevent reuse. Checkpoint flags distinguish
+first capture, retired history, reconnect/epoch and skipped frames; none establishes
+source continuity or readiness.
 
 ## Verification and rollout
 
 Run `cargo xtask verify --check streaming-segment-contracts` then `cargo xtask verify`.
-The protected census covers pure freezing/codec and synthetic memory-store integrity,
+Also run `cargo xtask verify --check streaming-publication-postgres` with the isolated
+local PostgreSQL fixture. The protected census covers pure freezing/codec and synthetic memory-store integrity,
 isolation, denial/expiry and committed-write confirmation loss. It does not qualify
 cloud storage, vendors, fsync, physical disconnect or process-death recovery.
 
-No dependency, SQL migration, daemon mode, credentials or live calls are added.
-Rollback stops using the API without touching daily objects or unresolved sessions.
-PR17B owns durable publication/retirement; PR18 transport, PR19 adapter and PR20
+No dependency, daemon mode, credentials or live calls are added.
+Rollback stops new workers and retains additive tables, uncertain objects and
+unresolved sessions. Daily objects are unchanged.
+PR18 transport, PR19 adapter and PR20
 supervision remain separate. Daily live qualification remains explicitly not run.

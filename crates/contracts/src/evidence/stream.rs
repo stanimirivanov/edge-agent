@@ -243,7 +243,8 @@ impl StreamSegment {
     }
 }
 /// Owner-private descriptor. Neither the checksum nor the namespace grants access.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StreamSegmentObject {
     /// Complete licensed scope and exact finite admission binding.
     pub scope: StreamSegmentScope,

@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT descriptor,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND published AND NOT retired",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "descriptor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "descriptor"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delete_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "delete_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0fab4fafe2cc0083f1b4590d8da55eb953c117d73a882cc477685d72be5c1826"
+}

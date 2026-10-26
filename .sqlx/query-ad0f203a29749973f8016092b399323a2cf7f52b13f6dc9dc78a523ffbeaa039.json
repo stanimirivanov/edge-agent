@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(session_id=$2 AND preparation=$3 AND NOT retired,FALSE) AS \"same!\" FROM edgeagent_stream_publications WHERE publication_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "same!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ad0f203a29749973f8016092b399323a2cf7f52b13f6dc9dc78a523ffbeaa039"
+}

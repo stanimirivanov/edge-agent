@@ -16,7 +16,7 @@ fn root() -> std::path::PathBuf {
 fn generated_evidence_artifacts_have_exact_inventory_and_immutable_baselines() -> Result {
     verify(&root())?;
     let generated = artifacts()?;
-    assert_eq!(generated.len(), 13);
+    assert_eq!(generated.len(), 14);
     // Independent published SHA-256 census, populated on initial v1 publication.
     let baseline = include_str!("../fixtures/evidence-baselines.txt");
     let mut covered = std::collections::BTreeSet::new();
@@ -272,6 +272,18 @@ fn evidence_routes_bind_schema_owner_partition_and_reference_only_outcomes() -> 
 #[test]
 fn local_schemas_reject_version_drift_unknown_fields_and_missing_explicit_nulls() -> Result {
     let artifact = fixture()?;
+    let notice = StreamPublished {
+        session: artifact.data().scope.request.clone(),
+        publication: EvidenceId::new(&"2".repeat(32))?,
+    };
+    let notice_validator = jsonschema::validator_for(&EvidenceSchema::StreamPublished.generate()?)?;
+    let mut notice_json = serde_json::to_value(&notice)?;
+    assert!(notice_validator.is_valid(&notice_json));
+    notice_json["sha256"] = json!("not-public-evidence");
+    assert!(!notice_validator.is_valid(&notice_json));
+    assert!(serde_json::from_value::<StreamPublished>(notice_json).is_err());
+    let missing = json!({"session":notice.session});
+    assert!(!notice_validator.is_valid(&missing));
     let data = serde_json::to_value(artifact.data())?;
     let validator = jsonschema::validator_for(&EvidenceSchema::Artifact.generate()?)?;
     assert!(validator.is_valid(&data));

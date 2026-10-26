@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_stream_heads SET digest=NULL WHERE publication_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95719b5407d5b7f804e74e66771afd68cb62c10a5dae2983dbfd28a6b7595edc"
+}

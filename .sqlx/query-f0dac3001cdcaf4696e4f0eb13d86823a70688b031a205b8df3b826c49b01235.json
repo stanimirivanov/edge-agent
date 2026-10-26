@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM edgeagent_message_outbox WHERE message_source=$1 AND message_id=$2 AND envelope=$3) AS \"intact!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "intact!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f0dac3001cdcaf4696e4f0eb13d86823a70688b031a205b8df3b826c49b01235"
+}

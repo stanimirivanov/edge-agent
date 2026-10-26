@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM edgeagent_message_outbox WHERE message_source=$1 AND message_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a81017954589536f517fa45bb77ddc6bcbf133e4544ca03869ded2dba2e5f22c"
+}

@@ -109,6 +109,9 @@ impl Harness {
             GRANT SELECT ON {schema}.edgeagent_stream_accounts,{schema}.edgeagent_stream_admissions TO {role};
             GRANT UPDATE(charged_starts,generation,last_start_ms) ON {schema}.edgeagent_stream_accounts TO {role};
             REVOKE INSERT,DELETE,TRUNCATE ON {schema}.edgeagent_stream_sessions FROM {role};
+            REVOKE ALL ON {schema}.edgeagent_stream_retention FROM {role};
+            GRANT SELECT ON {schema}.edgeagent_stream_retention TO {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_stream_retention(TEXT) TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_stream_admission(TEXT),{schema}.edgeagent_stream_worker_allowed() TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input_role() TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input(TEXT) TO {role};
