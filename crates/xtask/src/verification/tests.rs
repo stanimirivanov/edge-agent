@@ -39,6 +39,17 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
     }
     for (id, expected) in [
         (
+            "stream-supervision-contracts",
+            vec![
+                "supervision_round_robin_preserves_fifo_and_bounds_every_eligible_wait",
+                "supervision_busy_and_failed_sources_cannot_starve_other_lanes",
+                "supervision_overload_retains_rejected_and_unresolved_records_without_eviction",
+                "supervision_foreign_and_dropped_dispatches_never_confirm_or_retry_heads",
+                "supervision_cancellation_and_source_failure_are_sticky_without_compensation",
+                "supervision_configuration_binding_and_diagnostics_fail_closed",
+            ],
+        ),
+        (
             "alpaca-iex-conformance",
             vec![
                 "alpaca_iex::tests::iex_protocol_requires_exact_handshake_and_subscription",
@@ -659,6 +670,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "frozen-evaluation-contracts",
             "streaming-segment-contracts",
             "wss-transport-contracts",
+            "stream-supervision-contracts",
             "alpaca-iex-conformance",
             "streaming-session-contracts",
             "offline-worker-contracts",

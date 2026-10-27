@@ -50,7 +50,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | Extension 3 | M03-PR17B | Durable segment inventory/retirement and atomic checkpoints/outbox | PR17A, PR12 | I |
 | Extension 2 | M03-PR18 | Bounded WSS transport and synthetic local protocol proofs | PR16 | H |
 | Extension 3 | M03-PR19 | First selected underlying-stream adapter with exact subscriptions | PR18, PR11C | I |
-| Extension 4 | M03-PR20 | Fair bounded multi-source supervision, readiness and recovery | PR17B, PR19, PR13 | J |
+| Extension 4a | M03-PR20A | Offline bounded multi-source queues, fair dispatch and explicit unresolved/failure contracts | PR17B, PR19, PR13 | J |
+| Extension 4b | M03-PR20B | Durable incidents, restore/readiness barriers and exact pending-publication recovery | PR20A, PR17B | K |
+| Extension 4c | M03-PR20C | Owner-pinned IEX canonical acceptance and bounded streaming runtime composition/proofs | PR20B, PR19 | L |
 
 ## Acceptance boundaries
 
@@ -187,6 +189,19 @@ also address scoped metadata retirement, restore/reference freshness and any act
 provider entitlement shared with HTTP. Daily PR15C live qualification remains not run.
 
 ## Harness and outstanding decisions
+
+Maintainer-approved PR20 split: [PR20A](../stream-supervision.md) implements a
+pure offline bounded scheduler over caller-supplied canonical observations.
+Explicit per-source/aggregate ceilings include unresolved FIFO heads. Round-robin
+dispatch skips busy/failed lanes without evicting evidence or retrying dropped work.
+Overload, binding failure and cancellation block health; health never grants evidence
+readiness. No provider, task spawn, runtime selector, persistence or activation ships.
+PR20B must persist incidents and restore barriers and recover exact publication
+preparations before reconstructing/using the transient scheduler. PR20C must supply
+authenticated condition/calendar/identity semantics, bounded producer/task composition,
+publication and existing domain readiness with synthetic integration proofs. Until both
+are complete, PR20 and the streaming extension remain incomplete. Vendor activation
+and original daily live qualification remain separately blocked/not run.
 
 PR19 selects Alpaca IEX trades and minute bars for [offline protocol conformance](../alpaca-iex.md)
 only. Explicit Xiex venue coverage is not historical SIP or consolidated evidence.
