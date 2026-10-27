@@ -187,6 +187,10 @@ impl<L, A> std::fmt::Debug for WssSession<'_, L, A> {
     }
 }
 impl WssTransport {
+    #[cfg(test)]
+    pub(crate) fn for_test(config: WssConfig<'_>, roots: rustls::RootCertStore) -> Result<Self> {
+        Self::build(config, roots)
+    }
     /// Use verified native trust roots and the existing ring TLS provider; no global mutation.
     /// # Errors
     /// Rejects invalid configuration or an empty usable trust store.

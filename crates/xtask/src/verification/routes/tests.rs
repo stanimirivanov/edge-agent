@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn iex_routes_offline_protocol_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/alpaca_iex.rs",
+        "crates/market-data-http/src/alpaca_iex/protocol.rs",
+        "crates/market-data-http/src/alpaca_iex/tests/peer.rs",
+        "docs/development/alpaca-iex.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(advice.guides.contains("docs/development/alpaca-iex.md"));
+        assert!(advice.checks.contains("alpaca-iex-conformance"));
+    }
+    Ok(())
+}
+
+#[test]
 fn wss_transport_routes_bounded_local_protocol_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/wss.rs",

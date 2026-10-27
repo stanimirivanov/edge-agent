@@ -32,13 +32,21 @@ pub struct Fixture {
 }
 impl Fixture {
     pub fn new(ms: i64, members: u32) -> Result<Self> {
-        let interval = EffectiveInterval::new(at(ms - 1000)?, at(ms + 86_400_000)?)?;
         let contract = EvidenceContract::new(
             EvidenceKind::ShareTrade,
             MarketScope::Consolidated,
             SemanticReference::new(ReferenceId::new(1)?, ReferenceRevision::new(1)?),
             TimestampPrecision::Milliseconds,
         )?;
+        Self::profile(ms, members, contract, DeliveryCapability::Sequenced)
+    }
+    pub fn profile(
+        ms: i64,
+        members: u32,
+        contract: EvidenceContract,
+        delivery: DeliveryCapability,
+    ) -> Result<Self> {
+        let interval = EffectiveInterval::new(at(ms - 1000)?, at(ms + 86_400_000)?)?;
         let routing = RoutingScope {
             source: SourceId::new(1)?,
             feed: FeedId::new(1)?,
@@ -90,7 +98,7 @@ impl Fixture {
                     capability: ProviderCapability::new(
                         scope.source,
                         contract,
-                        DeliveryCapability::Sequenced,
+                        delivery,
                         KnowledgeCapability::CaptureOnly,
                     ),
                     effective: interval,
@@ -172,18 +180,33 @@ impl Fixture {
         })
     }
     pub fn seal(&self, data: StreamingSessionData) -> Result<StreamingSession> {
-        let plan = SelectionPlan::resolve(
-            self.context,
-            (ReferenceId::new(500)?, ReferenceId::new(501)?),
-            &self.selections,
-            &self.directories,
-        )?;
+        let plan = self.plan()?;
         Ok(StreamingSession::new(
             data,
             &plan,
             self.catalogs(),
             at(self.ms)?,
         )?)
+    }
+    pub fn plan(&self) -> Result<SelectionPlan<'_>> {
+        Ok(SelectionPlan::resolve(
+            self.context,
+            (ReferenceId::new(500)?, ReferenceId::new(501)?),
+            &self.selections,
+            &self.directories,
+        )?)
+    }
+    pub fn retain_first(&mut self, members: usize) -> Result<()> {
+        self.scopes.truncate(members);
+        let interval = EffectiveInterval::new(at(self.ms - 1000)?, at(self.ms + 86_400_000)?)?;
+        let ids: Vec<_> = self.scopes.iter().map(|s| s.instrument).collect();
+        self.selections = ReferenceHistory::new(vec![version(
+            500,
+            1,
+            self.ms - 1,
+            InstrumentSelection::new(interval, &ids)?,
+        )?])?;
+        Ok(())
     }
     pub fn session(&self, id: u128) -> Result<StreamingSession> {
         self.seal(self.data(id)?)

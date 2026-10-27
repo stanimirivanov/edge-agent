@@ -78,6 +78,7 @@ pub(super) fn binding(plan: &SelectionPlan<'_>) -> Result<Vec<u8>> {
             Venue::Xnys => 0,
             Venue::Xnas => 1,
             Venue::Arcx => 2,
+            Venue::Xiex => 3,
             _ => return Err(SelectionError::Scope),
         });
         let (a, b) = range.bounds();
