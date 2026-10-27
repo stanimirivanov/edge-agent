@@ -432,7 +432,7 @@ mod tests {
     fn acquisition_schema_assembly_includes_the_ledger_migration() -> Result<(), Box<dyn Error>> {
         let root = super::super::workspace_root();
         let paths = inbox_migrations(&root.join("crates/market-data-postgres/migrations"))?;
-        assert_eq!(paths.len(), 8);
+        assert_eq!(paths.len(), 9);
         assert_eq!(
             paths
                 .iter()

@@ -931,8 +931,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        assert_eq!(inventory.len(), 103);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 103);
+        // Includes PR20B's two isolated restore/incident publication proofs.
+        assert_eq!(inventory.len(), 105);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 105);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
