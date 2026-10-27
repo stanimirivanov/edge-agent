@@ -1,5 +1,6 @@
 //! Finite capture admission and accounting, not a vendor transport or readiness grant.
 mod authority;
+mod inputs;
 mod publication;
 mod recovery;
 mod segment;
@@ -11,6 +12,7 @@ use edgeagent_contracts::evidence::{EvidenceDigest, EvidenceId};
 use edgeagent_market_data_domain::{
     DeliveryCapability, EffectiveInterval, EvidenceContract, UtcInstant,
 };
+pub use inputs::*;
 pub use publication::*;
 pub use recovery::*;
 pub use segment::{CapturedStreamObservation, StreamSegmentInput, freeze_stream_segment};

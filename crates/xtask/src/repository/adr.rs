@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 71] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 72] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -376,6 +376,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 71] = [
         number: 71,
         path: "docs/decisions/0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md",
         title: "Pin IEX canonical interpretation to complete owner profiles",
+    },
+    PublishedIdentity {
+        number: 72,
+        path: "docs/decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md",
+        title: "Authenticate stream owner inputs and reserve namespaces",
     },
 ];
 

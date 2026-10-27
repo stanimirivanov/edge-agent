@@ -21,6 +21,9 @@ const STREAM_PUBLICATION: Target = Target {
         "stream_stop_preserves_reads_withdrawal_denies_and_cleanup_requires_writer_quiescence",
         "stream_restore_requires_independent_approval_and_preserves_sticky_incidents",
         "stream_restore_recovers_exact_pending_intents_and_approval_rolls_back",
+        "inputs::stream_owner_inputs_require_independent_roles_and_exact_current_loading",
+        "inputs::stream_namespace_collisions_and_changed_retries_roll_back_every_claim",
+        "inputs::stream_input_retirement_erases_private_scope_without_reopening_namespaces",
     ],
 };
 const STREAMING: Target = Target {
@@ -931,9 +934,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        // Includes PR20B's two isolated restore/incident publication proofs.
-        assert_eq!(inventory.len(), 105);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 105);
+        // Includes PR20B recovery and PR20C2A's three isolated owner-input proofs.
+        assert_eq!(inventory.len(), 108);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 108);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

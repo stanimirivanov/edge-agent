@@ -946,6 +946,7 @@ pub(super) fn checks() -> Vec<Check> {
                     ignored: false,
                     expected: vec![
                         "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                        "iex_acceptance::tests::iex_owner_inputs_derive_exact_namespace_claims_from_the_complete_profile",
                         "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
                         "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
                         "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
@@ -1001,6 +1002,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "stream_publication_recovery_preserves_exact_bytes_and_opaque_event",
                         "recovery::stream_restore_replays_original_intent_and_rechecks_after_effects",
                         "recovery::stream_restore_empty_cancelled_or_stale_recovery_never_opens_barrier",
+                        "inputs::stream_owner_inputs_bind_complete_bytes_and_reject_ambiguous_or_stale_records",
                         "stream_retained_authority_outlives_capture_not_original_rights",
                         "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                         "stream_segment_store_is_create_only_scoped_and_reopens",
@@ -1183,6 +1185,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "alpaca_iex::tests::iex_unknown_accounting_revocation_and_cancellation_stop_without_reconnect",
                         "alpaca_iex::tests::iex_abandoned_intake_and_absolute_handshake_deadline_are_terminal",
                         "alpaca_iex::tests::iex_configuration_and_diagnostics_do_not_expand_scope_or_expose_data",
+                        "iex_acceptance::tests::iex_owner_inputs_derive_exact_namespace_claims_from_the_complete_profile",
                         "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
                         "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
                         "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",

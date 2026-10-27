@@ -8,6 +8,7 @@ use edgeagent_market_data_application::{
 };
 use edgeagent_market_data_domain::UtcInstant;
 use sqlx::{PgPool, Postgres, Transaction};
+mod inputs;
 mod lifecycle;
 mod publication;
 mod recovery;

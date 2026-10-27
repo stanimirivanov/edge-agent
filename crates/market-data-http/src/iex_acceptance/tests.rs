@@ -106,6 +106,42 @@ fn refs<'a>(
 }
 
 #[test]
+fn iex_owner_inputs_derive_exact_namespace_claims_from_the_complete_profile() -> TestResult {
+    let f = fixture(false)?;
+    let l = lane(&f, false)?;
+    let p = profile(&f, &l, false)?;
+    let s = session(&f, &p)?;
+    let selection = f.plan()?;
+    let inputs = p.owner_inputs(&s, &selection, at(1000)?)?;
+    assert_eq!(inputs.profile(), p.bytes());
+    assert_eq!(inputs.claims().len(), 1);
+    let claim = inputs.claims().first().ok_or("claim")?;
+    assert_eq!(claim.namespace(), 7);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(claim.scope())?,
+        serde_json::json!([
+            "edgeagent.iex-identity-scope.v1",
+            format!("{:032x}", 1),
+            format!("{:032x}", 1),
+            [1970, 1, 1],
+            ["iex-trade", "V", "C"]
+        ])
+    );
+    let changed = IexCanonicalProfile::new(
+        SourceId::new(1)?,
+        f.contract,
+        TransformationRevision::new(2)?,
+        std::slice::from_ref(&l),
+        &[IexConditionRule::new(&["@"], &[8])?],
+    )?;
+    let changed_session = session(&f, &changed)?;
+    let revised = changed.owner_inputs(&changed_session, &selection, at(1000)?)?;
+    assert_eq!(revised.claims(), inputs.claims());
+    assert_ne!(revised.bytes(), inputs.bytes());
+    assert!(changed.owner_inputs(&s, &selection, at(1000)?).is_err());
+    Ok(())
+}
+#[test]
 fn iex_acceptance_trade_identity_replay_and_native_provenance_are_exact() -> TestResult {
     let f = fixture(false)?;
     let l = lane(&f, false)?;

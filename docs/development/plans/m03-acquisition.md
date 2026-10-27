@@ -53,7 +53,9 @@ Each implementation ships focused negative tests and docs with its behavior.
 | Extension 4a | M03-PR20A | Offline bounded multi-source queues, fair dispatch and explicit unresolved/failure contracts | PR17B, PR19, PR13 | J |
 | Extension 4b | M03-PR20B | Durable incidents, restore/readiness barriers and exact pending-publication recovery | PR20A, PR17B | K |
 | Extension 4c | M03-PR20C1 | Complete owner-pinned IEX canonical interpretation, identity and native provenance | PR20B, PR19 | L |
-| Extension 4d | M03-PR20C2 | Authenticated bounded offline streaming runtime, publication, readiness and integration proofs | PR20C1, PR20B | M |
+| Extension 4d | M03-PR20C2A | Authenticated complete owner inputs and retained namespace ownership | PR20C1, PR20B | M |
+| Extension 4e | M03-PR20C2B | Versioned native companion artifacts, atomic canonical publication and shared retention | PR20C2A, PR17B | N |
+| Extension 4f | M03-PR20C2C | Bounded offline streaming runtime, recovery, readiness and integration proofs | PR20C2B, PR20A, PR20B | O |
 
 ## Acceptance boundaries
 
@@ -194,12 +196,19 @@ provider entitlement shared with HTTP. Daily PR15C live qualification remains no
 Maintainer-approved PR20C split: [PR20C1](../iex-canonical-acceptance.md) freezes
 complete owner-selected condition/reference/window/identity profiles and converts
 IEX normalized observations without discarding native provenance. A matching sealed
-configuration pin is not independent approval. PR20C2 must authenticate installed
-owner inputs, enforce namespace consistency across profiles, persist complete native/
-profile provenance and compose bounded tasks, restore/incident fences, publication
-and domain readiness. PR20 and the streaming extension remain incomplete until that
-runtime composition and synthetic integration qualification ship. No vendor activation
-or live qualification is authorized by either slice.
+configuration pin is not independent approval. The approved follow-up split is:
+
+- [PR20C2A](../stream-owner-inputs.md): independently install complete owner inputs,
+  enforce namespace ownership across profiles/accounts, load exact actual records
+  under current denial/expiry checks and retire private scope metadata without namespace reuse.
+- PR20C2B: persist a versioned native companion artifact atomically linked to canonical
+  publication, with common scoped retention, revocation and cleanup. Canonical values
+  alone must not discard native conditions, exchange/tape, count/VWAP or profile provenance.
+- PR20C2C: compose bounded offline tasks, authenticated inputs, fresh restore/incident
+  fences, exact publication recovery and domain readiness with synthetic integration proofs.
+
+PR20 and the streaming extension remain incomplete until all three slices and runtime
+qualification ship. No vendor activation or live qualification is authorized by this split.
 
 Maintainer-approved PR20 split: [PR20A](../stream-supervision.md) implements a
 pure offline bounded scheduler over caller-supplied canonical observations.

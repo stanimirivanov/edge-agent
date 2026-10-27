@@ -6,6 +6,8 @@
 #[allow(dead_code)]
 #[path = "../../market-data-application/tests/support/streaming.rs"]
 mod fixture;
+#[path = "stream_publication/inputs.rs"]
+mod inputs;
 #[allow(dead_code)]
 mod support;
 use edgeagent_contracts::{Component, MessageMetadata, evidence::*};

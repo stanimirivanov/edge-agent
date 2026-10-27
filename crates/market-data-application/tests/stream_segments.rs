@@ -2,6 +2,8 @@
 #[allow(dead_code)]
 #[path = "support/segment.rs"]
 mod fixture;
+#[path = "stream_segments/inputs.rs"]
+mod inputs;
 #[path = "stream_segments/recovery.rs"]
 mod recovery;
 use edgeagent_contracts::evidence::*;

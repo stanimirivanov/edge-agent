@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT edgeagent_stream_owner_inputs_control($1,$2,$3,$4) AS \"approved!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "approved!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0eebbfb4094a09fcf72a4509b0d09c970339a461110b8cd4d82ce60d1120c8af"
+}
