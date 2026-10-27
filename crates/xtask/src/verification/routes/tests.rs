@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn iex_canonical_routes_owner_profile_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/iex_acceptance.rs",
+        "crates/market-data-http/src/iex_acceptance/encoding.rs",
+        "docs/development/iex-canonical-acceptance.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/iex-canonical-acceptance.md")
+        );
+        assert!(advice.checks.contains("iex-canonical-acceptance"));
+    }
+    Ok(())
+}
+
+#[test]
 fn stream_recovery_routes_durable_and_pure_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/streaming/recovery.rs",

@@ -41,6 +41,15 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
     }
     for (id, expected) in [
         (
+            "iex-canonical-acceptance",
+            vec![
+                "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
+                "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
+                "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
+            ],
+        ),
+        (
             "stream-supervision-contracts",
             vec![
                 "supervision_round_robin_preserves_fifo_and_bounds_every_eligible_wait",
@@ -675,6 +684,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "streaming-segment-contracts",
             "wss-transport-contracts",
             "stream-supervision-contracts",
+            "iex-canonical-acceptance",
             "alpaca-iex-conformance",
             "streaming-session-contracts",
             "offline-worker-contracts",

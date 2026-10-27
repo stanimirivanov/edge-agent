@@ -52,7 +52,8 @@ Each implementation ships focused negative tests and docs with its behavior.
 | Extension 3 | M03-PR19 | First selected underlying-stream adapter with exact subscriptions | PR18, PR11C | I |
 | Extension 4a | M03-PR20A | Offline bounded multi-source queues, fair dispatch and explicit unresolved/failure contracts | PR17B, PR19, PR13 | J |
 | Extension 4b | M03-PR20B | Durable incidents, restore/readiness barriers and exact pending-publication recovery | PR20A, PR17B | K |
-| Extension 4c | M03-PR20C | Owner-pinned IEX canonical acceptance and bounded streaming runtime composition/proofs | PR20B, PR19 | L |
+| Extension 4c | M03-PR20C1 | Complete owner-pinned IEX canonical interpretation, identity and native provenance | PR20B, PR19 | L |
+| Extension 4d | M03-PR20C2 | Authenticated bounded offline streaming runtime, publication, readiness and integration proofs | PR20C1, PR20B | M |
 
 ## Acceptance boundaries
 
@@ -189,6 +190,16 @@ also address scoped metadata retirement, restore/reference freshness and any act
 provider entitlement shared with HTTP. Daily PR15C live qualification remains not run.
 
 ## Harness and outstanding decisions
+
+Maintainer-approved PR20C split: [PR20C1](../iex-canonical-acceptance.md) freezes
+complete owner-selected condition/reference/window/identity profiles and converts
+IEX normalized observations without discarding native provenance. A matching sealed
+configuration pin is not independent approval. PR20C2 must authenticate installed
+owner inputs, enforce namespace consistency across profiles, persist complete native/
+profile provenance and compose bounded tasks, restore/incident fences, publication
+and domain readiness. PR20 and the streaming extension remain incomplete until that
+runtime composition and synthetic integration qualification ship. No vendor activation
+or live qualification is authorized by either slice.
 
 Maintainer-approved PR20 split: [PR20A](../stream-supervision.md) implements a
 pure offline bounded scheduler over caller-supplied canonical observations.
