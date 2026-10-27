@@ -188,6 +188,13 @@ provider entitlement shared with HTTP. Daily PR15C live qualification remains no
 
 ## Harness and outstanding decisions
 
+PR19 selects Alpaca IEX trades and minute bars for [offline protocol conformance](../alpaca-iex.md)
+only. Explicit Xiex venue coverage is not historical SIP or consolidated evidence.
+Each existing sealed session admits one contract (trade or minute bar); no combined
+admission or extra account capacity is implied. Corrections/cancels require explicit
+reconciliation. PR20 must compose authenticated semantics/identity, durable invalidity,
+capture publication and recovery/readiness; no vendor activation ships in PR19.
+
 Maintainer-approved PR17 split: [PR17A](../streaming-segments.md) supplies bounded
 normalized capture and scoped create-only storage, not readiness or publication.
 PR17B inventories before PUT, verifies current charged ranges/generations, atomically

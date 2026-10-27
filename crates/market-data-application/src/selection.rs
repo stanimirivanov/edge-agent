@@ -235,6 +235,46 @@ impl InstrumentRoute<'_> {
     }
 }
 impl<'a> SelectionPlan<'a> {
+    /// Exact feed/epoch namespace of this frozen directory; not source continuity evidence.
+    #[must_use]
+    pub const fn routing_scope(&self) -> RoutingScope {
+        self.context.scope
+    }
+    /// Resolve selected symbol mappings only when this complete plan matches the sealed session.
+    /// # Errors
+    /// Rejects a different selection/directory witness, missing aliases or ambiguous instruments.
+    pub fn streaming_routes(
+        &self,
+        session: &crate::StreamingSession,
+    ) -> Result<Vec<InstrumentRoute<'_>>> {
+        #[derive(serde::Deserialize)]
+        struct Witness {
+            selection: Vec<u8>,
+        }
+        let witness: Witness =
+            serde_json::from_slice(session.bytes()).map_err(|_| SelectionError::Scope)?;
+        if witness.selection != self.binding_bytes()? {
+            return Err(SelectionError::Scope);
+        }
+        session
+            .data()
+            .scopes
+            .iter()
+            .map(|scope| {
+                let mut mappings = self
+                    .directory
+                    .value()
+                    .entries
+                    .iter()
+                    .filter(|(_, mapping)| mapping.value().identities().0 == scope.instrument);
+                let (key, mapping) = mappings.next().ok_or(SelectionError::Mapping)?;
+                if mappings.next().is_some() || key.as_symbol().is_none() {
+                    return Err(SelectionError::Mapping);
+                }
+                Ok(InstrumentRoute(mapping))
+            })
+            .collect()
+    }
     pub(crate) fn streaming_binding(
         &self,
         scopes: &[crate::AccessScope],

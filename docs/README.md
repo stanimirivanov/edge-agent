@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For offline Alpaca IEX trades/minute bars and exact bounded subscriptions, read
+[Alpaca IEX](development/alpaca-iex.md) and
+[ADR-0068](decisions/0068-qualify-iex-streams-with-exact-offline-subscriptions.md).
+
 For bounded WSS frames, verified TLS, durable arrival charging and offline protocol proofs,
 read [streaming transport](development/streaming-transport.md) and
 [ADR-0067](decisions/0067-bound-wss-frames-before-provider-decoding.md).

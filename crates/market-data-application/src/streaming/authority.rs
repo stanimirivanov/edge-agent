@@ -62,6 +62,7 @@ pub(super) fn seal(
         MarketScope::Venue(Venue::Xnys) => "xnys",
         MarketScope::Venue(Venue::Xnas) => "xnas",
         MarketScope::Venue(Venue::Arcx) => "arcx",
+        MarketScope::Venue(Venue::Xiex) => "xiex",
         _ => return Err(invalid()),
     };
     let (semantic, precision) = data.contract.rules();

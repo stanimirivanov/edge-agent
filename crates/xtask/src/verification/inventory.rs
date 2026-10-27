@@ -339,6 +339,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic TLS loopback and controlled-clock transport proofs; no vendor activation or source readiness.",
         ),
         check(
+            "alpaca-iex-conformance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "alpaca_iex::tests::",
+                "--features",
+                "serde_json/preserve_order,compression-unification-test",
+                "--",
+            ],
+            "Invented Alpaca IEX protocol and local TLS proofs only; no vendor activation, continuity or readiness.",
+        ),
+        check(
             "streaming-session-contracts",
             "T2",
             &["verify", "test"],
@@ -870,6 +888,24 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "alpaca-iex-conformance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    ignored: false,
+                    expected: vec![
+                        "alpaca_iex::tests::iex_protocol_requires_exact_handshake_and_subscription",
+                        "alpaca_iex::tests::iex_exact_trades_and_minute_bars_preserve_scope_time_and_values",
+                        "alpaca_iex::tests::iex_batches_reject_ambiguity_corrections_and_partial_success",
+                        "alpaca_iex::tests::iex_known_unselected_payload_skips_values_but_not_control_or_mapping_checks",
+                        "alpaca_iex::tests::iex_loopback_tls_auth_subscription_fragments_and_controls_are_charged",
+                        "alpaca_iex::tests::iex_unknown_accounting_revocation_and_cancellation_stop_without_reconnect",
+                        "alpaca_iex::tests::iex_abandoned_intake_and_absolute_handshake_deadline_are_terminal",
+                        "alpaca_iex::tests::iex_configuration_and_diagnostics_do_not_expand_scope_or_expose_data",
+                    ],
+                });
+            }
             "wss-transport-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -1073,6 +1109,14 @@ pub(super) fn checks() -> Vec<Check> {
                         "tests::cancellation_original_deadlines_and_dropped_attempts_do_not_restart_work",
                         "tests::statuses_retry_after_encodings_and_public_diagnostics_are_explicit",
                         "tests::tls_handshake_failure_never_downgrades_or_exposes_request_secrets",
+                        "alpaca_iex::tests::iex_protocol_requires_exact_handshake_and_subscription",
+                        "alpaca_iex::tests::iex_exact_trades_and_minute_bars_preserve_scope_time_and_values",
+                        "alpaca_iex::tests::iex_batches_reject_ambiguity_corrections_and_partial_success",
+                        "alpaca_iex::tests::iex_known_unselected_payload_skips_values_but_not_control_or_mapping_checks",
+                        "alpaca_iex::tests::iex_loopback_tls_auth_subscription_fragments_and_controls_are_charged",
+                        "alpaca_iex::tests::iex_unknown_accounting_revocation_and_cancellation_stop_without_reconnect",
+                        "alpaca_iex::tests::iex_abandoned_intake_and_absolute_handshake_deadline_are_terminal",
+                        "alpaca_iex::tests::iex_configuration_and_diagnostics_do_not_expand_scope_or_expose_data",
                         "wss::tests::wss_charges_controls_fragments_and_exact_caps_before_exposure",
                         "wss::tests::wss_rejects_untrusted_tls_bad_hostname_and_invalid_upgrades",
                         "wss::tests::wss_protocol_overflow_and_lost_charge_are_terminal",

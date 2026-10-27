@@ -16,6 +16,8 @@ pub enum Venue {
     Xnas,
     /// NYSE Arca.
     Arcx,
+    /// Investors Exchange; venue coverage is not consolidated coverage.
+    Xiex,
 }
 
 /// Bounded, case-sensitive provider alias; never stable instrument identity.

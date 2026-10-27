@@ -6,6 +6,11 @@
 //! ```
 #![deny(missing_docs)]
 mod alpaca;
+mod alpaca_iex;
+pub use alpaca_iex::{
+    AlpacaIex, AlpacaIexConfig, AlpacaIexSession, IexError, IexErrorKind, IexObservation,
+    IexProgress, IexValue,
+};
 mod endpoint;
 pub use alpaca::{AlpacaDaily, AlpacaDailyConfig, AlpacaProgress, AlpacaSession};
 mod error;
@@ -23,5 +28,9 @@ pub use wss::{
     WssConfig, WssError, WssErrorKind, WssFrame, WssFrameKind, WssSession, WssTransport,
 };
 
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../market-data-application/tests/support/streaming.rs"]
+mod streaming_fixture;
 #[cfg(test)]
 mod tests;

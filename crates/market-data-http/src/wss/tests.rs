@@ -1,8 +1,6 @@
 //! Owned TLS loopback peers only; no DNS provider, vendor, Docker or credentials.
-#[allow(dead_code)]
-#[path = "../../../market-data-application/tests/support/streaming.rs"]
-mod fixture;
 use super::*;
+use crate::streaming_fixture as fixture;
 use edgeagent_market_data_application::{
     AuthorityCatalogs, BudgetErrorKind, StreamingFrame, StreamingUsage,
 };

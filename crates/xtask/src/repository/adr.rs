@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 67] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 68] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -356,6 +356,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 67] = [
         number: 67,
         path: "docs/decisions/0067-bound-wss-frames-before-provider-decoding.md",
         title: "Bound WSS frames before provider decoding",
+    },
+    PublishedIdentity {
+        number: 68,
+        path: "docs/decisions/0068-qualify-iex-streams-with-exact-offline-subscriptions.md",
+        title: "Qualify IEX streams with exact offline subscriptions",
     },
 ];
 
