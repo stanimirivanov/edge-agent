@@ -168,12 +168,12 @@ fn unaccepted_replacement_cannot_claim_supersession() {
 fn retained_high_water_detects_deleting_the_latest_decision() {
     // This literal is an independent published floor, not derived from the
     // identity ledger that the test protects.
-    let complete = records_through(69);
+    let complete = records_through(70);
     assert!(validate_sequence(&complete).is_empty());
 
-    let truncated = records_through(68);
+    let truncated = records_through(69);
     let rendered = render(&validate_sequence(&truncated));
-    assert!(rendered.contains("repository policy records 0069"));
+    assert!(rendered.contains("repository policy records 0070"));
 }
 
 #[test]

@@ -967,6 +967,8 @@ pub(super) fn checks() -> Vec<Check> {
                         "stream_segment_codec_rejects_noncanonical_corrupt_and_unbounded_input",
                         "stream_segment_values_preserve_cancellations_and_source_semantics",
                         "stream_publication_recovery_preserves_exact_bytes_and_opaque_event",
+                        "recovery::stream_restore_replays_original_intent_and_rechecks_after_effects",
+                        "recovery::stream_restore_empty_cancelled_or_stale_recovery_never_opens_barrier",
                         "stream_retained_authority_outlives_capture_not_original_rights",
                         "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                         "stream_segment_store_is_create_only_scoped_and_reopens",

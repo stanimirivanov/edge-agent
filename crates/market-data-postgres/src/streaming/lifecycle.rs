@@ -143,7 +143,7 @@ impl PostgresStreamingLedger {
         Ok(completed)
     }
 }
-async fn owner_session(
+pub(super) async fn owner_session(
     tx: &mut Transaction<'_, Postgres>,
     account: ProviderAccountId,
     id: &EvidenceId,

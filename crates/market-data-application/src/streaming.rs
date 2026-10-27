@@ -1,6 +1,7 @@
 //! Finite capture admission and accounting, not a vendor transport or readiness grant.
 mod authority;
 mod publication;
+mod recovery;
 mod segment;
 use crate::{
     AccessScope, AuthorityCatalogs, BudgetError as Error, BudgetErrorKind as K, Cancellation,
@@ -11,6 +12,7 @@ use edgeagent_market_data_domain::{
     DeliveryCapability, EffectiveInterval, EvidenceContract, UtcInstant,
 };
 pub use publication::*;
+pub use recovery::*;
 pub use segment::{CapturedStreamObservation, StreamSegmentInput, freeze_stream_segment};
 use std::{
     future::Future,
