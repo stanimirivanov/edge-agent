@@ -198,6 +198,14 @@ explicitly record reconnects, skipped frames and first/retired history, never co
 Notifications carry only opaque IDs. PR18 remains parallel with PR17A;
 PR20 depends on PR17B. Both slices remain offline.
 
+PR18 supplies the [bounded WSS library](../streaming-transport.md) and protected
+synthetic loopback TLS/protocol proofs. It commits one start before dialing and
+charges all complete frames before provider decoding. Explicit upgrade/frame/
+fragment/outgoing limits and original connect/idle/lifetime bounds fail closed;
+uncertain accounting or abandoned operations stop socket reuse. No subscription,
+vendor runtime, readiness or provider quiescence is implied. PR19 supplies the
+selected provider adapter; PR20 composes fresh authority, recovery and supervision.
+
 Run `cargo xtask verify` for each implementation. PR11A adds the protected portable
 `offline-source-isolation` gate and the separate Linux-only network-denial proof.
 PR11B adds the protected `metered-provider-dispatch` gate. PR11C adds

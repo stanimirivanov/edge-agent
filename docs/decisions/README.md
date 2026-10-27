@@ -178,3 +178,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0064](0064-bound-streaming-sessions-with-durable-account-fences.md) | Accepted | Bound streaming sessions with durable account fences. |
 | [ADR-0065](0065-separate-stream-capture-segments-from-evidence-readiness.md) | Accepted | Separate stream capture segments from evidence readiness. |
 | [ADR-0066](0066-publish-stream-capture-through-durable-lifecycle-fences.md) | Accepted | Publish stream capture through durable lifecycle fences. |
+| [ADR-0067](0067-bound-wss-frames-before-provider-decoding.md) | Accepted | Bound WSS frames before provider decoding. |

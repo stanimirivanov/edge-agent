@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For bounded WSS frames, verified TLS, durable arrival charging and offline protocol proofs,
+read [streaming transport](development/streaming-transport.md) and
+[ADR-0067](decisions/0067-bound-wss-frames-before-provider-decoding.md).
+
 For bounded normalized streaming capture (not evidence readiness), read
 [streaming segments](development/streaming-segments.md) and
 [ADR-0065](decisions/0065-separate-stream-capture-segments-from-evidence-readiness.md).

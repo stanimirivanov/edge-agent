@@ -39,6 +39,20 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
     }
     for (id, expected) in [
         (
+            "wss-transport-contracts",
+            vec![
+                "wss::tests::wss_charges_controls_fragments_and_exact_caps_before_exposure",
+                "wss::tests::wss_rejects_untrusted_tls_bad_hostname_and_invalid_upgrades",
+                "wss::tests::wss_protocol_overflow_and_lost_charge_are_terminal",
+                "wss::tests::wss_cancellation_denial_and_abandoned_receive_never_reuse_socket",
+                "wss::tests::wss_guard_bounds_idle_partial_work_and_total_lifetime",
+                "wss::tests::wss_configuration_and_diagnostics_fail_closed",
+                "wss::tests::wss_abandoned_committed_charge_never_exposes_or_replays_payload",
+                "wss::tests::wss_fragment_and_outgoing_budgets_are_not_renewed_by_progress",
+                "wss::tests::wss_frame_ceiling_is_inclusive_and_silent_upgrade_times_out",
+            ],
+        ),
+        (
             "streaming-segment-contracts",
             vec![
                 "stream_segment_freezing_binds_session_scope_epoch_generation_and_retention",
@@ -210,6 +224,15 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "tests::cancellation_original_deadlines_and_dropped_attempts_do_not_restart_work",
                 "tests::statuses_retry_after_encodings_and_public_diagnostics_are_explicit",
                 "tests::tls_handshake_failure_never_downgrades_or_exposes_request_secrets",
+                "wss::tests::wss_charges_controls_fragments_and_exact_caps_before_exposure",
+                "wss::tests::wss_rejects_untrusted_tls_bad_hostname_and_invalid_upgrades",
+                "wss::tests::wss_protocol_overflow_and_lost_charge_are_terminal",
+                "wss::tests::wss_cancellation_denial_and_abandoned_receive_never_reuse_socket",
+                "wss::tests::wss_guard_bounds_idle_partial_work_and_total_lifetime",
+                "wss::tests::wss_configuration_and_diagnostics_fail_closed",
+                "wss::tests::wss_abandoned_committed_charge_never_exposes_or_replays_payload",
+                "wss::tests::wss_fragment_and_outgoing_budgets_are_not_renewed_by_progress",
+                "wss::tests::wss_frame_ceiling_is_inclusive_and_silent_upgrade_times_out",
             ],
         ),
         (
@@ -614,6 +637,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "account-audit-contracts",
             "frozen-evaluation-contracts",
             "streaming-segment-contracts",
+            "wss-transport-contracts",
             "streaming-session-contracts",
             "offline-worker-contracts",
             "offline-source-isolation",

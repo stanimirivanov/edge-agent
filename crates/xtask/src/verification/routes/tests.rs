@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn wss_transport_routes_bounded_local_protocol_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-http/src/wss.rs",
+        "crates/market-data-http/src/wss/connection.rs",
+        "crates/market-data-http/src/wss/tests.rs",
+        "docs/development/streaming-transport.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/streaming-transport.md")
+        );
+        assert!(advice.checks.contains("wss-transport-contracts"));
+    }
+    Ok(())
+}
+
+#[test]
 fn streaming_routes_authority_and_durable_account_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/streaming/authority.rs",
