@@ -167,6 +167,126 @@ async fn charge(
 }
 #[tokio::test]
 #[ignore = "requires isolated local PostgreSQL"]
+async fn stream_restore_requires_independent_approval_and_preserves_sticky_incidents() -> Result {
+    let h = Harness::new().await?;
+    let (pool, role) = h.worker().await?;
+    let result = AssertUnwindSafe(async {
+        let f = fixture::Fixture::new(h.now - 100, 1)?;
+        let s = f.session(1)?;
+        let owner = Ledger::new(h.pool.clone());
+        let w = Ledger::new(pool.clone());
+        owner
+            .configure_account(f.account()?, f.policy(1, 4)?, 0)
+            .await?;
+        owner.admit(&s, f.catalogs()).await?;
+        assert_eq!(
+            w.recovery_state(&s, f.catalogs()).await?,
+            StreamRecoveryState {
+                revision: 0,
+                blocked: true,
+                incident: None
+            }
+        );
+        let restore = w.begin_restore(&s, f.catalogs()).await?;
+        assert!(
+            w.check_stream_restored(&s, &restore, f.catalogs())
+                .await
+                .is_err()
+        );
+        assert!(
+            w.approve_stream_restore(&s, &restore, f.catalogs())
+                .await
+                .is_err()
+        );
+        assert!(
+            sqlx::query("UPDATE edgeagent_stream_recovery SET blocked=FALSE")
+                .execute(&pool)
+                .await
+                .is_err()
+        );
+        owner
+            .approve_stream_restore(&s, &restore, f.catalogs())
+            .await?;
+        w.check_stream_restored(&s, &restore, f.catalogs()).await?;
+        let before = w.status(&s.data().id).await?;
+        let restarted = Ledger::new(pool.clone());
+        let next = restarted.begin_restore(&s, f.catalogs()).await?;
+        assert!(next.identity().1 > restore.identity().1);
+        assert!(
+            w.check_stream_restored(&s, &restore, f.catalogs())
+                .await
+                .is_err()
+        );
+        let state = restarted
+            .record_stream_incident(&s, &next, StreamStop::SourceFailure, f.catalogs())
+            .await?;
+        assert!(state.blocked);
+        assert_eq!(state.incident, Some(StreamStop::SourceFailure));
+        assert_eq!(
+            Ledger::new(pool.clone())
+                .recovery_state(&s, f.catalogs())
+                .await?,
+            state
+        );
+        assert!(
+            owner
+                .approve_stream_restore(&s, &next, f.catalogs())
+                .await
+                .is_err()
+        );
+        assert!(restarted.begin_restore(&s, f.catalogs()).await.is_err());
+        assert_eq!(w.status(&s.data().id).await?, before);
+        assert_eq!(format!("{next:?}"), "StreamRestore(..)");
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    h.drop_worker(pool, &role).await?;
+    h.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated local PostgreSQL"]
+async fn stream_restore_recovers_exact_pending_intents_and_approval_rolls_back() -> Result {
+    let h = Harness::new().await?;
+    let (pool, role) = h.worker().await?;
+    let result=AssertUnwindSafe(async {
+        let f=fixture::Fixture::new(h.now-100,1)?; let s=f.session(1)?;
+        let owner=Ledger::new(h.pool.clone()); let w=Ledger::new(pool.clone()); let cancel=Cancellation::default();
+        owner.configure_account(f.account()?,f.policy(1,4)?,0).await?;owner.admit(&s,f.catalogs()).await?;
+        let c=w.reserve(&s,f.catalogs(),&cancel).await?;charge(&w,&f,&s,&c,1).await?;
+        let p=proposal(&f,&s,&c,70,[1,1],None)?;
+        w.stage(&s,&p,f.catalogs(),&cancel).await?;
+        let before=w.status(&s.data().id).await?;
+        let restarted=Ledger::new(pool.clone()); let restore=restarted.begin_restore(&s,f.catalogs()).await?;
+        assert!(owner.approve_stream_restore(&s,&restore,f.catalogs()).await.is_err());
+        let store=SegmentStore{stored:std::sync::Mutex::new(None),fail:std::sync::atomic::AtomicBool::new(true),puts:std::sync::atomic::AtomicUsize::new(0)};
+        let access=Access{object:p.segment().object(),at:fixture::at(h.now)?};
+        assert!(recover_pending_stream_segment(&restarted,&restarted,&store,&s,&restore,InstrumentId::new(1)?,f.catalogs(),&cancel,&access).await.is_err());
+        assert!(restarted.recovery_state(&s,f.catalogs()).await?.blocked);
+        assert_eq!(restarted.pending_segment(&s,InstrumentId::new(1)?,f.catalogs()).await?.ok_or("pending")?.bytes()?,p.bytes()?);
+        let receipt=recover_pending_stream_segment(&restarted,&restarted,&store,&s,&restore,InstrumentId::new(1)?,f.catalogs(),&cancel,&access).await?.ok_or("receipt")?;
+        // Model lost COMMIT confirmation: a fresh client discovers no pending work,
+        // and recovers the retained exact receipt without another object PUT.
+        let fresh=Ledger::new(pool.clone()); let puts=store.puts.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(recover_pending_stream_segment(&fresh,&fresh,&store,&s,&restore,InstrumentId::new(1)?,f.catalogs(),&cancel,&access).await?.is_none());
+        assert_eq!(fresh.recover_publication(&s,&p,f.catalogs()).await?,Some(receipt));
+        assert_eq!(store.puts.load(std::sync::atomic::Ordering::SeqCst),puts);
+        sqlx::raw_sql("CREATE FUNCTION fail_restore() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic rollback'; END $$; CREATE TRIGGER fail_restore AFTER UPDATE ON edgeagent_stream_recovery FOR EACH ROW WHEN(NOT NEW.blocked) EXECUTE FUNCTION fail_restore();").execute(&h.pool).await?;
+        assert!(owner.approve_stream_restore(&s,&restore,f.catalogs()).await.is_err());
+        assert!(fresh.recovery_state(&s,f.catalogs()).await?.blocked);
+        sqlx::raw_sql("DROP TRIGGER fail_restore ON edgeagent_stream_recovery; DROP FUNCTION fail_restore();").execute(&h.pool).await?;
+        owner.approve_stream_restore(&s,&restore,f.catalogs()).await?;
+        fresh.check_stream_restored(&s,&restore,f.catalogs()).await?;
+        assert_eq!(fresh.status(&s.data().id).await?,before);
+        let count:i64=sqlx::query_scalar("SELECT count(*) FROM edgeagent_message_outbox").fetch_one(&h.pool).await?;assert_eq!(count,1);
+        Ok(())
+    }).catch_unwind().await;
+    h.drop_worker(pool, &role).await?;
+    h.finish(result).await
+}
+#[tokio::test]
+#[ignore = "requires isolated local PostgreSQL"]
 async fn stream_preparation_and_atomic_publication_survive_result_loss_and_rollback() -> Result {
     let h = Harness::new().await?;
     let (pool, role) = h.worker().await?;

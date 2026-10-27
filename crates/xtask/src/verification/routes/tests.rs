@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn stream_recovery_routes_durable_and_pure_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/streaming/recovery.rs",
+        "crates/market-data-postgres/src/streaming/recovery.rs",
+        "crates/market-data-postgres/migrations/0009_stream_recovery.sql",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/stream-supervision.md")
+        );
+        assert!(advice.checks.contains("streaming-publication-postgres"));
+    }
+    Ok(())
+}
+
+#[test]
 fn supervision_routes_bounded_offline_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-application/src/supervision.rs",

@@ -2,6 +2,8 @@
 #[allow(dead_code)]
 #[path = "support/segment.rs"]
 mod fixture;
+#[path = "stream_segments/recovery.rs"]
+mod recovery;
 use edgeagent_contracts::evidence::*;
 use edgeagent_contracts::{Component, MessageMetadata};
 

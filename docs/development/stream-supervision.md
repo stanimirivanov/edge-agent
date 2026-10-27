@@ -57,14 +57,55 @@ It releases no provider account capacity and changes no persisted usage counters
 Memory is transient: process loss loses queues, so this API is not a production
 recovery mechanism. Reconstructing it cannot establish permission to resume intake.
 
-PR20B must persist incidents/restore barriers and recover the exact original
-preparations through the existing stream publication ledger, including uncertain
-commit results. PR20C must compose owner-pinned IEX semantics, deterministic
+PR20B implements protected incidents/restore barriers and exact original
+preparation recovery through the existing stream publication ledger, including
+uncertain commit results. PR20C must compose owner-pinned IEX semantics, deterministic
 identities, authority, bounded tasks, publication and domain readiness. Neither
 task may reset budgets, substitute sources or infer physical quiescence from a
 timeout, cancellation or dead process. See [ADR-0069](../decisions/0069-bound-offline-stream-supervision-with-unresolved-heads.md).
 
 ## Verification and rollout
+
+PR20B adds [ADR-0070](../decisions/0070-fence-stream-restores-with-durable-incident-barriers.md)
+and migration `0009_stream_recovery.sql`, after 0008. New and existing sessions
+start blocked at revision zero. Grant the independently provisioned worker LOGIN
+only `EXECUTE ON FUNCTION edgeagent_stream_recovery_control(TEXT,BIGINT,TEXT,SMALLINT)`;
+never grant recovery-table DML, including through role membership. Existing owner,
+account, retention and current-catalog checks remain required. Daily behavior is unchanged.
+
+Every worker restart must call `begin_restore` before reconstructing its transient
+scheduler. This commits a higher blocked revision. If its COMMIT result is unknown,
+inspect durable state and begin another restore; do not assume rollback or reuse
+an old approved snapshot. `StreamRestore` is a local revision witness, not permission.
+Only `approve_stream_restore` on the independent owner's LOGIN can approve that
+exact revision, after the owner independently verifies old workers are fenced and
+restore/reference/consumer inputs are current. Approval rejects pending publication
+intents. `record_stream_incident` irreversibly blocks that session; inspect state
+after an uncertain result. Reconciliation needs a separately admitted session.
+
+Call `recover_pending_stream_segment` for each explicitly selected instrument
+(selection remains capped at 32). It discovers the sole pending lane preparation,
+uses its original bytes/IDs/event and rechecks the restoring fence before/after I/O.
+Unknown PUT results remain inventoried. A committed-but-unconfirmed publication is
+not pending: recover its retained exact receipt with `recover_segment` and
+`recover_publication` when its ID is known; do not issue another PUT or invent an ID.
+An empty lane proves no unfinished preparation, not absence of past captures.
+Expired/stopped preparations require the existing authorized retirement path;
+they cannot silently reopen the same session. Neither recovery nor owner approval
+refunds usage, releases an unresolved provider generation or certifies market readiness.
+
+`check_stream_restored` must be checked afresh at use time. It denies stale,
+unapproved or incident-bearing revisions, stopped admissions, pending intents and
+current authority loss. Existing capture APIs still only capture; they do not
+enforce this new readiness barrier automatically. PR20C must compose checks on
+both sides of bounded work, IEX semantic/identity acceptance and domain readiness.
+Do not expose a streaming runtime until that composition is qualified.
+
+Run `cargo xtask verify --check streaming-segment-contracts` for pure recovery
+proofs, and `cargo xtask verify --check streaming-publication-postgres` on the
+isolated local platform for role, restart, uncertainty, rollback and exact receipt
+proofs. `cargo xtask verify sqlx-metadata` checks the typed function/cache against
+the actual migrated schema in CI. These are distinct evidence boundaries.
 
 `cargo xtask verify --check stream-supervision-contracts` runs six deterministic,
 credential-free proofs with an independently protected discovery census.

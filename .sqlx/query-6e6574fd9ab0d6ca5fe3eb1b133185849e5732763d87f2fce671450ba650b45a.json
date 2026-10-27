@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT edgeagent_stream_recovery_control($1,$2,$3,$4) AS \"state?\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6e6574fd9ab0d6ca5fe3eb1b133185849e5732763d87f2fce671450ba650b45a"
+}

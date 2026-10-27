@@ -16,6 +16,8 @@
 For offline fair bounded stream queues and unresolved dispatch ownership, read
 [stream supervision](development/stream-supervision.md) and
 [ADR-0069](decisions/0069-bound-offline-stream-supervision-with-unresolved-heads.md).
+For protected incidents, independent restore approval and exact pending recovery,
+also read [ADR-0070](decisions/0070-fence-stream-restores-with-durable-incident-barriers.md).
 
 For offline Alpaca IEX trades/minute bars and exact bounded subscriptions, read
 [Alpaca IEX](development/alpaca-iex.md) and

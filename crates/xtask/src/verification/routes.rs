@@ -122,6 +122,35 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/streaming/recovery.rs"),
+        guides: &["docs/development/stream-supervision.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/src/streaming/recovery.rs"),
+        guides: &[
+            "docs/development/stream-supervision.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &["streaming-publication-postgres", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/migrations/0009_stream_recovery.sql"),
+        guides: &[
+            "docs/development/stream-supervision.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &["streaming-publication-postgres", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-application/tests/stream_segments/"),
+        guides: &["docs/development/stream-supervision.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/src/supervision"),
         guides: &["docs/development/stream-supervision.md"],
         checks: &["stream-supervision-contracts"],

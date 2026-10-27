@@ -196,11 +196,14 @@ Explicit per-source/aggregate ceilings include unresolved FIFO heads. Round-robi
 dispatch skips busy/failed lanes without evicting evidence or retrying dropped work.
 Overload, binding failure and cancellation block health; health never grants evidence
 readiness. No provider, task spawn, runtime selector, persistence or activation ships.
-PR20B must persist incidents and restore barriers and recover exact publication
-preparations before reconstructing/using the transient scheduler. PR20C must supply
+PR20B supplies protected sticky incidents, revision-fenced restore barriers and
+exact publication recovery through existing preparations/receipts. Independent
+owner approval cannot clear incidents or bypass pending work; begin a new restore
+before reconstructing the transient scheduler. See [ADR-0070](../../decisions/0070-fence-stream-restores-with-durable-incident-barriers.md).
+PR20C must supply
 authenticated condition/calendar/identity semantics, bounded producer/task composition,
 publication and existing domain readiness with synthetic integration proofs. Until both
-are complete, PR20 and the streaming extension remain incomplete. Vendor activation
+are composed and qualified, PR20 and the streaming extension remain incomplete. Vendor activation
 and original daily live qualification remain separately blocked/not run.
 
 PR19 selects Alpaca IEX trades and minute bars for [offline protocol conformance](../alpaca-iex.md)

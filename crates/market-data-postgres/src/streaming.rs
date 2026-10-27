@@ -10,6 +10,7 @@ use edgeagent_market_data_domain::UtcInstant;
 use sqlx::{PgPool, Postgres, Transaction};
 mod lifecycle;
 mod publication;
+mod recovery;
 mod worker;
 type Result<T> = std::result::Result<T, Error>;
 fn invalid() -> Error {

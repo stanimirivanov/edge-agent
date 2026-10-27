@@ -19,6 +19,8 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             "stream_preparation_and_atomic_publication_survive_result_loss_and_rollback",
             "stream_publication_fences_generations_charged_ranges_and_chain_forks",
             "stream_stop_preserves_reads_withdrawal_denies_and_cleanup_requires_writer_quiescence",
+            "stream_restore_requires_independent_approval_and_preserves_sticky_incidents",
+            "stream_restore_recovers_exact_pending_intents_and_approval_rolls_back",
         ]
     );
     let complete = census
@@ -83,6 +85,8 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "stream_segment_codec_rejects_noncanonical_corrupt_and_unbounded_input",
                 "stream_segment_values_preserve_cancellations_and_source_semantics",
                 "stream_publication_recovery_preserves_exact_bytes_and_opaque_event",
+                "recovery::stream_restore_replays_original_intent_and_rechecks_after_effects",
+                "recovery::stream_restore_empty_cancelled_or_stale_recovery_never_opens_barrier",
                 "stream_retained_authority_outlives_capture_not_original_rights",
                 "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                 "stream_segment_store_is_create_only_scoped_and_reopens",

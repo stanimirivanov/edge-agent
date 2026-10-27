@@ -181,3 +181,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0067](0067-bound-wss-frames-before-provider-decoding.md) | Accepted | Bound WSS frames before provider decoding. |
 | [ADR-0068](0068-qualify-iex-streams-with-exact-offline-subscriptions.md) | Accepted | Qualify IEX streams with exact offline subscriptions. |
 | [ADR-0069](0069-bound-offline-stream-supervision-with-unresolved-heads.md) | Accepted | Bound offline stream supervision with unresolved heads. |
+| [ADR-0070](0070-fence-stream-restores-with-durable-incident-barriers.md) | Accepted | Fence stream restores with durable incident barriers. |
