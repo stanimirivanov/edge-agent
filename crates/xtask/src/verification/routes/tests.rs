@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn supervision_routes_bounded_offline_proofs() -> Result<(), String> {
+    for path in [
+        "crates/market-data-application/src/supervision.rs",
+        "crates/market-data-application/tests/supervision.rs",
+        "docs/development/stream-supervision.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/stream-supervision.md")
+        );
+        assert!(advice.checks.contains("stream-supervision-contracts"));
+    }
+    Ok(())
+}
+
+#[test]
 fn iex_routes_offline_protocol_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/alpaca_iex.rs",

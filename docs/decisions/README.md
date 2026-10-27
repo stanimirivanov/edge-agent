@@ -180,3 +180,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0066](0066-publish-stream-capture-through-durable-lifecycle-fences.md) | Accepted | Publish stream capture through durable lifecycle fences. |
 | [ADR-0067](0067-bound-wss-frames-before-provider-decoding.md) | Accepted | Bound WSS frames before provider decoding. |
 | [ADR-0068](0068-qualify-iex-streams-with-exact-offline-subscriptions.md) | Accepted | Qualify IEX streams with exact offline subscriptions. |
+| [ADR-0069](0069-bound-offline-stream-supervision-with-unresolved-heads.md) | Accepted | Bound offline stream supervision with unresolved heads. |

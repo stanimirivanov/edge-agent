@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 68] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 69] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -361,6 +361,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 68] = [
         number: 68,
         path: "docs/decisions/0068-qualify-iex-streams-with-exact-offline-subscriptions.md",
         title: "Qualify IEX streams with exact offline subscriptions",
+    },
+    PublishedIdentity {
+        number: 69,
+        path: "docs/decisions/0069-bound-offline-stream-supervision-with-unresolved-heads.md",
+        title: "Bound offline stream supervision with unresolved heads",
     },
 ];
 

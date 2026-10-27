@@ -339,6 +339,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Synthetic TLS loopback and controlled-clock transport proofs; no vendor activation or source readiness.",
         ),
         check(
+            "stream-supervision-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-application",
+                "--test",
+                "supervision",
+                "--",
+            ],
+            "Offline bounded FIFO/fair scheduling, unresolved ownership and sticky failures; not durable recovery or evidence readiness.",
+        ),
+        check(
             "alpaca-iex-conformance",
             "T2",
             &["verify", "test"],
@@ -888,6 +904,22 @@ pub(super) fn checks() -> Vec<Check> {
     ));
     for entry in &mut checks {
         match entry.id {
+            "stream-supervision-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    ignored: false,
+                    expected: vec![
+                        "supervision_round_robin_preserves_fifo_and_bounds_every_eligible_wait",
+                        "supervision_busy_and_failed_sources_cannot_starve_other_lanes",
+                        "supervision_overload_retains_rejected_and_unresolved_records_without_eviction",
+                        "supervision_foreign_and_dropped_dispatches_never_confirm_or_retry_heads",
+                        "supervision_cancellation_and_source_failure_are_sticky_without_compensation",
+                        "supervision_configuration_binding_and_diagnostics_fail_closed",
+                    ],
+                });
+            }
             "alpaca-iex-conformance" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");

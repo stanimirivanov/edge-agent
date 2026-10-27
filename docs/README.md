@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For offline fair bounded stream queues and unresolved dispatch ownership, read
+[stream supervision](development/stream-supervision.md) and
+[ADR-0069](decisions/0069-bound-offline-stream-supervision-with-unresolved-heads.md).
+
 For offline Alpaca IEX trades/minute bars and exact bounded subscriptions, read
 [Alpaca IEX](development/alpaca-iex.md) and
 [ADR-0068](decisions/0068-qualify-iex-streams-with-exact-offline-subscriptions.md).
