@@ -22,12 +22,12 @@ fn decode(value: &str) -> Result<StreamRecoveryState> {
         return Err(invalid());
     }
     let mut parts = value.split(':');
-    let revision = parts
+    let revision: u64 = parts
         .next()
         .ok_or_else(invalid)?
         .parse()
         .map_err(|_| invalid())?;
-    let blocked = parts
+    let blocked: bool = parts
         .next()
         .ok_or_else(invalid)?
         .parse()
