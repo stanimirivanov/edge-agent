@@ -182,3 +182,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0068](0068-qualify-iex-streams-with-exact-offline-subscriptions.md) | Accepted | Qualify IEX streams with exact offline subscriptions. |
 | [ADR-0069](0069-bound-offline-stream-supervision-with-unresolved-heads.md) | Accepted | Bound offline stream supervision with unresolved heads. |
 | [ADR-0070](0070-fence-stream-restores-with-durable-incident-barriers.md) | Accepted | Fence stream restores with durable incident barriers. |
+| [ADR-0071](0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md) | Accepted | Pin IEX canonical interpretation to complete owner profiles. |

@@ -1,5 +1,45 @@
 use std::{collections::VecDeque, io};
 
+#[test]
+fn shared_http_census_covers_specialized_library_proofs() -> Result<(), String> {
+    let checks = inventory::checks();
+    let shared = checks
+        .iter()
+        .find(|c| c.id == "provider-http-contracts")
+        .and_then(|c| c.discovery.as_ref())
+        .ok_or("shared HTTP census missing")?;
+    let covers =
+        |broad: &[&str], specialized: &[&str]| specialized.iter().all(|name| broad.contains(name));
+    for id in [
+        "wss-transport-contracts",
+        "alpaca-iex-conformance",
+        "iex-canonical-acceptance",
+    ] {
+        let proof = checks
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.discovery.as_ref())
+            .ok_or_else(|| format!("specialized HTTP census missing: {id}"))?;
+        assert!(
+            covers(&shared.expected, &proof.expected),
+            "shared HTTP census omits {id}"
+        );
+        for identity in &proof.expected {
+            let missing = shared
+                .expected
+                .iter()
+                .copied()
+                .filter(|name| name != identity)
+                .collect::<Vec<_>>();
+            assert!(
+                !covers(&missing, &proof.expected),
+                "missing shared proof must fail coverage"
+            );
+        }
+    }
+    Ok(())
+}
+
 use super::{
     Check, CommandSpec, Discovery, Program, Requirement, inventory,
     runner::{self, Execution, Executor, Options, Status},
@@ -40,6 +80,15 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
         }
     }
     for (id, expected) in [
+        (
+            "iex-canonical-acceptance",
+            vec![
+                "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
+                "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
+                "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
+            ],
+        ),
         (
             "stream-supervision-contracts",
             vec![
@@ -260,6 +309,10 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "alpaca_iex::tests::iex_unknown_accounting_revocation_and_cancellation_stop_without_reconnect",
                 "alpaca_iex::tests::iex_abandoned_intake_and_absolute_handshake_deadline_are_terminal",
                 "alpaca_iex::tests::iex_configuration_and_diagnostics_do_not_expand_scope_or_expose_data",
+                "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
+                "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
+                "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
                 "wss::tests::wss_charges_controls_fragments_and_exact_caps_before_exposure",
                 "wss::tests::wss_rejects_untrusted_tls_bad_hostname_and_invalid_upgrades",
                 "wss::tests::wss_protocol_overflow_and_lost_charge_are_terminal",
@@ -675,6 +728,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "streaming-segment-contracts",
             "wss-transport-contracts",
             "stream-supervision-contracts",
+            "iex-canonical-acceptance",
             "alpaca-iex-conformance",
             "streaming-session-contracts",
             "offline-worker-contracts",

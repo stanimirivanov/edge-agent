@@ -355,6 +355,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Offline bounded FIFO/fair scheduling, unresolved ownership and sticky failures; not durable recovery or evidence readiness.",
         ),
         check(
+            "iex-canonical-acceptance",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-market-data-http",
+                "--lib",
+                "iex_acceptance::tests::",
+                "--features",
+                "serde_json/preserve_order,compression-unification-test",
+                "--",
+            ],
+            "Invented owner-pinned IEX conditions, full references, source identities and native provenance; not runtime activation or readiness.",
+        ),
+        check(
             "alpaca-iex-conformance",
             "T2",
             &["verify", "test"],
@@ -920,6 +938,20 @@ pub(super) fn checks() -> Vec<Check> {
                     ],
                 });
             }
+            "iex-canonical-acceptance" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    ignored: false,
+                    expected: vec![
+                        "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                        "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
+                        "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
+                        "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
+                    ],
+                });
+            }
             "alpaca-iex-conformance" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -1151,6 +1183,10 @@ pub(super) fn checks() -> Vec<Check> {
                         "alpaca_iex::tests::iex_unknown_accounting_revocation_and_cancellation_stop_without_reconnect",
                         "alpaca_iex::tests::iex_abandoned_intake_and_absolute_handshake_deadline_are_terminal",
                         "alpaca_iex::tests::iex_configuration_and_diagnostics_do_not_expand_scope_or_expose_data",
+                        "iex_acceptance::tests::iex_acceptance_trade_identity_replay_and_native_provenance_are_exact",
+                        "iex_acceptance::tests::iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds",
+                        "iex_acceptance::tests::iex_acceptance_rejects_unknown_semantics_stale_references_and_authority",
+                        "iex_acceptance::tests::iex_acceptance_profile_bytes_bind_complete_inputs_and_reject_ambiguity",
                         "wss::tests::wss_charges_controls_fragments_and_exact_caps_before_exposure",
                         "wss::tests::wss_rejects_untrusted_tls_bad_hostname_and_invalid_upgrades",
                         "wss::tests::wss_protocol_overflow_and_lost_charge_are_terminal",

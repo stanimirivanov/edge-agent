@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For explicit owner-pinned IEX conditions, canonical identities and native provenance,
+read [IEX canonical acceptance](development/iex-canonical-acceptance.md) and
+[ADR-0071](decisions/0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md).
+
 For offline fair bounded stream queues and unresolved dispatch ownership, read
 [stream supervision](development/stream-supervision.md) and
 [ADR-0069](decisions/0069-bound-offline-stream-supervision-with-unresolved-heads.md).

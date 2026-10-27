@@ -7,9 +7,14 @@
 #![deny(missing_docs)]
 mod alpaca;
 mod alpaca_iex;
+mod iex_acceptance;
 pub use alpaca_iex::{
     AlpacaIex, AlpacaIexConfig, AlpacaIexSession, IexError, IexErrorKind, IexObservation,
     IexProgress, IexValue,
+};
+pub use iex_acceptance::{
+    IexAcceptanceError, IexAcceptanceReferences, IexAcceptedObservation, IexCanonicalProfile,
+    IexConditionRule, IexIdentityLane, IexIdentityScope,
 };
 mod endpoint;
 pub use alpaca::{AlpacaDaily, AlpacaDailyConfig, AlpacaProgress, AlpacaSession};
