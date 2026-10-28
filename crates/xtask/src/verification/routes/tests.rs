@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn offline_stream_runtime_routes_require_real_composition_proofs() -> Result<(), String> {
+    for path in [
+        "services/market-data/src/offline_streaming/engine.rs",
+        "services/market-data/src/lib.rs",
+        "services/market-data/tests/offline_stream_runtime.rs",
+        "services/market-data/tests/stream_runtime/fixture.rs",
+        "crates/market-data-postgres/src/streaming/history.rs",
+        "crates/market-data-http/src/iex_acceptance/replay.rs",
+        "docs/development/offline-stream-runtime.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/offline-stream-runtime.md")
+        );
+        assert!(advice.checks.contains("offline-stream-runtime"));
+    }
+    Ok(())
+}
+
+#[test]
 fn native_companion_paths_route_paired_recovery_proofs() -> Result<(), String> {
     for path in [
         "crates/contracts/src/evidence/stream_companion.rs",

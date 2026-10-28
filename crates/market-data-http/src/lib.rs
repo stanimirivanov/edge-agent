@@ -14,7 +14,7 @@ pub use alpaca_iex::{
 };
 pub use iex_acceptance::{
     IexAcceptanceError, IexAcceptanceReferences, IexAcceptedObservation, IexCanonicalProfile,
-    IexConditionRule, IexIdentityLane, IexIdentityScope,
+    IexConditionRule, IexIdentityLane, IexIdentityScope, IexReplayContext,
 };
 mod endpoint;
 pub use alpaca::{AlpacaDaily, AlpacaDailyConfig, AlpacaProgress, AlpacaSession};

@@ -192,6 +192,29 @@ fn supervision_foreign_and_dropped_dispatches_never_confirm_or_retry_heads() -> 
         assert!(supervisor.dispatch_next()?.is_none());
         assert_eq!(supervisor.status(FeedId::new(1)?)?.pending, 1);
     }
+    let mut batch = make()?;
+    enqueue(&mut batch, 1, 1)?;
+    enqueue(&mut batch, 1, 2)?;
+    let head = batch.dispatch_next()?.ok_or("head")?;
+    let dispatch = batch.extend_dispatch(head, n(2)?)?;
+    assert_eq!(
+        dispatch
+            .observations()
+            .map(|o| o.version().lineage().0.get())
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(batch.status(FeedId::new(1)?)?.pending, 2);
+    batch.confirm(dispatch)?;
+    assert_eq!(batch.status(FeedId::new(1)?)?.pending, 0);
+    let mut oversized = make()?;
+    enqueue(&mut oversized, 1, 1)?;
+    let head = oversized.dispatch_next()?.ok_or("head")?;
+    assert!(matches!(
+        oversized.extend_dispatch(head, n(2)?),
+        Err(SupervisionError::ForeignDispatch)
+    ));
+    assert!(oversized.status(FeedId::new(1)?)?.unresolved);
     Ok(())
 }
 

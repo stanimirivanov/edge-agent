@@ -122,6 +122,52 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("services/market-data/src/offline_streaming/"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &[
+            "offline-stream-runtime",
+            "stream-supervision-contracts",
+            "iex-canonical-acceptance",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("services/market-data/src/lib.rs"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &["offline-stream-runtime"],
+    },
+    Route {
+        matcher: Matcher::Exact("services/market-data/tests/offline_stream_runtime.rs"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &["offline-stream-runtime"],
+    },
+    Route {
+        matcher: Matcher::Prefix("services/market-data/tests/stream_runtime/"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &["offline-stream-runtime"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/src/streaming/"),
+        guides: &[
+            "docs/development/offline-stream-runtime.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &["offline-stream-runtime", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-http/src/iex_acceptance/replay.rs"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &[
+            "offline-stream-runtime",
+            "iex-canonical-acceptance",
+            "provider-http-contracts",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/offline-stream-runtime.md"),
+        guides: &["docs/development/offline-stream-runtime.md"],
+        checks: &["offline-stream-runtime", "stream-supervision-contracts"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-application/src/streaming/publication/"),
         guides: &["docs/development/stream-native-provenance.md"],
         checks: &[

@@ -196,6 +196,40 @@ impl Fixture {
             &self.directories,
         )?)
     }
+    /// Select an explicit synthetic feed before sealing/admitting any session.
+    pub fn remap_feed(&mut self, feed: FeedId) -> Result<()> {
+        let mut data = self.data(1)?;
+        data.delivery = self
+            .providers
+            .at(at(self.ms)?)
+            .next()
+            .ok_or("provider")?
+            .value()
+            .capability
+            .declaration()
+            .1;
+        let session = self.seal(data)?;
+        let routes = self
+            .plan()?
+            .streaming_routes(&session)?
+            .into_iter()
+            .map(|r| {
+                RouteBinding::new(
+                    RoutingKey::symbol(r.mapping().value().binding().0),
+                    r.mapping().clone(),
+                )
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        self.context.scope.feed = feed;
+        let interval = EffectiveInterval::new(at(self.ms - 1000)?, at(self.ms + 86_400_000)?)?;
+        self.directories = ReferenceHistory::new(vec![version(
+            501,
+            1,
+            self.ms - 1,
+            RoutingDirectory::new(self.context.scope, interval, routes)?,
+        )?])?;
+        Ok(())
+    }
     pub fn retain_first(&mut self, members: usize) -> Result<()> {
         self.scopes.truncate(members);
         let interval = EffectiveInterval::new(at(self.ms - 1000)?, at(self.ms + 86_400_000)?)?;

@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT publication_id,COALESCE(octet_length(preparation),0) AS \"bytes!\",published,retired FROM edgeagent_stream_publications WHERE session_id=$1 ORDER BY publication_id LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publication_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "publication_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "published",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "published"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "retired",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_stream_publications",
+            "name": "retired"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "1ae31b8939689d8c7b09cd4e1491e4f181e634e6655f34399ff8688acf00070a"
+}

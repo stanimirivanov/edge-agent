@@ -1,6 +1,8 @@
 //! Explicit owner-selected interpretation, not a live source or self-authenticating grant.
 mod accept;
 mod companion;
+mod replay;
+pub use replay::IexReplayContext;
 mod encoding;
 mod inputs;
 #[cfg(test)]
@@ -119,6 +121,7 @@ pub struct IexCanonicalProfile {
 }
 /// Canonical value plus untouched native normalized provenance. Neither is ReadyEvidence.
 /// Retaining only the canonical value would discard bar VWAP/count or original condition order.
+#[derive(Clone)]
 pub struct IexAcceptedObservation {
     canonical: CanonicalObservation,
     native: IexObservation,
