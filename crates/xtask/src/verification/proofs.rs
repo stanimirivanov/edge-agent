@@ -24,6 +24,7 @@ const STREAM_PUBLICATION: Target = Target {
         "inputs::stream_owner_inputs_require_independent_roles_and_exact_current_loading",
         "inputs::stream_namespace_collisions_and_changed_retries_roll_back_every_claim",
         "inputs::stream_input_retirement_erases_private_scope_without_reopening_namespaces",
+        "companion::native_pair_publication_recovers_exact_receipt_and_retains_partial_cleanup_inventory",
     ],
 };
 const STREAMING: Target = Target {
@@ -935,8 +936,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes PR20B recovery and PR20C2A's three isolated owner-input proofs.
-        assert_eq!(inventory.len(), 108);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 108);
+        assert_eq!(inventory.len(), 109);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 109);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

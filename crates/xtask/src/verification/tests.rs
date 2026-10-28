@@ -64,6 +64,7 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
             "inputs::stream_owner_inputs_require_independent_roles_and_exact_current_loading",
             "inputs::stream_namespace_collisions_and_changed_retries_roll_back_every_claim",
             "inputs::stream_input_retirement_erases_private_scope_without_reopening_namespaces",
+            "companion::native_pair_publication_recovers_exact_receipt_and_retains_partial_cleanup_inventory",
         ]
     );
     let complete = census
@@ -141,11 +142,13 @@ fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() ->
                 "recovery::stream_restore_replays_original_intent_and_rechecks_after_effects",
                 "recovery::stream_restore_empty_cancelled_or_stale_recovery_never_opens_barrier",
                 "inputs::stream_owner_inputs_bind_complete_bytes_and_reject_ambiguous_or_stale_records",
+                "companion::native_companion_binds_exact_records_owner_inputs_and_legacy_recovery",
                 "stream_retained_authority_outlives_capture_not_original_rights",
                 "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                 "stream_segment_store_is_create_only_scoped_and_reopens",
                 "stream_segment_store_recovers_uncertain_put_and_denies_revocation_expiry",
                 "stream_segment_store_rejects_descriptor_and_content_attacks",
+                "companion::native_companion_store_verifies_uncertain_creation_denial_and_paired_cleanup",
             ],
         ),
         (

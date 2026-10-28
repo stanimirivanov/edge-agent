@@ -9,6 +9,7 @@ use edgeagent_market_data_application::{
 use futures_util::TryStreamExt;
 use object_store::{ObjectStore, ObjectStoreExt, PutMode, path::Path};
 use std::{fmt, sync::Arc, time::Duration};
+mod companion;
 mod segment;
 
 #[cfg(test)]

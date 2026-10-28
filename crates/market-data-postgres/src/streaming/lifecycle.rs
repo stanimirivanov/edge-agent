@@ -121,9 +121,12 @@ impl PostgresStreamingLedger {
         tx.commit().await.map_err(Error::storage)?;
         let mut completed = 0;
         for row in rows {
+            let (object, companion) =
+                edgeagent_market_data_application::StreamPublication::objects(&row.descriptor)?;
             let cleanup = StreamCleanup {
                 publication: EvidenceId::new(&row.publication_id).map_err(|_| invalid())?,
-                object: serde_json::from_str(&row.descriptor).map_err(|_| invalid())?,
+                object,
+                companion,
             };
             store
                 .delete_segment(&cleanup, authority)

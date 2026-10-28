@@ -9,6 +9,8 @@ pub use supervision::{
     SupervisedSource, SupervisionError,
 };
 mod streaming;
+pub use streaming::read_stream_publication;
+pub use streaming::verify_stream_capture_record;
 pub use streaming::{
     CapturedStreamObservation, StreamCaptureBoundary, StreamCleanup, StreamDeletion,
     StreamDeletionAuthority, StreamNamespaceClaim, StreamOwnerInputs, StreamPublication,

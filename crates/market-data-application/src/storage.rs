@@ -20,6 +20,26 @@ pub trait StreamSegmentAccess: Send + Sync {
 /// Owner-private normalized streaming storage; no checkpoint/publication or cleanup grant.
 /// Uncertain PUTs retry the exact bytes/key, never compensate by deletion or new identity.
 pub trait StreamSegmentStorage: Send + Sync {
+    /// Conditional native create/read-back. Legacy stores fail closed for this capability.
+    fn put_companion(
+        &self,
+        _companion: &edgeagent_contracts::evidence::StreamCompanion,
+        _access: &impl StreamSegmentAccess,
+    ) -> impl Future<
+        Output = Result<edgeagent_contracts::evidence::StreamCompanionObject, EvidenceStorageError>,
+    > + Send {
+        async { Err(EvidenceStorageError::new(EvidenceStorageErrorKind::Denied)) }
+    }
+    /// Bounded native read under the same exact canonical scope/deadline authorization.
+    fn get_companion(
+        &self,
+        _object: &edgeagent_contracts::evidence::StreamCompanionObject,
+        _access: &impl StreamSegmentAccess,
+    ) -> impl Future<
+        Output = Result<edgeagent_contracts::evidence::StreamCompanion, EvidenceStorageError>,
+    > + Send {
+        async { Err(EvidenceStorageError::new(EvidenceStorageErrorKind::Denied)) }
+    }
     /// Conditional create plus exact canonical read-back under current authority.
     /// # Errors
     /// Returns classified authorization, integrity, expiry, backend or deadline failures.

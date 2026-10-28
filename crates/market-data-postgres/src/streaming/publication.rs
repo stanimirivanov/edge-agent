@@ -13,6 +13,31 @@ pub(super) fn millis(t: EvidenceTime) -> Result<i64> {
 fn number(n: &EvidenceRevision) -> Result<i64> {
     n.as_str().parse().map_err(|_| invalid())
 }
+// Compare paired inventory to the exact receipt preparation, not a mutable parallel map.
+async fn objects(
+    tx: &mut Transaction<'_, Postgres>,
+    session: &StreamingSession,
+    id: &EvidenceId,
+) -> Result<(StreamSegmentObject, Option<StreamCompanionObject>)> {
+    let row=sqlx::query!("SELECT descriptor,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND published AND NOT retired",id.as_str(),session.data().id.as_str()).fetch_optional(&mut **tx).await.map_err(Error::storage)?.ok_or_else(denied)?;
+    if row.delete_ms <= now(tx).await?.unix_millis() {
+        return Err(denied());
+    }
+    let p=sqlx::query!("SELECT preparation,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND NOT retired",id.as_str(),session.data().id.as_str()).fetch_one(&mut **tx).await.map_err(Error::storage)?;
+    let p = StreamPublication::decode(p.preparation.as_deref().ok_or_else(invalid)?)?;
+    if p.id() != id
+        || p.segment().data().scope.session != session.data().id
+        || p.descriptor()? != row.descriptor
+    {
+        return Err(conflict());
+    }
+    let result = StreamPublication::objects(&row.descriptor)?;
+    // Full preparation decoding is bounded CPU work, but cannot extend exclusive retention.
+    if row.delete_ms <= now(tx).await?.unix_millis() {
+        return Err(denied());
+    }
+    Ok(result)
+}
 pub(super) async fn retained_guard(
     tx: &mut Transaction<'_, Postgres>,
     session: &StreamingSession,
@@ -88,7 +113,14 @@ async fn write_guard(
     {
         return Err(denied());
     }
-    proposal.recheck_capture(session, catalogs, now(tx).await?, cancel)
+    proposal.recheck_capture(session, catalogs, now(tx).await?, cancel)?;
+    if let Some(c) = proposal.companion() {
+        let inputs =
+            edgeagent_market_data_application::StreamOwnerInputs::decode(&c.data().owner_inputs)?;
+        inputs.recheck(session, catalogs, now(tx).await?, cancel)?;
+        super::inputs::authenticate(tx, session, &inputs).await?;
+    }
+    Ok(())
 }
 
 impl StreamPublicationLedger for PostgresStreamingLedger {
@@ -149,6 +181,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
             reconnect: r.reconnect.ok_or_else(invalid)?,
             skipped: r.skipped.ok_or_else(invalid)?,
         };
+        objects(&mut tx, session, p.id()).await?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(Some(result))
     }
@@ -175,7 +208,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
             return Err(conflict());
         }
         let bytes = p.bytes()?;
-        let descriptor = serde_json::to_string(&p.segment().object()).map_err(|_| invalid())?;
+        let descriptor = p.descriptor()?;
         sqlx::query!("INSERT INTO edgeagent_stream_publications(publication_id,session_id,instrument,preparation,descriptor,delete_ms) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(publication_id) DO NOTHING",p.id().as_str(),session.data().id.as_str(),p.segment().data().scope.instrument.as_str(),bytes,descriptor,millis(p.segment().data().delete_by)?)
             .execute(&mut *tx).await.map_err(|e| {
                 if e.as_database_error().and_then(|d|d.code()).as_deref()==Some("23505") {
@@ -237,6 +270,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
             if !intact {
                 return Err(invalid());
             }
+            objects(&mut tx, session, p.id()).await?;
             tx.commit().await.map_err(Error::storage)?;
             return Ok(StreamCaptureBoundary {
                 history_start: r.history_start.ok_or_else(invalid)?,
@@ -284,6 +318,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
             })?;
         sqlx::query!("INSERT INTO edgeagent_stream_heads(session_id,instrument,publication_id,digest,frame,generation,epoch,captured_ms) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(session_id,instrument) DO UPDATE SET publication_id=excluded.publication_id,digest=excluded.digest,frame=excluded.frame,generation=excluded.generation,epoch=excluded.epoch,captured_ms=excluded.captured_ms",session.data().id.as_str(),instrument,p.id().as_str(),p.segment().digest().as_str(),end,generation,epoch,captured).execute(&mut *tx).await.map_err(Error::storage)?;
         sqlx::query!("UPDATE edgeagent_stream_publications SET published=TRUE,event=$2,history_start=$3,reconnect=$4,skipped=$5,history_retired=$6 WHERE publication_id=$1",p.id().as_str(),event,boundary.history_start,boundary.reconnect,boundary.skipped,boundary.history_retired).execute(&mut *tx).await.map_err(Error::storage)?;
+        objects(&mut tx, session, p.id()).await?;
         write_guard(&mut tx, session, p, catalogs, cancel).await?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(boundary)
@@ -296,11 +331,19 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
     ) -> Result<StreamSegmentObject> {
         let mut tx = self.ledger.transaction().await?;
         retained_guard(&mut tx, session, catalogs).await?;
-        let row=sqlx::query!("SELECT descriptor,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND published AND NOT retired",id.as_str(),session.data().id.as_str()).fetch_optional(&mut *tx).await.map_err(Error::storage)?.ok_or_else(denied)?;
-        if row.delete_ms <= now(&mut tx).await?.unix_millis() {
-            return Err(denied());
-        }
-        let object = serde_json::from_str(&row.descriptor).map_err(|_| invalid())?;
+        let (object, _) = objects(&mut tx, session, id).await?;
+        tx.commit().await.map_err(Error::storage)?;
+        Ok(object)
+    }
+    async fn published_companion(
+        &self,
+        session: &StreamingSession,
+        id: &EvidenceId,
+        catalogs: AuthorityCatalogs<'_>,
+    ) -> Result<Option<StreamCompanionObject>> {
+        let mut tx = self.ledger.transaction().await?;
+        retained_guard(&mut tx, session, catalogs).await?;
+        let (_, object) = objects(&mut tx, session, id).await?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(object)
     }

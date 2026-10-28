@@ -18,7 +18,30 @@ impl IexCanonicalProfile {
         let routes = selection
             .streaming_routes(session)
             .map_err(|_| IexAcceptanceError::Binding)?;
-        let claims = self
+        let claims = self.namespace_claims()?;
+        if session.data().contract != self.contract
+            || session.data().delivery != DeliveryCapability::Snapshots
+            || session
+                .data()
+                .scopes
+                .iter()
+                .any(|s| s.source != self.source)
+            || routes
+                .iter()
+                .any(|r| !self.lanes.iter().any(|l| same(r.mapping(), &l.mapping)))
+            || self
+                .lanes
+                .iter()
+                .any(|l| !routes.iter().any(|r| same(r.mapping(), &l.mapping)))
+        {
+            return Err(IexAcceptanceError::Binding);
+        }
+        StreamOwnerInputs::new(session, self.bytes(), &claims, expires)
+            .map_err(|_| IexAcceptanceError::Binding)
+    }
+    // Share one complete logical-scope encoding between installation and native projection.
+    pub(super) fn namespace_claims(&self) -> Result<Vec<StreamNamespaceClaim>> {
+        let mut claims = self
             .lanes
             .iter()
             .map(|lane| {
@@ -40,24 +63,7 @@ impl IexCanonicalProfile {
                     .map_err(|_| IexAcceptanceError::Configuration)
             })
             .collect::<Result<Vec<_>>>()?;
-        if session.data().contract != self.contract
-            || session.data().delivery != DeliveryCapability::Snapshots
-            || session
-                .data()
-                .scopes
-                .iter()
-                .any(|s| s.source != self.source)
-            || routes
-                .iter()
-                .any(|r| !self.lanes.iter().any(|l| same(r.mapping(), &l.mapping)))
-            || self
-                .lanes
-                .iter()
-                .any(|l| !routes.iter().any(|r| same(r.mapping(), &l.mapping)))
-        {
-            return Err(IexAcceptanceError::Binding);
-        }
-        StreamOwnerInputs::new(session, self.bytes(), &claims, expires)
-            .map_err(|_| IexAcceptanceError::Binding)
+        claims.sort_by_key(StreamNamespaceClaim::namespace);
+        Ok(claims)
     }
 }

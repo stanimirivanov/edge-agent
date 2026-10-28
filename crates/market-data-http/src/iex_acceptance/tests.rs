@@ -105,6 +105,142 @@ fn refs<'a>(
     }
 }
 
+fn check_companion(
+    f: &Fixture,
+    p: &IexCanonicalProfile,
+    s: &StreamingSession,
+    a: &IexAcceptedObservation,
+) -> TestResult {
+    use edgeagent_contracts::evidence::*;
+    use edgeagent_market_data_application::*;
+    let n = a.native();
+    let c = StreamingConnection::from_committed(
+        s,
+        7,
+        StreamingUsage {
+            starts: 1,
+            frames: 0,
+            bytes: 0,
+            last_frame_bytes: None,
+            stopped: false,
+        },
+    )?;
+    let records = [CapturedStreamObservation {
+        frame: n.frames[1],
+        item: n.item,
+        observation: a.canonical(),
+    }];
+    let segment = freeze_stream_segment(
+        s,
+        &c,
+        f.catalogs(),
+        at(n.received_at.unix_millis() + 1)?,
+        &Cancellation::default(),
+        StreamSegmentInput {
+            instrument: a.canonical().context().origin().0,
+            epoch: FeedEpoch::new(1)?,
+            frames: n.frames,
+            previous: None,
+            limits: StreamSegmentLimits {
+                bytes: 65536,
+                records: 16,
+            },
+            delete_by: at(120_000)?,
+            records: &records,
+        },
+    )?;
+    let inputs = p.owner_inputs(s, &f.plan()?, at(120_000)?)?;
+    let companion = p.companion(
+        &segment,
+        &inputs,
+        &[a],
+        StreamSegmentLimits {
+            bytes: 65536,
+            records: 16,
+        },
+    )?;
+    assert_eq!(companion.data().owner_inputs, inputs.bytes());
+    let wrong_claim = StreamNamespaceClaim::new(
+        std::num::NonZeroU64::new(7).ok_or("namespace")?,
+        br#"["contradictory scope"]"#,
+    )?;
+    let wrong_inputs = StreamOwnerInputs::new(s, p.bytes(), &[wrong_claim], at(120_000)?)?;
+    assert!(
+        p.companion(
+            &segment,
+            &wrong_inputs,
+            &[a],
+            StreamSegmentLimits {
+                bytes: 65536,
+                records: 16
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(
+        StreamCompanion::decode(companion.bytes(), &companion.object().sha256)?,
+        companion
+    );
+    match (
+        &companion.data().records.first().ok_or("record")?.value,
+        &n.value,
+    ) {
+        (
+            StreamNativeValue::IexTrade {
+                id,
+                conditions,
+                exchange,
+                tape,
+            },
+            IexValue::Trade {
+                id: raw,
+                conditions: raw_conditions,
+                exchange: raw_exchange,
+                tape: raw_tape,
+                ..
+            },
+        ) => {
+            assert_eq!(id.as_str(), raw.to_string());
+            assert_eq!(conditions, raw_conditions);
+            assert_eq!(exchange, raw_exchange);
+            assert_eq!(tape, raw_tape);
+        }
+        (
+            StreamNativeValue::IexMinuteBar { trades, vwap },
+            IexValue::MinuteBar {
+                trades: raw,
+                vwap: raw_vwap,
+                ..
+            },
+        ) => {
+            assert_eq!(trades.as_str(), raw.to_string());
+            assert_eq!(vwap.coefficient, raw_vwap.decimal_parts().0.to_string());
+            assert_eq!(u32::from(vwap.scale), raw_vwap.decimal_parts().1);
+        }
+        _ => return Err("wrong native kind".into()),
+    }
+    let mut wrong = segment.data().clone();
+    wrong
+        .records
+        .first_mut()
+        .ok_or("record")?
+        .conditions
+        .push(65000);
+    assert!(
+        p.companion(
+            &StreamSegment::new(wrong)?,
+            &inputs,
+            &[a],
+            StreamSegmentLimits {
+                bytes: 65536,
+                records: 16
+            }
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
 #[test]
 fn iex_owner_inputs_derive_exact_namespace_claims_from_the_complete_profile() -> TestResult {
     let f = fixture(false)?;
@@ -162,6 +298,7 @@ fn iex_acceptance_trade_identity_replay_and_native_provenance_are_exact() -> Tes
         )?)
     };
     let first: IexAcceptedObservation = accept(trade(&f, &l)?)?;
+    check_companion(&f, &p, &s, &first)?;
     let mut replay = trade(&f, &l)?;
     replay.received_at = at(20)?;
     replay.frames = [2, 3];
@@ -221,6 +358,7 @@ fn iex_acceptance_trade_identity_replay_and_native_provenance_are_exact() -> Tes
         input,
     )?;
     assert_eq!(result.canonical().context().session_conditions().1, &[7, 9]);
+    check_companion(&f, &grouped, &grouped_session, &result)?;
     assert!(
         matches!(&result.native().value,IexValue::Trade{conditions,..} if conditions==&["Z","@"])
     );
@@ -297,6 +435,7 @@ fn iex_acceptance_minute_bars_preserve_raw_coverage_count_vwap_and_bounds() -> T
         accepted.canonical().version().lineage().0.get(),
         7u128 << 64
     );
+    check_companion(&f, &p, &s, &accepted)?;
     assert!(
         matches!(accepted.canonical().value(),Some(ObservationValue::Bar(b)) if b.bucket().1==BarCoverage::Intraday)
     );

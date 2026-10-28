@@ -201,7 +201,7 @@ configuration pin is not independent approval. The approved follow-up split is:
 - [PR20C2A](../stream-owner-inputs.md): independently install complete owner inputs,
   enforce namespace ownership across profiles/accounts, load exact actual records
   under current denial/expiry checks and retire private scope metadata without namespace reuse.
-- PR20C2B: persist a versioned native companion artifact atomically linked to canonical
+- [PR20C2B](../stream-native-provenance.md): persist a versioned native companion artifact atomically linked to canonical
   publication, with common scoped retention, revocation and cleanup. Canonical values
   alone must not discard native conditions, exchange/tape, count/VWAP or profile provenance.
 - PR20C2C: compose bounded offline tasks, authenticated inputs, fresh restore/incident

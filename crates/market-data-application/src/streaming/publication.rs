@@ -1,4 +1,5 @@
 //! Pre-PUT inventory and explicit recovery; no implicit retry or continuity inference.
+mod companion;
 mod validation;
 use super::*;
 use crate::{EvidenceStorageError, StreamSegmentAccess, StreamSegmentStorage};
@@ -9,6 +10,7 @@ pub struct StreamPublication {
     id: EvidenceId,
     segment: StreamSegment,
     envelope: MessageEnvelope,
+    companion: Option<StreamCompanion>,
 }
 impl std::fmt::Debug for StreamPublication {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,6 +47,7 @@ impl StreamPublication {
             id,
             segment,
             envelope,
+            companion: None,
         })
     }
     /// Original opaque intent; not a checksum or bearer capability.
@@ -67,6 +70,16 @@ impl StreamPublication {
     /// Rejects a serialization failure.
     pub fn bytes(&self) -> Result<Vec<u8>> {
         let event = self.envelope.to_json().map_err(|_| invalid())?;
+        if let Some(c) = &self.companion {
+            return serde_json::to_vec(&(
+                "edgeagent.stream-publication.v2",
+                self.id.as_str(),
+                self.segment.bytes(),
+                c.bytes(),
+                event,
+            ))
+            .map_err(|_| invalid());
+        }
         serde_json::to_vec(&(self.id.as_str(), self.segment.bytes(), event)).map_err(|_| invalid())
     }
     /// Decode only bounded owner-retained preparations and verify exact re-encoding.
@@ -74,11 +87,27 @@ impl StreamPublication {
     /// Rejects malformed, noncanonical or oversized records.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         // JSON byte arrays are private recovery encoding, not another public segment format.
-        if bytes.len() > MAX_STREAM_SEGMENT_BYTES * 5 + 4096 {
+        if bytes.len()
+            > MAX_STREAM_SEGMENT_BYTES * 10
+                + edgeagent_contracts::MAX_PORTABLE_MESSAGE_BYTES * 5
+                + 8192
+        {
             return Err(invalid());
         }
-        let (id, segment, event): (String, Vec<u8>, Vec<u8>) =
-            serde_json::from_slice(bytes).map_err(|_| invalid())?;
+        let (id, segment, event, companion) =
+            match serde_json::from_slice::<(String, Vec<u8>, Vec<u8>)>(bytes) {
+                Ok((id, s, e)) => (id, s, e, None),
+                Err(_) => {
+                    let (v, id, s, c, e): (String, String, Vec<u8>, Vec<u8>, Vec<u8>) =
+                        serde_json::from_slice(bytes).map_err(|_| invalid())?;
+                    if v != "edgeagent.stream-publication.v2" {
+                        return Err(invalid());
+                    }
+                    let c = StreamCompanion::decode(&c, &DailyEvidenceArtifact::hash(&c))
+                        .map_err(|_| invalid())?;
+                    (id, s, e, Some(c))
+                }
+            };
         let segment = StreamSegment::decode(&segment, &DailyEvidenceArtifact::hash(&segment))
             .map_err(|_| invalid())?;
         let envelope = MessageEnvelope::from_json(&event).map_err(|_| invalid())?;
@@ -93,6 +122,12 @@ impl StreamPublication {
             id: EvidenceId::new(&id).map_err(|_| invalid())?,
             segment,
             envelope,
+            companion: None,
+        };
+        let value = if let Some(c) = companion {
+            value.with_companion(c)?
+        } else {
+            value
         };
         if value.envelope.id() != format!("stream-publication-{}", id)
             || value.envelope.subject()
@@ -170,6 +205,16 @@ pub trait StreamPublicationLedger: Send + Sync {
         id: &EvidenceId,
         catalogs: AuthorityCatalogs<'_>,
     ) -> impl Future<Output = Result<StreamSegmentObject>> + Send;
+    /// Resolve the exact native companion bound to the same retained receipt.
+    /// Legacy implementations explicitly have no native publication capability.
+    fn published_companion(
+        &self,
+        _session: &StreamingSession,
+        _id: &EvidenceId,
+        _catalogs: AuthorityCatalogs<'_>,
+    ) -> impl Future<Output = Result<Option<StreamCompanionObject>>> + Send {
+        async { Ok(None) }
+    }
 }
 fn storage(e: EvidenceStorageError) -> Error {
     Error::with_source(K::Storage, e)
@@ -202,6 +247,15 @@ pub async fn publish_stream_segment(
     if stored != proposal.segment().object() {
         return Err(invalid());
     }
+    if let Some(companion) = proposal.companion()
+        && store
+            .put_companion(companion, access)
+            .await
+            .map_err(storage)?
+            != companion.object()
+    {
+        return Err(invalid());
+    }
     ledger
         .commit_segment(session, proposal, catalogs, cancellation)
         .await
@@ -209,6 +263,46 @@ pub async fn publish_stream_segment(
 /// Check durable denial both sides of bounded storage I/O; never return withdrawn bytes.
 /// # Errors
 /// Rejects unpublished/retired objects, current denial, expiry or corrupt storage.
+pub async fn read_stream_publication(
+    ledger: &impl StreamPublicationLedger,
+    store: &impl StreamSegmentStorage,
+    session: &StreamingSession,
+    id: &EvidenceId,
+    catalogs: AuthorityCatalogs<'_>,
+    access: &impl StreamSegmentAccess,
+) -> Result<(StreamSegment, Option<StreamCompanion>)> {
+    let object = ledger.published_segment(session, id, catalogs).await?;
+    let segment = store.get_segment(&object, access).await.map_err(storage)?;
+    if segment.object() != object {
+        return Err(invalid());
+    }
+    let companion = ledger.published_companion(session, id, catalogs).await?;
+    let native = if let Some(expected) = &companion {
+        let c = store
+            .get_companion(expected, access)
+            .await
+            .map_err(storage)?;
+        if c.object() != *expected {
+            return Err(invalid());
+        }
+        c.bind(&segment).map_err(|_| invalid())?;
+        Some(c)
+    } else {
+        None
+    };
+    if ledger.published_companion(session, id, catalogs).await? != companion {
+        return Err(Error::new(K::Denied));
+    }
+    if ledger.published_segment(session, id, catalogs).await? != object {
+        return Err(Error::new(K::Denied));
+    }
+    Ok((segment, native))
+}
+
+/// Read canonical capture only after verifying its receipt-bound companion, when present.
+/// Consumers needing native metadata use `read_stream_publication` to retain both values.
+/// # Errors
+/// Rejects missing/corrupt companions, changed receipts, withdrawal or exclusive expiry.
 pub async fn read_stream_segment(
     ledger: &impl StreamPublicationLedger,
     store: &impl StreamSegmentStorage,
@@ -217,15 +311,11 @@ pub async fn read_stream_segment(
     catalogs: AuthorityCatalogs<'_>,
     access: &impl StreamSegmentAccess,
 ) -> Result<StreamSegment> {
-    let object = ledger.published_segment(session, id, catalogs).await?;
-    let segment = store.get_segment(&object, access).await.map_err(storage)?;
-    if segment.object() != object {
-        return Err(invalid());
-    }
-    if ledger.published_segment(session, id, catalogs).await? != object {
-        return Err(Error::new(K::Denied));
-    }
-    Ok(segment)
+    Ok(
+        read_stream_publication(ledger, store, session, id, catalogs, access)
+            .await?
+            .0,
+    )
 }
 
 /// Retired exact object, kept only until physical deletion is confirmed.
@@ -235,6 +325,8 @@ pub struct StreamCleanup {
     pub publication: EvidenceId,
     /// Exact scoped deletion descriptor, never read authority.
     pub object: StreamSegmentObject,
+    /// Exact native object retired atomically with its canonical receipt, if present.
+    pub companion: Option<StreamCompanionObject>,
 }
 /// Independent storage-writer quiescence, distinct from provider connection quiescence.
 pub trait StreamDeletionAuthority: Send + Sync {

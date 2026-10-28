@@ -70,7 +70,7 @@ pub fn freeze_stream_segment(
         let mut records = Vec::with_capacity(input.records.len());
         for captured in input.records {
             let o = captured.observation;
-            let (instrument, provider, transformation) = o.context().origin();
+            let (instrument, provider, _) = o.context().origin();
             let (contract, delivery, _) = provider.declaration();
             let received = o.times().received_at();
             if instrument != scope.instrument
@@ -88,26 +88,7 @@ pub fn freeze_stream_segment(
             let received_ms =
                 received_time.seconds * 1000 + i64::from(received_time.nanos / 1_000_000);
             retention_start = retention_start.min(received_ms);
-            let (oid, rev, previous) = o.version().lineage();
-            let (observed, published) = o.times().provider_times();
-            records.push(StreamRecord {
-                frame: revision(captured.frame)?,
-                item: captured.item,
-                observation: version(oid.get(), rev.get())?,
-                predecessor: previous.map(|r| revision(r.get())).transpose()?,
-                transformation: revision(transformation.get())?,
-                sequence: o
-                    .sequence()
-                    .map(|n| EvidenceSequence::new(&n.to_string()))
-                    .transpose()?,
-                event_at: time(o.times().event_at())?,
-                received_at: time(received)?,
-                observed_at: observed.map(time).transpose()?,
-                published_at: published.map(time).transpose()?,
-                date: date(o.context().session_conditions().0)?,
-                conditions: o.context().session_conditions().1.to_vec(),
-                value: o.value().map(value).transpose()?,
-            });
+            records.push(record(captured.frame, captured.item, o)?);
         }
         if input.delete_by > rights.value().delete_by
             || input.delete_by.unix_millis() - retention_start
@@ -147,6 +128,43 @@ pub fn freeze_stream_segment(
         })
     };
     convert().map_err(|_| invalid())
+}
+fn record(
+    frame: u64,
+    item: u32,
+    o: &CanonicalObservation,
+) -> std::result::Result<StreamRecord, EvidenceContractError> {
+    let (oid, rev, previous) = o.version().lineage();
+    let (observed, published) = o.times().provider_times();
+    Ok(StreamRecord {
+        frame: revision(frame)?,
+        item,
+        observation: version(oid.get(), rev.get())?,
+        predecessor: previous.map(|r| revision(r.get())).transpose()?,
+        transformation: revision(o.context().origin().2.get())?,
+        sequence: o
+            .sequence()
+            .map(|n| EvidenceSequence::new(&n.to_string()))
+            .transpose()?,
+        event_at: time(o.times().event_at())?,
+        received_at: time(o.times().received_at())?,
+        observed_at: observed.map(time).transpose()?,
+        published_at: published.map(time).transpose()?,
+        date: date(o.context().session_conditions().0)?,
+        conditions: o.context().session_conditions().1.to_vec(),
+        value: o.value().map(value).transpose()?,
+    })
+}
+/// Compare every normalized record field against a sealed observation using the capture encoder.
+/// This establishes representation equality, never rights, profile approval or readiness.
+/// # Errors
+/// Rejects changed values, lineage, transformation, conditions, source/receipt times or sequence.
+pub fn verify_stream_capture_record(wire: &StreamRecord, o: &CanonicalObservation) -> Result<()> {
+    let frame = wire.frame.as_str().parse().map_err(|_| invalid())?;
+    if record(frame, wire.item, o).map_err(|_| invalid())? != *wire {
+        return Err(invalid());
+    }
+    Ok(())
 }
 fn side(s: QuoteSide) -> std::result::Result<StreamQuoteSide, EvidenceContractError> {
     Ok(StreamQuoteSide {

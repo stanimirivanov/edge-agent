@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn native_companion_paths_route_paired_recovery_proofs() -> Result<(), String> {
+    for path in [
+        "crates/contracts/src/evidence/stream_companion.rs",
+        "crates/market-data-object-store/src/store/companion.rs",
+        "docs/development/stream-native-provenance.md",
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/stream-native-provenance.md")
+        );
+        assert!(advice.checks.contains("streaming-segment-contracts"));
+        assert!(advice.checks.contains("streaming-publication-postgres"));
+    }
+    Ok(())
+}
+
+#[test]
 fn stream_owner_input_routes_include_exact_owned_proofs() -> Result<(), String> {
     for (path, check) in [
         (

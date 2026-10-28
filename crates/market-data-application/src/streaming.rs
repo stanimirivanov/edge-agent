@@ -15,7 +15,10 @@ use edgeagent_market_data_domain::{
 pub use inputs::*;
 pub use publication::*;
 pub use recovery::*;
-pub use segment::{CapturedStreamObservation, StreamSegmentInput, freeze_stream_segment};
+pub use segment::{
+    CapturedStreamObservation, StreamSegmentInput, freeze_stream_segment,
+    verify_stream_capture_record,
+};
 use std::{
     future::Future,
     num::{NonZeroU16, NonZeroU32, NonZeroU64},

@@ -218,6 +218,11 @@ impl StreamOwnerInputs {
     pub fn profile(&self) -> &[u8] {
         &self.profile
     }
+    /// Commitment to the complete sealed session, including authority and selection bytes.
+    #[must_use]
+    pub fn session_digest(&self) -> EvidenceDigest {
+        DailyEvidenceArtifact::hash(&self.session)
+    }
     /// Exact bounded namespace claims, including complete retained logical scopes.
     #[must_use]
     pub fn claims(&self) -> &[StreamNamespaceClaim] {

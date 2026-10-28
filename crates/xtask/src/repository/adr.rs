@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 72] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 73] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -381,6 +381,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 72] = [
         number: 72,
         path: "docs/decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md",
         title: "Authenticate stream owner inputs and reserve namespaces",
+    },
+    PublishedIdentity {
+        number: 73,
+        path: "docs/decisions/0073-bind-native-stream-companions-to-publication-receipts.md",
+        title: "Bind native stream companions to publication receipts",
     },
 ];
 

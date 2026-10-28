@@ -122,6 +122,64 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Prefix("crates/market-data-application/src/streaming/publication/"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact(
+            "crates/market-data-application/tests/stream_segments/companion.rs",
+        ),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-object-store/tests/stream_segments/"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/contracts/src/evidence/stream_companion.rs"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "iex-canonical-acceptance",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-http/src/iex_acceptance/companion.rs"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &["iex-canonical-acceptance", "provider-http-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-object-store/src/store/companion.rs"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact(
+            "crates/market-data-postgres/tests/stream_publication/companion.rs",
+        ),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &["streaming-publication-postgres"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/stream-native-provenance.md"),
+        guides: &["docs/development/stream-native-provenance.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "iex-canonical-acceptance",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
         matcher: Matcher::Exact("crates/market-data-application/src/streaming/inputs.rs"),
         guides: &["docs/development/stream-owner-inputs.md"],
         checks: &[

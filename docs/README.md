@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For receipt-bound native streaming metadata, paired recovery and cleanup, read
+[native streaming provenance](development/stream-native-provenance.md) and
+[ADR-0073](decisions/0073-bind-native-stream-companions-to-publication-receipts.md).
+
 For independently installed streaming inputs, restricted worker loading and retained
 namespace ownership, read [stream owner inputs](development/stream-owner-inputs.md)
 and [ADR-0072](decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md).

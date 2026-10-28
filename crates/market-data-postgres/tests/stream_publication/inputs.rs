@@ -42,7 +42,7 @@ fn second_account(ms: i64) -> Result<fixture::Fixture> {
     )?;
     Ok(f)
 }
-fn record(
+pub(super) fn record(
     f: &fixture::Fixture,
     id: u128,
     namespace: u64,
