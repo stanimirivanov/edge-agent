@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 #[path = "../../../../crates/market-data-application/tests/support/streaming.rs"]
 mod base;
+use chrono::Datelike;
 use edgeagent_contracts::evidence::*;
 use edgeagent_market_data::offline_streaming::*;
 use edgeagent_market_data_application::*;
@@ -47,6 +48,7 @@ impl OfflineStreamClock for Clock {
     }
 }
 pub struct Fixture {
+    date: SessionDate,
     pub base: base::Fixture,
     pub profile: IexCanonicalProfile,
     pub session: StreamingSession,
@@ -66,8 +68,28 @@ impl Fixture {
             SemanticReference::new(ReferenceId::new(1)?, ReferenceRevision::new(1)?),
             TimestampPrecision::Nanoseconds,
         )?;
-        let mut base =
-            base::Fixture::profile(ms, members, contract, DeliveryCapability::Snapshots)?;
+        let day = chrono::DateTime::from_timestamp_millis(ms)
+            .ok_or("fixture timestamp")?
+            .date_naive();
+        let session_date = |d: chrono::NaiveDate| SessionDate::new(d.year(), d.month(), d.day());
+        let date = session_date(day)?;
+        let dates = DateRange::new(
+            date,
+            session_date(day.succ_opt().ok_or("fixture next day")?)?,
+        )?;
+        let open = day
+            .and_hms_opt(0, 0, 0)
+            .ok_or("fixture midnight")?
+            .and_utc()
+            .timestamp_millis();
+        let mut base = base::Fixture::profile_on(
+            ms,
+            members,
+            contract,
+            DeliveryCapability::Snapshots,
+            date,
+            dates,
+        )?;
         let account = ProviderAccountId::new(id)?;
         for s in &mut base.scopes {
             s.account = account;
@@ -124,8 +146,9 @@ impl Fixture {
             [9; 32],
             CalendarDay::new(
                 Venue::Xnas,
-                SessionDate::new(1970, 1, 1)?,
-                SessionHours::Regular(SessionWindow::new(at(ms)?, at(ms + 3_600_000)?)?),
+                date,
+                // Invented same-day hours, independent of the arrival's time of day.
+                SessionHours::Regular(SessionWindow::new(at(open)?, at(open + 86_399_999)?)?),
                 "invented-v1",
             )?,
         );
@@ -163,6 +186,7 @@ impl Fixture {
         let session = base.seal(data)?;
         let inputs = profile.owner_inputs(&session, &selection, at(ms + 600_000)?)?;
         Ok(Self {
+            date,
             base,
             profile,
             session,
@@ -194,7 +218,7 @@ impl Fixture {
                     KnowledgeCapability::CaptureOnly,
                 ),
                 TransformationRevision::new(1)?,
-                SessionDate::new(1970, 1, 1)?,
+                self.date,
             ),
             epoch: FeedEpoch::new(1)?,
             continuity: ContinuityPolicy::new(

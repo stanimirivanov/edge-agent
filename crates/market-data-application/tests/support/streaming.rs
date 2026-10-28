@@ -46,6 +46,27 @@ impl Fixture {
         contract: EvidenceContract,
         delivery: DeliveryCapability,
     ) -> Result<Self> {
+        Self::profile_on(
+            ms,
+            members,
+            contract,
+            delivery,
+            SessionDate::new(1970, 1, 1)?,
+            DateRange::new(
+                SessionDate::new(1969, 12, 31)?,
+                SessionDate::new(1970, 1, 2)?,
+            )?,
+        )
+    }
+    /// Supply a coherent synthetic mapping/session date without changing legacy fixtures.
+    pub fn profile_on(
+        ms: i64,
+        members: u32,
+        contract: EvidenceContract,
+        delivery: DeliveryCapability,
+        session: SessionDate,
+        dates: DateRange,
+    ) -> Result<Self> {
         let interval = EffectiveInterval::new(at(ms - 1000)?, at(ms + 86_400_000)?)?;
         let routing = RoutingScope {
             source: SourceId::new(1)?,
@@ -111,10 +132,7 @@ impl Fixture {
                 ListingId::new(u128::from(n))?,
                 symbol.clone(),
                 Venue::Xnas,
-                DateRange::new(
-                    SessionDate::new(1969, 12, 31)?,
-                    SessionDate::new(1970, 1, 2)?,
-                )?,
+                dates,
             );
             routes.push(RouteBinding::new(
                 RoutingKey::symbol(&symbol),
@@ -137,7 +155,7 @@ impl Fixture {
                 scope: routing,
                 effective_at: at(ms)?,
                 cutoff: at(ms)?,
-                session: SessionDate::new(1970, 1, 1)?,
+                session,
             },
         })
     }

@@ -22,6 +22,48 @@ use std::{
     time::Duration,
 };
 
+#[test]
+fn offline_runtime_fixture_dates_and_acceptance_are_coherent_without_postgres() -> Result {
+    // Epoch, modern date, leap-day edge and late-night arrivals: fixture construction
+    // must not depend on PostgreSQL's current date or cross-midnight core windows.
+    for ms in [0, 1_704_067_200_000, 1_709_251_199_900, 1_730_246_399_900] {
+        for members in [1, 2] {
+            let f = Fixture::members(ms, 2, members)?;
+            let selection = f.base.plan()?;
+            let source = f.source(&selection, 8)?;
+            assert_eq!(
+                source
+                    .profile
+                    .owner_inputs(source.session, &selection, f.inputs.expires_at())?,
+                f.inputs
+            );
+            for instrument in 1..=members {
+                let accepted = source.profile.accept(
+                    source.session,
+                    &selection,
+                    source.catalogs,
+                    edgeagent_market_data_http::IexAcceptanceReferences {
+                        mappings: &f.mappings,
+                        calendars: &f.calendars,
+                    },
+                    at(ms + 100)?,
+                    &Cancellation::default(),
+                    f.trade_for(u128::from(instrument), 1, instrument - 1, 11, 1000)?,
+                )?;
+                assert_eq!(
+                    accepted.canonical().context().origin().0,
+                    InstrumentId::new(u128::from(instrument))?
+                );
+                assert_eq!(
+                    accepted.canonical().times().received_at(),
+                    PreciseInstant::from_millis(at(ms + 1)?)
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test]
 #[ignore = "requires isolated local PostgreSQL"]
 async fn offline_runtime_requires_approval_and_publishes_exact_ready_evidence() -> Result {
