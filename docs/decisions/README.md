@@ -184,3 +184,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0070](0070-fence-stream-restores-with-durable-incident-barriers.md) | Accepted | Fence stream restores with durable incident barriers. |
 | [ADR-0071](0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md) | Accepted | Pin IEX canonical interpretation to complete owner profiles. |
 | [ADR-0072](0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md) | Accepted | Authenticate stream owner inputs and reserve namespaces. |
+| [ADR-0073](0073-bind-native-stream-companions-to-publication-receipts.md) | Accepted | Bind native stream companions to publication receipts. |

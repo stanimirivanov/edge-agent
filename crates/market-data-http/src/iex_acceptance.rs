@@ -1,5 +1,6 @@
 //! Explicit owner-selected interpretation, not a live source or self-authenticating grant.
 mod accept;
+mod companion;
 mod encoding;
 mod inputs;
 #[cfg(test)]

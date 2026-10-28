@@ -1003,11 +1003,13 @@ pub(super) fn checks() -> Vec<Check> {
                         "recovery::stream_restore_replays_original_intent_and_rechecks_after_effects",
                         "recovery::stream_restore_empty_cancelled_or_stale_recovery_never_opens_barrier",
                         "inputs::stream_owner_inputs_bind_complete_bytes_and_reject_ambiguous_or_stale_records",
+                        "companion::native_companion_binds_exact_records_owner_inputs_and_legacy_recovery",
                         "stream_retained_authority_outlives_capture_not_original_rights",
                         "stream_deletion_requires_quiescence_and_preserves_other_namespaces",
                         "stream_segment_store_is_create_only_scoped_and_reopens",
                         "stream_segment_store_recovers_uncertain_put_and_denies_revocation_expiry",
                         "stream_segment_store_rejects_descriptor_and_content_attacks",
+                        "companion::native_companion_store_verifies_uncertain_creation_denial_and_paired_cleanup",
                     ],
                     ignored: false,
                 });

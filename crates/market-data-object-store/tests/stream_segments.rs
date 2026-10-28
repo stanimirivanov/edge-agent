@@ -20,6 +20,8 @@ use std::{
     time::Duration,
 };
 type K = EvidenceStorageErrorKind;
+#[path = "stream_segments/companion.rs"]
+mod companion;
 struct WriterQuiet(bool);
 impl StreamDeletionAuthority for WriterQuiet {
     fn confirm_storage_quiescent(
@@ -46,6 +48,7 @@ async fn stream_deletion_requires_quiescence_and_preserves_other_namespaces() ->
         .put(&unrelated, b"invented unrelated object".to_vec().into())
         .await?;
     let cleanup = StreamCleanup {
+        companion: None,
         publication: EvidenceId::new(&format!("{:032x}", 0xabc))?,
         object: object.clone(),
     };

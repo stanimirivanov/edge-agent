@@ -1,4 +1,6 @@
 //! Pure synthetic capture/codec proofs; no provider, storage or implicit readiness.
+#[path = "stream_segments/companion.rs"]
+mod companion;
 #[allow(dead_code)]
 #[path = "support/segment.rs"]
 mod fixture;

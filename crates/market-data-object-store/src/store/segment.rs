@@ -11,7 +11,21 @@ impl StreamDeletion for ImmutableEvidenceStore {
         authority: &impl StreamDeletionAuthority,
     ) -> Result<(), Error> {
         authority.confirm_storage_quiescent(cleanup)?;
+        if cleanup
+            .companion
+            .as_ref()
+            .is_some_and(|c| c.segment != cleanup.object)
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
         tokio::time::timeout(self.timeout, async {
+            if let Some(c) = &cleanup.companion {
+                match self.backend.delete(&super::companion::key(c)).await {
+                    Ok(()) | Err(object_store::Error::NotFound { .. }) => (),
+                    Err(e) => return Err(backend_error(e)),
+                }
+                authority.confirm_storage_quiescent(cleanup)?;
+            }
             match self.backend.delete(&key(&cleanup.object)).await {
                 Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
                 Err(e) => Err(backend_error(e)),
@@ -24,6 +38,22 @@ impl StreamDeletion for ImmutableEvidenceStore {
 }
 
 impl StreamSegmentStorage for ImmutableEvidenceStore {
+    async fn put_companion(
+        &self,
+        c: &edgeagent_contracts::evidence::StreamCompanion,
+        access: &impl StreamSegmentAccess,
+    ) -> Result<edgeagent_contracts::evidence::StreamCompanionObject, Error> {
+        self.create_companion(c, access).await
+    }
+    async fn get_companion(
+        &self,
+        o: &edgeagent_contracts::evidence::StreamCompanionObject,
+        access: &impl StreamSegmentAccess,
+    ) -> Result<edgeagent_contracts::evidence::StreamCompanion, Error> {
+        tokio::time::timeout(self.timeout, self.read_companion(o, access))
+            .await
+            .map_err(|e| Error::with_source(Kind::Deadline, e))?
+    }
     async fn put_segment(
         &self,
         segment: &StreamSegment,
@@ -103,7 +133,10 @@ impl ImmutableEvidenceStore {
         Ok(segment)
     }
 }
-fn guard(object: &StreamSegmentObject, access: &impl StreamSegmentAccess) -> Result<(), Error> {
+pub(super) fn guard(
+    object: &StreamSegmentObject,
+    access: &impl StreamSegmentAccess,
+) -> Result<(), Error> {
     if object.bytes == 0
         || object.bytes as usize > MAX_STREAM_SEGMENT_BYTES
         || !object.delete_by.nanos.is_multiple_of(1_000_000)

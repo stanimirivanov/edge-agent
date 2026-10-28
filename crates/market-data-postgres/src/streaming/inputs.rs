@@ -1,6 +1,24 @@
 //! Independent owner installation; no provider adapter or vendor DTO enters this crate.
 use super::*;
 use edgeagent_market_data_application::StreamOwnerInputs;
+pub(super) async fn authenticate(
+    tx: &mut Transaction<'_, Postgres>,
+    session: &StreamingSession,
+    expected: &StreamOwnerInputs,
+) -> Result<()> {
+    let bytes = sqlx::query_scalar!(
+        r#"SELECT edgeagent_load_stream_inputs($1) AS "inputs?""#,
+        session.data().id.as_str()
+    )
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(Error::storage)?
+    .ok_or_else(denied)?;
+    if bytes != expected.bytes() {
+        return Err(conflict());
+    }
+    Ok(())
+}
 fn classify(error: sqlx::Error) -> Error {
     if error
         .as_database_error()

@@ -3,6 +3,8 @@
     clippy::disallowed_methods,
     reason = "Isolated schema administration and synthetic fault injection only."
 )]
+#[path = "stream_publication/companion.rs"]
+mod companion;
 #[allow(dead_code)]
 #[path = "../../market-data-application/tests/support/streaming.rs"]
 mod fixture;

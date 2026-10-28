@@ -10,6 +10,10 @@
 
 ## Capture and encoding
 
+PR20C2B adds [receipt-bound native companions](stream-native-provenance.md). New paired
+preparations inventory both objects and share the canonical deadline, denial and cleanup;
+legacy canonical-only encoding remains readable. Native metadata never grants readiness.
+
 `StreamSegment` owns `edgeagent.evidence.stream-segment.v1`: compact recursively
 sorted JSON plus one LF; SHA-256 includes LF. Decode bounds before parsing, validates
 fields and rejects alternate bytes, duplicate/unknown keys and unsupported formats.

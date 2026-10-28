@@ -9,6 +9,7 @@ mod native_daily;
 #[cfg(feature = "schema")]
 pub mod schemas;
 mod stream;
+mod stream_companion;
 mod stream_publication;
 pub use artifact::DailyEvidenceArtifact;
 pub use date_only::*;
@@ -17,6 +18,7 @@ pub use messages::*;
 pub use model::*;
 pub use native_daily::*;
 pub use stream::*;
+pub use stream_companion::*;
 pub use stream_publication::*;
 
 /// Maximum canonical evidence object bytes; the event envelope stays at 256 KiB.

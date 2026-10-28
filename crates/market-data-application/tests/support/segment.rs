@@ -7,6 +7,49 @@ use edgeagent_market_data_application::*;
 use edgeagent_market_data_domain::*;
 pub use session_fixture::{Fixture, Result, at};
 pub const AT: i64 = 1_800_000_000_000;
+pub fn companion(segment: &StreamSegment) -> Result<StreamCompanion> {
+    let f = Fixture::new(AT, 1)?;
+    let session = f.session(1)?;
+    let claim = StreamNamespaceClaim::new(
+        std::num::NonZeroU64::new(7).ok_or("namespace")?,
+        br#"["invented",1]"#,
+    )?;
+    let inputs = StreamOwnerInputs::new(
+        &session,
+        b"invented complete configuration",
+        &[claim],
+        at(AT + 1000)?,
+    )?;
+    let records = segment
+        .data()
+        .records
+        .iter()
+        .map(|r| -> Result<StreamNativeRecord> {
+            Ok(StreamNativeRecord {
+                frames: [r.frame.clone(), r.frame.clone()],
+                item: r.item,
+                value: StreamNativeValue::IexTrade {
+                    id: EvidenceRevision::new(
+                        &(u128::from_str_radix(r.observation.id.as_str(), 16)? as u64).to_string(),
+                    )?,
+                    exchange: "V".into(),
+                    tape: "C".into(),
+                    conditions: vec!["Z".into(), "@".into()],
+                },
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(StreamCompanion::new(StreamCompanionData {
+        version: StreamCompanionFormat::V1,
+        limits: StreamSegmentLimits {
+            bytes: 65536,
+            records: 16,
+        },
+        segment: segment.object(),
+        owner_inputs: inputs.bytes().to_vec(),
+        records,
+    })?)
+}
 pub fn observation(f: &Fixture, id: u128, sequence: u64) -> Result<CanonicalObservation> {
     Ok(CanonicalObservation::new(
         ObservationContext::new(

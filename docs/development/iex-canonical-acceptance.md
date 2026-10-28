@@ -97,7 +97,7 @@ calendar or eligibility rule. No provider or public test stream is contacted.
 PR20C2A adds [complete independent owner input installation and namespace ownership](stream-owner-inputs.md).
 Use `owner_inputs` to derive claims from this profile and the exact sealed selection,
 then require the restricted loader to return the actual protected matching bytes.
-PR20C2B remains responsible for atomically linked native companion provenance;
+PR20C2B adds [atomically linked native companion provenance](stream-native-provenance.md);
 PR20C2C owns fresh restore/incident checks, bounded source/task supervision,
 publication/recovery, domain readiness and synthetic integration qualification.
 Vendor activation and original daily live qualification remain separately blocked.

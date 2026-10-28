@@ -89,7 +89,7 @@ actual schema/cache freshness. The new checked-query cache descriptors are suppl
 for offline compilation; actual migrated-schema validation is required in CI.
 Default acceptance remains `cargo xtask verify`.
 
-PR20C2B must persist a versioned native companion atomically with canonical publication
+PR20C2B persists a [versioned native companion](stream-native-provenance.md) atomically with canonical publication
 under shared retention. PR20C2C then composes bounded offline workers, restore/recovery,
 publication and domain readiness. No vendor activation or live qualification ships here.
 See [ADR-0072](../decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md).
