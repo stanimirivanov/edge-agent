@@ -1,6 +1,49 @@
 use super::*;
 
 #[test]
+fn stream_owner_input_routes_include_exact_owned_proofs() -> Result<(), String> {
+    for (path, check) in [
+        (
+            "crates/market-data-application/src/streaming/inputs.rs",
+            "streaming-segment-contracts",
+        ),
+        (
+            "crates/market-data-application/tests/stream_segments/inputs.rs",
+            "streaming-segment-contracts",
+        ),
+        (
+            "crates/market-data-postgres/src/streaming/inputs.rs",
+            "sqlx-metadata",
+        ),
+        (
+            "crates/market-data-postgres/migrations/0010_stream_owner_inputs.sql",
+            "sqlx-metadata",
+        ),
+        (
+            "crates/market-data-postgres/tests/stream_publication/inputs.rs",
+            "streaming-publication-postgres",
+        ),
+        (
+            "crates/market-data-http/src/iex_acceptance/inputs.rs",
+            "provider-http-contracts",
+        ),
+        (
+            "docs/development/stream-owner-inputs.md",
+            "iex-canonical-acceptance",
+        ),
+    ] {
+        let advice = advise(&[path.into()])?;
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/stream-owner-inputs.md")
+        );
+        assert!(advice.checks.contains(check));
+    }
+    Ok(())
+}
+
+#[test]
 fn iex_canonical_routes_owner_profile_proofs() -> Result<(), String> {
     for path in [
         "crates/market-data-http/src/iex_acceptance.rs",

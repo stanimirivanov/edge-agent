@@ -19,7 +19,7 @@ pub const TERMINAL_MIGRATION_SQL: &str =
 /// Retirement inventory, opaque denial identities and account block generations.
 pub const RETENTION_MIGRATION_SQL: &str = include_str!("../migrations/0003_evidence_retention.sql");
 /// Ordered private migrations; retention refuses un-inventoried legacy publication metadata.
-pub const MIGRATIONS: [&str; 9] = [
+pub const MIGRATIONS: [&str; 10] = [
     MIGRATION_SQL,
     TERMINAL_MIGRATION_SQL,
     RETENTION_MIGRATION_SQL,
@@ -29,4 +29,5 @@ pub const MIGRATIONS: [&str; 9] = [
     include_str!("../migrations/0007_streaming_sessions.sql"),
     include_str!("../migrations/0008_stream_publication.sql"),
     include_str!("../migrations/0009_stream_recovery.sql"),
+    include_str!("../migrations/0010_stream_owner_inputs.sql"),
 ];

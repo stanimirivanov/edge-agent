@@ -114,6 +114,8 @@ impl Harness {
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_stream_retention(TEXT) TO {role};
             REVOKE ALL ON {schema}.edgeagent_stream_recovery FROM {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_stream_recovery_control(TEXT,BIGINT,TEXT,SMALLINT) TO {role};
+            REVOKE ALL ON {schema}.edgeagent_stream_owner_inputs,{schema}.edgeagent_stream_namespaces,{schema}.edgeagent_stream_namespace_members FROM {role};
+            GRANT EXECUTE ON FUNCTION {schema}.edgeagent_load_stream_inputs(TEXT) TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_lock_stream_admission(TEXT),{schema}.edgeagent_stream_worker_allowed() TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input_role() TO {role};
             GRANT EXECUTE ON FUNCTION {schema}.edgeagent_qualification_input(TEXT) TO {role};

@@ -11,11 +11,12 @@ pub use supervision::{
 mod streaming;
 pub use streaming::{
     CapturedStreamObservation, StreamCaptureBoundary, StreamCleanup, StreamDeletion,
-    StreamDeletionAuthority, StreamPublication, StreamPublicationLedger, StreamRecoveryLedger,
-    StreamRecoveryState, StreamRestore, StreamSegmentInput, StreamingAccountPolicy,
-    StreamingArrival, StreamingAuthority, StreamingConnection, StreamingFrame, StreamingLedger,
-    StreamingLimits, StreamingSession, StreamingSessionData, StreamingUsage, freeze_stream_segment,
-    publish_stream_segment, read_stream_segment, recover_pending_stream_segment,
+    StreamDeletionAuthority, StreamNamespaceClaim, StreamOwnerInputs, StreamPublication,
+    StreamPublicationLedger, StreamRecoveryLedger, StreamRecoveryState, StreamRestore,
+    StreamSegmentInput, StreamingAccountPolicy, StreamingArrival, StreamingAuthority,
+    StreamingConnection, StreamingFrame, StreamingLedger, StreamingLimits, StreamingSession,
+    StreamingSessionData, StreamingUsage, freeze_stream_segment, publish_stream_segment,
+    read_stream_segment, recover_pending_stream_segment,
 };
 mod canonical;
 pub use activation::{

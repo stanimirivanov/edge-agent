@@ -6,7 +6,7 @@
 - A matching configuration pin proves consistency, not independent owner approval.
 - Unknown conditions, changed references, foreign partitions and invalid times reject.
 - Native provenance survives alongside canonical values; no sequence is invented.
-- PR20C2 must integrate authenticated owner inputs, runtime, publication and readiness.
+- PR20C2A supplies authenticated owner inputs; PR20C2B/C own publication and runtime.
 
 ## Profile and ownership
 
@@ -40,8 +40,9 @@ Object-map feature unification cannot alter this array-only encoding.
 Bind the digest to `StreamingSessionData.configuration` before the independent owner
 installs the admission. During acceptance, compare complete selection witnesses and
 resolve exact current reference histories. A profile hash, a matching sealed session
-or caller-supplied catalogs cannot authenticate themselves. PR20C2 must verify actual
-independent PostgreSQL owner installation and complete approved input provenance.
+or caller-supplied catalogs cannot authenticate themselves. PR20C2A verifies actual
+independent PostgreSQL owner installation and complete approved input bytes;
+reference-catalog truth remains the trusted owner's responsibility.
 This library introduces no approving production adapter or runtime mode.
 
 ## Identity, values and time
@@ -52,8 +53,9 @@ namespace; its low half is the exact positive u64 provider trade ID or nonnegati
 Unix minute bucket start. IDs larger than 2^53 remain exact. Replay/replicas using
 the same approved profile retain the same ID; receipt/frame/item changes do not
 create another logical fact. The library checks uniqueness inside one profile only.
-PR20C2 must enforce cross-profile namespace ownership; a changed profile must never
-reuse a namespace for a different identity scope.
+PR20C2A enforces retained cross-profile/account namespace ownership; a changed profile
+cannot reuse a namespace for a different identity scope. Private scope erasure keeps
+an opaque non-reusable namespace tombstone, not reconstructible historical dedup.
 
 Emit revision 1, preserve source and original receipt times, and leave sequence absent.
 Receipt cannot precede the source event or bar end. Minute buckets must be aligned,
@@ -92,8 +94,11 @@ rules/partitions, calendar changes, authority/cancellation, bounds and redaction
 Fixtures are invented, require no credentials or network and claim no actual venue
 calendar or eligibility rule. No provider or public test stream is contacted.
 
-PR20C2 remains responsible for full owner input authentication/namespace consistency,
-fresh restore/incident checks, bounded source/task supervision, durable provenance,
+PR20C2A adds [complete independent owner input installation and namespace ownership](stream-owner-inputs.md).
+Use `owner_inputs` to derive claims from this profile and the exact sealed selection,
+then require the restricted loader to return the actual protected matching bytes.
+PR20C2B remains responsible for atomically linked native companion provenance;
+PR20C2C owns fresh restore/incident checks, bounded source/task supervision,
 publication/recovery, domain readiness and synthetic integration qualification.
 Vendor activation and original daily live qualification remain separately blocked.
 See [ADR-0071](../decisions/0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md).

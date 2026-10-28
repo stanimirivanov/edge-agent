@@ -1,6 +1,7 @@
 //! Explicit owner-selected interpretation, not a live source or self-authenticating grant.
 mod accept;
 mod encoding;
+mod inputs;
 #[cfg(test)]
 mod tests;
 use crate::IexObservation;

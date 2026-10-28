@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For independently installed streaming inputs, restricted worker loading and retained
+namespace ownership, read [stream owner inputs](development/stream-owner-inputs.md)
+and [ADR-0072](decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md).
+
 For explicit owner-pinned IEX conditions, canonical identities and native provenance,
 read [IEX canonical acceptance](development/iex-canonical-acceptance.md) and
 [ADR-0071](decisions/0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md).

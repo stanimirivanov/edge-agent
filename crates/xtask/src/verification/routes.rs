@@ -122,6 +122,56 @@ struct Route {
 // dependency allowances. Overlapping routes form a union, never an override.
 const ROUTES: &[Route] = &[
     Route {
+        matcher: Matcher::Exact("crates/market-data-application/src/streaming/inputs.rs"),
+        guides: &["docs/development/stream-owner-inputs.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-application/tests/stream_segments/inputs.rs"),
+        guides: &["docs/development/stream-owner-inputs.md"],
+        checks: &["streaming-segment-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-postgres/src/streaming/inputs.rs"),
+        guides: &[
+            "docs/development/stream-owner-inputs.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &["streaming-publication-postgres", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/market-data-postgres/tests/stream_publication/"),
+        guides: &["docs/development/stream-owner-inputs.md"],
+        checks: &["streaming-publication-postgres"],
+    },
+    Route {
+        matcher: Matcher::Exact(
+            "crates/market-data-postgres/migrations/0010_stream_owner_inputs.sql",
+        ),
+        guides: &[
+            "docs/development/stream-owner-inputs.md",
+            "docs/development/sqlx-metadata.md",
+        ],
+        checks: &["streaming-publication-postgres", "sqlx-metadata"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/market-data-http/src/iex_acceptance/inputs.rs"),
+        guides: &["docs/development/stream-owner-inputs.md"],
+        checks: &["iex-canonical-acceptance", "provider-http-contracts"],
+    },
+    Route {
+        matcher: Matcher::Exact("docs/development/stream-owner-inputs.md"),
+        guides: &["docs/development/stream-owner-inputs.md"],
+        checks: &[
+            "streaming-segment-contracts",
+            "iex-canonical-acceptance",
+            "streaming-publication-postgres",
+        ],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/market-data-http/src/iex_acceptance"),
         guides: &["docs/development/iex-canonical-acceptance.md"],
         checks: &["iex-canonical-acceptance", "alpaca-iex-conformance"],
