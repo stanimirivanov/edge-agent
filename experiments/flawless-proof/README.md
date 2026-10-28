@@ -28,6 +28,27 @@ evaluation; Flawless did not publish a vendor-signed digest or checksum sidecar
 at the probed artifact locations. The test fails closed if the downloaded
 binary differs from the pinned digest. It does not redistribute the binary.
 
+Artifact provisioning uses a separate 10-second connect timeout and 120-second
+whole-response deadline, independent of the 20-second localhost control client.
+It permits at most three fresh GET attempts for transport/body failures, HTTP 429
+or 5xx, with one- and two-second backoffs (at most 363 seconds of download budgets).
+Each attempt streams at most 512 MiB into a private partial file and recomputes
+SHA-256 from the start. Only a completely verified file becomes executable;
+partial files are removed on failure. Other HTTP errors, oversized artifacts,
+digest mismatch and local file errors fail immediately. No unverified cache,
+changed digest, partial-range resume or workflow-effect retry is introduced.
+
+From the repository root, run the credential-free loopback provisioning regressions
+without downloading or executing Flawless:
+
+```text
+cargo test --locked --manifest-path experiments/flawless-proof/Cargo.toml tests::download::tests::
+```
+
+They cover a truncated response followed by a clean retry, transient HTTP status,
+terminal HTTP/hash/size rejection and bounded retry exhaustion. The complete
+server/Wasm crash proof remains a separate CI execution.
+
 | Platform | Pinned SHA-256 | Execution result |
 | --- | --- | --- |
 | Windows x64 | `b06723cce23b6e599f39440f6781b68ea45d6a96a3c0761715fbcb1bd729fccf` | Passed locally, 2026-10-05. |

@@ -14,8 +14,8 @@ use std::{
 };
 
 use reqwest::blocking::{Client, multipart};
-use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+mod download;
 
 const VERSION: &str = "1.0.0-beta.3";
 
@@ -174,24 +174,12 @@ fn open_port() -> u16 {
         .port()
 }
 
-fn provision_server(temp: &Path, client: &Client) -> PathBuf {
+fn provision_server(temp: &Path) -> PathBuf {
     let (artifact, filename, expected_hash) = SERVER_ARTIFACT;
     let url = format!("https://downloads.flawless.dev/{VERSION}/{artifact}");
-    let bytes = client
-        .get(url)
-        .send()
-        .expect("download pinned official Flawless server")
-        .error_for_status()
-        .expect("Flawless server download status")
-        .bytes()
-        .expect("read Flawless binary");
-    let actual_hash = format!("{:x}", Sha256::digest(&bytes));
-    assert_eq!(
-        actual_hash, expected_hash,
-        "Flawless binary digest mismatch"
-    );
     let path = temp.join(filename);
-    fs::write(&path, bytes).expect("save verified Flawless server");
+    download::provision(&url, &path, expected_hash)
+        .expect("provision digest-pinned Flawless server within bounded download attempts");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -268,7 +256,7 @@ fn recorded_effects_resume_after_server_process_crash() {
         .timeout(Duration::from_secs(20))
         .build()
         .expect("HTTP client");
-    let binary = provision_server(temp.path(), &client);
+    let binary = provision_server(temp.path());
     let wasm = build_workflow(temp.path());
     let effects = MockEffects::start();
     let data = temp.path().join("server-data");
