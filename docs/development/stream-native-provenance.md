@@ -5,7 +5,7 @@
 - PR20C2B binds immutable native provenance to the canonical publication receipt.
 - Explicit limits, scope and deadline govern both objects; approval remains independent.
 - Unknown writes retain exact recovery data; partial cleanup retains both descriptors.
-- Offline capability only; PR20C2C still owns runtime and readiness composition.
+- Offline capability only; [PR20C2C](offline-stream-runtime.md) composes runtime and readiness.
 
 ## Freeze, attach and publish
 
@@ -75,7 +75,8 @@ CI owns `cargo xtask verify --check streaming-segment-contracts`,
 default `cargo xtask verify`. Local compilation and strict Clippy run before delivery;
 heavier storage/database/provider-conformance proofs remain assigned to CI.
 
-PR20C2C must compose fresh input/restore checks, bounded offline tasks, exact recovery,
-publication and domain readiness. M03/PR20 remain incomplete. No provider activation
-or live qualification is included.
+The [PR20C2C offline runtime](offline-stream-runtime.md) composes fresh input/restore
+checks, bounded tasks, exact recovery, publication and borrowed domain readiness.
+Its synthetic qualification is a CI merge gate. No provider activation or live
+qualification is included.
 See [ADR-0073](../decisions/0073-bind-native-stream-companions-to-publication-receipts.md).

@@ -6,7 +6,9 @@ mod qualification;
 mod runtime;
 mod streaming;
 pub use runtime::{QualificationCleanup, QualificationSnapshot, QualificationWorker};
-pub use streaming::{PostgresStreamingLedger, StreamingStatus};
+pub use streaming::{
+    PostgresStreamingLedger, StreamHistoryEntry, StreamRuntimePhase, StreamingStatus,
+};
 mod retention;
 mod terminal;
 pub use ledger::PostgresAcquisitionLedger;

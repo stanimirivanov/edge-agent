@@ -81,8 +81,10 @@ async fn write_guard(
     proposal: &StreamPublication,
     catalogs: AuthorityCatalogs<'_>,
     cancel: &Cancellation,
+    fence: Option<&RestoreFence>,
 ) -> Result<()> {
     retained_guard(tx, session, catalogs).await?;
+    recovery::enforce(tx, session, fence, true).await?;
     worker(tx, session).await?;
     session.recheck(catalogs, now(tx).await?, cancel)?;
     let d = proposal.segment().data();
@@ -193,7 +195,17 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
         cancel: &Cancellation,
     ) -> Result<()> {
         let mut tx = self.ledger.transaction().await?;
-        write_guard(&mut tx, session, p, catalogs, cancel).await?;
+        write_guard(&mut tx, session, p, catalogs, cancel, self.fence.as_ref()).await?;
+        if self
+            .fence
+            .as_ref()
+            .is_some_and(|f| f.phase == StreamRuntimePhase::Restoring)
+        {
+            let old=sqlx::query!("SELECT preparation,delete_ms FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 AND NOT retired",p.id().as_str(),session.data().id.as_str()).fetch_optional(&mut *tx).await.map_err(Error::storage)?.ok_or_else(denied)?;
+            if old.preparation.as_deref() != Some(p.bytes()?.as_slice()) {
+                return Err(conflict());
+            }
+        }
         // Reject forks before PUT: otherwise an orphan could alias a published object's key.
         let d = p.segment().data();
         let previous = d.previous.as_ref().map(EvidenceDigest::as_str);
@@ -219,7 +231,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
         if !same {
             return Err(conflict());
         }
-        write_guard(&mut tx, session, p, catalogs, cancel).await?;
+        write_guard(&mut tx, session, p, catalogs, cancel, self.fence.as_ref()).await?;
         tx.commit().await.map_err(Error::storage)
     }
     async fn recover_segment(
@@ -255,7 +267,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
         cancel: &Cancellation,
     ) -> Result<StreamCaptureBoundary> {
         let mut tx = self.ledger.transaction().await?;
-        write_guard(&mut tx, session, p, catalogs, cancel).await?;
+        write_guard(&mut tx, session, p, catalogs, cancel, self.fence.as_ref()).await?;
         let bytes = p.bytes()?;
         let r=sqlx::query!(r#"SELECT COALESCE(preparation=$3,FALSE) AS "same!",published,retired,event,history_start,history_retired,reconnect,skipped FROM edgeagent_stream_publications WHERE publication_id=$1 AND session_id=$2 FOR UPDATE"#,p.id().as_str(),session.data().id.as_str(),bytes).fetch_optional(&mut *tx).await.map_err(Error::storage)?.ok_or_else(conflict)?;
         if !r.same || r.retired {
@@ -319,7 +331,7 @@ impl StreamPublicationLedger for PostgresStreamingLedger {
         sqlx::query!("INSERT INTO edgeagent_stream_heads(session_id,instrument,publication_id,digest,frame,generation,epoch,captured_ms) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(session_id,instrument) DO UPDATE SET publication_id=excluded.publication_id,digest=excluded.digest,frame=excluded.frame,generation=excluded.generation,epoch=excluded.epoch,captured_ms=excluded.captured_ms",session.data().id.as_str(),instrument,p.id().as_str(),p.segment().digest().as_str(),end,generation,epoch,captured).execute(&mut *tx).await.map_err(Error::storage)?;
         sqlx::query!("UPDATE edgeagent_stream_publications SET published=TRUE,event=$2,history_start=$3,reconnect=$4,skipped=$5,history_retired=$6 WHERE publication_id=$1",p.id().as_str(),event,boundary.history_start,boundary.reconnect,boundary.skipped,boundary.history_retired).execute(&mut *tx).await.map_err(Error::storage)?;
         objects(&mut tx, session, p.id()).await?;
-        write_guard(&mut tx, session, p, catalogs, cancel).await?;
+        write_guard(&mut tx, session, p, catalogs, cancel, self.fence.as_ref()).await?;
         tx.commit().await.map_err(Error::storage)?;
         Ok(boundary)
     }

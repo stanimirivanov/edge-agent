@@ -46,6 +46,96 @@ use super::{
 };
 
 #[test]
+fn flawless_census_requires_crash_and_download_proofs_without_filtering() -> Result<(), String> {
+    let proof = inventory::checks()
+        .into_iter()
+        .find(|c| c.id == "m08-flawless-test")
+        .ok_or("missing Flawless proof")?;
+    assert_eq!(
+        proof.command.args,
+        [
+            "test",
+            "--locked",
+            "--workspace",
+            "--manifest-path",
+            "experiments/flawless-proof/Cargo.toml",
+            "--all-targets",
+            "--",
+        ]
+    );
+    let census = proof.discovery.ok_or("missing Flawless census")?;
+    assert!(!census.ignored);
+    let mut expected_args = proof.command.args;
+    expected_args.push("--list");
+    assert_eq!(census.args, expected_args);
+    // Independent literals protect the original crash proof as well as every new
+    // provisioning regression; the execution command must remain the whole suite.
+    assert_eq!(
+        census.expected,
+        [
+            "tests::recorded_effects_resume_after_server_process_crash",
+            "tests::download::tests::exhausted_body_retries_remove_all_partial_bytes",
+            "tests::download::tests::terminal_rejections_never_publish_an_executable_or_retry",
+            "tests::download::tests::transient_status_retries_with_the_same_pinned_digest",
+            "tests::download::tests::truncated_body_restarts_fresh_and_exposes_only_verified_binary",
+        ]
+    );
+    let complete = census
+        .expected
+        .iter()
+        .map(|n| format!("{n}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(&census, complete.as_bytes())?;
+    for name in &census.expected {
+        for changed in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, &format!("{name}_renamed")),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}unreviewed: test\n"),
+        ] {
+            assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn offline_stream_runtime_census_cannot_silently_shrink() -> Result<(), String> {
+    let proof = inventory::checks()
+        .into_iter()
+        .find(|c| c.id == "offline-stream-runtime")
+        .ok_or("missing runtime gate")?;
+    let census = proof.discovery.ok_or("missing runtime census")?;
+    assert_eq!(
+        census.expected,
+        vec![
+            "offline_runtime_requires_approval_and_publishes_exact_ready_evidence",
+            "offline_runtime_isolates_slow_sources_with_bounded_fair_dispatch",
+            "offline_runtime_restart_recovers_exact_native_intent_and_fences_old_workers",
+            "failures::offline_runtime_sticky_failures_and_revocation_never_grant_readiness",
+        ]
+    );
+    assert!(census.ignored);
+    let complete = census
+        .expected
+        .iter()
+        .map(|n| format!("{n}: test\n"))
+        .collect::<String>();
+    runner::verify_discovery(&census, complete.as_bytes())?;
+    for name in &census.expected {
+        for changed in [
+            complete.replace(&format!("{name}: test\n"), ""),
+            complete.replace(name, &format!("{name}_renamed")),
+            format!("{complete}{name}: test\n"),
+            format!("{complete}unreviewed: test\n"),
+        ] {
+            assert!(runner::verify_discovery(&census, changed.as_bytes()).is_err());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn evidence_proof_census_rejects_removed_renamed_duplicated_and_extra_tests() -> Result<(), String>
 {
     let publication = inventory::checks()

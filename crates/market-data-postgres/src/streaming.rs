@@ -8,11 +8,13 @@ use edgeagent_market_data_application::{
 };
 use edgeagent_market_data_domain::UtcInstant;
 use sqlx::{PgPool, Postgres, Transaction};
+mod history;
 mod inputs;
 mod lifecycle;
 mod publication;
 mod recovery;
 mod worker;
+pub use history::StreamHistoryEntry;
 type Result<T> = std::result::Result<T, Error>;
 fn invalid() -> Error {
     Error::new(K::Invalid)
@@ -31,6 +33,21 @@ fn key(account: ProviderAccountId) -> String {
 #[derive(Clone, Debug)]
 pub struct PostgresStreamingLedger {
     ledger: PostgresAcquisitionLedger,
+    fence: Option<RestoreFence>,
+}
+/// Explicit runtime publication phase; neither phase grants independent approval.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StreamRuntimePhase {
+    /// Recover only existing exact preparations behind a blocked revision.
+    Restoring,
+    /// Spend/publish only under the independently approved exact revision.
+    Running,
+}
+#[derive(Clone, Debug)]
+struct RestoreFence {
+    session: EvidenceId,
+    revision: u64,
+    phase: StreamRuntimePhase,
 }
 /// Owner-private observation, not a permission to dial or a physical-quiescence assertion.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,6 +142,24 @@ impl PostgresStreamingLedger {
     pub const fn new(pool: PgPool) -> Self {
         Self {
             ledger: PostgresAcquisitionLedger::new(pool),
+            fence: None,
+        }
+    }
+    /// Bind every runtime accounting/publication mutation to a durable restore revision.
+    /// This creates no approval: actual phase/revision is checked inside each transaction.
+    #[must_use]
+    pub fn fenced(
+        &self,
+        restore: &edgeagent_market_data_application::StreamRestore,
+        phase: StreamRuntimePhase,
+    ) -> Self {
+        Self {
+            ledger: self.ledger.clone(),
+            fence: Some(RestoreFence {
+                session: restore.identity().0.clone(),
+                revision: restore.identity().1,
+                phase,
+            }),
         }
     }
     /// Install an exclusive owner-reviewed stream allocation and known opening debit.

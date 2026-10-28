@@ -68,6 +68,28 @@ async fn control(
     .ok_or_else(denied)?;
     decode(&value)
 }
+pub(super) async fn enforce(
+    tx: &mut Transaction<'_, Postgres>,
+    session: &StreamingSession,
+    fence: Option<&RestoreFence>,
+    allow_restore: bool,
+) -> Result<()> {
+    let Some(f) = fence else {
+        return Ok(());
+    };
+    if f.session != session.data().id || (!allow_restore && f.phase != StreamRuntimePhase::Running)
+    {
+        return Err(denied());
+    }
+    let state = control(tx, session, 0, "inspect", None).await?;
+    if state.revision != f.revision
+        || state.incident.is_some()
+        || state.blocked != (f.phase == StreamRuntimePhase::Restoring)
+    {
+        return Err(denied());
+    }
+    Ok(())
+}
 impl PostgresStreamingLedger {
     /// Inspect protected state under current retained authority; never grants readiness.
     /// # Errors

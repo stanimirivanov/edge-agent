@@ -204,11 +204,13 @@ configuration pin is not independent approval. The approved follow-up split is:
 - [PR20C2B](../stream-native-provenance.md): persist a versioned native companion artifact atomically linked to canonical
   publication, with common scoped retention, revocation and cleanup. Canonical values
   alone must not discard native conditions, exchange/tape, count/VWAP or profile provenance.
-- PR20C2C: compose bounded offline tasks, authenticated inputs, fresh restore/incident
+- [PR20C2C](../offline-stream-runtime.md): compose bounded offline tasks, authenticated inputs, fresh restore/incident
   fences, exact publication recovery and domain readiness with synthetic integration proofs.
 
-PR20 and the streaming extension remain incomplete until all three slices and runtime
-qualification ship. No vendor activation or live qualification is authorized by this split.
+PR20C2C supplies finite typed service composition with synthetic integration proofs;
+runtime qualification remains a CI merge gate. There is no new daemon selector or
+vendor activation. The streaming extension is complete only after all three slices
+and their offline qualification ship. Original daily live qualification remains not run.
 
 Maintainer-approved PR20 split: [PR20A](../stream-supervision.md) implements a
 pure offline bounded scheduler over caller-supplied canonical observations.

@@ -36,7 +36,7 @@ actual independently installed private bytes only after checking current control
 role independence. Rust decodes them, compares every byte and rechecks current
 authority/selection, cancellation, expiry and retention. Reject missing, retired,
 changed, revoked or expired inputs. Do not turn this DTO into an activation flag.
-PR20C2C must compose fresh checks with restore barriers before externally visible work.
+The [PR20C2C runtime](offline-stream-runtime.md) composes fresh checks with restore barriers before externally visible work.
 
 ## Migration and roles
 
@@ -90,6 +90,6 @@ for offline compilation; actual migrated-schema validation is required in CI.
 Default acceptance remains `cargo xtask verify`.
 
 PR20C2B persists a [versioned native companion](stream-native-provenance.md) atomically with canonical publication
-under shared retention. PR20C2C then composes bounded offline workers, restore/recovery,
+under shared retention. The [PR20C2C runtime](offline-stream-runtime.md) composes bounded offline workers, restore/recovery,
 publication and domain readiness. No vendor activation or live qualification ships here.
 See [ADR-0072](../decisions/0072-authenticate-stream-owner-inputs-and-reserve-namespaces.md).

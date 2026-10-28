@@ -98,6 +98,7 @@ pub struct AlpacaIex {
 }
 /// Typed provider value, still requiring owner-authenticated semantic/identity acceptance.
 #[non_exhaustive]
+#[derive(Clone)]
 pub enum IexValue {
     /// Positive exact trade; provider ID is not a sequence or globally unique identity.
     Trade {
@@ -123,6 +124,7 @@ pub enum IexValue {
     },
 }
 /// Transient normalized record; not a canonical observation, publication or readiness proof.
+#[derive(Clone)]
 pub struct IexObservation {
     /// Exact mapping from the admitted frozen selection, preserving its revision.
     pub mapping: ReferenceVersion<InstrumentMapping>,

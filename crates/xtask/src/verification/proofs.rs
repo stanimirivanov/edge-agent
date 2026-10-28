@@ -12,6 +12,16 @@ const PROCESS_DEPENDENCIES: &[Requirement] = &[
     Requirement::ExecutableOrEnvironment("docker", "EDGEAGENT_NATS_SERVER"),
 ];
 const POSTGRES: &[Requirement] = &[Requirement::Environment("EDGEAGENT_POSTGRES_URL")];
+const OFFLINE_STREAM_RUNTIME: Target = Target {
+    package: "edgeagent-market-data",
+    name: "offline_stream_runtime",
+    identities: &[
+        "offline_runtime_requires_approval_and_publishes_exact_ready_evidence",
+        "offline_runtime_isolates_slow_sources_with_bounded_fair_dispatch",
+        "offline_runtime_restart_recovers_exact_native_intent_and_fences_old_workers",
+        "failures::offline_runtime_sticky_failures_and_revocation_never_grant_readiness",
+    ],
+};
 const STREAM_PUBLICATION: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "stream_publication",
@@ -282,6 +292,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "offline-stream-runtime",
+            &OFFLINE_STREAM_RUNTIME,
+            POSTGRES,
+            "Finite synthetic runtime: actual independent roles, grouped native publication, slow-source isolation, worker-state loss, atomic restore fences, exact history recovery and domain readiness denial; no provider activation.",
+        ),
         suite(
             "streaming-publication-postgres",
             &STREAM_PUBLICATION,
@@ -613,6 +629,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         ACQUISITION_TERMINAL,
         QUALIFICATION_OWNER,
         STREAM_PUBLICATION,
+        OFFLINE_STREAM_RUNTIME,
         STREAMING,
         NATIVE_PUBLICATION,
         EVIDENCE_RETENTION,
@@ -920,7 +937,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 38);
+        assert_eq!(checks.len(), 39);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -935,9 +952,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        // Includes PR20B recovery and PR20C2A's three isolated owner-input proofs.
-        assert_eq!(inventory.len(), 109);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 109);
+        // Includes the four owned finite offline runtime proofs.
+        assert_eq!(inventory.len(), 113);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 113);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

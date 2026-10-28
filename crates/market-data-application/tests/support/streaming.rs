@@ -46,6 +46,27 @@ impl Fixture {
         contract: EvidenceContract,
         delivery: DeliveryCapability,
     ) -> Result<Self> {
+        Self::profile_on(
+            ms,
+            members,
+            contract,
+            delivery,
+            SessionDate::new(1970, 1, 1)?,
+            DateRange::new(
+                SessionDate::new(1969, 12, 31)?,
+                SessionDate::new(1970, 1, 2)?,
+            )?,
+        )
+    }
+    /// Supply a coherent synthetic mapping/session date without changing legacy fixtures.
+    pub fn profile_on(
+        ms: i64,
+        members: u32,
+        contract: EvidenceContract,
+        delivery: DeliveryCapability,
+        session: SessionDate,
+        dates: DateRange,
+    ) -> Result<Self> {
         let interval = EffectiveInterval::new(at(ms - 1000)?, at(ms + 86_400_000)?)?;
         let routing = RoutingScope {
             source: SourceId::new(1)?,
@@ -111,10 +132,7 @@ impl Fixture {
                 ListingId::new(u128::from(n))?,
                 symbol.clone(),
                 Venue::Xnas,
-                DateRange::new(
-                    SessionDate::new(1969, 12, 31)?,
-                    SessionDate::new(1970, 1, 2)?,
-                )?,
+                dates,
             );
             routes.push(RouteBinding::new(
                 RoutingKey::symbol(&symbol),
@@ -137,7 +155,7 @@ impl Fixture {
                 scope: routing,
                 effective_at: at(ms)?,
                 cutoff: at(ms)?,
-                session: SessionDate::new(1970, 1, 1)?,
+                session,
             },
         })
     }
@@ -195,6 +213,40 @@ impl Fixture {
             &self.selections,
             &self.directories,
         )?)
+    }
+    /// Select an explicit synthetic feed before sealing/admitting any session.
+    pub fn remap_feed(&mut self, feed: FeedId) -> Result<()> {
+        let mut data = self.data(1)?;
+        data.delivery = self
+            .providers
+            .at(at(self.ms)?)
+            .next()
+            .ok_or("provider")?
+            .value()
+            .capability
+            .declaration()
+            .1;
+        let session = self.seal(data)?;
+        let routes = self
+            .plan()?
+            .streaming_routes(&session)?
+            .into_iter()
+            .map(|r| {
+                RouteBinding::new(
+                    RoutingKey::symbol(r.mapping().value().binding().0),
+                    r.mapping().clone(),
+                )
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        self.context.scope.feed = feed;
+        let interval = EffectiveInterval::new(at(self.ms - 1000)?, at(self.ms + 86_400_000)?)?;
+        self.directories = ReferenceHistory::new(vec![version(
+            501,
+            1,
+            self.ms - 1,
+            RoutingDirectory::new(self.context.scope, interval, routes)?,
+        )?])?;
+        Ok(())
     }
     pub fn retain_first(&mut self, members: usize) -> Result<()> {
         self.scopes.truncate(members);

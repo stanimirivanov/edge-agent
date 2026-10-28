@@ -160,6 +160,36 @@ fn check_companion(
         },
     )?;
     assert_eq!(companion.data().owner_inputs, inputs.bytes());
+    let selection = f.plan()?;
+    let mappings = ReferenceHistory::new(p.lanes.iter().map(|l| l.mapping.clone()).collect())?;
+    let calendars = ReferenceHistory::new(p.lanes.iter().map(|l| l.calendar.clone()).collect())?;
+    let replay = p.replay_companion(
+        IexReplayContext {
+            session: s,
+            selection: &selection,
+            catalogs: f.catalogs(),
+            references: refs(&mappings, &calendars),
+            at: at(n.received_at.unix_millis() + 1)?,
+            cancellation: &Cancellation::default(),
+        },
+        &segment,
+        &companion,
+    )?;
+    assert_eq!(replay.len(), 1);
+    let replayed = replay.first().ok_or("retained replay")?;
+    assert_eq!(replayed.canonical(), a.canonical());
+    assert_eq!(
+        p.companion(
+            &segment,
+            &inputs,
+            &[replayed],
+            StreamSegmentLimits {
+                bytes: 65536,
+                records: 16
+            }
+        )?,
+        companion
+    );
     let wrong_claim = StreamNamespaceClaim::new(
         std::num::NonZeroU64::new(7).ok_or("namespace")?,
         br#"["contradictory scope"]"#,

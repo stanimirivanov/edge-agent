@@ -221,9 +221,9 @@ PACKAGE_RULES = {
             "edgeagent-market-data-http",
             "edgeagent-inbox-postgres", "edgeagent-outbox-postgres", "edgeagent-outbox-relay",
             "edgeagent-messaging", "edgeagent-messaging-nats", "async-nats", "chrono",
-            "object_store", "serde_json", "sqlx", "tokio", "url",
+            "object_store", "serde_json", "sqlx", "tokio", "url", "futures-util",
         }),
-        frozenset({"tokio", "futures-util", "edgeagent-event-spine-conformance"}),
+        frozenset({"tokio", "edgeagent-event-spine-conformance"}),
     ),
     "services/research": PackageRule(
         "edgeagent-research",

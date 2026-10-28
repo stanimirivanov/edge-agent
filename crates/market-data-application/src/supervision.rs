@@ -119,6 +119,7 @@ pub struct StreamDispatch {
     feed: FeedId,
     epoch: FeedEpoch,
     observation: Arc<CanonicalObservation>,
+    tail: Vec<Arc<CanonicalObservation>>,
 }
 impl StreamDispatch {
     /// Exact pinned feed and epoch; not a qualified source sequence.
@@ -130,6 +131,10 @@ impl StreamDispatch {
     #[must_use]
     pub fn observation(&self) -> &CanonicalObservation {
         &self.observation
+    }
+    /// Exact FIFO batch, including the head; original arrivals are never reordered.
+    pub fn observations(&self) -> impl Iterator<Item = &CanonicalObservation> {
+        std::iter::once(self.observation.as_ref()).chain(self.tail.iter().map(AsRef::as_ref))
     }
 }
 
@@ -268,9 +273,46 @@ impl StreamSupervisor {
                 feed: lane.source.feed,
                 epoch: lane.source.epoch,
                 observation: Arc::clone(observation),
+                tail: Vec::new(),
             }));
         }
         Ok(None)
+    }
+
+    /// Extend an unresolved head to an explicit positive bounded FIFO batch. This groups
+    /// complete frames without guessing source semantics or changing occupancy/fairness.
+    /// # Errors
+    /// Denies foreign/changed/stopped heads, repeated extension or count beyond the queue.
+    pub fn extend_dispatch(
+        &mut self,
+        mut dispatch: StreamDispatch,
+        count: NonZeroU16,
+    ) -> Result<StreamDispatch, SupervisionError> {
+        self.check_cancellation()?;
+        let lane = self
+            .lanes
+            .get(dispatch.lane)
+            .ok_or(SupervisionError::ForeignDispatch)?;
+        if !Arc::ptr_eq(&self.owner, &dispatch.owner)
+            || !lane.unresolved
+            || lane.stopped.is_some()
+            || !dispatch.tail.is_empty()
+            || usize::from(count.get()) > lane.queue.len()
+            || lane
+                .queue
+                .front()
+                .is_none_or(|v| !Arc::ptr_eq(v, &dispatch.observation))
+        {
+            return Err(SupervisionError::ForeignDispatch);
+        }
+        dispatch.tail = lane
+            .queue
+            .iter()
+            .skip(1)
+            .take(usize::from(count.get()) - 1)
+            .cloned()
+            .collect();
+        Ok(dispatch)
     }
 
     /// Retire only this exact local head after the caller explicitly confirms work.
@@ -295,12 +337,26 @@ impl StreamSupervisor {
         {
             return Err(SupervisionError::ForeignDispatch);
         }
+        if lane.queue.len() < dispatch.tail.len() + 1
+            || !lane
+                .queue
+                .iter()
+                .skip(1)
+                .take(dispatch.tail.len())
+                .zip(&dispatch.tail)
+                .all(|(a, b)| Arc::ptr_eq(a, b))
+        {
+            return Err(SupervisionError::ForeignDispatch);
+        }
         if let Some(stop) = lane.stopped {
             return Err(SupervisionError::Stopped(stop));
         }
         lane.queue.pop_front();
+        for _ in &dispatch.tail {
+            lane.queue.pop_front();
+        }
         lane.unresolved = false;
-        self.pending -= 1;
+        self.pending -= 1 + dispatch.tail.len();
         Ok(())
     }
 

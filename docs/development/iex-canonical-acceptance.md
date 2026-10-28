@@ -98,7 +98,7 @@ PR20C2A adds [complete independent owner input installation and namespace owners
 Use `owner_inputs` to derive claims from this profile and the exact sealed selection,
 then require the restricted loader to return the actual protected matching bytes.
 PR20C2B adds [atomically linked native companion provenance](stream-native-provenance.md);
-PR20C2C owns fresh restore/incident checks, bounded source/task supervision,
+The [PR20C2C runtime](offline-stream-runtime.md) supplies fresh restore/incident checks, bounded source/task supervision,
 publication/recovery, domain readiness and synthetic integration qualification.
 Vendor activation and original daily live qualification remain separately blocked.
 See [ADR-0071](../decisions/0071-pin-iex-canonical-interpretation-to-complete-owner-profiles.md).

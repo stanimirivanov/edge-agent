@@ -1676,7 +1676,13 @@ fn m08_checks() -> Vec<Check> {
                     "server::tests::shutdown_reaps_unwaited_and_completed_children",
                 ]
             }
-            _ => vec!["tests::recorded_effects_resume_after_server_process_crash"],
+            _ => vec![
+                "tests::recorded_effects_resume_after_server_process_crash",
+                "tests::download::tests::exhausted_body_retries_remove_all_partial_bytes",
+                "tests::download::tests::terminal_rejections_never_publish_an_executable_or_retry",
+                "tests::download::tests::transient_status_retries_with_the_same_pinned_digest",
+                "tests::download::tests::truncated_body_restarts_fresh_and_exposes_only_verified_binary",
+            ],
         };
         proof.command.args.push("--");
         let mut args = proof.command.args.clone();

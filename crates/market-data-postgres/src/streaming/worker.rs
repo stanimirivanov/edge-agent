@@ -10,6 +10,7 @@ impl StreamingLedger for PostgresStreamingLedger {
         let account = key(session.account());
         let policy = lock_account(&mut tx, &account).await?;
         worker(&mut tx, session).await?;
+        recovery::enforce(&mut tx, session, self.fence.as_ref(), false).await?;
         let state = state(&mut tx, &session.data().id).await?;
         let at = now(&mut tx).await?;
         validate_policy(&policy, session, at)?;
@@ -69,6 +70,7 @@ impl StreamingLedger for PostgresStreamingLedger {
         let mut tx = self.ledger.transaction().await?;
         let policy = lock_account(&mut tx, &key(session.account())).await?;
         worker(&mut tx, session).await?;
+        recovery::enforce(&mut tx, session, self.fence.as_ref(), false).await?;
         let state = state(&mut tx, &session.data().id).await?;
         let at = now(&mut tx).await?;
         validate_policy(&policy, session, at)?;

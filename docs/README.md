@@ -13,6 +13,10 @@
 
 ## Purpose and authority
 
+For finite synthetic stream execution, exact history recovery and borrowed domain
+readiness, read [offline stream runtime](development/offline-stream-runtime.md) and
+[ADR-0074](decisions/0074-compose-finite-offline-streams-behind-durable-restore-fences.md).
+
 For receipt-bound native streaming metadata, paired recovery and cleanup, read
 [native streaming provenance](development/stream-native-provenance.md) and
 [ADR-0073](decisions/0073-bind-native-stream-companions-to-publication-receipts.md).
