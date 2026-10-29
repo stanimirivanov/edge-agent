@@ -806,6 +806,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "research-evidence",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research-domain",
+                "--test",
+                "evidence",
+                "--",
+            ],
+            "Pure research minimum-evidence policy, point-in-time boundaries and order-independent abstention; no authentication or I/O claim.",
+        ),
+        check(
             "research-contracts",
             "T2",
             &["verify", "test"],
@@ -1433,6 +1449,21 @@ pub(super) fn checks() -> Vec<Check> {
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
                         "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
                         "published_settlement_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-evidence" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "complete_evidence_is_sealed_in_historical_order",
+                        "time_rights_and_history_boundaries_fail_closed",
+                        "revisions_units_lineage_and_duplicate_sessions_cannot_pass",
+                        "reason_priority_is_stable_under_every_small_permutation",
+                        "malformed_selection_and_oversized_evidence_are_bounded",
                     ],
                     ignored: false,
                 });
