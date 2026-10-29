@@ -11,5 +11,21 @@ publish = false
 edgeagent-contracts.workspace = true
 edgeagent-service-runtime.workspace = true
 
+edgeagent-audit-domain.workspace = true
+edgeagent-research-application.workspace = true
+edgeagent-inbox-postgres.workspace = true
+edgeagent-messaging.workspace = true
+edgeagent-messaging-nats.workspace = true
+axum.workspace = true
+async-nats.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["net", "process", "io-util", "signal", "time"] }
+url.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+
 [lints]
 workspace = true

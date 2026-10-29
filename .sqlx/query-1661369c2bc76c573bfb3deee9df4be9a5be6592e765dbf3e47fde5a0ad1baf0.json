@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request_id FROM edgeagent_research_views LIMIT 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_views",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1661369c2bc76c573bfb3deee9df4be9a5be6592e765dbf3e47fde5a0ad1baf0"
+}

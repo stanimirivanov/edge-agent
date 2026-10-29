@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_research_views(caller_scope,request_id,request,checkpoint) VALUES($1,$2,$3,$4) ON CONFLICT(caller_scope,request_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d802eb69ba472e062cd3ca448670fbebf138e30ae626387e874b29c714413aba"
+}

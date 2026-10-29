@@ -822,6 +822,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded local HTTP validation, caller binding and acknowledgement timing; no database required.",
         ),
         check(
+            "projector-query-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-audit-projector",
+                "--test",
+                "contracts",
+                "--",
+            ],
+            "Internal query scope/Host/Origin/write refusal before storage, local configuration, descriptor compatibility and safe diagnostics.",
+        ),
+        check(
             "research-projection-contracts",
             "T2",
             &["verify", "test"],
@@ -1566,6 +1582,18 @@ pub(super) fn checks() -> Vec<Check> {
                         "conflicts_and_unavailable_commits_return_safe_non_success_responses",
                         "serving_requires_explicit_loopback_database_schema_and_scope",
                         "descriptor_commands_remain_available_without_serving_configuration",
+                    ],
+                    ignored: false,
+                });
+            }
+            "projector-query-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "internal_queries_reject_foreign_browser_hosts_and_writes_before_storage",
+                        "configuration_descriptors_and_error_diagnostics_preserve_local_boundary",
                     ],
                     ignored: false,
                 });

@@ -208,9 +208,9 @@ PACKAGE_RULES = {
         XTASK_DEPENDENCIES,
     ),
     "services/audit-projector": PackageRule(
-        "edgeagent-audit-projector",
-        "bin",
-        SERVICE_DEPENDENCIES,
+        "edgeagent-audit-projector", "bin",
+        frozenset({"edgeagent-contracts","edgeagent-service-runtime","edgeagent-audit-domain","edgeagent-research-application","edgeagent-inbox-postgres","edgeagent-messaging","edgeagent-messaging-nats","axum","async-nats","serde","serde_json","sqlx","tokio","url"}),
+        frozenset({"futures-util"}),
     ),
     "services/execution-simulator": PackageRule(
         "edgeagent-execution-simulator",

@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request,checkpoint,applied_delivery_key,gap_envelope FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_views",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "checkpoint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_views",
+            "name": "checkpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "applied_delivery_key",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_views",
+            "name": "applied_delivery_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "gap_envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_views",
+            "name": "gap_envelope"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "5829c8809ede228fffffafc069253ae4cafeafa6459aee874fa155a710af8796"
+}

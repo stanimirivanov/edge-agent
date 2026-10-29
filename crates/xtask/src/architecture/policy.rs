@@ -113,7 +113,15 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
         name: "edgeagent-audit-projector",
         role: CrateRole::CompositionRoot,
-        normal: &["edgeagent-contracts", "edgeagent-service-runtime"],
+        normal: &[
+            "edgeagent-contracts",
+            "edgeagent-service-runtime",
+            "edgeagent-audit-domain",
+            "edgeagent-research-application",
+            "edgeagent-inbox-postgres",
+            "edgeagent-messaging",
+            "edgeagent-messaging-nats",
+        ],
         development: NONE,
         build: NONE,
     },
