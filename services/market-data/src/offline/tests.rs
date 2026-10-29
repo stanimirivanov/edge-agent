@@ -93,6 +93,7 @@ fn profile_lock_excludes_a_second_owner_and_refuses_reinitialization() -> Result
         database: String::new(),
         root: root.clone(),
         request: None,
+        recipe: fixture::Recipe::Single,
         broker: None,
         stream: None,
         consumer: None,
@@ -113,4 +114,103 @@ fn profile_lock_excludes_a_second_owner_and_refuses_reinitialization() -> Result
     // This test owns this freshly created exact directory, including the lock file.
     std::fs::remove_dir_all(&root)?;
     result
+}
+
+#[path = "../../fixtures/offline-single-v1/fixture.rs"]
+#[allow(dead_code)]
+mod legacy_fixture;
+
+#[tokio::test]
+async fn history_recipes_preserve_legacy_identity_and_replay_exact_batches() -> Result {
+    use fixture::Recipe;
+    let time = 1_792_800_000_000;
+    assert_eq!(
+        Job::new(1, time)?.record,
+        legacy_fixture::Job::new(1, time)?.record
+    );
+    for (recipe, count) in [
+        (Recipe::Single, 1),
+        (Recipe::History, 6),
+        (Recipe::Missing, 5),
+        (Recipe::ActionMismatch, 6),
+    ] {
+        assert!(Recipe::parse(recipe.name())? == recipe);
+        let job = Job::with_recipe(1, time, recipe)?;
+        let restored = Job::restore(&job.record)?;
+        let cancel = Cancellation::default();
+        let authority = job.catalogs().admit(
+            job.record.request(),
+            job.record.request().admitted_at,
+            &cancel,
+        )?;
+        let batch = job.source.fetch(&authority, &cancel).await?;
+        assert_eq!(batch.observations.len(), count);
+        assert_eq!(batch, restored.source.fetch(&authority, &cancel).await?);
+        if recipe != Recipe::Single {
+            assert_ne!(job.record, Job::new(1, time)?.record);
+        }
+        let bytes = batch
+            .observations
+            .iter()
+            .map(edgeagent_market_data_replay::synthetic_daily_bytes)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        assert_eq!(
+            bytes,
+            restored
+                .source
+                .fetch(&authority, &cancel)
+                .await?
+                .observations
+                .iter()
+                .map(edgeagent_market_data_replay::synthetic_daily_bytes)
+                .collect::<std::result::Result<Vec<_>, _>>()?
+        );
+    }
+    assert!(Recipe::parse("history-v2").is_err());
+    let job = Job::with_recipe(1, time, Recipe::History)?;
+    let mut fields: std::collections::BTreeMap<String, String> =
+        serde_json::from_slice(job.record.bytes())?;
+    fields.insert("configuration_sha256".into(), "a".repeat(64));
+    let mut bytes = serde_json::to_vec(&fields)?;
+    bytes.push(b'\n');
+    let mut command = job.record.command().clone();
+    command.request_sha256 = DailyEvidenceArtifact::hash(&bytes);
+    let changed = AdmissionRecord::decode(&bytes, &command)?;
+    assert!(Job::restore(&changed).is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn history_quality_accepts_complete_and_refuses_missing_or_action_mismatch() -> Result {
+    use fixture::Recipe;
+    let storage = ImmutableEvidenceStore::new(
+        Arc::new(object_store::memory::InMemory::new()),
+        Duration::from_secs(15),
+    )?;
+    for recipe in [Recipe::History, Recipe::Missing, Recipe::ActionMismatch] {
+        let job = Job::with_recipe(1, now()?.unix_millis(), recipe)?;
+        let access = Access {
+            job: &job,
+            captured: now()?,
+        };
+        let result = job
+            .prepare(&storage, &access, &Cancellation::default())
+            .await;
+        if recipe == Recipe::History {
+            result?;
+        } else {
+            let error = result.err().ok_or("negative recipe unexpectedly passed")?;
+            let cause = error
+                .source()
+                .and_then(|e| e.downcast_ref::<EvidenceFreezeError>())
+                .ok_or("expected typed quality failure")?;
+            let expected = if recipe == Recipe::Missing {
+                edgeagent_market_data_domain::DailyQualityError::Completeness
+            } else {
+                edgeagent_market_data_domain::DailyQualityError::UnsupportedAction
+            };
+            assert!(matches!(cause, EvidenceFreezeError::Quality(actual) if *actual == expected));
+        }
+    }
+    Ok(())
 }

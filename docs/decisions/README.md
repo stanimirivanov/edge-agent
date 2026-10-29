@@ -188,3 +188,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0074](0074-compose-finite-offline-streams-behind-durable-restore-fences.md) | Accepted | Compose finite offline streams behind durable restore fences. |
 | [ADR-0075](0075-support-linux-development-hosts.md) | Accepted | Support Linux development hosts. |
 | [ADR-0076](0076-version-deterministic-research-contracts.md) | Accepted | Version deterministic research contracts. |
+| [ADR-0077](0077-version-bounded-offline-history-recipes.md) | Accepted | Version bounded offline history recipes. |

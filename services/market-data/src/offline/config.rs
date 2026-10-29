@@ -19,6 +19,7 @@ pub(super) struct Config {
     pub database: String,
     pub root: std::path::PathBuf,
     pub request: Option<u128>,
+    pub recipe: super::fixture::Recipe,
     pub broker: Option<String>,
     pub stream: Option<String>,
     pub consumer: Option<String>,
@@ -83,9 +84,11 @@ impl Config {
             .ok_or(ConfigError("missing offline command"))?
             .clone();
         let mut request = None;
+        let mut recipe = super::fixture::Recipe::Single;
         let mut confirmed = BTreeSet::new();
         match command.as_str() {
-            "offline-seed" if args.len() == 2 => {
+            "offline-seed" if args.len() == 2 || args.len() == 3 => {
+                if let Some(name) = args.get(2) { recipe = super::fixture::Recipe::parse(name)?; }
                 let id = EvidenceId::new(&args[1]).map_err(|_| ConfigError("seed requires one canonical nonzero hexadecimal request identity"))?;
                 request = Some(u128::from_str_radix(id.as_str(), 16)?);
             }
@@ -135,6 +138,7 @@ impl Config {
             database,
             root,
             request,
+            recipe,
             broker,
             stream,
             consumer,

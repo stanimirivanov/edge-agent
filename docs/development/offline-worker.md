@@ -122,3 +122,41 @@ Fault interception exists only in integration fixtures, not production switches.
 This proves committed transition uniqueness, not exactly-once transport/external
 effects, PostgreSQL server crash recovery or distributed writer fencing. M10 retains full
 operational readiness, authenticated live authority and restore qualification.
+
+## Versioned multi-session recipes
+
+`offline-seed <request-id> [recipe]` defaults to `single-v1`. Explicit names:
+
+| Recipe | Invented data | Quality result |
+| --- | --- | --- |
+| `single-v1` | Original single bar, two UTC dates behind admission | Accepted |
+| `history-v1` | Six sessions, oldest seven UTC dates behind admission | Accepted |
+| `history-missing-v1` | Same six-session range with its third observation omitted | Rejected |
+| `history-action-mismatch-v1` | Complete raw series with an unsupported action on its first session | Rejected |
+
+Each history close starts at USD 123.45 and increases by USD 1 per session;
+OHLC are equal and volume is zero. These are raw provider-day observations,
+not adjusted prices or total returns. The mismatch fixture exercises refusal to
+reinterpret unsupported corporate-action history, not a synthetic adjusted-price
+claim. Every UTC date is explicitly an invented open session, including weekends:
+this calendar is not XNYS qualification or historical constituent membership.
+The universe is the single `INVENTED` instrument selected by the retained catalog.
+
+The fixed six-session bound, one-day buckets, explicit session references and
+observation versions are part of the recipe. All observations become available
+at admission, never at their older event dates. Readiness for history recipes
+permits a finite 90-day age and six-day skew; the legacy policy stays unchanged.
+No caller-supplied arrays, dates, prices or unbounded session counts are accepted.
+
+Worker recovery selects the recipe by exact retained admission identity, including
+configuration; a changed recipe cannot replace unfinished work. Completed receipts
+still recover first. The frozen source fixture in
+[`offline-single-v1`](../../services/market-data/fixtures/offline-single-v1/)
+is the original byte-for-byte implementation used to preserve its historical
+configuration binding and independently test legacy compatibility. Do not edit it.
+New recipe identities bind their name and current implementation bytes.
+
+No migration, schema upgrade, provider activation or new runtime mode is needed.
+Use a new request ID for a different recipe; retain the original command on retry.
+The existing `offline-worker-contracts` gate includes recipe replay, legacy
+compatibility, changed-configuration refusal and complete/negative quality tests.

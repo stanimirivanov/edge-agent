@@ -31,13 +31,7 @@ pub(super) async fn handle(
             Err(error) => return Err(error.into()),
         }
         let (record, _) = ledger.load(&command).await?;
-        let job = Job::new(
-            record.request().id.get(),
-            record.request().admitted_at.unix_millis(),
-        )?;
-        if record != job.record {
-            return Err(Permanent("offline_configuration_mismatch").into());
-        }
+        let job = Job::restore(&record).map_err(|_| Permanent("offline_configuration_mismatch"))?;
         let access = Access {
             job: &job,
             captured: now()?,

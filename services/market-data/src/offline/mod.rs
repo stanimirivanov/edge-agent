@@ -93,7 +93,7 @@ async fn execute(config: &config::Config) -> Result {
         }
         let ledger = PostgresAcquisitionLedger::new(pool.clone());
         if config.command == "offline-seed" {
-            let job = Job::new(config.request.ok_or("missing invented request")?, now()?.unix_millis())?;
+            let job = Job::with_recipe(config.request.ok_or("missing invented request")?, now()?.unix_millis(), config.recipe)?;
             let cancel = Cancellation::default();
             let authorized = job.catalogs().admit(job.record.request(), now()?, &cancel)?;
             ledger.admit(&job.record, &authorized).await?;
