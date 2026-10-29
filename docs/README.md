@@ -76,6 +76,8 @@ Read the rows that match the work. Do not bulk-read every guide or decision.
 Always consult the product and architecture sources when a change affects
 observable behavior, evidence meaning, ownership, or a dependency boundary.
 
+For M04 versioned research payloads, read [research contracts](development/research-contracts.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object
