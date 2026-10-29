@@ -159,6 +159,10 @@ PACKAGE_RULES = {
         "lib",
         MESSAGING_DEPENDENCIES,
     ),
+    "crates/research-postgres": PackageRule(
+        "edgeagent-research-postgres", "lib", frozenset({CONTRACTS, "edgeagent-research-application", INBOX_POSTGRES, OUTBOX_POSTGRES, "sqlx"}),
+        frozenset({"edgeagent-research-domain", "edgeagent-market-data-domain", "futures-util", "tokio"}),
+    ),
     "crates/research-application": PackageRule(
         "edgeagent-research-application", "lib", frozenset({CONTRACTS, "edgeagent-research-domain"}),
         frozenset({"edgeagent-market-data-domain", "serde_json"}),

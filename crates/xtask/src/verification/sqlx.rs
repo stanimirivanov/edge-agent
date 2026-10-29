@@ -39,7 +39,7 @@ pub(super) fn run() -> ExitCode {
     match verify(super::workspace_root()) {
         Ok(()) => {
             println!(
-                "SQLx metadata matches the isolated inbox, outbox, simulation and acquisition schemas"
+                "SQLx metadata matches the isolated inbox, outbox, simulation, acquisition and research schemas"
             );
             ExitCode::SUCCESS
         }
@@ -98,6 +98,12 @@ fn verify(root: &Path) -> Result<(), String> {
         let bytes = fs::read(&path)
             .map_err(|error| format!("cannot read acquisition migration: {error}"))?;
         println!("Applying acquisition migration {}", path.display());
+        apply_inbox_migration(root, &bytes)?;
+    }
+    for path in inbox_migrations(&root.join("crates/research-postgres/migrations"))? {
+        let bytes =
+            fs::read(&path).map_err(|error| format!("cannot read research migration: {error}"))?;
+        println!("Applying research migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
     // The synthetic process composition also uses checked macros. This schema

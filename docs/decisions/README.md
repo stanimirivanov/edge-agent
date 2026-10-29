@@ -192,3 +192,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0078](0078-validate-frozen-research-evidence.md) | Accepted | Validate frozen research evidence. |
 | [ADR-0079](0079-version-raw-price-momentum.md) | Accepted | Version raw-price momentum. |
 | [ADR-0080](0080-render-ranked-research-outcomes.md) | Accepted | Render ranked research outcomes. |
+| [ADR-0081](0081-commit-research-completions-atomically.md) | Accepted | Commit research completions atomically. |

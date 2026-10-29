@@ -923,7 +923,7 @@ pub(super) fn checks() -> Vec<Check> {
             &["sqlx-metadata"],
             Xtask,
             &["sqlx-metadata"],
-            "Regenerated query metadata matches both migration directories; requires fresh isolated local Compose PostgreSQL and pinned SQLx CLI, not runtime atomicity.",
+            "Regenerated query metadata matches all service-owned migration directories; requires fresh isolated local Compose PostgreSQL and pinned SQLx CLI, not runtime atomicity.",
         ),
         check(
             "dependency-policy",

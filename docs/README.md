@@ -84,6 +84,8 @@ For M04 deterministic raw-price momentum, read [research momentum](development/r
 
 For M04 ranked canonical outcomes, read [research rendering](development/research-rendering.md).
 
+For M04 atomic research completion, read [research persistence](development/research-persistence.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

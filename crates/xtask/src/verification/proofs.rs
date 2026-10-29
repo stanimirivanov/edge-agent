@@ -144,6 +144,17 @@ struct Target {
     identities: &'static [&'static str],
 }
 
+const RESEARCH_PERSISTENCE: Target = Target {
+    package: "edgeagent-research-postgres",
+    name: "persistence",
+    identities: &[
+        "duplicate_requests_return_first_outcome_and_conflicting_intent_rolls_back",
+        "concurrent_completion_and_client_restart_recover_exact_original_receipt",
+        "statement_and_deferred_commit_failures_rollback_completion_inbox_and_outbox",
+        "cancelled_transaction_leaves_no_completion_or_publication_intent",
+        "immutable_completion_and_corrupt_retained_outbox_fail_closed",
+    ],
+};
 const PUBLISH: Target = Target {
     package: "edgeagent-messaging-nats",
     name: "jetstream_publish",
@@ -292,6 +303,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "research-persistence",
+            &RESEARCH_PERSISTENCE,
+            POSTGRES,
+            "Real research completion/inbox/outbox atomicity, scoped concurrency, original receipt recovery, cancellation and integrity refusal; no broker publication.",
+        ),
         suite(
             "offline-stream-runtime",
             &OFFLINE_STREAM_RUNTIME,
@@ -618,6 +635,7 @@ fn suite(
 pub(super) fn ignored_inventory() -> Vec<&'static str> {
     let mut identities = vec!["messaging::tests::payload_decode_throughput_probe"];
     for target in [
+        RESEARCH_PERSISTENCE,
         PUBLISH,
         CONSUME,
         NATS_BOUNDARIES,
@@ -937,7 +955,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 39);
+        assert_eq!(checks.len(), 40);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -952,9 +970,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        // Includes the four owned finite offline runtime proofs.
-        assert_eq!(inventory.len(), 113);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 113);
+        // Includes the owned finite offline runtime and five Research PostgreSQL proofs.
+        assert_eq!(inventory.len(), 118);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 118);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
