@@ -7,8 +7,7 @@ product workspace or deployable services.
 The test owns and reaps an ephemeral Temporal CLI dev-server process. Before
 startup, the test downloads the
 official Temporal CLI `v1.8.3` tarball and verifies its SHA-256 against the
-release's [published checksums][checksums]. It supports Linux x64 and Windows
-x64; another platform requires an explicitly reviewed artifact hash. The
+release's [published checksums][checksums]. It supports Linux x64; another platform requires an explicitly reviewed artifact hash. The
 verified executable is launched directly on loopback with the default namespace
 and no UI. Readiness requires a successful SDK connection including GetSystemInfo,
 within the same five-second startup bound used by the SDK fixture. The process

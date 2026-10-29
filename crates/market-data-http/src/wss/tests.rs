@@ -226,7 +226,7 @@ async fn peer(reply: Reply, wire: Vec<u8>, hostname_ok: bool) -> TestResult<Peer
 }
 // Pure ledger examples use 100 ms; those values are not TLS scheduling assertions.
 // Protocol proofs get explicit finite local-I/O budgets. Timing proofs use barriers
-// and virtual time so neither busy Windows runners nor retries determine success.
+// and virtual time so neither busy runners nor retries determine success.
 fn session_data(
     a: &Authority,
 ) -> TestResult<edgeagent_market_data_application::StreamingSessionData> {

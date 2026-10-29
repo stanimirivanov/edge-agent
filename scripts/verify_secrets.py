@@ -105,7 +105,7 @@ def validate_policy(root: Path) -> ToolPolicy:
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
         raise SecurityToolError("cannot read secret detector configuration") from error
     if set(manifest) != {"schema_version", "gitleaks"} or set(manifest["gitleaks"]) != {
-        "version", "license", "release_url", "linux_x64", "windows_x64"
+        "version", "license", "release_url", "linux_x64"
     } or any(set(manifest["gitleaks"][target]) != {"archive", "sha256", "executable"} for target in policy.archives):
         raise SecurityToolError("security tool policy contains unreviewed fields")
     if config != expected_config(policy.version):
@@ -121,7 +121,7 @@ def sanitized_environment(source: Path | None = None) -> dict[str, str]:
     environment = {key: value for key, value in os.environ.items() if not key.upper().startswith(("GITLEAKS_", "GIT_"))}
     environment["GIT_NO_REPLACE_OBJECTS"] = "1"
     if source is not None:
-        # The Windows sandbox may use another account to own the checkout.
+        # A sandbox may use another account to own the checkout.
         # Trust only this invocation's already selected source, never '*', and
         # do not retain any ambient routing or configuration injection.
         environment["GIT_CONFIG_COUNT"] = "1"
@@ -448,7 +448,7 @@ def main() -> int:
             return 0
         executable = options.gitleaks
         if executable is None:
-            archive = policy.archives.get("windows_x64" if sys.platform == "win32" else "linux_x64")
+            archive = policy.archives["linux_x64"]
             local = ROOT / f"artifacts/security-tools/gitleaks-{policy.version}" / archive.executable
             executable = str(local) if local.is_file() else "gitleaks"
         found = shutil.which(executable)

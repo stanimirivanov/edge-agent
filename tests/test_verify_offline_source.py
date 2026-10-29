@@ -20,7 +20,7 @@ SPEC.loader.exec_module(LAUNCHER)
 
 class OfflineLauncherTests(unittest.TestCase):
     def test_unsupported_platform_cannot_pass_or_execute_a_child(self):
-        with patch.object(LAUNCHER.sys, "platform", "win32"), patch.object(
+        with patch.object(LAUNCHER.sys, "platform", "unsupported"), patch.object(
             LAUNCHER.subprocess, "run"
         ) as run, redirect_stdout(io.StringIO()):
             self.assertEqual(LAUNCHER.main(), 1)

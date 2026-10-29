@@ -84,8 +84,7 @@ changing policy.
 ## Pinned scanner installation
 
 [Security tool policy](../../supply-chain/security-tools.toml) pins the exact
-MIT-licensed Gitleaks release and SHA-256 digests of the official Linux x64 and
-Windows x64 archives. The Python-standard-library installer verifies the
+MIT-licensed Gitleaks release and SHA-256 digests of the official Linux x64 archives. The Python-standard-library installer verifies the
 archive before extraction, selects only the expected executable, and installs
 it into the ignored `artifacts/security-tools/gitleaks-8.30.1/` directory.
 Other operating systems or architectures fail explicitly rather than using an

@@ -41,7 +41,7 @@ class QualificationHarnessTests(unittest.TestCase):
         directory = Path(self.temporary.name)
         self.profile = directory / "owner-private-profile.json"
         self.profile.write_bytes(b'{"invented":true}\n')
-        self.binary = directory / "edgeagent-market-data.exe"
+        self.binary = directory / "edgeagent-market-data"
         self.binary.write_bytes(b"invented binary; never executed")
         self.invocation = harness.Invocation(
             "acquire", self.profile, hashlib.sha256(self.profile.read_bytes()).hexdigest(),

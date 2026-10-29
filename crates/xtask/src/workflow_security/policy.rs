@@ -187,10 +187,7 @@ fn runner(name: &str, job_id: &str, job: &Yaml) -> bool {
                 .and_then(|value| field(value, "matrix"))
                 .is_some_and(|matrix| {
                     keys(matrix) == Some(["os"].into_iter().collect())
-                        && string_sequence(
-                            field(matrix, "os"),
-                            &["ubuntu-latest", "windows-latest"],
-                        )
+                        && string_sequence(field(matrix, "os"), &["ubuntu-latest"])
                 })
     } else if name == "m08-durable-execution.yml" && job_id == "proof" {
         text(job, "runs-on") == Some("ubuntu-latest")

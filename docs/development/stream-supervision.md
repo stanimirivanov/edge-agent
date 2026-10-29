@@ -109,7 +109,7 @@ the actual migrated schema in CI. These are distinct evidence boundaries.
 
 `cargo xtask verify --check stream-supervision-contracts` runs six deterministic,
 credential-free proofs with an independently protected discovery census.
-`cargo xtask verify` includes that gate on Ubuntu and Windows in the existing
+`cargo xtask verify` includes that gate on Ubuntu in the existing
 Repository quality workflow. The proofs cover saturated 32-source fairness,
 FIFO/duplicate preservation, slow/failed-source isolation, both capacity ceilings,
 foreign/dropped dispatches, cancellation, binding and redaction. They use no

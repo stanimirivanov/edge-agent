@@ -1512,7 +1512,7 @@ fn advise(paths: &[String]) -> Result<Advice, String> {
 fn normalize(path: &str) -> Result<String, String> {
     let normalized = path.replace('\\', "/");
     // Deleted paths remain routable. No input path is opened or executed, and
-    // containment is lexical so Windows and POSIX reject the same inputs.
+    // containment is lexical so foreign and POSIX paths receive the same validation.
     if normalized.is_empty()
         || normalized
             .chars()

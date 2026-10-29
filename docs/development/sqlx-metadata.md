@@ -93,10 +93,7 @@ export EDGEAGENT_SQLX_METADATA_LOCAL=1
 cargo xtask verify sqlx-metadata
 ```
 
-PowerShell users set the same three environment values with `$env:NAME='value'`
-and run the same canonical Cargo command. The action launches fixed argument
-vectors and pipes migration bytes directly into Compose `psql`; no POSIX shell
-or manually maintained migration loop is required.
+The action launches fixed argument vectors and pipes migration bytes directly into Compose `psql`.
 
 The action probes `cargo sqlx --no-dotenv --version`, which reports
 `sqlx-cli-sqlx 0.9.0`. The standalone `sqlx --version` reports

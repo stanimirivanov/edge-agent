@@ -271,8 +271,6 @@ mod tests {
     use std::error::Error;
     #[cfg(unix)]
     use std::os::unix::process::ExitStatusExt;
-    #[cfg(windows)]
-    use std::os::windows::process::ExitStatusExt;
 
     fn version_output(stdout: &[u8]) -> Output {
         Output {
@@ -330,8 +328,7 @@ mod tests {
     #[test]
     fn unsuccessful_probe_cannot_authorize_schema_assembly() {
         let mut output = version_output(b"sqlx-cli-sqlx 0.9.0\n");
-        // This represents a nonzero exit on Windows and signal termination on
-        // Unix. Neither can authorize schema assembly, even with valid stdout.
+        // Signal termination cannot authorize schema assembly, even with valid stdout.
         output.status = std::process::ExitStatus::from_raw(1);
         output.stderr = b"stderr-private-sentinel".to_vec();
         assert!(validate_version(&output).is_err_and(|error| {

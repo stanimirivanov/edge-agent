@@ -12,7 +12,6 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
-import zipfile
 
 
 ROOT = Path(__file__).parents[1]
@@ -31,7 +30,7 @@ class SecretVerificationTests(unittest.TestCase):
     def test_checked_in_detector_policy_is_valid(self) -> None:
         policy = verify_secrets.validate_policy(ROOT)
         self.assertEqual("8.30.1", policy.version)
-        self.assertEqual({"linux_x64", "windows_x64"}, set(policy.archives))
+        self.assertEqual({"linux_x64"}, set(policy.archives))
 
     def test_policy_rejects_configuration_suppression_and_shape_drift(self) -> None:
         original = (ROOT / ".gitleaks.toml").read_text(encoding="utf-8")
@@ -61,9 +60,9 @@ class SecretVerificationTests(unittest.TestCase):
             original.replace('version = "8.30.1"', 'version = "latest"'),
             original.replace('license = "MIT"', 'license = "unknown"'),
             original.replace("https://github.com/gitleaks/gitleaks/releases/tag/", "https://example.invalid/"),
-            original.replace('archive = "gitleaks_8.30.1_windows_x64.zip"', 'archive = "../../unsafe.zip"'),
-            original.replace('executable = "gitleaks.exe"', 'executable = "../gitleaks.exe"'),
-            original.replace("d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e", "not-a-digest"),
+            original.replace('archive = "gitleaks_8.30.1_linux_x64.tar.gz"', 'archive = "../../unsafe.zip"'),
+            original.replace('executable = "gitleaks"', 'executable = "../gitleaks"'),
+            original.replace("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", "not-a-digest"),
             original + '\nextra = "unreviewed"\n',
         ):
             with tempfile.TemporaryDirectory() as directory:
@@ -291,46 +290,44 @@ class SecretVerificationTests(unittest.TestCase):
 
 
 class GitleaksInstallerTests(unittest.TestCase):
-    def archive(self, content: bytes = b"synthetic executable", name: str = "gitleaks.exe", extra: bool = False) -> bytes:
+    def archive(self, members=None) -> bytes:
         output = io.BytesIO()
-        with zipfile.ZipFile(output, "w") as source:
-            source.writestr(name, content)
-            if extra:
-                source.writestr("../../escape", "not extracted")
+        if members is None:
+            members = [("gitleaks", b"synthetic executable", tarfile.REGTYPE)]
+        with tarfile.open(fileobj=output, mode="w:gz") as source:
+            for name, content, kind in members:
+                member = tarfile.TarInfo(name)
+                member.type = kind
+                member.size = len(content)
+                source.addfile(member, io.BytesIO(content))
         return output.getvalue()
 
     def test_authentication_precedes_archive_parsing(self) -> None:
-        with patch.object(install_gitleaks.zipfile, "ZipFile") as parse:
+        with patch.object(install_gitleaks.tarfile, "open") as parse:
             with self.assertRaisesRegex(install_gitleaks.SecurityToolError, "checksum"):
-                install_gitleaks.authenticated_binary(b"not an archive", install_gitleaks.Archive("test.zip", "0" * 64, "gitleaks.exe"))
+                install_gitleaks.authenticated_binary(b"not an archive", install_gitleaks.Archive("test.tar.gz", "0" * 64, "gitleaks"))
             parse.assert_not_called()
 
     def test_archive_extracts_only_exact_executable_no_traversal(self) -> None:
-        payload = self.archive(extra=True)
-        binary = install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.zip", hashlib.sha256(payload).hexdigest(), "gitleaks.exe"))
+        payload = self.archive([("gitleaks", b"synthetic executable", tarfile.REGTYPE),
+                                ("../../escape", b"not extracted", tarfile.REGTYPE)])
+        binary = install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.tar.gz", hashlib.sha256(payload).hexdigest(), "gitleaks"))
         self.assertEqual(b"synthetic executable", binary)
 
     def test_archive_rejects_missing_empty_symlink_duplicate_and_oversized_member(self) -> None:
-        payloads = [self.archive(name="../gitleaks.exe"), self.archive(content=b"")]
-        duplicate = io.BytesIO()
-        with zipfile.ZipFile(duplicate, "w") as source:
-            source.writestr("gitleaks.exe", "one")
-            with self.assertWarns(UserWarning):
-                source.writestr("gitleaks.exe", "two")
-        payloads.append(duplicate.getvalue())
-        symlink = io.BytesIO()
-        with zipfile.ZipFile(symlink, "w") as source:
-            entry = zipfile.ZipInfo("gitleaks.exe")
-            entry.external_attr = 0o120777 << 16
-            source.writestr(entry, "../escape")
-        payloads.append(symlink.getvalue())
+        payloads = [
+            self.archive([("../gitleaks", b"wrong", tarfile.REGTYPE)]),
+            self.archive([("gitleaks", b"", tarfile.REGTYPE)]),
+            self.archive([("gitleaks", b"one", tarfile.REGTYPE), ("gitleaks", b"two", tarfile.REGTYPE)]),
+            self.archive([("gitleaks", b"", tarfile.SYMTYPE)]),
+        ]
         for payload in payloads:
             with self.assertRaises(install_gitleaks.SecurityToolError):
-                install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.zip", hashlib.sha256(payload).hexdigest(), "gitleaks.exe"))
+                install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.tar.gz", hashlib.sha256(payload).hexdigest(), "gitleaks"))
         payload = self.archive()
         with patch.object(install_gitleaks, "MAX_BINARY_BYTES", 2):
             with self.assertRaises(install_gitleaks.SecurityToolError):
-                install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.zip", hashlib.sha256(payload).hexdigest(), "gitleaks.exe"))
+                install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.tar.gz", hashlib.sha256(payload).hexdigest(), "gitleaks"))
 
     def test_tar_archive_extracts_exact_regular_binary(self) -> None:
         output = io.BytesIO()
@@ -343,10 +340,10 @@ class GitleaksInstallerTests(unittest.TestCase):
         self.assertEqual(content, install_gitleaks.authenticated_binary(payload, install_gitleaks.Archive("test.tar.gz", hashlib.sha256(payload).hexdigest(), "gitleaks")))
 
     def test_supported_host_resolution_is_explicit(self) -> None:
-        for system, machine, expected in (("Linux", "x86_64", "linux_x64"), ("Windows", "AMD64", "windows_x64")):
+        for system, machine, expected in (("Linux", "x86_64", "linux_x64"),):
             with patch.object(install_gitleaks.platform, "system", return_value=system), patch.object(install_gitleaks.platform, "machine", return_value=machine):
                 self.assertEqual(expected, install_gitleaks.host_target())
-        for system, machine in (("Darwin", "x86_64"), ("Linux", "aarch64")):
+        for system, machine in (("Windows", "AMD64"), ("Darwin", "x86_64"), ("Linux", "aarch64")):
             with patch.object(install_gitleaks.platform, "system", return_value=system), patch.object(install_gitleaks.platform, "machine", return_value=machine):
                 with self.assertRaises(install_gitleaks.SecurityToolError):
                     install_gitleaks.host_target()

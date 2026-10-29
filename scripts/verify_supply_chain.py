@@ -125,12 +125,9 @@ def check_workspace_locks(root: Path) -> list[Problem]:
         relative_directory = directory.relative_to(root).as_posix()
         try:
             directory_stat = directory.lstat()
-            if stat.S_ISLNK(directory_stat.st_mode) or (
-                getattr(directory_stat, "st_file_attributes", 0)
-                & stat.FILE_ATTRIBUTE_REPARSE_POINT
-            ):
+            if stat.S_ISLNK(directory_stat.st_mode):
                 problems.append(
-                    Problem(relative_directory, "source symlinks and reparse points are not allowed")
+                    Problem(relative_directory, "source symlinks are not allowed")
                 )
                 continue
             with os.scandir(directory) as entries:
@@ -143,12 +140,9 @@ def check_workspace_locks(root: Path) -> list[Problem]:
                     path = directory / entry.name
                     relative = path.relative_to(root).as_posix()
                     entry_stat = entry.stat(follow_symlinks=False)
-                    if stat.S_ISLNK(entry_stat.st_mode) or (
-                        getattr(entry_stat, "st_file_attributes", 0)
-                        & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                    ):
+                    if stat.S_ISLNK(entry_stat.st_mode):
                         problems.append(
-                            Problem(relative, "source symlinks and reparse points are not allowed")
+                            Problem(relative, "source symlinks are not allowed")
                         )
                     elif stat.S_ISDIR(entry_stat.st_mode):
                         if depth >= SOURCE_SCAN_MAX_DEPTH:

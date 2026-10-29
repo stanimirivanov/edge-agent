@@ -40,7 +40,7 @@ Work items:
 - Add a local dependency profile for PostgreSQL, NATS JetStream, S3-compatible storage, and OpenTelemetry collection.
 - Generate an SBOM and provenance metadata and sign release images.
 - Retain the repository verifier until Rust tooling covers each equivalent check.
-- Run authoritative checks on Linux and Windows with one documented command.
+- Run authoritative checks on Linux with one documented command.
 
 Completion means a new contributor can build, test, inspect, and package every
 deployable without private credentials, paid services, or undocumented setup.
