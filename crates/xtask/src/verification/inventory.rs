@@ -822,6 +822,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded local HTTP validation, caller binding and acknowledgement timing; no database required.",
         ),
         check(
+            "research-projection-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-audit-domain",
+                "--test",
+                "research",
+                "--features",
+                "serde_json/preserve_order",
+                "--",
+            ],
+            "Pure scoped Research replay, immutable outcomes, lifecycle gap refusal and anchored bounded checkpoint integrity under map-order feature unification.",
+        ),
+        check(
             "research-worker-contracts",
             "T2",
             &["verify", "test"],
@@ -1548,6 +1566,20 @@ pub(super) fn checks() -> Vec<Check> {
                         "conflicts_and_unavailable_commits_return_safe_non_success_responses",
                         "serving_requires_explicit_loopback_database_schema_and_scope",
                         "descriptor_commands_remain_available_without_serving_configuration",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-projection-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "pending_terminal_replay_and_checkpoint_resume_preserve_exact_owner_bytes",
+                        "conflicting_terminal_intent_foreign_scope_and_invalid_records_never_mutate",
+                        "reordered_lifecycle_records_remain_explicit_gaps_without_cursor_or_state_advance",
+                        "restore_rejects_corruption_wrong_anchor_versions_and_rechecks_sealed_outcomes",
                     ],
                     ignored: false,
                 });
