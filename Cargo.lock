@@ -660,8 +660,21 @@ dependencies = [
 name = "edgeagent-audit-projector"
 version = "0.1.0"
 dependencies = [
+ "async-nats",
+ "axum",
+ "edgeagent-audit-domain",
  "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
+ "edgeagent-messaging",
+ "edgeagent-messaging-nats",
+ "edgeagent-research-application",
  "edgeagent-service-runtime",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "url",
 ]
 
 [[package]]

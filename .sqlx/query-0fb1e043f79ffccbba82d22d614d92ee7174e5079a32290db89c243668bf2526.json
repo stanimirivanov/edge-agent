@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_research_views SET gap_envelope=COALESCE(gap_envelope,$3),gap_delivery_key=COALESCE(gap_delivery_key,$4) WHERE caller_scope=$1 AND request_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0fb1e043f79ffccbba82d22d614d92ee7174e5079a32290db89c243668bf2526"
+}

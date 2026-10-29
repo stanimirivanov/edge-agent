@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT envelope,message_type FROM edgeagent_message_inbox WHERE consumer_name='research-projector' AND message_source=$1 AND message_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_inbox",
+            "name": "envelope"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "message_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_inbox",
+            "name": "message_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "117f8d83747d16f8890b0fc3d03212ed8f728a65976446b94d86637778c6a1a9"
+}

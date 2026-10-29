@@ -84,6 +84,8 @@ For M04 deterministic raw-price momentum, read [research momentum](development/r
 
 For M04 ranked canonical outcomes, read [research rendering](development/research-rendering.md).
 
+For M04 persistent internal Research queries, read [projector runtime](development/projector-runtime.md) and [ADR-0086](decisions/0086-persist-and-serve-scoped-research-projections.md).
+
 For M04 pure Research replay views, read [Research projection](development/research-projection.md) and [ADR-0085](decisions/0085-project-immutable-research-outcomes.md).
 
 For M04 receipt-first Research execution, read [Research worker](development/research-worker.md) and [ADR-0084](decisions/0084-run-receipt-first-research-workers.md).

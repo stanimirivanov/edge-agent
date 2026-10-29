@@ -39,7 +39,7 @@ pub(super) fn run() -> ExitCode {
     match verify(super::workspace_root()) {
         Ok(()) => {
             println!(
-                "SQLx metadata matches the isolated inbox, outbox, simulation, acquisition, research and Gateway schemas"
+                "SQLx metadata matches the isolated inbox, outbox, simulation, acquisition, research, Gateway and projector schemas"
             );
             ExitCode::SUCCESS
         }
@@ -110,6 +110,12 @@ fn verify(root: &Path) -> Result<(), String> {
         let bytes =
             fs::read(&path).map_err(|error| format!("cannot read Gateway migration: {error}"))?;
         println!("Applying Gateway migration {}", path.display());
+        apply_inbox_migration(root, &bytes)?;
+    }
+    for path in inbox_migrations(&root.join("services/audit-projector/migrations"))? {
+        let bytes =
+            fs::read(&path).map_err(|error| format!("cannot read projector migration: {error}"))?;
+        println!("Applying projector migration {}", path.display());
         apply_inbox_migration(root, &bytes)?;
     }
     // The synthetic process composition also uses checked macros. This schema

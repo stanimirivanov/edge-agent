@@ -13,5 +13,19 @@ const DESCRIPTOR: ServiceDescriptor = ServiceDescriptor::new(
 );
 
 fn main() -> ExitCode {
-    run(DESCRIPTOR)
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if args
+        .first()
+        .is_some_and(|a| a.starts_with("offline-") || a == "serve")
+    {
+        match edgeagent_audit_projector::runtime::run(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => {
+                eprintln!("projector failed closed");
+                ExitCode::from(2)
+            }
+        }
+    } else {
+        run(DESCRIPTOR)
+    }
 }
