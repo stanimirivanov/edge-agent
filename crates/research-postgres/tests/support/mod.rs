@@ -163,7 +163,10 @@ impl Harness {
         for sql in edgeagent_inbox_postgres::PostgresInbox::MIGRATIONS
             .into_iter()
             .chain(edgeagent_outbox_postgres::PostgresOutbox::MIGRATIONS)
-            .chain([edgeagent_research_postgres::MIGRATION])
+            .chain([
+                edgeagent_research_postgres::MIGRATION,
+                edgeagent_research_postgres::lifecycle::MIGRATION,
+            ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
         }

@@ -854,6 +854,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Internal query scope/Host/Origin/write refusal before storage, local configuration, descriptor compatibility and safe diagnostics.",
         ),
         check(
+            "research-lifecycle",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research-domain",
+                "--test",
+                "lifecycle",
+                "--",
+            ],
+            "Explicit-time irreversible lifecycle state/revision policy without storage or a scheduler.",
+        ),
+        check(
             "research-projection-contracts",
             "T2",
             &["verify", "test"],
@@ -1628,6 +1644,17 @@ pub(super) fn checks() -> Vec<Check> {
                     ignored: false,
                 });
             }
+            "research-lifecycle" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "explicit_lifecycle_time_order_and_final_states_are_irreversible",
+                    ],
+                    ignored: false,
+                });
+            }
             "research-projection-contracts" => {
                 let mut args = entry.command.args.clone();
                 args.push("--list");
@@ -1638,6 +1665,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "conflicting_terminal_intent_foreign_scope_and_invalid_records_never_mutate",
                         "reordered_lifecycle_records_remain_explicit_gaps_without_cursor_or_state_advance",
                         "restore_rejects_corruption_wrong_anchor_versions_and_rechecks_sealed_outcomes",
+                        "lifecycle_replay_duplicates_gaps_and_checkpoint_versions_preserve_original_bytes",
                     ],
                     ignored: false,
                 });

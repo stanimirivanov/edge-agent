@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 edgeagent-contracts.workspace = true
+edgeagent-research-domain.workspace = true
 edgeagent-market-data-domain.workspace = true
 edgeagent-simulation-domain.workspace = true
 serde.workspace = true

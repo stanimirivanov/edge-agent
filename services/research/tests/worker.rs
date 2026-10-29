@@ -55,6 +55,51 @@ async fn restart_and_lost_result_recover_before_owner_read_with_one_publication(
                 .canonical_bytes()?,
             first.stdout
         );
+        let record = ResearchRecord::decode(&first.stdout)?;
+        let ResearchRecord::Artifact(base) = &record else {
+            return Err("artifact".into());
+        };
+        let lifecycle = edgeagent_contracts::research::ResearchLifecycle {
+            scope: base.request.scope.clone(),
+            request_id: base.request.request_id.clone(),
+            artifact: record.digest()?,
+            revision: 1,
+            effective_at_ms: base.expires_at_ms,
+            change: edgeagent_contracts::research::LifecycleChange::Expired,
+        };
+        let bytes = ResearchRecord::Lifecycle(lifecycle).canonical_bytes()?;
+        let mut previous = None;
+        for _ in 0..2 {
+            use tokio::io::AsyncWriteExt as _;
+            let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_edgeagent-research"))
+                .arg("offline-lifecycle")
+                .env(
+                    "EDGEAGENT_POSTGRES_URL",
+                    std::env::var("EDGEAGENT_POSTGRES_URL")?,
+                )
+                .env("EDGEAGENT_RESEARCH_SCHEMA", &db.schema)
+                .env("EDGEAGENT_RESEARCH_SCOPE", &base.request.scope)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()?;
+            child.stdin.take().ok_or("stdin")?.write_all(&bytes).await?;
+            let output =
+                tokio::time::timeout(std::time::Duration::from_secs(30), child.wait_with_output())
+                    .await??;
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let envelope = edgeagent_contracts::MessageEnvelope::from_json(&output.stdout)?;
+            edgeagent_research_application::lifecycle::decode(&envelope)?;
+            if let Some(old) = previous {
+                assert_eq!(output.stdout, old);
+            }
+            previous = Some(output.stdout);
+        }
         Ok(())
     })
     .catch_unwind()

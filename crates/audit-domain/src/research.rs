@@ -1,5 +1,5 @@
 //! Pure caller-scoped Research view. Authenticate owner records outside this reducer.
-//! Lifecycle facts are explicit gaps until their separate transition implementation;
+//! Lifecycle facts append explicit-time owner revisions without changing outcome bytes;
 //! callers must not advance consumption progress after a rejected/gapped input.
 use crate::{ReplayError as Error, ReplayOutcome};
 use edgeagent_contracts::research::{MAX_RESEARCH_BYTES, ResearchRecord, ResearchRequest};
@@ -16,6 +16,14 @@ pub enum ResearchStatus {
     Artifact,
     /// An owner-classified terminal abstention was observed.
     Abstained,
+    /// Owner invalidation.
+    Invalidated,
+    /// Explicit owner expiry.
+    Expired,
+    /// Final owner withdrawal.
+    Withdrawn,
+    /// Final replacement link.
+    Corrected,
 }
 /// Independent per-request view, never financial/account audit state.
 pub struct ResearchProjection {
@@ -23,6 +31,7 @@ pub struct ResearchProjection {
     request_bytes: Vec<u8>,
     outcome: Option<Vec<u8>>,
     status: ResearchStatus,
+    lifecycle: Vec<Vec<u8>>,
 }
 impl std::fmt::Debug for ResearchProjection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,6 +55,7 @@ impl ResearchProjection {
             request_bytes,
             outcome: None,
             status: ResearchStatus::Pending,
+            lifecycle: Vec::new(),
         })
     }
     /// Immutable caller/request/policy anchor; it confers no owner authenticity.
@@ -58,13 +68,13 @@ impl ResearchProjection {
     pub const fn status(&self) -> ResearchStatus {
         self.status
     }
-    /// Local view revision: zero pending, one terminal. Never an invented owner sequence.
+    /// Local revision: zero pending, one terminal, then one per owner lifecycle fact.
     #[must_use]
     pub const fn revision(&self) -> u64 {
         if matches!(self.status, ResearchStatus::Pending) {
             0
         } else {
-            1
+            1 + self.lifecycle.len() as u64
         }
     }
     /// Exact canonical immutable terminal bytes, without a new freshness/entitlement claim.
@@ -88,7 +98,7 @@ impl ResearchProjection {
     }
     /// Apply an authenticated owner record; all errors leave state/checkpoint unchanged.
     /// # Errors
-    /// Rejects malformed, foreign or conflicting facts. Lifecycle facts return Gap,
+    /// Rejects malformed, foreign or conflicting facts. Missing lifecycle revisions return Gap,
     /// requiring backfill/handler support; they are never consumed or silently skipped.
     pub fn apply(&mut self, record: ResearchRecord) -> Result<ReplayOutcome, Error> {
         let bytes = record.canonical_bytes().map_err(|_| Error::Invalid)?;
@@ -106,24 +116,7 @@ impl ResearchProjection {
                 ResearchStatus::Abstained
             }
             ResearchRecord::Lifecycle(change) => {
-                if change.scope != self.request.scope
-                    || change.request_id != self.request.request_id
-                {
-                    return Err(Error::Scope);
-                }
-                if let Some(outcome) = &self.outcome {
-                    if self.status != ResearchStatus::Artifact {
-                        return Err(Error::Conflict);
-                    }
-                    let digest = ResearchRecord::decode(outcome)
-                        .map_err(|_| Error::Invalid)?
-                        .digest()
-                        .map_err(|_| Error::Invalid)?;
-                    if digest != change.artifact {
-                        return Err(Error::Conflict);
-                    }
-                }
-                return Err(Error::Gap);
+                return self.apply_lifecycle(change.clone(), bytes);
             }
         };
         if let Some(outcome) = &self.outcome {
@@ -137,13 +130,108 @@ impl ResearchProjection {
         self.status = status;
         Ok(ReplayOutcome::Applied)
     }
+    /// Exact retained lifecycle records, in consecutive owner order (at most two).
+    #[must_use]
+    pub fn lifecycle_records(&self) -> &[Vec<u8>] {
+        &self.lifecycle
+    }
+    fn apply_lifecycle(
+        &mut self,
+        change: edgeagent_contracts::research::ResearchLifecycle,
+        bytes: Vec<u8>,
+    ) -> Result<ReplayOutcome, Error> {
+        use edgeagent_contracts::research::LifecycleChange;
+        use edgeagent_research_domain::lifecycle::{Head, State};
+        if change.scope != self.request.scope || change.request_id != self.request.request_id {
+            return Err(Error::Scope);
+        }
+        let Some(outcome) = &self.outcome else {
+            return Err(Error::Gap);
+        };
+        let ResearchRecord::Artifact(artifact) =
+            ResearchRecord::decode(outcome).map_err(|_| Error::Invalid)?
+        else {
+            return Err(Error::Conflict);
+        };
+        if ResearchRecord::Artifact(artifact.clone())
+            .digest()
+            .map_err(|_| Error::Invalid)?
+            != change.artifact
+        {
+            return Err(Error::Conflict);
+        }
+        if change.revision <= self.lifecycle.len() as u64 {
+            return if self.lifecycle.get(change.revision as usize - 1) == Some(&bytes) {
+                Ok(ReplayOutcome::Duplicate)
+            } else {
+                Err(Error::Conflict)
+            };
+        }
+        if change.revision != self.lifecycle.len() as u64 + 1 {
+            return Err(Error::Gap);
+        }
+        let state = match change.change {
+            LifecycleChange::Invalidated => State::Invalidated,
+            LifecycleChange::Expired => State::Expired,
+            LifecycleChange::Withdrawn => State::Withdrawn,
+            LifecycleChange::Corrected { .. } => State::Corrected,
+        };
+        let (prior, time) = match self.lifecycle.last() {
+            Some(bytes) => {
+                let ResearchRecord::Lifecycle(last) =
+                    ResearchRecord::decode(bytes).map_err(|_| Error::Invalid)?
+                else {
+                    return Err(Error::Invalid);
+                };
+                let prior = match last.change {
+                    LifecycleChange::Invalidated => State::Invalidated,
+                    LifecycleChange::Expired => State::Expired,
+                    LifecycleChange::Withdrawn => State::Withdrawn,
+                    LifecycleChange::Corrected { .. } => State::Corrected,
+                };
+                (prior, last.effective_at_ms)
+            }
+            None => (State::Published, artifact.request.decision_at_ms),
+        };
+        Head {
+            state: prior,
+            revision: self.lifecycle.len() as u64,
+            effective_at_ms: time,
+        }
+        .transition(
+            change.revision,
+            change.effective_at_ms,
+            artifact.expires_at_ms,
+            state,
+        )
+        .map_err(|_| Error::Conflict)?;
+        self.status = match state {
+            State::Published => ResearchStatus::Artifact,
+            State::Invalidated => ResearchStatus::Invalidated,
+            State::Expired => ResearchStatus::Expired,
+            State::Withdrawn => ResearchStatus::Withdrawn,
+            State::Corrected => ResearchStatus::Corrected,
+        };
+        self.lifecycle.push(bytes);
+        Ok(ReplayOutcome::Applied)
+    }
     /// Encode a complete disposable view. Persist atomically with consumer progress.
     /// Checksum detects corruption, not authenticity or an authorized storage rollback.
     /// # Errors
     /// Rejects encoding/capacity failures.
     pub fn checkpoint(&self) -> Result<Vec<u8>, Error> {
         let checkpoint = Checkpoint {
-            version: "EARP1".into(),
+            version: if self.lifecycle.is_empty() {
+                "EARP1"
+            } else {
+                "EARP2"
+            }
+            .into(),
+            lifecycle: self
+                .lifecycle
+                .iter()
+                .map(|b| String::from_utf8(b.clone()).map_err(|_| Error::Invalid))
+                .collect::<Result<_, _>>()?,
             request: String::from_utf8(self.request_bytes.clone()).map_err(|_| Error::Invalid)?,
             outcome: self
                 .outcome
@@ -175,7 +263,7 @@ impl ResearchProjection {
             return Err(Error::Invalid);
         }
         let checkpoint: Checkpoint = serde_json::from_slice(body).map_err(|_| Error::Invalid)?;
-        if checkpoint.version != "EARP1" {
+        if !matches!(checkpoint.version.as_str(), "EARP1" | "EARP2") {
             return Err(Error::Invalid);
         }
         let mut view = Self::new(request)?;
@@ -192,6 +280,12 @@ impl ResearchProjection {
             }
             view.apply(record)?;
         }
+        if checkpoint.lifecycle.len() > 2 {
+            return Err(Error::Capacity);
+        }
+        for change in checkpoint.lifecycle {
+            view.apply(ResearchRecord::decode(change.as_bytes()).map_err(|_| Error::Invalid)?)?;
+        }
         if view.checkpoint() != Ok(bytes.to_vec()) {
             return Err(Error::Invalid);
         }
@@ -204,4 +298,6 @@ struct Checkpoint {
     version: String,
     request: String,
     outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lifecycle: Vec<String>,
 }

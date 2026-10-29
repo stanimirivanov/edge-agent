@@ -118,7 +118,7 @@ PACKAGE_RULES = {
     ),
     "crates/audit-domain": PackageRule(
         "edgeagent-audit-domain", "lib",
-        frozenset({CONTRACTS, "edgeagent-market-data-domain", "edgeagent-simulation-domain", "serde", "serde_json", "sha2"}),
+        frozenset({CONTRACTS, "edgeagent-research-domain", "edgeagent-market-data-domain", "edgeagent-simulation-domain", "serde", "serde_json", "sha2"}),
     ),
     "crates/simulation-postgres": PackageRule(
         "edgeagent-simulation-postgres", "lib",

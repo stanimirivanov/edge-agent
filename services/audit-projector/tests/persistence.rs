@@ -234,3 +234,46 @@ async fn conflicting_owner_data_stays_gapped_and_corrupt_or_unavailable_views_fa
     .await;
     db.finish(result).await
 }
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn lifecycle_gaps_backfill_atomically_and_closed_queries_preserve_exact_history() -> Result {
+    use edgeagent_contracts::research::{LifecycleChange, ResearchLifecycle};
+    use edgeagent_research_application::lifecycle;
+    let db = Database::new().await?;
+    let result=AssertUnwindSafe(async {
+        let store=Arc::new(db.store()?);let record=record("life",false)?;
+        let req=request(&record)?;
+        let first=ResearchLifecycle{scope:req.scope.clone(),request_id:req.request_id.clone(),artifact:record.digest()?,revision:1,effective_at_ms:100,change:LifecycleChange::Invalidated};
+        let mut last=first.clone();last.revision=2;last.change=LifecycleChange::Withdrawn;
+        let one=lifecycle::publication(&first,"2026-10-29T00:00:00Z")?;
+        let two=lifecycle::publication(&last,"2026-10-29T00:00:00Z")?;
+        assert_eq!(store.project(&two,"missing-base").await.err().ok_or("gap")?.kind(),Kind::Gap);
+        assert_eq!(db.counts().await?,(0,0));
+        store.track(req).await?;
+        assert_eq!(store.project(&two,"gap").await.err().ok_or("gap")?.kind(),Kind::Gap);
+        store.project(&event(&record)?,"base").await?;
+        store.project(&one,"one").await?;
+        assert_eq!(store.get("offline","life").await?.ok_or("view")?.status,"gap");
+        sqlx::raw_sql("CREATE FUNCTION clear_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.gap_envelope IS NULL THEN RAISE EXCEPTION 'synthetic clear fault'; END IF; RETURN NEW; END $$; CREATE TRIGGER clear_fault BEFORE UPDATE OF gap_envelope ON edgeagent_research_views FOR EACH ROW EXECUTE FUNCTION clear_fault()").execute(&db.pool).await?;
+        assert_eq!(store.project(&two,"two").await.err().ok_or("fault")?.kind(),Kind::Storage);
+        assert_eq!(db.counts().await?,(1,2));
+        assert_eq!(store.get("offline","life").await?.ok_or("view")?.projection_revision,2);
+        sqlx::raw_sql("DROP TRIGGER clear_fault ON edgeagent_research_views").execute(&db.pool).await?;
+        store.project(&two,"two").await?;
+        let mut child=db.spawn(&two.to_json()?).await?;
+        assert!(tokio::time::timeout(Duration::from_secs(15),child.wait()).await??.success());
+        let view=store.get("offline","life").await?.ok_or("view")?;
+        assert_eq!((view.status,view.projection_revision),("withdrawn",3));
+        assert_eq!(view.applied_delivery_key.as_deref(),Some("two"));
+        assert_eq!(view.outcome_bytes(),Some(record.canonical_bytes()?.as_slice()));
+        assert!(view.lifecycle==Some(last));assert_eq!(db.counts().await?,(1,3));
+        let server=Server::new(store.clone()).await?;
+        assert!(server.query("GET","/internal/v1/research-requests/offline/life/outcome","").await?.starts_with("HTTP/1.1 410"));
+        let metadata=server.query("GET","/internal/v1/research-requests/offline/life","").await?;
+        assert!(metadata.starts_with("HTTP/1.1 200"));assert!(metadata.contains("withdrawn"));
+        sqlx::query("DELETE FROM edgeagent_message_inbox WHERE message_id=$1").bind(one.id()).execute(&db.pool).await?;
+        assert_eq!(store.get("offline","life").await.err().ok_or("proof")?.kind(),Kind::Corrupt);
+        Ok(())
+    }).catch_unwind().await;
+    db.finish(result).await
+}

@@ -83,6 +83,7 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
         role: CrateRole::Domain,
         normal: &[
             "edgeagent-contracts",
+            "edgeagent-research-domain",
             "edgeagent-market-data-domain",
             "edgeagent-simulation-domain",
         ],

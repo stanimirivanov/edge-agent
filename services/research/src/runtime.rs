@@ -54,7 +54,7 @@ pub fn run(args: &[String]) -> Result {
     if args.len() != 1
         || !matches!(
             args[0].as_str(),
-            "offline-once" | "offline-worker" | "offline-relay"
+            "offline-once" | "offline-worker" | "offline-relay" | "offline-lifecycle"
         )
     {
         return Err("invalid research mode".into());
@@ -97,6 +97,12 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode=="offline-lifecycle" {
+            use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(131_073).read_to_end(&mut bytes)?;
+            let edgeagent_contracts::research::ResearchRecord::Lifecycle(event)=edgeagent_contracts::research::ResearchRecord::decode(&bytes)? else {return Err("expected lifecycle owner command".into());};
+            let event=tokio::time::timeout(Duration::from_secs(25),store.append_lifecycle(&scope,event,&time()?)).await??;
+            std::io::stdout().write_all(&event.to_json()?)?;return Ok(());
+        }
         if mode=="offline-once" {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let delivery=MessageEnvelope::from_json(&bytes)?;

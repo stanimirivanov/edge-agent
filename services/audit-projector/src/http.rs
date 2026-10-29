@@ -83,6 +83,14 @@ async fn outcome(
     }
     match tokio::time::timeout(std::time::Duration::from_secs(5), store.get(&scope, &id)).await {
         Ok(Ok(Some(view))) if view.status == "gap" => error(StatusCode::CONFLICT, "gap"),
+        Ok(Ok(Some(view)))
+            if matches!(
+                view.status,
+                "invalidated" | "expired" | "withdrawn" | "corrected"
+            ) =>
+        {
+            error(StatusCode::GONE, view.status)
+        }
         Ok(Ok(Some(view))) => match view.outcome_bytes() {
             Some(bytes) => (
                 StatusCode::OK,

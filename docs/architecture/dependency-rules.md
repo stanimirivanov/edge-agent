@@ -58,7 +58,7 @@ dependencies between workspace packages:
 | Package | Allowed normal workspace dependencies |
 |---|---|
 | `edgeagent-contracts` | None |
-| `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
+| `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-research-domain`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-research-postgres` | `edgeagent-contracts`, `edgeagent-research-application`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres` |
 | `edgeagent-research-application` | `edgeagent-contracts`, `edgeagent-research-domain` |
 | `edgeagent-research-domain` | `edgeagent-market-data-domain` |

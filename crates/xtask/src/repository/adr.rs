@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 87] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 88] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -456,6 +456,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 87] = [
         number: 87,
         path: "docs/decisions/0087-query-research-through-the-local-gateway.md",
         title: "Query Research through the local Gateway",
+    },
+    PublishedIdentity {
+        number: 88,
+        path: "docs/decisions/0088-append-and-project-owner-artifact-lifecycle.md",
+        title: "Append and project owner artifact lifecycle",
     },
 ];
 

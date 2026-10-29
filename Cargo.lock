@@ -650,6 +650,7 @@ version = "0.1.0"
 dependencies = [
  "edgeagent-contracts",
  "edgeagent-market-data-domain",
+ "edgeagent-research-domain",
  "edgeagent-simulation-domain",
  "serde",
  "serde_json",

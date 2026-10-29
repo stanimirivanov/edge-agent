@@ -29,8 +29,8 @@ a broker offset. Both inputs are capped at 262144 bytes before decoding.
 
 `offline-worker` also requires loopback `EDGEAGENT_NATS_URL`, explicit
 `EDGEAGENT_PROJECTOR_STREAM`, `EDGEAGENT_PROJECTOR_CONSUMER` and
-`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with both
-Research PUBLISHED and ABSTAINED subjects, no broad single filter, explicit ACK,
+`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with all three
+Research PUBLISHED, ABSTAINED and lifecycle CHANGED subjects, no broad single filter, explicit ACK,
 at least 60-second ACK wait, three maximum deliveries and 1–32 pending ACKs. The
 consumer validates actual subject against payload route before projection. SIGINT/
 SIGTERM stop intake; each operation is bounded. No topology or deployment is created.
@@ -45,18 +45,19 @@ writers; READ COMMITTED, five-second lock and fifteen-second statement timeouts 
 Checkpoint, inbox and successful applied-delivery key commit together. Duplicate
 inbox deliveries commit no new domain/progress writes, including process/response
 loss recovery. The key is opaque per-delivery evidence, not global consumer position
-or an inferred stream high-water mark. Local view revision remains zero/one.
+or an inferred stream high-water mark. Local view revision is zero/one before lifecycle, then one plus owner lifecycle revision.
 
 Conflicting authenticated owner data or source/ID envelope reuse commits one bounded
 unresolved envelope/key while preserving the checkpoint/applied marker. The first
-conflict is retained; further deliveries do not overwrite it or clear the gap.
+conflict is retained. Missing lifecycle predecessors can be backfilled and the retained
+missing event retried to clear its gap atomically; other conflicts stay blocked.
 An inbox identity conflict rolls back that transaction before a separate diagnostic
 gap transaction. No new successful inbox receipt/progress is recorded for unresolved
 work. It is NAKed after fifteen seconds, not ACKed or automatically discarded.
 At the broker delivery ceiling it remains unresolved for operator intervention.
 Malformed, foreign-scope and misrouted messages are quarantined before termination;
 storage/corruption failures remain retryable and do not become successful projection.
-Lifecycle records/routes are not activated until M04-PR13.
+See [Research lifecycle](research-lifecycle.md) for the owner route, backfill and upgrade rules.
 
 ## Internal read API
 
@@ -70,7 +71,9 @@ There is no HTTP write surface, CORS, public login or Gateway route in this slic
 | `/internal/v1/research-requests/{scope}/{id}` | 200 metadata with `scope`, `request_id`, `projection_revision`, `status`, `applied_delivery_key` |
 | `/internal/v1/research-requests/{scope}/{id}/outcome` | 200 exact canonical artifact/abstention record bytes for an intact non-gapped terminal view |
 
-Metadata status is `pending`, `artifact`, `abstained` or `gap`. Pending is a known
+Metadata status also includes lifecycle `invalidated`, `expired`, `withdrawn` and
+`corrected`, with optional last `lifecycle` fact. Closed outcome GETs return 410.
+Initial metadata status is `pending`, `artifact`, `abstained` or `gap`. Pending is a known
 tracked request with no terminal fact; it is not rejection. Not-yet-observed IDs
 return 404 `not_observed`, also not authoritative rejection. A pending outcome is
 202; a gapped outcome is 409 `gap`; foreign scope/Origin/Host is 403, invalid ID 400,
@@ -100,4 +103,5 @@ rebuild: reset disposable projection/inbox and consumer progress together and re
 authenticated retained owner publications. Do not delete inbox proofs independently,
 rewrite authoritative data, skip unresolved input or assume checksum equals storage
 authentication. Rollback stops serving/intake and preserves disposable state until a
-coordinated rebuild. [Gateway queries](gateway-queries.md) expose these observations; PR13 adds lifecycle transitions.
+coordinated rebuild. [Gateway queries](gateway-queries.md) expose these observations
+and [lifecycle transitions](research-lifecycle.md).

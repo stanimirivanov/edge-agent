@@ -189,6 +189,45 @@ async fn queries_preserve_observations_and_exact_terminal_bytes_without_forwarde
         assert!(!calls[0].1.contains_key("authorization"));
         assert!(!calls[0].1.contains_key("x-forwarded-host"));
     }
+    for (status, change) in [
+        (
+            "invalidated",
+            serde_json::json!({"transition":"invalidated"}),
+        ),
+        ("expired", serde_json::json!({"transition":"expired"})),
+        ("withdrawn", serde_json::json!({"transition":"withdrawn"})),
+        (
+            "corrected",
+            serde_json::json!({"transition":"corrected","replacement":"03".repeat(32)}),
+        ),
+    ] {
+        let mut metadata: serde_json::Value =
+            serde_json::from_slice(&view(status, 2, "latest".into()))?;
+        metadata["lifecycle"] = serde_json::json!({"scope":"offline","request_id":"request-1","artifact":"02".repeat(32),"revision":1,"effective_at_ms":200,"change":change});
+        let (gateway, _owner, _) = setup(
+            200,
+            serde_json::to_vec(&metadata)?,
+            "application/json",
+            false,
+        )
+        .await?;
+        let response = gateway.get(PATH, "").await?;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(body(&response)?.contains(status));
+        let (gateway, _owner, _) = setup(
+            410,
+            format!("{{\"status\":\"{status}\"}}").into_bytes(),
+            "application/json",
+            false,
+        )
+        .await?;
+        assert!(
+            gateway
+                .get(&format!("{PATH}/outcome"), "")
+                .await?
+                .starts_with("HTTP/1.1 410")
+        );
+    }
     for (code, status, suffix) in [
         (202, "pending", "/outcome"),
         (409, "gap", "/outcome"),

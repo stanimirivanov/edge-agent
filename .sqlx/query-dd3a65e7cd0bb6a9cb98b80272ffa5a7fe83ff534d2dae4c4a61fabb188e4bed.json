@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_research_views SET gap_envelope=NULL,gap_delivery_key=NULL WHERE caller_scope=$1 AND request_id=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd3a65e7cd0bb6a9cb98b80272ffa5a7fe83ff534d2dae4c4a61fabb188e4bed"
+}

@@ -133,7 +133,6 @@ fn reordered_lifecycle_records_remain_explicit_gaps_without_cursor_or_state_adva
     view.apply(record.clone())?;
     let terminal = view.checkpoint()?;
     assert_eq!(view.apply(change.clone()), Err(Error::Gap));
-    assert_eq!(view.apply(lifecycle(&record, 1)?), Err(Error::Gap));
     let mut wrong = change;
     if let ResearchRecord::Lifecycle(c) = &mut wrong {
         c.artifact = "09".repeat(32);
@@ -197,5 +196,43 @@ fn restore_rejects_corruption_wrong_anchor_versions_and_rechecks_sealed_outcomes
     let mut noncanonical = serde_json::to_vec_pretty(&value)?;
     noncanonical.extend(Sha256::digest(&noncanonical));
     assert!(ResearchProjection::restore(req, &noncanonical).is_err());
+    Ok(())
+}
+#[test]
+fn lifecycle_replay_duplicates_gaps_and_checkpoint_versions_preserve_original_bytes() -> Result {
+    let record = artifact()?;
+    let req = request(&record)?;
+    let mut view = ResearchProjection::new(req.clone())?;
+    view.apply(record.clone())?;
+    let original = view.outcome_bytes().ok_or("outcome")?.to_vec();
+    let mut first = lifecycle(&record, 1)?;
+    if let ResearchRecord::Lifecycle(e) = &mut first {
+        e.change = LifecycleChange::Invalidated;
+    }
+    let mut second = lifecycle(&record, 2)?;
+    if let ResearchRecord::Lifecycle(e) = &mut second {
+        e.change = LifecycleChange::Withdrawn;
+    }
+    assert_eq!(view.apply(second.clone()), Err(Error::Gap));
+    assert_eq!(view.apply(first.clone())?, ReplayOutcome::Applied);
+    let after_first = view.checkpoint()?;
+    assert_eq!(view.status(), ResearchStatus::Invalidated);
+    assert_eq!(view.apply(first.clone())?, ReplayOutcome::Duplicate);
+    assert_eq!(view.checkpoint()?, after_first);
+    view = ResearchProjection::restore(req.clone(), &after_first)?;
+    assert_eq!(view.apply(second.clone())?, ReplayOutcome::Applied);
+    assert_eq!(view.status(), ResearchStatus::Withdrawn);
+    assert_eq!(view.revision(), 3);
+    assert_eq!(view.outcome_bytes(), Some(original.as_slice()));
+    let final_bytes = view.checkpoint()?;
+    assert_eq!(view.apply(first)?, ReplayOutcome::Duplicate);
+    assert_eq!(view.apply(second)?, ReplayOutcome::Duplicate);
+    assert_eq!(view.apply(lifecycle(&record, 2)?), Err(Error::Conflict));
+    assert_eq!(view.apply(lifecycle(&record, 3)?), Err(Error::Conflict));
+    assert_eq!(view.checkpoint()?, final_bytes);
+    assert_eq!(
+        ResearchProjection::restore(req, &final_bytes)?.checkpoint()?,
+        final_bytes
+    );
     Ok(())
 }
