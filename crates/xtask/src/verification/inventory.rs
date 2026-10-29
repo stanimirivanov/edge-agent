@@ -806,6 +806,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "gateway-http",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-gateway",
+                "--test",
+                "http",
+                "--",
+            ],
+            "Bounded local HTTP validation, caller binding and acknowledgement timing; no database required.",
+        ),
+        check(
             "research-rendering",
             "T2",
             &["verify", "test"],
@@ -1483,6 +1499,21 @@ pub(super) fn checks() -> Vec<Check> {
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
                         "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
                         "published_settlement_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
+            "gateway-http" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "acknowledgement_waits_for_durable_admission",
+                        "malformed_foreign_browser_and_oversized_inputs_never_reach_storage",
+                        "conflicts_and_unavailable_commits_return_safe_non_success_responses",
+                        "serving_requires_explicit_loopback_database_schema_and_scope",
+                        "descriptor_commands_remain_available_without_serving_configuration",
                     ],
                     ignored: false,
                 });

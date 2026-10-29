@@ -144,6 +144,16 @@ struct Target {
     identities: &'static [&'static str],
 }
 
+const GATEWAY_ADMISSION: Target = Target {
+    package: "edgeagent-gateway",
+    name: "admission",
+    identities: &[
+        "http_retries_restart_and_conflicting_reuse_preserve_one_command",
+        "concurrent_admission_and_separate_scopes_are_idempotent",
+        "statement_and_deferred_commit_failures_never_acknowledge_or_retain_intent",
+        "immutable_admission_and_corrupt_retained_outbox_fail_closed",
+    ],
+};
 const RESEARCH_PERSISTENCE: Target = Target {
     package: "edgeagent-research-postgres",
     name: "persistence",
@@ -303,6 +313,12 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "gateway-admission",
+            &GATEWAY_ADMISSION,
+            POSTGRES,
+            "Real Gateway HTTP acceptance after request/outbox commit, retries, scope isolation, contention, rollback and integrity refusal.",
+        ),
         suite(
             "research-persistence",
             &RESEARCH_PERSISTENCE,
@@ -635,6 +651,7 @@ fn suite(
 pub(super) fn ignored_inventory() -> Vec<&'static str> {
     let mut identities = vec!["messaging::tests::payload_decode_throughput_probe"];
     for target in [
+        GATEWAY_ADMISSION,
         RESEARCH_PERSISTENCE,
         PUBLISH,
         CONSUME,
@@ -955,7 +972,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 40);
+        assert_eq!(checks.len(), 41);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -970,9 +987,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        // Includes the owned finite offline runtime and five Research PostgreSQL proofs.
-        assert_eq!(inventory.len(), 118);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 118);
+        // Includes Research completion and four Gateway admission transaction proofs.
+        assert_eq!(inventory.len(), 122);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 122);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

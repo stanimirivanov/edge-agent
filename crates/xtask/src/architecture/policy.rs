@@ -154,7 +154,12 @@ pub(super) const PACKAGE_POLICIES: &[PackagePolicy] = &[
     PackagePolicy {
         name: "edgeagent-gateway",
         role: CrateRole::CompositionRoot,
-        normal: &["edgeagent-contracts", "edgeagent-service-runtime"],
+        normal: &[
+            "edgeagent-contracts",
+            "edgeagent-service-runtime",
+            "edgeagent-outbox-postgres",
+            "edgeagent-research-application",
+        ],
         development: NONE,
         build: NONE,
     },

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT to_regclass('edgeagent_gateway_requests') IS NOT NULL AND to_regclass('edgeagent_message_outbox') IS NOT NULL AS \"ready!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ready!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6652d457664283a5f3d772f38ed29c9e4f8af1641a45a3a4d5215896536e18df"
+}
