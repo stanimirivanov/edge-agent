@@ -80,6 +80,8 @@ For M04 versioned research payloads, read [research contracts](development/resea
 
 For M04 frozen evidence eligibility, read [research evidence](development/research-evidence.md).
 
+For M04 deterministic raw-price momentum, read [research momentum](development/research-momentum.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object
