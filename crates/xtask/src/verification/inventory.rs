@@ -1124,6 +1124,8 @@ pub(super) fn checks() -> Vec<Check> {
                     expected: vec![
                         "offline::tests::offline_mode_rejects_vendor_and_live_flags_before_infrastructure",
                         "offline::tests::compiled_profile_is_pinned_and_cancellation_cannot_activate_a_source",
+                        "offline::tests::history_recipes_preserve_legacy_identity_and_replay_exact_batches",
+                        "offline::tests::history_quality_accepts_complete_and_refuses_missing_or_action_mismatch",
                         "offline::tests::cleanup_never_infers_account_or_write_quiescence",
                         "offline::tests::profile_lock_excludes_a_second_owner_and_refuses_reinitialization",
                         "offline::tests::compiled_profile_passes_quality_and_creates_a_scoped_artifact",

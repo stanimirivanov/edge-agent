@@ -6,6 +6,37 @@ use edgeagent_market_data_replay::{OfflineMode, SyntheticDailySource, synthetic_
 use edgeagent_simulation_domain::ArtifactDigest;
 use std::num::NonZeroU32;
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum Recipe {
+    Single,
+    History,
+    Missing,
+    ActionMismatch,
+}
+impl Recipe {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Single => "single-v1",
+            Self::History => "history-v1",
+            Self::Missing => "history-missing-v1",
+            Self::ActionMismatch => "history-action-mismatch-v1",
+        }
+    }
+    pub fn parse(name: &str) -> Result<Self> {
+        [
+            Self::Single,
+            Self::History,
+            Self::Missing,
+            Self::ActionMismatch,
+        ]
+        .into_iter()
+        .find(|r| r.name() == name)
+        .ok_or_else(|| "unsupported invented recipe".into())
+    }
+    fn sessions(self) -> u8 {
+        if self == Self::Single { 1 } else { 6 }
+    }
+}
 const DAY: i64 = 86_400_000;
 pub(super) struct Job {
     pub record: AdmissionRecord,
@@ -17,8 +48,7 @@ pub(super) struct Job {
     actions: ReferenceHistory<CorporateAction>,
     coverage: ReferenceVersion<ActionCoverage>,
     symbol: Symbol,
-    bucket: EvidenceInterval,
-    day: SessionDate,
+    buckets: Vec<(SessionDate, EvidenceInterval)>,
     quality: DailyQualityPolicy,
 }
 
@@ -36,20 +66,24 @@ fn version<T>(value: T, known: UtcInstant) -> Result<ReferenceVersion<T>> {
     ))
 }
 impl Job {
+    #[cfg(test)]
     pub fn new(id: u128, admitted_ms: i64) -> Result<Self> {
+        Self::with_recipe(id, admitted_ms, Recipe::Single)
+    }
+    pub fn with_recipe(id: u128, admitted_ms: i64, recipe: Recipe) -> Result<Self> {
         let admitted = at(admitted_ms)?;
         let start_ms = admitted_ms
             .div_euclid(DAY)
             .checked_mul(DAY)
             // Daily quality requires twelve hours after bucket end. Two UTC dates
             // behind admission is eligible at every time of day, including midnight.
-            .and_then(|v| v.checked_sub(2 * DAY))
+            .and_then(|v| v.checked_sub((i64::from(recipe.sessions()) + 1) * DAY))
             .ok_or("invalid synthetic date")?;
         let date =
             chrono::DateTime::from_timestamp_millis(start_ms).ok_or("invalid synthetic date")?;
         let end_date = date
             .date_naive()
-            .succ_opt()
+            .checked_add_days(chrono::Days::new(u64::from(recipe.sessions())))
             .ok_or("invalid synthetic date")?;
         let day = SessionDate::new(date.year(), date.month(), date.day())?;
         let range = DateRange::new(
@@ -149,85 +183,143 @@ impl Job {
             admitted,
         )?;
         let mappings = ReferenceHistory::new(vec![mapping.clone()])?;
-        let calendar = ReferenceHistory::new(vec![version(
-            CalendarDay::new(
-                Venue::Xnys,
-                day,
-                SessionHours::Regular(SessionWindow::new(
-                    at(start_ms + 14 * 3_600_000)?,
-                    at(start_ms + 21 * 3_600_000)?,
-                )?),
-                "invented-session-v1",
-            )?,
-            admitted,
-        )?])?;
-        let actions = ReferenceHistory::new(vec![])?;
+        let mut calendar_days = Vec::new();
+        let mut buckets = Vec::new();
+        for index in 0..recipe.sessions() {
+            let start = start_ms + i64::from(index) * DAY;
+            let date =
+                chrono::DateTime::from_timestamp_millis(start).ok_or("invalid synthetic date")?;
+            let session = SessionDate::new(date.year(), date.month(), date.day())?;
+            calendar_days.push(ReferenceVersion::new(
+                ReferenceId::new(u128::from(index) + 1)?,
+                ReferenceRevision::new(1)?,
+                SourceId::new(1)?,
+                admitted,
+                [7; 32],
+                CalendarDay::new(
+                    Venue::Xnys,
+                    session,
+                    SessionHours::Regular(SessionWindow::new(
+                        at(start + 14 * 3_600_000)?,
+                        at(start + 21 * 3_600_000)?,
+                    )?),
+                    "invented-session-v1",
+                )?,
+            ));
+            buckets.push((
+                session,
+                EvidenceInterval::new(
+                    PreciseInstant::from_millis(at(start)?),
+                    PreciseInstant::from_millis(at(start + DAY)?),
+                )?,
+            ));
+        }
+        let calendar = ReferenceHistory::new(calendar_days)?;
+        let actions = ReferenceHistory::new(if recipe == Recipe::ActionMismatch {
+            vec![version(
+                CorporateAction::new(scope.instrument, day, ActionKind::Unsupported),
+                admitted,
+            )?]
+        } else {
+            vec![]
+        })?;
         let coverage = version(
             ActionCoverage::new(scope.instrument, range, at(admitted_ms + DAY)?),
             admitted,
         )?;
-        let bucket = EvidenceInterval::new(
-            PreciseInstant::from_millis(at(start_ms)?),
-            PreciseInstant::from_millis(at(start_ms + DAY)?),
-        )?;
-        let observation = CanonicalObservation::new(
-            ObservationContext::new(
-                scope.instrument,
-                capability,
-                TransformationRevision::new(1)?,
-                day,
-                &[],
-            )?,
-            ObservationVersion::new(ObservationId::new(1)?, ObservationRevision::new(1)?, None)?,
-            EvidenceTimes::new(
-                bucket.bounds().0,
-                None,
-                None,
-                PreciseInstant::from_millis(admitted),
-            )?,
-            None,
-            Some(ObservationValue::Bar(RawBar::new(
-                bucket,
-                BarCoverage::ProviderDay,
-                [UsdPrice::new(12345, 2)?; 4],
-                ShareVolume::new(0, 0)?,
-            )?)),
-        )?;
         let clock = PreciseInstant::from_millis(admitted);
         let feed = FeedId::new(1)?;
         let epoch = FeedEpoch::new(1)?;
-        let mut tracker = ContinuityTracker::new(
-            FeedScope::new(feed, capability, TransformationRevision::new(1)?, day),
-            epoch,
-            ContinuityMode::Snapshots,
-            ContinuityPolicy::new(
-                semantic,
-                8,
-                2,
-                Duration::from_secs(10),
-                Duration::from_secs(10),
-            )?,
-            clock,
-        )?;
-        tracker.ingest(epoch, clock, observation)?;
-        tracker.heartbeat(epoch, clock, None)?;
+        let mut trackers = Vec::new();
+        for (index, (session, bucket)) in buckets.iter().enumerate() {
+            if recipe == Recipe::Missing && index == 2 {
+                continue;
+            }
+            let observation = CanonicalObservation::new(
+                ObservationContext::new(
+                    scope.instrument,
+                    capability,
+                    TransformationRevision::new(1)?,
+                    *session,
+                    &[],
+                )?,
+                ObservationVersion::new(
+                    ObservationId::new(index as u128 + 1)?,
+                    ObservationRevision::new(1)?,
+                    None,
+                )?,
+                EvidenceTimes::new(
+                    bucket.bounds().0,
+                    None,
+                    None,
+                    PreciseInstant::from_millis(admitted),
+                )?,
+                None,
+                Some(ObservationValue::Bar(RawBar::new(
+                    *bucket,
+                    BarCoverage::ProviderDay,
+                    [UsdPrice::new(12345 + index as i128 * 100, 2)?; 4],
+                    ShareVolume::new(0, 0)?,
+                )?)),
+            )?;
+            let mut tracker = ContinuityTracker::new(
+                FeedScope::new(
+                    FeedId::new(index as u128 + 1)?,
+                    capability,
+                    TransformationRevision::new(1)?,
+                    *session,
+                ),
+                epoch,
+                ContinuityMode::Snapshots,
+                ContinuityPolicy::new(
+                    semantic,
+                    8,
+                    2,
+                    Duration::from_secs(10),
+                    Duration::from_secs(10),
+                )?,
+                clock,
+            )?;
+            tracker.ingest(epoch, clock, observation)?;
+            tracker.heartbeat(epoch, clock, None)?;
+            trackers.push((index, tracker));
+        }
+        let requirements = trackers
+            .iter()
+            .map(|(index, _)| {
+                Ok(EvidenceRequirement::new(
+                    FeedId::new(*index as u128 + 1)?,
+                    scope.instrument,
+                    contract,
+                    ContinuityRequirement::Snapshots,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let readiness = ReadinessPolicy::new(
             semantic,
-            Duration::from_secs(3 * 86_400),
-            Duration::from_secs(86_400),
-            &[EvidenceRequirement::new(
-                feed,
-                scope.instrument,
-                contract,
-                ContinuityRequirement::Snapshots,
-            )],
+            Duration::from_secs(if recipe == Recipe::Single {
+                3 * 86_400
+            } else {
+                90 * 86_400
+            }),
+            Duration::from_secs(if recipe == Recipe::Single {
+                86_400
+            } else {
+                6 * 86_400
+            }),
+            &requirements,
         )?;
-        let inputs = [EvidenceInput::new(
-            &tracker,
-            epoch,
-            ObservationId::new(1)?,
-            ObservationRevision::new(1)?,
-        )];
+        let inputs = trackers
+            .iter()
+            .map(|(index, tracker)| {
+                Ok(EvidenceInput::new(
+                    tracker,
+                    epoch,
+                    ObservationId::new(*index as u128 + 1)?,
+                    ObservationRevision::new(1)?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let ready = readiness.check(clock, &inputs)?;
         let routing = RoutingScope {
             source: scope.source,
@@ -274,14 +366,21 @@ impl Job {
             ListingId::new(1)?,
             quality,
         )?;
-        let retained = vec![synthetic_daily_bytes(
-            ready
-                .observations()
-                .first()
-                .ok_or("missing invented input")?,
-        )?];
+        let retained = ready
+            .observations()
+            .iter()
+            .map(|o| synthetic_daily_bytes(o).map_err(Into::into))
+            .collect::<Result<Vec<_>>>()?;
+        let implementation: &[u8] = if recipe == Recipe::Single {
+            include_bytes!("../../fixtures/offline-single-v1/fixture.rs")
+        } else {
+            include_bytes!("fixture.rs")
+        };
         let mut config = selected.binding_bytes()?;
-        config.extend_from_slice(include_bytes!("fixture.rs"));
+        config.extend_from_slice(implementation);
+        if recipe != Recipe::Single {
+            config.extend_from_slice(recipe.name().as_bytes());
+        }
         config.extend_from_slice(record.bytes());
         for bytes in &retained {
             config.extend_from_slice(bytes);
@@ -291,7 +390,7 @@ impl Job {
             &selected,
             &ready,
             &retained,
-            ArtifactDigest::of(include_bytes!("fixture.rs")),
+            ArtifactDigest::of(implementation),
             ArtifactDigest::of(&config),
             [0; 32],
         )?;
@@ -306,10 +405,27 @@ impl Job {
             actions,
             coverage,
             symbol,
-            bucket,
-            day,
+            buckets,
             quality,
         })
+    }
+    pub fn restore(record: &AdmissionRecord) -> Result<Self> {
+        for recipe in [
+            Recipe::Single,
+            Recipe::History,
+            Recipe::Missing,
+            Recipe::ActionMismatch,
+        ] {
+            let job = Self::with_recipe(
+                record.request().id.get(),
+                record.request().admitted_at.unix_millis(),
+                recipe,
+            )?;
+            if job.record == *record {
+                return Ok(job);
+            }
+        }
+        Err("offline_configuration_mismatch".into())
     }
     pub fn catalogs(&self) -> AuthorityCatalogs<'_> {
         AuthorityCatalogs {
@@ -327,7 +443,6 @@ impl Job {
             .catalogs()
             .admit(self.record.request(), access.now(), cancel)?;
         let batch = self.source.fetch(&authority, cancel).await?;
-        let buckets = [(self.day, self.bucket)];
         let series = DailySeriesSpec {
             instrument: self.record.request().scope.instrument,
             listing: ListingId::new(1)?,
@@ -336,7 +451,7 @@ impl Job {
             range: self.record.request().range,
             cutoff: access.now(),
             provider: batch.provider,
-            buckets: &buckets,
+            buckets: &self.buckets,
         };
         Ok(TerminalProposal::ready(
             &self.record,
