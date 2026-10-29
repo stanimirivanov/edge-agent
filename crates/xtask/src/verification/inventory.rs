@@ -822,6 +822,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded local HTTP validation, caller binding and acknowledgement timing; no database required.",
         ),
         check(
+            "gateway-query-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-gateway",
+                "--test",
+                "query",
+                "--",
+            ],
+            "Scoped Gateway/projector HTTP queries, exact outcomes, observation states, upstream bounds and failure refusal; no database required.",
+        ),
+        check(
             "projector-query-contracts",
             "T2",
             &["verify", "test"],
@@ -1582,6 +1598,20 @@ pub(super) fn checks() -> Vec<Check> {
                         "conflicts_and_unavailable_commits_return_safe_non_success_responses",
                         "serving_requires_explicit_loopback_database_schema_and_scope",
                         "descriptor_commands_remain_available_without_serving_configuration",
+                    ],
+                    ignored: false,
+                });
+            }
+            "gateway-query-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "query_scope_host_origin_and_invalid_ids_are_refused_before_upstream",
+                        "queries_preserve_observations_and_exact_terminal_bytes_without_forwarded_identity",
+                        "invalid_oversized_redirected_and_unavailable_projector_responses_fail_closed",
+                        "stalled_projector_is_bounded_and_configuration_cannot_redirect_authority",
                     ],
                     ignored: false,
                 });

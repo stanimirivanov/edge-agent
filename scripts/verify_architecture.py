@@ -222,7 +222,7 @@ PACKAGE_RULES = {
         "bin",
         SERVICE_DEPENDENCIES | frozenset({
             "edgeagent-outbox-postgres", "edgeagent-research-application",
-            "axum", "serde", "serde_json", "sqlx", "tokio", "url",
+            "axum", "reqwest", "rustls", "serde", "serde_json", "sqlx", "tokio", "url",
         }),
         frozenset({"futures-util"}),
     ),

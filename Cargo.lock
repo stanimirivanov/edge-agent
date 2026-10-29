@@ -743,6 +743,8 @@ dependencies = [
  "edgeagent-research-application",
  "edgeagent-service-runtime",
  "futures-util",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sqlx",

@@ -2,4 +2,5 @@
 #![forbid(unsafe_code)]
 pub mod admission;
 pub mod http;
+pub mod query;
 pub mod runtime;

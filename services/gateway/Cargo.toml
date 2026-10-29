@@ -12,6 +12,8 @@ edgeagent-contracts.workspace = true
 edgeagent-service-runtime.workspace = true
 
 axum.workspace = true
+reqwest = { workspace = true, features = ["rustls-no-provider"] }
+rustls.workspace = true
 edgeagent-outbox-postgres.workspace = true
 edgeagent-research-application.workspace = true
 serde.workspace = true

@@ -182,8 +182,16 @@ const ROUTES: &[Route] = &[
     },
     Route {
         matcher: Matcher::Prefix("services/gateway/"),
-        guides: &["docs/development/gateway-admission.md"],
-        checks: &["gateway-http", "gateway-admission", "sqlx-metadata"],
+        guides: &[
+            "docs/development/gateway-admission.md",
+            "docs/development/gateway-queries.md",
+        ],
+        checks: &[
+            "gateway-http",
+            "gateway-query-contracts",
+            "gateway-admission",
+            "sqlx-metadata",
+        ],
     },
     Route {
         matcher: Matcher::Prefix("crates/research-postgres/"),
