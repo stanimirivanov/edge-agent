@@ -7,6 +7,7 @@
 
 mod checkpoint;
 pub mod evaluation;
+pub mod research;
 
 use edgeagent_contracts::audit::{AccountAuditFrame, AccountAuditState};
 use sha2::{Digest, Sha256};
@@ -22,7 +23,7 @@ pub enum ReplayError {
     Gap,
     /// Different content at an already retained revision or predecessor.
     Conflict,
-    /// Account, run, configuration or risk policy does not match this view.
+    /// Owner/caller identity or immutable request/configuration does not match this view.
     Scope,
     /// Explicit non-evicting revision capacity exhausted.
     Capacity,
@@ -34,12 +35,12 @@ impl fmt::Display for ReplayError {
 }
 impl std::error::Error for ReplayError {}
 
-/// Result of applying a complete owner revision.
+/// Result of applying a complete owner fact or revision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplayOutcome {
     /// View advanced once.
     Applied,
-    /// Identical retained revision; no effects.
+    /// Identical retained fact or revision; no effects.
     Duplicate,
 }
 
