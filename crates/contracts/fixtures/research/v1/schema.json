@@ -1,0 +1,401 @@
+{
+  "$defs": {
+    "AbstentionReason": {
+      "description": "Stable v1 terminal abstention vocabulary; additions require compatibility review.",
+      "oneOf": [
+        {
+          "const": "insufficient_history",
+          "description": "No complete lookback.",
+          "type": "string"
+        },
+        {
+          "const": "future_evidence",
+          "description": "Evidence was unavailable at decision time.",
+          "type": "string"
+        },
+        {
+          "const": "stale_evidence",
+          "description": "Evidence exceeded the selected freshness policy.",
+          "type": "string"
+        },
+        {
+          "const": "invalid_evidence",
+          "description": "Conflicting or corrupt evidence.",
+          "type": "string"
+        },
+        {
+          "const": "unsupported_universe",
+          "description": "Selected instruments cannot be evaluated by this implementation.",
+          "type": "string"
+        },
+        {
+          "const": "missing_entitlement",
+          "description": "Evidence use is not authorized.",
+          "type": "string"
+        },
+        {
+          "const": "no_eligible_candidate",
+          "description": "No candidate passes the selected minimum policy.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "description": "Owner-authenticated immutable evidence reference; never a fetch URL.",
+      "properties": {
+        "available_at_ms": {
+          "description": "Evidence availability in Unix milliseconds, including processing delay.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "digest": {
+          "description": "SHA-256 of exact retained evidence bytes.",
+          "type": "string"
+        },
+        "instrument": {
+          "description": "Stable instrument token.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instrument",
+        "digest",
+        "available_at_ms"
+      ],
+      "type": "object"
+    },
+    "LifecycleChange": {
+      "description": "Append-only lifecycle change; validation of prior owner state belongs to the application.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Owner invalidated the artifact.",
+          "properties": {
+            "transition": {
+              "const": "invalidated",
+              "type": "string"
+            }
+          },
+          "required": [
+            "transition"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Owner withdrew the artifact.",
+          "properties": {
+            "transition": {
+              "const": "withdrawn",
+              "type": "string"
+            }
+          },
+          "required": [
+            "transition"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The explicit artifact expiry was reached.",
+          "properties": {
+            "transition": {
+              "const": "expired",
+              "type": "string"
+            }
+          },
+          "required": [
+            "transition"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A separately committed artifact replaces this one.",
+          "properties": {
+            "replacement": {
+              "description": "SHA-256 of the replacement artifact record.",
+              "type": "string"
+            },
+            "transition": {
+              "const": "corrected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "transition",
+            "replacement"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RankedCandidate": {
+      "additionalProperties": false,
+      "description": "One ranked candidate; score is a dimensionless return in parts per million.",
+      "properties": {
+        "instrument": {
+          "description": "Instrument from the requested universe.",
+          "type": "string"
+        },
+        "score_ppm": {
+          "description": "Checked, policy-rounded momentum score; no floating-point JSON.",
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "instrument",
+        "score_ppm"
+      ],
+      "type": "object"
+    },
+    "ResearchAbstention": {
+      "additionalProperties": false,
+      "description": "Accepted request with a terminal evidence-policy abstention, not an ingress rejection.",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/AbstentionReason",
+          "description": "Stable reason, without private provider diagnostics."
+        },
+        "request": {
+          "$ref": "#/$defs/ResearchRequest",
+          "description": "Exact admitted request."
+        }
+      },
+      "required": [
+        "request",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ResearchArtifact": {
+      "additionalProperties": false,
+      "description": "Immutable deterministic result. Scenario/risk outputs are explicitly unavailable in v1.",
+      "properties": {
+        "evidence": {
+          "description": "Complete retained evidence census, sorted by instrument and digest.",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "type": "array"
+        },
+        "expires_at_ms": {
+          "description": "Expiry cutoff, Unix milliseconds; later expiry is an appended lifecycle event.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "explanation": {
+          "description": "Bounded deterministic explanation; never establishes facts or policy authority.",
+          "type": "string"
+        },
+        "ranking": {
+          "description": "Ordered eligible candidates; score descending, instrument ascending on ties.",
+          "items": {
+            "$ref": "#/$defs/RankedCandidate"
+          },
+          "type": "array"
+        },
+        "request": {
+          "$ref": "#/$defs/ResearchRequest",
+          "description": "Exact admitted request and its pinned policy identities."
+        },
+        "scenarios": {
+          "$ref": "#/$defs/Unavailable",
+          "description": "Explicit unavailable value; no invented entry/target/risk illustrations."
+        }
+      },
+      "required": [
+        "request",
+        "ranking",
+        "evidence",
+        "expires_at_ms",
+        "explanation",
+        "scenarios"
+      ],
+      "type": "object"
+    },
+    "ResearchLifecycle": {
+      "additionalProperties": false,
+      "description": "Owner-authenticated lifecycle fact; not public command authority.",
+      "properties": {
+        "artifact": {
+          "description": "SHA-256 of immutable original artifact record bytes.",
+          "type": "string"
+        },
+        "change": {
+          "$ref": "#/$defs/LifecycleChange",
+          "description": "Explicit owner transition."
+        },
+        "effective_at_ms": {
+          "description": "Effective Unix milliseconds; application verifies against prior state.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "request_id": {
+          "description": "Request identity.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Consecutive owner revision, starting at one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scope": {
+          "description": "Caller scope.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "request_id",
+        "artifact",
+        "revision",
+        "effective_at_ms",
+        "change"
+      ],
+      "type": "object"
+    },
+    "ResearchRequest": {
+      "additionalProperties": false,
+      "description": "Bounded research intent; policy configuration is identified, not interpreted here.",
+      "properties": {
+        "configuration": {
+          "description": "Immutable strategy/numeric/evidence policy configuration digest.",
+          "type": "string"
+        },
+        "decision_at_ms": {
+          "description": "Point-in-time decision cutoff, Unix milliseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "implementation": {
+          "description": "Immutable implementation revision digest.",
+          "type": "string"
+        },
+        "instruments": {
+          "description": "Explicit historical universe, in stable instrument-token order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lookback_sessions": {
+          "description": "Lookback in trading sessions; not calendar days or holding horizon.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "request_id": {
+          "description": "Caller-scoped stable request token; not a CloudEvents delivery ID.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Explicit caller/tenant scope supplied by authenticated ingress.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "scope",
+        "implementation",
+        "configuration",
+        "decision_at_ms",
+        "lookback_sessions",
+        "instruments"
+      ],
+      "type": "object"
+    },
+    "Unavailable": {
+      "description": "Explicit unavailable scenario/risk output; null, omission and numeric zero are different.",
+      "oneOf": [
+        {
+          "const": "not_qualified",
+          "description": "Requires a separately qualified scenario/risk contract.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "urn:edgeagent:schema:research:record:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Versioned record union. Raw DTO deserialization alone does not validate semantics.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "description": "Request v1.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ResearchRequest"
+        },
+        "kind": {
+          "const": "research.request.v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "Artifact v1.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ResearchArtifact"
+        },
+        "kind": {
+          "const": "research.artifact.v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "Abstention v1.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ResearchAbstention"
+        },
+        "kind": {
+          "const": "research.abstention.v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "Lifecycle fact v1.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ResearchLifecycle"
+        },
+        "kind": {
+          "const": "research.lifecycle.v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ResearchRecord"
+}

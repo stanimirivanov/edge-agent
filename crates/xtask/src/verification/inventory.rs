@@ -806,6 +806,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "research-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-contracts",
+                "--test",
+                "research",
+                "--features",
+                "schema,serde_json/preserve_order",
+                "--",
+            ],
+            "Research v1 canonical fixtures, structural schema freshness and fail-closed validation; no runtime activation.",
+        ),
+        check(
             "message-schema-contracts",
             "T2",
             &["verify", "test"],
@@ -1413,6 +1431,21 @@ pub(super) fn checks() -> Vec<Check> {
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
                         "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
                         "published_settlement_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "frozen_records_round_trip_and_bind_exact_content",
+                        "invalid_shapes_versions_bounds_and_semantics_are_rejected",
+                        "raw_boundaries_reject_duplicates_noncanonical_and_oversize_without_leaking",
+                        "published_schema_matches_frozen_v1_inventory",
+                        "lifecycle_reasons_and_candidate_order_are_stable",
                     ],
                     ignored: false,
                 });

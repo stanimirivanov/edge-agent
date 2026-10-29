@@ -1,0 +1,1 @@
+{"data":{"configuration":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","decision_at_ms":100,"implementation":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","instruments":["AAA"],"lookback_sessions":5,"request_id":"request-01","scope":"offline"},"kind":"research.request.v1"}

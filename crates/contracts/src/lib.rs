@@ -10,6 +10,7 @@ pub mod evidence;
 pub mod execution;
 mod message_type;
 mod messaging;
+pub mod research;
 mod routing;
 pub mod settlement;
 pub mod simulation;
