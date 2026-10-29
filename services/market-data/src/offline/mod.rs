@@ -4,6 +4,7 @@ mod config;
 mod fixture;
 mod handling;
 mod policy;
+mod research;
 use handling::handle;
 #[cfg(test)]
 mod tests;
@@ -104,6 +105,17 @@ async fn execute(config: &config::Config) -> Result {
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
         let mut confirmed = config.confirmed.clone();
+        if config.command == "offline-research-once" {
+            use std::io::Read as _;
+            let mut bytes=Vec::new();
+            std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
+            let envelope=MessageEnvelope::from_json(&bytes)?;
+            let event=research::fulfil(pool.clone(), &ledger, &storage, &envelope,
+                config.request.ok_or("missing owner acquisition")?,
+                &std::env::var("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?, &Cancellation::default()).await?;
+            println!("{}",String::from_utf8(event.to_json()?)?);
+            return Ok(());
+        }
         if config.command == "offline-maintain" {
             maintenance(&ledger, &storage, &confirmed).await?;
             return Ok(());
@@ -118,7 +130,7 @@ async fn execute(config: &config::Config) -> Result {
                 edgeagent_messaging::LeaseDuration::new(Duration::from_secs(30))?,
                 edgeagent_outbox_relay::MaxAttempts::new(3)?,
                 edgeagent_outbox_relay::RetryBackoff::new(Duration::from_secs(1), Duration::from_secs(60))?)?;
-            let registry = registry()?;
+            let registry = edgeagent_contracts::research_acquisition::registry()?;
             for _ in 0..config.messages {
                 let outcome = tokio::time::timeout(Duration::from_secs(15), edgeagent_outbox_relay::relay_once(&mut store, &registry, &publisher, &policy)).await??;
                 if matches!(outcome, edgeagent_outbox_relay::RelayOutcome::Idle) { break; }
@@ -130,7 +142,10 @@ async fn execute(config: &config::Config) -> Result {
         let stream = context.get_stream(config.stream.as_deref().ok_or("missing stream")?).await?;
         let consumer: async_nats::jetstream::consumer::PullConsumer = stream.get_consumer(config.consumer.as_deref().ok_or("missing consumer")?).await?;
         let c = &consumer.cached_info().config;
-        if c.filter_subject != DEFINITIONS[0].subject()? || !c.filter_subjects.is_empty()
+        let request_subject = if config.command == "offline-research-worker" {
+            edgeagent_contracts::research_acquisition::REQUEST.subject()?
+        } else { DEFINITIONS[0].subject()? };
+        if c.filter_subject != request_subject || !c.filter_subjects.is_empty()
             || c.ack_wait < Duration::from_secs(30) || !(1..=3).contains(&c.max_deliver)
             || !(1..=32).contains(&c.max_ack_pending) {
             return Err("incompatible offline consumer bounds".into());
@@ -149,7 +164,13 @@ async fn execute(config: &config::Config) -> Result {
                 result = tokio::time::timeout(Duration::from_secs(30), consumer.receive()) => result??,
             };
             {
-            let work = tokio::time::timeout(Duration::from_secs(300), handle(&pool, &ledger, &storage, delivery, &cancel, &mut confirmed));
+            let work = tokio::time::timeout(Duration::from_secs(300), async {
+                if config.command == "offline-research-worker" {
+                    research::handle(&pool,&ledger,&storage,delivery,
+                        config.request.ok_or("missing owner acquisition")?,
+                        &std::env::var("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?,&cancel).await
+                } else { handle(&pool, &ledger, &storage, delivery, &cancel, &mut confirmed).await }
+            });
             tokio::pin!(work);
             tokio::select! {
                 result = &mut work => result??,

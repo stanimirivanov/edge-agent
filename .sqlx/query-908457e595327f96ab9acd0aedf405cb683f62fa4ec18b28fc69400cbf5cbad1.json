@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request,delivery,acquisition_id,acquisition_digest,admission,publication FROM edgeagent_research_evidence WHERE caller_scope=$1 AND request_id=$2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "delivery",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "delivery"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "acquisition_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "acquisition_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "acquisition_digest",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "acquisition_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "admission",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "admission"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "publication",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_evidence",
+            "name": "publication"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "908457e595327f96ab9acd0aedf405cb683f62fa4ec18b28fc69400cbf5cbad1"
+}

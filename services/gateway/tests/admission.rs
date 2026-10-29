@@ -7,8 +7,8 @@
 mod database;
 mod support;
 use database::Harness;
+use edgeagent_contracts::research_acquisition;
 use edgeagent_gateway::admission::{AdmissionStore, Kind, PostgresAdmission};
-use edgeagent_research_application::publication;
 use futures_util::FutureExt;
 use std::{panic::AssertUnwindSafe, sync::Arc};
 use support::*;
@@ -28,7 +28,7 @@ async fn http_retries_restart_and_conflicting_reuse_preserve_one_command() -> Re
                 .fetch_one(&h.pool)
                 .await?;
         let envelope = edgeagent_contracts::MessageEnvelope::from_json(&original)?;
-        assert!(publication::evaluation_request(&envelope)? == request());
+        assert!(research_acquisition::request(&envelope)? == request());
         assert!(
             server
                 .post(&serde_json::to_vec_pretty(&request())?, JSON)
@@ -65,6 +65,23 @@ async fn http_retries_restart_and_conflicting_reuse_preserve_one_command() -> Re
         assert_eq!(original, retained);
         drop(restarted);
         pool.close().await;
+        // Retained PR7 direct-evaluation admissions remain acknowledgeable after route migration.
+        let mut legacy=request(); legacy.request_id="legacy-pr7".into();
+        let record=edgeagent_contracts::research::ResearchRecord::Request(legacy.clone());
+        let (key,partition)=research_acquisition::binding(&legacy)?;
+        let mut wire:serde_json::Value=serde_json::from_slice(&original)?;
+        wire["type"]=edgeagent_research_application::publication::EVALUATE.message_type().into();
+        wire["data"]=serde_json::to_value(&record)?;
+        wire["id"]=key.clone().into(); wire["correlationid"]=key.clone().into();
+        wire["idempotencykey"]=key.into(); wire["subject"]=partition.clone().into();wire["partitionkey"]=partition.into();
+        let command=edgeagent_contracts::MessageEnvelope::from_json(&serde_json::to_vec(&wire)?)?;
+        let mut tx=h.pool.begin().await?;
+        sqlx::query("INSERT INTO edgeagent_gateway_requests(caller_scope,request_id,request,command) VALUES($1,$2,$3,$4)").bind(&legacy.scope).bind(&legacy.request_id).bind(record.canonical_bytes()?).bind(command.to_json()?).execute(&mut *tx).await?;
+        edgeagent_outbox_postgres::PostgresOutbox.enqueue(&mut tx,edgeagent_research_application::publication::EVALUATE,&command).await?;
+        tx.commit().await?;
+        let server=Server::new(Arc::new(PostgresAdmission::new(h.pool.clone(),"operator".into())?)).await?;
+        assert!(server.post(&serde_json::to_vec(&legacy)?,JSON).await?.starts_with("HTTP/1.1 202"));
+        assert_eq!(h.counts().await?,(2,2));
         Ok(())
     })
     .catch_unwind()

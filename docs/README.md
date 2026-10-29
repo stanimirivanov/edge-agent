@@ -84,6 +84,8 @@ For M04 deterministic raw-price momentum, read [research momentum](development/r
 
 For M04 ranked canonical outcomes, read [research rendering](development/research-rendering.md).
 
+For M04 owner-correlated offline evidence, read [research acquisition](development/research-acquisition.md) and [ADR-0083](decisions/0083-correlate-owner-approved-research-evidence.md).
+
 For M04 durable HTTP submission, read [Gateway admission](development/gateway-admission.md) and [ADR-0082](decisions/0082-admit-research-through-a-durable-local-gateway.md).
 
 For M04 atomic research completion, read [research persistence](development/research-persistence.md).

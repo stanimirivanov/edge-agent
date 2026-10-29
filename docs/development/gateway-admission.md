@@ -57,8 +57,8 @@ Do not point the service at Research's private completion tables.
 Admission stores canonical request and exact command bytes. A scoped primary key
 serializes concurrent retries; a separate READ COMMITTED read sees the winning
 commit. Exact equality reuses the original command; changed content conflicts.
-The existing EVALUATE definition binds Gateway source, scoped subject/partition and
-request digest. Fresh admission requires a fresh outbox row. Retained commands
+New admissions use the MarketData-owned fulfil-research-evidence definition, binding Gateway source, scoped subject/partition and
+request digest. Fresh admission requires a fresh outbox row. Retained PR7 EVALUATE commands remain unchanged and retryable. Retained commands
 must have intact routing/bytes; integrity failure refuses acknowledgement.
 Outbox rows must remain for the full admission lifetime; independent pruning is
 unsupported. Retention policy and relay are later slices. Rollback stops serving

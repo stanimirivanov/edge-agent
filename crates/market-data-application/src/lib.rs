@@ -3,6 +3,7 @@
 //! not credentials; recheck current catalogs before accepting results or using retained data.
 #![deny(missing_docs)]
 mod activation;
+pub mod research;
 mod supervision;
 pub use supervision::{
     RejectedStreamObservation, StreamDispatch, StreamLaneStatus, StreamStop, StreamSupervisor,
