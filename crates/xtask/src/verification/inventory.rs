@@ -822,6 +822,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Bounded local HTTP validation, caller binding and acknowledgement timing; no database required.",
         ),
         check(
+            "research-worker-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research",
+                "--test",
+                "contracts",
+                "--",
+            ],
+            "Deterministic owner-byte conversion, digest rejection, local configuration and descriptor compatibility.",
+        ),
+        check(
             "research-rendering",
             "T2",
             &["verify", "test"],
@@ -1532,6 +1548,18 @@ pub(super) fn checks() -> Vec<Check> {
                         "conflicts_and_unavailable_commits_return_safe_non_success_responses",
                         "serving_requires_explicit_loopback_database_schema_and_scope",
                         "descriptor_commands_remain_available_without_serving_configuration",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-worker-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "verified_bytes_produce_deterministic_outcomes_and_wrong_digest_never_ranks",
+                        "runtime_rejects_nonlocal_profiles_and_preserves_descriptor_commands",
                     ],
                     ignored: false,
                 });

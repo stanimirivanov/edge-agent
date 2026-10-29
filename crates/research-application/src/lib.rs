@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod publication;
+pub mod worker;
 
 use edgeagent_contracts::research::{
     AbstentionReason, EvidenceRef, RankedCandidate, ResearchAbstention, ResearchArtifact,
@@ -66,6 +67,18 @@ impl RenderedOutcome {
     pub fn digest(&self) -> &str {
         &self.digest
     }
+}
+/// Render an owner/policy-classified no-evidence outcome without inventing market facts.
+/// # Errors
+/// Rejects invalid request/reason contract combinations.
+pub fn abstain(
+    request: ResearchRequest,
+    reason: AbstentionReason,
+) -> Result<RenderedOutcome, EvaluationError> {
+    finish(ResearchRecord::Abstention(ResearchAbstention {
+        request,
+        reason,
+    }))
 }
 fn finish(record: ResearchRecord) -> Result<RenderedOutcome, EvaluationError> {
     let bytes = record

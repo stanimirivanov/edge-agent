@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request_id FROM edgeagent_research_completions LIMIT 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_completions",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e01bb0a39772c813bc0f0353884b0fe257613289224a9d42ab069fa7510bcc54"
+}

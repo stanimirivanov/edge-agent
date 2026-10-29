@@ -856,6 +856,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "relay-policy-contracts",
             "contracts-preserve-order",
             "gateway-http",
+            "research-worker-contracts",
             "research-rendering",
             "research-momentum",
             "research-evidence",

@@ -71,6 +71,33 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                     "offline worker failed closed: dependency, policy or confirmation failure"
                 );
             }
+            if args.first().is_some_and(|a| a == "offline-research-read") {
+                let mut cause = Some(error.as_ref() as &(dyn std::error::Error + 'static));
+                while let Some(e) = cause {
+                    if e.downcast_ref::<BudgetError>()
+                        .is_some_and(|e| e.kind() == BudgetErrorKind::Denied)
+                        || e.downcast_ref::<EvidenceStorageError>()
+                            .is_some_and(|e| e.kind() == EvidenceStorageErrorKind::Denied)
+                        || matches!(
+                            e.downcast_ref::<sqlx::Error>(),
+                            Some(sqlx::Error::RowNotFound)
+                        )
+                    {
+                        return std::process::ExitCode::from(77);
+                    }
+                    if e.downcast_ref::<BudgetError>()
+                        .is_some_and(|e| e.kind() == BudgetErrorKind::Storage)
+                        || e.downcast_ref::<EvidenceStorageError>()
+                            .is_some_and(|e| e.kind() == EvidenceStorageErrorKind::Backend)
+                        || e.downcast_ref::<sqlx::Error>().is_some()
+                        || e.downcast_ref::<std::io::Error>().is_some()
+                    {
+                        return std::process::ExitCode::from(75);
+                    }
+                    cause = e.source();
+                }
+                return std::process::ExitCode::from(65);
+            }
             std::process::ExitCode::from(2)
         }
     }
@@ -105,6 +132,23 @@ async fn execute(config: &config::Config) -> Result {
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
         let mut confirmed = config.confirmed.clone();
+        if config.command == "offline-research-read" {
+            use std::io::{Read as _,Write as _};
+            let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
+            let event=MessageEnvelope::from_json(&bytes)?;
+            let outcome=edgeagent_contracts::research_acquisition::ResearchEvidence::from_envelope(&event)?;
+            if outcome.request().scope!=std::env::var("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")? {return Err(BudgetError::new(BudgetErrorKind::Denied).into());}
+            let retained=edgeagent_market_data_postgres::PostgresResearchEvidence::new(pool.clone()).export(&event).await?;
+            if Some(retained.admission.request().id.get())!=config.request {return Err(BudgetError::new(BudgetErrorKind::Denied).into());}
+            let job=Job::restore(&retained.admission)?;
+            let access=Access{job:&job,captured:now()?};
+            let edgeagent_contracts::research_acquisition::ResearchEvidence::Ready{decision,..}=outcome else {return Err(BudgetError::new(BudgetErrorKind::Denied).into());};
+            let EvidenceOutcome::Ready{object}=&decision.outcome else {return Err(BudgetError::new(BudgetErrorKind::Invalid).into());};
+            let managed=RetainedEvidenceStorage::new(&storage,&ledger);
+            let artifact=managed.get(object,&access).await?;
+            std::io::stdout().write_all(artifact.bytes())?;
+            return Ok(());
+        }
         if config.command == "offline-research-once" {
             use std::io::Read as _;
             let mut bytes=Vec::new();

@@ -58,6 +58,28 @@ impl PostgresResearchEvidence {
         let request = research_acquisition::request(delivery).map_err(|_| invalid())?;
         sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_research_evidence_denials WHERE caller_scope=$1 AND request_id=$2) AS "denied!""#,request.scope,request.request_id).fetch_one(&self.pool).await.map_err(Error::storage)
     }
+    /// Authenticate a retained correlated publication before an owner-controlled object read.
+    /// # Errors
+    /// Rejects erased/pending/conflicting publication or corrupt retained outbox state.
+    pub async fn export(&self, event: &MessageEnvelope) -> Result<PendingResearchEvidence, Error> {
+        let outcome = ResearchEvidence::from_envelope(event).map_err(|_| invalid())?;
+        let request = outcome.request();
+        let mut tx = self.tx().await?;
+        Self::fence(&mut tx, request).await?;
+        let retained = Self::read(&mut tx, request).await?;
+        if retained
+            .publication
+            .as_ref()
+            .ok_or_else(|| Error::new(K::Denied))?
+            .to_json()
+            .map_err(|_| invalid())?
+            != event.to_json().map_err(|_| invalid())?
+        {
+            return Err(Error::new(K::Conflict));
+        }
+        tx.commit().await.map_err(Error::storage)?;
+        Ok(retained)
+    }
     async fn read(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         request: &ResearchRequest,

@@ -33,6 +33,35 @@ async fn pending_research_restarts_and_reordered_duplicates_reuse_one_acquisitio
             ResearchEvidence::from_envelope(&one)?,
             ResearchEvidence::Ready { .. }
         ));
+        let owner_lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(h.root.join("offline.lock"))?;
+        owner_lock.try_lock()?;
+        let busy = h
+            .run(
+                &["offline-research-read", "00000000000000000000000000000001"],
+                Some(&one.to_json()?),
+            )
+            .await?;
+        assert_eq!(busy.status.code(), Some(75));
+        assert!(busy.stdout.is_empty());
+        drop(owner_lock);
+        let exported = h
+            .run(
+                &["offline-research-read", "00000000000000000000000000000001"],
+                Some(&one.to_json()?),
+            )
+            .await?;
+        assert!(exported.status.success());
+        let ResearchEvidence::Ready { decision, .. } = ResearchEvidence::from_envelope(&one)?
+        else {
+            return Err("ready".into());
+        };
+        let EvidenceOutcome::Ready { object } = &decision.outcome else {
+            return Err("object".into());
+        };
+        DailyEvidenceArtifact::decode(&exported.stdout, &object.sha256)?;
         let duplicate = delivery(&request, "delivery-2")?;
         assert_eq!(h.once(&duplicate).await?.to_json()?, one.to_json()?);
         assert_eq!(h.once(&first).await?.to_json()?, one.to_json()?);
@@ -90,6 +119,14 @@ async fn pending_research_restarts_and_reordered_duplicates_reuse_one_acquisitio
         ledger
             .revoke_evidence_scope(&owner.retention_scope()?)
             .await?;
+        let denied = h
+            .run(
+                &["offline-research-read", "00000000000000000000000000000001"],
+                Some(&one.to_json()?),
+            )
+            .await?;
+        assert_eq!(denied.status.code(), Some(77));
+        assert!(denied.stdout.is_empty());
         ledger.retire_due_evidence(16).await?;
         assert!(bridge.denied(&first).await?);
         for table in [
