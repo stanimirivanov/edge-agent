@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod momentum;
+pub mod ranking;
 
 use edgeagent_market_data_domain::{InstrumentId, ListingId, SessionDate, UsdPrice};
 
@@ -176,6 +177,27 @@ impl EvidencePolicy {
             universe,
             sessions,
         })
+    }
+    /// Immutable owner-selected revisions and decision/freshness bounds for application binding.
+    #[must_use]
+    pub const fn binding(&self) -> PolicyBinding {
+        PolicyBinding {
+            decision_at_ms: self.decision_at_ms,
+            max_age_ms: self.max_age_ms,
+            implementation: self.implementation,
+            configuration: self.configuration,
+            calendar: self.calendar,
+        }
+    }
+    /// Exact historically selected supported instruments and listings, in stable order.
+    #[must_use]
+    pub fn universe(&self) -> &[SelectedInstrument] {
+        &self.universe
+    }
+    /// Exact selected open-session census, never inferred from current calendar state.
+    #[must_use]
+    pub fn sessions(&self) -> &[SessionDate] {
+        &self.sessions
     }
     /// Assess one frozen series per selected instrument, returning a sealed ordered view.
     /// This does not authenticate claims, establish licenses or calculate momentum.

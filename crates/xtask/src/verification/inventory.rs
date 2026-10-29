@@ -806,6 +806,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "research-rendering",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research-application",
+                "--test",
+                "rendering",
+                "--features",
+                "map-order-test",
+                "--",
+            ],
+            "Research request binding, deterministic ranking, canonical artifact/abstention fixtures and refusal paths; no runtime or publication claim.",
+        ),
+        check(
             "research-momentum",
             "T2",
             &["verify", "test"],
@@ -1465,6 +1483,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
                         "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
                         "published_settlement_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-rendering" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "canonical_artifact_and_abstention_match_frozen_bytes",
+                        "permutations_ties_and_session_order_preserve_identical_output",
+                        "mismatched_request_and_policy_bindings_fail_before_rendering",
+                        "failed_required_evidence_abstains_without_partial_rankings",
+                        "expiry_and_numeric_failure_never_publish_an_artifact",
+                        "canonical_identity_retains_revision_and_availability_lineage",
                     ],
                     ignored: false,
                 });

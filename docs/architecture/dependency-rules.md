@@ -19,6 +19,7 @@
 |---|---|---|
 | `edgeagent-contracts` | Contract | Stable component identities, descriptors, and validated CloudEvents envelopes |
 | `edgeagent-audit-domain` | Domain | Disposable revisioned account/order/risk views and checkpoints from checked owner exports; no persistence or risk authority |
+| `edgeagent-research-application` | Application | Bind admitted requests to selected policies and render deterministic ranked artifacts/abstentions; no effects |
 | `edgeagent-research-domain` | Domain | Pure frozen-evidence selection, deterministic eligibility and abstention; no effects or transport DTOs |
 | `edgeagent-market-data-domain` | Domain | Checked market values and observation/provenance primitives; no transport, persistence or provider types |
 | `edgeagent-market-data-replay` | Adapter | Invented daily source and P05 continuation bridge; no network, secrets, persistence or worker activation |
@@ -57,6 +58,7 @@ dependencies between workspace packages:
 |---|---|
 | `edgeagent-contracts` | None |
 | `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
+| `edgeagent-research-application` | `edgeagent-contracts`, `edgeagent-research-domain` |
 | `edgeagent-research-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-market-data-replay` | `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
