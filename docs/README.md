@@ -78,6 +78,8 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 
 For M04 versioned research payloads, read [research contracts](development/research-contracts.md).
 
+For M04 frozen evidence eligibility, read [research evidence](development/research-evidence.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

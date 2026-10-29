@@ -924,6 +924,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-research-domain"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-market-data-domain",
+]
+
+[[package]]
 name = "edgeagent-service-runtime"
 version = "0.1.0"
 dependencies = [

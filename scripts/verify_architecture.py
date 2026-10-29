@@ -159,6 +159,9 @@ PACKAGE_RULES = {
         "lib",
         MESSAGING_DEPENDENCIES,
     ),
+    "crates/research-domain": PackageRule(
+        "edgeagent-research-domain", "lib", frozenset({"edgeagent-market-data-domain"}),
+    ),
     "crates/market-data-domain": PackageRule(
         "edgeagent-market-data-domain", "lib", frozenset({"chrono", "chrono-tz"}),
     ),

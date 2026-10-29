@@ -189,3 +189,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0075](0075-support-linux-development-hosts.md) | Accepted | Support Linux development hosts. |
 | [ADR-0076](0076-version-deterministic-research-contracts.md) | Accepted | Version deterministic research contracts. |
 | [ADR-0077](0077-version-bounded-offline-history-recipes.md) | Accepted | Version bounded offline history recipes. |
+| [ADR-0078](0078-validate-frozen-research-evidence.md) | Accepted | Validate frozen research evidence. |
