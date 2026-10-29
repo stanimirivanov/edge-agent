@@ -21,3 +21,7 @@ workspace = true
 
 [features]
 schema = ["dep:schemars"]
+
+[[example]]
+name = "research_acquisition_schema"
+required-features = ["schema"]

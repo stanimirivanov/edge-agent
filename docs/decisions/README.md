@@ -194,3 +194,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0080](0080-render-ranked-research-outcomes.md) | Accepted | Render ranked research outcomes. |
 | [ADR-0081](0081-commit-research-completions-atomically.md) | Accepted | Commit research completions atomically. |
 | [ADR-0082](0082-admit-research-through-a-durable-local-gateway.md) | Accepted | Admit research through a durable local Gateway. |
+| [ADR-0083](0083-correlate-owner-approved-research-evidence.md) | Accepted | Correlate owner-approved research evidence. |

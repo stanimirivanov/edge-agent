@@ -144,6 +144,27 @@ struct Target {
     identities: &'static [&'static str],
 }
 
+const RESEARCH_EVIDENCE_BROKER: Target = Target {
+    package: "edgeagent-market-data",
+    name: "research_broker",
+    identities: &[
+        "broker_worker_commits_before_ack_relays_exact_outcome_and_quarantines_bad_correlation",
+    ],
+};
+const RESEARCH_EVIDENCE_PROCESSES: Target = Target {
+    package: "edgeagent-market-data",
+    name: "research_evidence",
+    identities: &[
+        "pending_research_restarts_and_reordered_duplicates_reuse_one_acquisition",
+        "unsupported_selection_and_revoked_owner_rights_abstain_without_objects",
+        "incomplete_owner_history_abstains_without_a_ready_reference",
+    ],
+};
+const RESEARCH_CORRELATION: Target = Target {
+    package: "edgeagent-market-data-postgres",
+    name: "research",
+    identities: &["correlation_commit_failures_preserve_pending_work_without_inbox_or_outbox"],
+};
 const GATEWAY_ADMISSION: Target = Target {
     package: "edgeagent-gateway",
     name: "admission",
@@ -313,6 +334,24 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "research-evidence-broker",
+            &RESEARCH_EVIDENCE_BROKER,
+            EVENT_SPINE,
+            "Actual JetStream delivery/confirmed ACK, duplicate process recovery, exact correlated outbox relay and poison quarantine before termination.",
+        ),
+        suite(
+            "research-evidence-processes",
+            &RESEARCH_EVIDENCE_PROCESSES,
+            POSTGRES,
+            "Separate offline worker processes recover pending correlations and owner receipts; duplicates, denial and quality refusal retain one outcome without providers.",
+        ),
+        suite(
+            "research-correlation-postgres",
+            &RESEARCH_CORRELATION,
+            POSTGRES,
+            "Real scoped correlation atomicity: forged ready refusal, statement/deferred-commit rollback and retained outbox integrity.",
+        ),
         suite(
             "gateway-admission",
             &GATEWAY_ADMISSION,
@@ -651,6 +690,9 @@ fn suite(
 pub(super) fn ignored_inventory() -> Vec<&'static str> {
     let mut identities = vec!["messaging::tests::payload_decode_throughput_probe"];
     for target in [
+        RESEARCH_EVIDENCE_BROKER,
+        RESEARCH_EVIDENCE_PROCESSES,
+        RESEARCH_CORRELATION,
         GATEWAY_ADMISSION,
         RESEARCH_PERSISTENCE,
         PUBLISH,
@@ -972,7 +1014,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 41);
+        assert_eq!(checks.len(), 44);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -987,9 +1029,9 @@ mod tests {
             }
         }
         let inventory = ignored_inventory();
-        // Includes Research completion and four Gateway admission transaction proofs.
-        assert_eq!(inventory.len(), 122);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 122);
+        // Includes owner research evidence process/correlation and Gateway admission proofs.
+        assert_eq!(inventory.len(), 127);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 127);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

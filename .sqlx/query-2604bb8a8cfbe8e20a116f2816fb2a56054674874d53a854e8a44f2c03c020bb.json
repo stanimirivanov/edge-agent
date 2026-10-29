@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM edgeagent_research_evidence_denials WHERE caller_scope=$1 AND request_id=$2) AS \"denied!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "denied!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2604bb8a8cfbe8e20a116f2816fb2a56054674874d53a854e8a44f2c03c020bb"
+}

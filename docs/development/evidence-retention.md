@@ -42,7 +42,10 @@ at its original command deadline. A live receipt is never an absence-of-use orph
 
 Retirement atomically keeps an opaque request-ID denial and removes admission,
 command accounting, receipt, owner-private inbox/outbox envelopes and publication
-ownership. The head belongs to the last publishing request; retiring an older
+ownership. Research evidence correlations participate in the same owner retirement:
+private admission/result and correlated inbox/outbox envelopes are erased, leaving
+only an opaque caller-scope/request denial that prevents rebinding. See
+[research acquisition](research-acquisition.md). The head belongs to the last publishing request; retiring an older
 snapshot cannot remove a newer head. Observation-version fingerprints remain only
 while another retained publication owns them. Erasure removes historical receipt
 replay and eventually resets a forgotten correction lane; no future correction may

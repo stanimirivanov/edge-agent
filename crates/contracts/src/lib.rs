@@ -11,6 +11,7 @@ pub mod execution;
 mod message_type;
 mod messaging;
 pub mod research;
+pub mod research_acquisition;
 mod routing;
 pub mod settlement;
 pub mod simulation;

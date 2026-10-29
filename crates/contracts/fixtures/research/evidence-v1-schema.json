@@ -1,0 +1,388 @@
+{
+  "$defs": {
+    "AbstentionReason": {
+      "description": "Stable v1 terminal abstention vocabulary; additions require compatibility review.",
+      "oneOf": [
+        {
+          "const": "insufficient_history",
+          "description": "No complete lookback.",
+          "type": "string"
+        },
+        {
+          "const": "future_evidence",
+          "description": "Evidence was unavailable at decision time.",
+          "type": "string"
+        },
+        {
+          "const": "stale_evidence",
+          "description": "Evidence exceeded the selected freshness policy.",
+          "type": "string"
+        },
+        {
+          "const": "invalid_evidence",
+          "description": "Conflicting or corrupt evidence.",
+          "type": "string"
+        },
+        {
+          "const": "unsupported_universe",
+          "description": "Selected instruments cannot be evaluated by this implementation.",
+          "type": "string"
+        },
+        {
+          "const": "missing_entitlement",
+          "description": "Evidence use is not authorized.",
+          "type": "string"
+        },
+        {
+          "const": "no_eligible_candidate",
+          "description": "No candidate passes the selected minimum policy.",
+          "type": "string"
+        }
+      ]
+    },
+    "AcquireEvidence": {
+      "additionalProperties": false,
+      "description": "Identity-only request for an owner-retained immutable admission record; no actor, URL or price.",
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/EvidenceId",
+          "description": "Immutable command identity, also the acquisition partition key."
+        },
+        "request_sha256": {
+          "$ref": "#/$defs/EvidenceDigest",
+          "description": "Digest binding the complete owner-admitted request, not an API capability."
+        }
+      },
+      "required": [
+        "request",
+        "request_sha256"
+      ],
+      "type": "object"
+    },
+    "EvidenceDecisionData": {
+      "additionalProperties": false,
+      "description": "Untrusted terminal event input. The validated wrapper prevents invalid object bounds/times.",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/EvidenceOutcome",
+          "description": "Mutually exclusive ready/rejected outcome."
+        },
+        "request": {
+          "$ref": "#/$defs/AcquireEvidence",
+          "description": "Exact acquisition request binding."
+        }
+      },
+      "required": [
+        "request",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "EvidenceDigest": {
+      "description": "Lowercase SHA-256; an all-zero digest is representable, unlike an identity.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "EvidenceId": {
+      "description": "Nonzero 128-bit lowercase hex transport identity; domain namespaces remain distinct.",
+      "maxLength": 32,
+      "minLength": 32,
+      "pattern": "^[0-9a-f]*[1-9a-f][0-9a-f]*$",
+      "type": "string"
+    },
+    "EvidenceObject": {
+      "additionalProperties": false,
+      "description": "Scoped object identity. Hashes/locations are not permission to read it.",
+      "properties": {
+        "audience": {
+          "$ref": "#/$defs/EvidenceId",
+          "description": "Licensed audience, not a bearer token."
+        },
+        "bytes": {
+          "description": "Exact encoded length, within the 4 MiB object limit.",
+          "format": "uint32",
+          "maximum": 4194304,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "delete_by": {
+          "$ref": "#/$defs/EvidenceTime",
+          "description": "Exclusive deletion/use deadline."
+        },
+        "replaces": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceDigest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Linked prior immutable snapshot, null for an original capture."
+        },
+        "rights": {
+          "$ref": "#/$defs/EvidenceVersion",
+          "description": "Exact selected rights version."
+        },
+        "sha256": {
+          "$ref": "#/$defs/EvidenceDigest",
+          "description": "Canonical object digest."
+        },
+        "storage": {
+          "$ref": "#/$defs/EvidenceId",
+          "description": "Storage scope; the adapter must also bind rights and audience."
+        }
+      },
+      "required": [
+        "sha256",
+        "bytes",
+        "storage",
+        "audience",
+        "rights",
+        "delete_by"
+      ],
+      "type": "object"
+    },
+    "EvidenceOutcome": {
+      "description": "Terminal outcome; a rejection cannot carry a usable object or synthetic prices.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Only publish after immutable storage and owner commit.",
+          "properties": {
+            "object": {
+              "$ref": "#/$defs/EvidenceObject",
+              "description": "Scoped canonical object identity."
+            },
+            "status": {
+              "const": "ready",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "object"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Terminal no-evidence result.",
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/EvidenceRejection",
+              "description": "Bounded reason, never provider text."
+            },
+            "status": {
+              "const": "rejected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EvidenceRejection": {
+      "description": "Stable payload-free terminal failure reason; details stay owner-private.",
+      "oneOf": [
+        {
+          "const": "rights",
+          "description": "Current rights unavailable.",
+          "type": "string"
+        },
+        {
+          "const": "conformance",
+          "description": "Provider contract not qualified.",
+          "type": "string"
+        },
+        {
+          "const": "quality",
+          "description": "Whole-series quality failed.",
+          "type": "string"
+        },
+        {
+          "const": "cancelled",
+          "description": "Caller cancelled.",
+          "type": "string"
+        },
+        {
+          "const": "deadline",
+          "description": "Command deadline elapsed.",
+          "type": "string"
+        },
+        {
+          "const": "budget",
+          "description": "Durable resource budget exhausted.",
+          "type": "string"
+        },
+        {
+          "const": "provider",
+          "description": "Provider failed terminally.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvidenceRevision": {
+      "description": "Exact nonzero u64 revision encoded as text, not a lossy JavaScript number.",
+      "maxLength": 20,
+      "minLength": 1,
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "type": "string"
+    },
+    "EvidenceTime": {
+      "additionalProperties": false,
+      "description": "Lossless UTC seconds/nanoseconds, independent from event/receipt semantics.",
+      "properties": {
+        "nanos": {
+          "description": "Nanosecond fraction, never rounded to milliseconds.",
+          "format": "uint32",
+          "maximum": 999999999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Signed Unix seconds within Gregorian years 1..9999.",
+          "format": "int64",
+          "maximum": 253402300799,
+          "minimum": -62135596800,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seconds",
+        "nanos"
+      ],
+      "type": "object"
+    },
+    "EvidenceVersion": {
+      "additionalProperties": false,
+      "description": "Exact service-owned logical reference version, not a database location.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/EvidenceId",
+          "description": "Nonzero reference identity."
+        },
+        "revision": {
+          "$ref": "#/$defs/EvidenceRevision",
+          "description": "Exact selected revision."
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ResearchRequest": {
+      "additionalProperties": false,
+      "description": "Bounded research intent; policy configuration is identified, not interpreted here.",
+      "properties": {
+        "configuration": {
+          "description": "Immutable strategy/numeric/evidence policy configuration digest.",
+          "type": "string"
+        },
+        "decision_at_ms": {
+          "description": "Point-in-time decision cutoff, Unix milliseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "implementation": {
+          "description": "Immutable implementation revision digest.",
+          "type": "string"
+        },
+        "instruments": {
+          "description": "Explicit historical universe, in stable instrument-token order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lookback_sessions": {
+          "description": "Lookback in trading sessions; not calendar days or holding horizon.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "request_id": {
+          "description": "Caller-scoped stable request token; not a CloudEvents delivery ID.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Explicit caller/tenant scope supplied by authenticated ingress.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "scope",
+        "implementation",
+        "configuration",
+        "decision_at_ms",
+        "lookback_sessions",
+        "instruments"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:edgeagent:schema:market-data:research-evidence:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Untrusted wire DTO; call validate/from_envelope before using references.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "description": "An existing owner terminal receipt identifies retained evidence, not read permission.",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/EvidenceDecisionData",
+          "description": "Exact owner acquisition decision."
+        },
+        "request": {
+          "$ref": "#/$defs/ResearchRequest",
+          "description": "Original immutable request."
+        },
+        "status": {
+          "const": "ready",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "request",
+        "decision"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "No usable evidence; no object or provider diagnostic can accompany this result.",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/AbstentionReason",
+          "description": "Stable research refusal vocabulary."
+        },
+        "request": {
+          "$ref": "#/$defs/ResearchRequest",
+          "description": "Original immutable request."
+        },
+        "status": {
+          "const": "abstained",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "request",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ResearchEvidence"
+}

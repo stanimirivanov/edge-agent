@@ -872,6 +872,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Pure research minimum-evidence policy, point-in-time boundaries and order-independent abstention; no authentication or I/O claim.",
         ),
         check(
+            "research-acquisition-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-contracts",
+                "--test",
+                "research_acquisition",
+                "--features",
+                "schema,serde_json/preserve_order",
+                "--",
+            ],
+            "Owner research evidence route/correlation, strict DTO refusal and frozen schema freshness.",
+        ),
+        check(
             "research-contracts",
             "T2",
             &["verify", "test"],
@@ -1561,6 +1579,18 @@ pub(super) fn checks() -> Vec<Check> {
                         "revisions_units_lineage_and_duplicate_sessions_cannot_pass",
                         "reason_priority_is_stable_under_every_small_permutation",
                         "malformed_selection_and_oversized_evidence_are_bounded",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-acquisition-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "request_and_outcome_reject_wrong_owner_route_scope_and_correlation",
+                        "correlated_evidence_schema_matches_frozen_inventory",
                     ],
                     ignored: false,
                 });

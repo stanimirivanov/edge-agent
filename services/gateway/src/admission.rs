@@ -1,4 +1,5 @@
 //! Gateway-owned scoped request and evaluation-command transaction.
+use edgeagent_contracts::research_acquisition::{self, REQUEST};
 use edgeagent_contracts::{
     Component, MessageEnvelope, MessageMetadata,
     research::{ResearchRecord, ResearchRequest},
@@ -110,10 +111,10 @@ fn command(request: &ResearchRequest, time: &str) -> Result<MessageEnvelope, Err
         MessageMetadata {
             id: key.clone(),
             source: Component::Gateway.source_uri().into(),
-            message_type: EVALUATE.message_type().into(),
+            message_type: REQUEST.message_type().into(),
             subject: partition.clone(),
             time: time.into(),
-            data_schema: EVALUATE.data_schema().into(),
+            data_schema: REQUEST.data_schema().into(),
             correlation_id: key.clone(),
             causation_id: format!("ingress-{key}"),
             idempotency_key: key,
@@ -153,7 +154,7 @@ impl AdmissionStore for PostgresAdmission {
         let inserted=sqlx::query!("INSERT INTO edgeagent_gateway_requests (caller_scope,request_id,request,command) VALUES ($1,$2,$3,$4) ON CONFLICT (caller_scope,request_id) DO NOTHING",request.scope,request.request_id,bytes,envelope).execute(&mut *tx).await.map_err(storage)?.rows_affected()==1;
         if inserted {
             let disposition = PostgresOutbox
-                .enqueue(&mut tx, EVALUATE, &candidate)
+                .enqueue(&mut tx, REQUEST, &candidate)
                 .await
                 .map_err(|e| Error::with_source(Kind::Storage, e))?;
             if disposition != EnqueueDisposition::Inserted {
@@ -166,13 +167,23 @@ impl AdmissionStore for PostgresAdmission {
             return Err(Error::new(Kind::Conflict));
         }
         let retained = MessageEnvelope::from_json(&row.command).map_err(|_| invariant())?;
-        if publication::evaluation_request(&retained).map_err(|_| invariant())? != request
+        let definition = if retained.message_type() == REQUEST.message_type() {
+            REQUEST
+        } else {
+            EVALUATE
+        };
+        let retained_request = if definition == REQUEST {
+            research_acquisition::request(&retained).map_err(|_| invariant())?
+        } else {
+            publication::evaluation_request(&retained).map_err(|_| invariant())?
+        };
+        if retained_request != request
             || retained.to_json().map_err(|_| invariant())? != row.command
         {
             return Err(invariant());
         }
-        let subject = EVALUATE.subject().map_err(|_| invariant())?;
-        let intact=sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_message_outbox WHERE message_source=$1 AND message_id=$2 AND envelope=$3 AND message_type=$4 AND transport_subject=$5) AS "intact!""#,retained.source(),retained.id(),row.command,EVALUATE.message_type(),subject).fetch_one(&mut *tx).await.map_err(storage)?;
+        let subject = definition.subject().map_err(|_| invariant())?;
+        let intact=sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_message_outbox WHERE message_source=$1 AND message_id=$2 AND envelope=$3 AND message_type=$4 AND transport_subject=$5) AS "intact!""#,retained.source(),retained.id(),row.command,definition.message_type(),subject).fetch_one(&mut *tx).await.map_err(storage)?;
         if !intact {
             return Err(invariant());
         }

@@ -92,6 +92,12 @@ impl Config {
                 let id = EvidenceId::new(&args[1]).map_err(|_| ConfigError("seed requires one canonical nonzero hexadecimal request identity"))?;
                 request = Some(u128::from_str_radix(id.as_str(), 16)?);
             }
+            "offline-research-once" | "offline-research-worker" if args.len() == 2 => {
+                let id=EvidenceId::new(&args[1]).map_err(|_|ConfigError("research requires one owner-installed acquisition ID"))?;
+                request=Some(u128::from_str_radix(id.as_str(),16)?);
+                let scope=required("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?;
+                if scope.is_empty() || scope.len()>64 || !scope.bytes().all(|b|b.is_ascii_alphanumeric() || b"._-".contains(&b)) {return Err(ConfigError("invalid research operator scope").into());}
+            }
             "offline-maintain" if (3..=18).contains(&args.len()) && args.get(1).is_some_and(|v| v == "--owner-confirmed-quiescence") => {
                 for id in &args[2..] { confirmed.insert(EvidenceId::new(id)?); }
             }
@@ -101,38 +107,46 @@ impl Config {
         let database = required("EDGEAGENT_POSTGRES_URL")?;
         local_endpoint(&database, &["postgres", "postgresql"])?;
         let root = PathBuf::from(required("EDGEAGENT_OFFLINE_ROOT")?);
-        let (broker, stream, consumer, messages) =
-            if matches!(command.as_str(), "offline-worker" | "offline-relay") {
-                let broker = required("EDGEAGENT_NATS_URL")?;
-                local_endpoint(&broker, &["nats", "tls"])?;
-                let stream = if command == "offline-worker" {
-                    required("EDGEAGENT_OFFLINE_STREAM")?
-                } else {
-                    String::new()
-                };
-                let consumer = if command == "offline-worker" {
-                    required("EDGEAGENT_OFFLINE_CONSUMER")?
-                } else {
-                    String::new()
-                };
-                if [&stream, &consumer].iter().any(|s| {
-                    s.len() > 64
-                        || !s
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
-                }) {
-                    return Err(ConfigError("invalid offline stream/consumer identity").into());
-                }
-                let messages = required("EDGEAGENT_OFFLINE_MAX_MESSAGES")?
-                    .parse::<u8>()
-                    .map_err(|_| ConfigError("EDGEAGENT_OFFLINE_MAX_MESSAGES must be 1..=16"))?;
-                if !(1..=16).contains(&messages) {
-                    return Err(ConfigError("EDGEAGENT_OFFLINE_MAX_MESSAGES must be 1..=16").into());
-                }
-                (Some(broker), Some(stream), Some(consumer), messages)
+        let (broker, stream, consumer, messages) = if matches!(
+            command.as_str(),
+            "offline-worker" | "offline-relay" | "offline-research-worker"
+        ) {
+            let broker = required("EDGEAGENT_NATS_URL")?;
+            local_endpoint(&broker, &["nats", "tls"])?;
+            let stream = if matches!(
+                command.as_str(),
+                "offline-worker" | "offline-research-worker"
+            ) {
+                required("EDGEAGENT_OFFLINE_STREAM")?
             } else {
-                (None, None, None, 0)
+                String::new()
             };
+            let consumer = if matches!(
+                command.as_str(),
+                "offline-worker" | "offline-research-worker"
+            ) {
+                required("EDGEAGENT_OFFLINE_CONSUMER")?
+            } else {
+                String::new()
+            };
+            if [&stream, &consumer].iter().any(|s| {
+                s.len() > 64
+                    || !s
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+            }) {
+                return Err(ConfigError("invalid offline stream/consumer identity").into());
+            }
+            let messages = required("EDGEAGENT_OFFLINE_MAX_MESSAGES")?
+                .parse::<u8>()
+                .map_err(|_| ConfigError("EDGEAGENT_OFFLINE_MAX_MESSAGES must be 1..=16"))?;
+            if !(1..=16).contains(&messages) {
+                return Err(ConfigError("EDGEAGENT_OFFLINE_MAX_MESSAGES must be 1..=16").into());
+            }
+            (Some(broker), Some(stream), Some(consumer), messages)
+        } else {
+            (None, None, None, 0)
+        };
         Ok(Self {
             command,
             database,
