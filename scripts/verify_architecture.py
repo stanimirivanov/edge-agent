@@ -220,7 +220,11 @@ PACKAGE_RULES = {
     "services/gateway": PackageRule(
         "edgeagent-gateway",
         "bin",
-        SERVICE_DEPENDENCIES,
+        SERVICE_DEPENDENCIES | frozenset({
+            "edgeagent-outbox-postgres", "edgeagent-research-application",
+            "axum", "serde", "serde_json", "sqlx", "tokio", "url",
+        }),
+        frozenset({"futures-util"}),
     ),
     "services/market-data": PackageRule(
         "edgeagent-market-data",

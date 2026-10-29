@@ -13,5 +13,19 @@ const DESCRIPTOR: ServiceDescriptor = ServiceDescriptor::new(
 );
 
 fn main() -> ExitCode {
-    run(DESCRIPTOR)
+    if std::env::args().skip(1).eq(["serve"]) {
+        let result = edgeagent_gateway::runtime::Config::parse(|name| std::env::var(name).ok())
+            .and_then(|config| {
+                tokio::runtime::Runtime::new()
+                    .map_err(|_| "gateway runtime unavailable")?
+                    .block_on(edgeagent_gateway::runtime::serve(config))
+            });
+        if let Err(error) = result {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+        ExitCode::SUCCESS
+    } else {
+        run(DESCRIPTOR)
+    }
 }
