@@ -941,6 +941,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgeagent-research-postgres"
+version = "0.1.0"
+dependencies = [
+ "edgeagent-contracts",
+ "edgeagent-inbox-postgres",
+ "edgeagent-market-data-domain",
+ "edgeagent-outbox-postgres",
+ "edgeagent-research-application",
+ "edgeagent-research-domain",
+ "futures-util",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "edgeagent-service-runtime"
 version = "0.1.0"
 dependencies = [

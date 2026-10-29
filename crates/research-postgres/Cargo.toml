@@ -1,0 +1,24 @@
+[package]
+name = "edgeagent-research-postgres"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-contracts.workspace = true
+edgeagent-research-application.workspace = true
+edgeagent-inbox-postgres.workspace = true
+edgeagent-outbox-postgres.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+edgeagent-research-domain.workspace = true
+edgeagent-market-data-domain.workspace = true
+futures-util.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

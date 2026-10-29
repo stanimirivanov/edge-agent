@@ -2,6 +2,8 @@
 //! The caller must authenticate owner/audience assertions and verify retained bytes.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+pub mod publication;
+
 use edgeagent_contracts::research::{
     AbstentionReason, EvidenceRef, RankedCandidate, ResearchAbstention, ResearchArtifact,
     ResearchRecord, ResearchRequest, Unavailable,

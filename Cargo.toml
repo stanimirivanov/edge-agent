@@ -4,6 +4,7 @@ members = [
     "crates/audit-domain",
     "crates/research-domain",
     "crates/research-application",
+    "crates/research-postgres",
     "crates/contracts",
     "crates/event-spine-conformance",
     "crates/inbox-handler",
@@ -38,6 +39,7 @@ license = "Apache-2.0"
 repository = "https://github.com/stanimirivanov/edge-agent"
 
 [workspace.dependencies]
+edgeagent-research-application = { path = "crates/research-application" }
 edgeagent-research-domain = { path = "crates/research-domain" }
 base64 = { version = "=0.23.1", default-features = false, features = ["std"] }
 fastwebsockets = { version = "=0.10.0", default-features = false }
