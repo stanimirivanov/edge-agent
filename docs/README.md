@@ -82,6 +82,8 @@ For M04 frozen evidence eligibility, read [research evidence](development/resear
 
 For M04 deterministic raw-price momentum, read [research momentum](development/research-momentum.md).
 
+For M04 ranked canonical outcomes, read [research rendering](development/research-rendering.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

@@ -1,0 +1,22 @@
+[package]
+name = "edgeagent-research-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+edgeagent-contracts.workspace = true
+edgeagent-research-domain.workspace = true
+
+[dev-dependencies]
+edgeagent-market-data-domain.workspace = true
+serde_json.workspace = true
+
+[features]
+map-order-test = ["serde_json/preserve_order"]
+
+[lints]
+workspace = true
