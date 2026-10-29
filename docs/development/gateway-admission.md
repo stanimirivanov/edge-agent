@@ -39,7 +39,8 @@ UTC admission time. No evidence availability or calculation is asserted by admis
 
 Success (including identical retry) is HTTP 202 with JSON
 `{"request_id":"request-1","scope":"operator","status":"accepted"}`.
-There is no query endpoint or Location link in this slice. Invalid input is 400,
+[Gateway queries](gateway-queries.md) optionally expose projector observations; admission
+adds no Location link. Invalid input is 400,
 foreign scope/browser Origin/nonlocal Host is 403, changed scoped ID content is
 409, oversized body is 413, unsupported media type is 415, unavailable/corrupt
 storage is 503. No raw error/payload is returned. Retry uncertain outcomes with the

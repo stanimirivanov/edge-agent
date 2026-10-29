@@ -100,4 +100,4 @@ rebuild: reset disposable projection/inbox and consumer progress together and re
 authenticated retained owner publications. Do not delete inbox proofs independently,
 rewrite authoritative data, skip unresolved input or assume checksum equals storage
 authentication. Rollback stops serving/intake and preserves disposable state until a
-coordinated rebuild. PR12 adds Gateway queries; PR13 adds lifecycle transitions.
+coordinated rebuild. [Gateway queries](gateway-queries.md) expose these observations; PR13 adds lifecycle transitions.

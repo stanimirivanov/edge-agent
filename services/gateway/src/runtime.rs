@@ -10,6 +10,7 @@ pub struct Config {
     listen: SocketAddr,
     database: PgConnectOptions,
     scope: String,
+    projector: Option<Arc<crate::query::ProjectorClient>>,
 }
 impl Config {
     /// Parse configuration without reading process-global environment in tests.
@@ -53,10 +54,15 @@ impl Config {
         let database = PgConnectOptions::from_str(&database)
             .map_err(|_| "invalid database URL")?
             .options([("search_path", schema.as_str())]);
+        let projector = read("EDGEAGENT_GATEWAY_PROJECTOR_URL")
+            .map(|url| crate::query::ProjectorClient::new(&url).map(Arc::new))
+            .transpose()
+            .map_err(|_| "invalid projector endpoint")?;
         Ok(Self {
             listen,
             database,
             scope,
+            projector,
         })
     }
 }
@@ -79,9 +85,12 @@ pub async fn serve(config: Config) -> Result<(), &'static str> {
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
         .map_err(|_| "gateway listener unavailable")?;
-    let result = axum::serve(listener, http::router(Arc::new(store)))
-        .with_graceful_shutdown(shutdown())
-        .await;
+    let result = axum::serve(
+        listener,
+        http::router_with_queries(Arc::new(store), config.projector),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await;
     pool.close().await;
     result.map_err(|_| "gateway server failed")
 }

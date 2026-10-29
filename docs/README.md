@@ -92,6 +92,8 @@ For M04 receipt-first Research execution, read [Research worker](development/res
 
 For M04 owner-correlated offline evidence, read [research acquisition](development/research-acquisition.md) and [ADR-0083](decisions/0083-correlate-owner-approved-research-evidence.md).
 
+For M04 Gateway Research queries, read [Gateway queries](development/gateway-queries.md) and [ADR-0087](decisions/0087-query-research-through-the-local-gateway.md).
+
 For M04 durable HTTP submission, read [Gateway admission](development/gateway-admission.md) and [ADR-0082](decisions/0082-admit-research-through-a-durable-local-gateway.md).
 
 For M04 atomic research completion, read [research persistence](development/research-persistence.md).

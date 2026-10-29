@@ -134,6 +134,14 @@ fn serving_requires_explicit_loopback_database_schema_and_scope() {
         )
     }
     assert!(Config::parse(config).is_ok());
+    assert!(
+        Config::parse(|key| if key == "EDGEAGENT_GATEWAY_PROJECTOR_URL" {
+            Some("http://127.0.0.1:8081".into())
+        } else {
+            config(key)
+        })
+        .is_ok()
+    );
     for (key, value) in [
         ("EDGEAGENT_GATEWAY_LISTEN", "0.0.0.0:8080"),
         (
@@ -144,6 +152,7 @@ fn serving_requires_explicit_loopback_database_schema_and_scope() {
             "EDGEAGENT_POSTGRES_URL",
             "postgresql://test@127.0.0.1/test?host=example.org",
         ),
+        ("EDGEAGENT_GATEWAY_PROJECTOR_URL", "http://example.org"),
         ("EDGEAGENT_GATEWAY_SCHEMA", "public"),
         ("EDGEAGENT_GATEWAY_SCOPE", ""),
     ] {

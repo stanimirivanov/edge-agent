@@ -45,7 +45,7 @@ proofs with `serde_json/preserve_order`. `cargo test --locked -p edgeagent-audit
 also exercises existing account replay/evaluation. The default gate includes the
 focused suite and its exact named discovery. No external service is required.
 
-The [projector runtime](projector-runtime.md) adds persistence/consumer/internal queries; PR12 adds Gateway queries; PR13
+The [projector runtime](projector-runtime.md) adds persistence/consumer/internal queries; [Gateway queries](gateway-queries.md) exposes observations; PR13
 adds lifecycle transitions. No schema migration, server, broker provisioning,
 provider access or artifact mutation is introduced here. Disposable views can be
 removed on rollback and rebuilt from authenticated retained owner facts.
