@@ -349,7 +349,7 @@ cargo test --locked -p edgeagent-messaging --test claimed_envelope --test auto_t
 cargo test --locked -p edgeagent-outbox-relay --lib stored_
 ```
 
-The existing Linux/Windows workspace gate runs these tests without a broker,
+The existing Linux workspace gate runs these tests without a broker,
 database, runtime installation, or new dependencies.
 The isolated `delivery_warning` integration test uses controlled manual polls
 to exercise unsettled drop, unpolled abandonment, pending cancellation,
@@ -374,7 +374,7 @@ cargo test --locked -p edgeagent-outbox-relay --test cancellation
 cargo test --locked -p edgeagent-messaging --doc
 ```
 
-The existing Linux/Windows workspace gate runs both executables and the
+The existing Linux workspace gate runs both executables and the
 commit-before-terminal-settlement doctest. PostgreSQL conformance separately
 proves inbox atomicity, exact quarantine equality, monotonic attempts, and
 same-owner lease fencing; JetStream conformance proves real settlement and

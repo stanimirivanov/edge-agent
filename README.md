@@ -2,6 +2,7 @@
 
 ## TL;DR
 
+- Development and CI require Linux; see [host support](docs/decisions/0075-support-linux-development-hosts.md).
 - EdgeAgent is an open-source, event-driven market research and dry-run trading platform implemented as a Rust monorepo.
 - One Cargo workspace produces independently deployable gateway, market-data, research, execution-simulator, and audit-projector components.
 - Deterministic services own evidence, analytics, policy, simulated fills, positions, and P&L; models may explain validated facts but cannot create them.

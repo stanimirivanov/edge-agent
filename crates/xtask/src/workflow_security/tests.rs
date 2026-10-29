@@ -331,7 +331,7 @@ fn self_hosted_runners_unbounded_jobs_and_matrix_injection_are_rejected() {
     );
     reject(
         "repository-quality.yml",
-        "os: [ubuntu-latest, windows-latest]",
+        "os: [ubuntu-latest]",
         "os: [ubuntu-latest, self-hosted]",
         "finite OS matrix",
     );

@@ -19,13 +19,6 @@ mod download;
 
 const VERSION: &str = "1.0.0-beta.3";
 
-#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-const SERVER_ARTIFACT: (&str, &str, &str) = (
-    "x64-windows/flawless.exe",
-    "flawless.exe",
-    "b06723cce23b6e599f39440f6781b68ea45d6a96a3c0761715fbcb1bd729fccf",
-);
-
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const SERVER_ARTIFACT: (&str, &str, &str) = (
     "x64-linux/flawless",
@@ -245,10 +238,7 @@ fn start_server(binary: &Path, data: &Path, port: u16, client: &Client) -> Serve
     panic!("Flawless server did not become ready");
 }
 
-#[cfg(any(
-    all(target_os = "windows", target_arch = "x86_64"),
-    all(target_os = "linux", target_arch = "x86_64")
-))]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn recorded_effects_resume_after_server_process_crash() {
     let temp = TempDir::new().expect("isolated test directory");

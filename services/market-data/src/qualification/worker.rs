@@ -48,8 +48,6 @@ async fn stop_signal() -> Result {
                 .map_err(Error::storage)?;
         tokio::select! {r=tokio::signal::ctrl_c()=>r.map_err(Error::storage)?,_=terminate.recv()=>()}
     }
-    #[cfg(not(unix))]
-    tokio::signal::ctrl_c().await.map_err(Error::storage)?;
     Ok(())
 }
 

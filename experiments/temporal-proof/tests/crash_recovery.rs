@@ -21,20 +21,13 @@ const QUEUE: &str = "synthetic-m08-evaluation";
 const CLI_VERSION: &str = "1.8.3";
 // SHA-256 of the official v1.8.3 release tarballs, published in checksums.txt.
 // https://github.com/temporalio/cli/releases/download/v1.8.3/checksums.txt
-#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-const CLI_ARCHIVE_SHA256: &str = "9aab450b009528052fda8645314045d2c84ef50f744df131d80ee539e28a8235";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const CLI_ARCHIVE_SHA256: &str = "6f0afac1e9ddea71f480c43a49f5db5167a244c21db923707f069a79bcabdfea";
 
 async fn verified_temporal_cli(directory: &Path) -> Result<PathBuf, Box<dyn Error>> {
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let (platform, executable) = ("windows", "temporal.exe");
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let (platform, executable) = ("linux", "temporal");
-    #[cfg(not(any(
-        all(target_os = "windows", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "x86_64")
-    )))]
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
     compile_error!("Temporal M08 proof requires a pinned CLI hash for this platform");
 
     let archive_name = format!("temporal_cli_{CLI_VERSION}_{platform}_amd64.tar.gz");

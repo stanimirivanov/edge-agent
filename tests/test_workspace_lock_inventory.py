@@ -123,21 +123,18 @@ class WorkspaceLockInventoryTests(unittest.TestCase):
             except OSError as error:
                 self.skipTest(f"filesystem does not permit symlink creation: {error}")
             self.assertEqual(
-                ["linked-source: source symlinks and reparse points are not allowed"],
+                ["linked-source: source symlinks are not allowed"],
                 self.messages(),
             )
 
-    def test_symlinks_and_windows_reparse_points_fail_without_privileges(self) -> None:
+    def test_symlinks_fail_without_following_targets(self) -> None:
         for mode, attributes in [
             (stat.S_IFLNK, 0),
-            (stat.S_IFDIR, stat.FILE_ATTRIBUTE_REPARSE_POINT),
-            (stat.S_IFREG, stat.FILE_ATTRIBUTE_REPARSE_POINT),
         ]:
             with self.subTest(mode=mode, attributes=attributes):
                 inspect = Mock(
                     return_value=SimpleNamespace(
                         st_mode=mode,
-                        st_file_attributes=attributes,
                     )
                 )
                 entry = SimpleNamespace(name="unsafe-source", stat=inspect)
@@ -145,7 +142,7 @@ class WorkspaceLockInventoryTests(unittest.TestCase):
                     messages = self.messages()
                 inspect.assert_called_once_with(follow_symlinks=False)
                 self.assertIn(
-                    "unsafe-source: source symlinks and reparse points are not allowed",
+                    "unsafe-source: source symlinks are not allowed",
                     messages,
                 )
 

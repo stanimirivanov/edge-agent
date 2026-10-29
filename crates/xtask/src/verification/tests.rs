@@ -616,7 +616,7 @@ fn executable_choices_fail_closed_for_invalid_explicit_overrides()
         runner::resolve_executable_choice("docker", "EDGEAGENT_NATS_SERVER", None)?,
         std::ffi::OsString::from("docker")
     );
-    for invalid in ["", "relative.exe", "private-sentinel-missing"] {
+    for invalid in ["", "relative-binary", "private-sentinel-missing"] {
         let error = runner::resolve_executable_choice(
             "docker",
             "EDGEAGENT_NATS_SERVER",
@@ -1150,7 +1150,7 @@ fn overrides_are_single_argv_values_and_ordinary_children_force_offline_sqlx()
 -> Result<(), Box<dyn std::error::Error>> {
     let options = Options::parse(&[
         "--python".to_owned(),
-        "C:/Python Tools/python.exe".to_owned(),
+        "/opt/Python Tools/python3".to_owned(),
         "--sbom-output".to_owned(),
         "artifacts/custom path".to_owned(),
     ])?;
@@ -1164,7 +1164,7 @@ fn overrides_are_single_argv_values_and_ordinary_children_force_offline_sqlx()
         ],
     };
     let child = runner::subprocess(&command, &options)?;
-    assert_eq!(child.get_program(), "C:/Python Tools/python.exe");
+    assert_eq!(child.get_program(), "/opt/Python Tools/python3");
     assert_eq!(
         child.get_args().collect::<Vec<_>>(),
         [

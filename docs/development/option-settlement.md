@@ -100,7 +100,7 @@ synthetic P10 correctness, not public/provider/session activation or all of M07.
 
 ## Verification
 
-```powershell
+```bash
 cargo test --locked -p edgeagent-simulation-domain --test settlement
 cargo test --locked -p edgeagent-simulation-domain --doc
 cargo xtask verify
@@ -111,7 +111,5 @@ cargo xtask verify --check sqlx-metadata
 Default tests cover arithmetic, attributions, wire/schema checks, redaction and
 compile-time mark/fixing separation. The protected process gate uses the documented
 disposable PostgreSQL profile for concurrency, real worker death and replay.
-On Windows, finish process proofs before starting another Cargo build of the
-worker binary: a running executable cannot be replaced by a concurrent build.
 Post-commit worker-result loss is not a new broker-wire ACK fault; no proof claims
 provider finality, HA, power-loss durability or market fidelity.

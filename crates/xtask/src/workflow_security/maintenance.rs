@@ -138,13 +138,6 @@ fn lock_roots(root: &Path) -> Result<BTreeSet<String>, &'static str> {
 }
 
 fn is_link(metadata: &fs::Metadata) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        // Junctions can escape source discovery without being symbolic links.
-        metadata.file_type().is_symlink() || metadata.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
     metadata.file_type().is_symlink()
 }
 

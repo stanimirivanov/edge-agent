@@ -17,7 +17,6 @@ import tempfile
 import tomllib
 import urllib.error
 import urllib.request
-import zipfile
 
 
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
@@ -43,7 +42,7 @@ class ToolPolicy:
 
 
 def load_policy(root: Path) -> ToolPolicy:
-    """Validate the release pin and both supported runner archive identities."""
+    """Validate the release pin and the supported Linux archive identity."""
 
     try:
         source = (root / "supply-chain/security-tools.toml").read_bytes()
@@ -63,7 +62,6 @@ def load_policy(root: Path) -> ToolPolicy:
     archives = {}
     for target, suffix, executable in (
         ("linux_x64", "tar.gz", "gitleaks"),
-        ("windows_x64", "zip", "gitleaks.exe"),
     ):
         entry = tool.get(target)
         expected_name = f"gitleaks_{version}_{target}.{suffix}"
@@ -83,10 +81,10 @@ def host_target() -> str:
     """Fail explicitly instead of installing a binary for an unsupported host."""
 
     if platform.machine().lower() not in {"amd64", "x86_64"}:
-        raise SecurityToolError("Gitleaks installer supports x64 Linux and Windows only")
+        raise SecurityToolError("Gitleaks installer supports x64 Linux only")
     system = platform.system().lower()
-    if system not in {"linux", "windows"}:
-        raise SecurityToolError("Gitleaks installer supports x64 Linux and Windows only")
+    if system != "linux":
+        raise SecurityToolError("Gitleaks installer supports x64 Linux only")
     return f"{system}_x64"
 
 
@@ -96,26 +94,16 @@ def authenticated_binary(payload: bytes, archive: Archive) -> bytes:
     if len(payload) > MAX_ARCHIVE_BYTES or hashlib.sha256(payload).hexdigest() != archive.sha256:
         raise SecurityToolError("Gitleaks archive checksum verification failed")
     try:
-        if archive.name.endswith(".zip"):
-            with zipfile.ZipFile(io.BytesIO(payload)) as source:
-                entries = [entry for entry in source.infolist() if entry.filename == archive.executable]
-                if len(entries) != 1 or entries[0].is_dir() or entries[0].file_size > MAX_BINARY_BYTES:
-                    raise SecurityToolError("Gitleaks archive has an invalid executable member")
-                mode = entries[0].external_attr >> 16
-                if mode & 0o170000 == 0o120000:
-                    raise SecurityToolError("Gitleaks archive executable must not be a symlink")
-                binary = source.read(entries[0])
-        else:
-            with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as source:
-                entries = [entry for entry in source.getmembers() if entry.name == archive.executable]
-                if len(entries) != 1 or not entries[0].isfile() or entries[0].size > MAX_BINARY_BYTES:
-                    raise SecurityToolError("Gitleaks archive has an invalid executable member")
-                reader = source.extractfile(entries[0])
-                if reader is None:
-                    raise SecurityToolError("Gitleaks archive executable could not be read")
-                with reader:
-                    binary = reader.read(MAX_BINARY_BYTES + 1)
-    except (OSError, tarfile.TarError, zipfile.BadZipFile, RuntimeError) as error:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as source:
+            entries = [entry for entry in source.getmembers() if entry.name == archive.executable]
+            if len(entries) != 1 or not entries[0].isfile() or entries[0].size > MAX_BINARY_BYTES:
+                raise SecurityToolError("Gitleaks archive has an invalid executable member")
+            reader = source.extractfile(entries[0])
+            if reader is None:
+                raise SecurityToolError("Gitleaks archive executable could not be read")
+            with reader:
+                binary = reader.read(MAX_BINARY_BYTES + 1)
+    except (OSError, tarfile.TarError, RuntimeError) as error:
         if isinstance(error, SecurityToolError):
             raise
         raise SecurityToolError("Gitleaks archive could not be decoded") from error

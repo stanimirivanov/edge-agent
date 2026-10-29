@@ -27,10 +27,6 @@ fn serve(responses: Vec<&'static [u8]>) -> (String, thread::JoinHandle<usize>) {
                     Err(e) => panic!("artifact fixture accept: {e}"),
                 }
             };
-            // Windows can inherit the listener's nonblocking mode on accept.
-            stream
-                .set_nonblocking(false)
-                .expect("blocking fixture stream");
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .expect("fixture read bound");

@@ -215,7 +215,7 @@ It checks exact public text, accurate source-presence diagnostics, absent
 fabricated causes, typed cause retention, and source-free errors nested in
 application wrappers.
 Source-free constructors remain usable in constant expressions. These T2 tests
-run in the existing Linux/Windows workspace-test gate; doctests enforce
+run in the existing Linux workspace-test gate; doctests enforce
 constructor use with positive and `must_use` rejection
 examples. When adding a public error wrapper,
 test both paths: a redacted top-level message does not make its raw source chain
@@ -267,7 +267,7 @@ warnings. Manual polls prove exact disposition forwarding, adapter resource
 release, and release of delivery payload ownership without an async runtime or
 sleeps. Warning assertions reject both textual and numeric-byte payloads,
 delivery identities, and routes. Compile-fail doctests enforce consuming
-ownership and `must_use`; the existing Linux/Windows workspace and doctest
+ownership and `must_use`; the existing Linux workspace and doctest
 gates own these T2 contracts. The guard never chooses a broker disposition;
 see [ADR-0020](../decisions/0020-retain-settlement-abandonment-diagnostics.md).
 
@@ -279,7 +279,7 @@ recovery, quarantine identity and monotonic attempts, abandoned-claim expiry,
 immutable publication retry, and recovery from each outbox outcome's lost
 result. The relay fake uses an explicit clock and replaces worker handles without
 resetting stored generations. The crate-level doctest proves commit precedes
-terminal settlement. Existing Linux/Windows workspace tests and doctests own
+terminal settlement. Existing Linux workspace tests and doctests own
 these gates, with no runtime, sleeps, or services. Actual PostgreSQL atomicity,
 quarantine comparison, and same-owner fences remain T3 adapter contracts; do not
 promote fake transaction behavior into a claimed database guarantee. See
@@ -329,7 +329,7 @@ claim generation, including failure to persist quarantine. The `auto_traits`
 executable proves `MessageDelivery: Send`, every future alias is `Send` for its
 operation lifetime, and public messaging errors are `Send + Sync + 'static`.
 Do not add a `Sync` bound to one-shot deliveries or settlement adapters merely
-to satisfy a test. Existing Linux/Windows workspace tests own these gates;
+to satisfy a test. Existing Linux workspace tests own these gates;
 focused commands and the recovery boundary are in the
 [messaging guide](messaging-adapters.md#stored-envelope-validation-boundary).
 
@@ -342,7 +342,7 @@ cargo test --release --locked -p edgeagent-contracts --lib payload_decode_throug
 
 Its timings are machine-dependent evidence, not a CI threshold. The default
 suite asserts byte-for-byte canonical fixture encoding. The T2 `make verify`
-gate and the Linux/Windows repository-quality job also run
+gate and the Linux repository-quality job also run
 `cargo test --locked -p edgeagent-contracts --features serde_json/preserve_order`.
 This catches dependency feature unification that could otherwise change
 persisted envelope bytes without changing contract source code.

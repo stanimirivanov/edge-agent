@@ -115,7 +115,7 @@ def supervise(
         try:
             if invocation.phase not in PHASES or None in (report["profile_sha256"], report["binary_sha256"]):
                 raise HarnessError("invalid_invocation")
-            if invocation.binary.name not in ("edgeagent-market-data", "edgeagent-market-data.exe"):
+            if invocation.binary.name != "edgeagent-market-data":
                 raise HarnessError("unexpected_binary_name")
             if _hash_file(invocation.profile, 8192) != invocation.profile_sha256:
                 raise HarnessError("profile_digest_mismatch")

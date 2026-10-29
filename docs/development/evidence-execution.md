@@ -95,7 +95,7 @@ financial tables/checkpoints; never reverse committed cash by dropping schema.
 
 ## Verification
 
-```powershell
+```bash
 cargo xtask verify
 cargo xtask verify --check account-admission-processes
 cargo xtask verify --check sqlx-metadata

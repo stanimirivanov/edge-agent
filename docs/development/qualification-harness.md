@@ -18,7 +18,7 @@ storage, compatible consumers and restore/erasure reviews. A profile digest, rep
 command-line flag supplies none of these facts. Default validation checks file integrity,
 not profile semantics; the existing Rust CLI owns semantic and fresh authority checks.
 
-Provide a trusted built `edgeagent-market-data` or `edgeagent-market-data.exe`, an absolute
+Provide a trusted built `edgeagent-market-data`, an absolute
 private profile path and independently reviewed SHA-256 pins for both. Do not build or
 download a binary from inside the harness. Keep pinned files immutable and inaccessible
 to untrusted writers throughout execution: the local hash check is not protection against
@@ -26,7 +26,7 @@ a privileged process replacing a file between validation and execution.
 
 Choose a fresh absolute report path outside the checkout, in an existing owner-private
 directory. The harness creates no directories and never overwrites a report. On POSIX it
-requests mode 0600; on Windows the operator must provision restrictive inherited ACLs.
+requests mode 0600.
 Reports still contain sensitive profile/binary digests and must follow owner retention.
 No paths, credentials, inherited environment values, child output or exception text enter
 the report or console. No provider payload is collected as qualification evidence.

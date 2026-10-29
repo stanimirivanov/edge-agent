@@ -94,7 +94,7 @@ performance and restore qualification remain M08/M10 follow-through.
 
 ## Verification
 
-```powershell
+```bash
 cargo xtask verify --check frozen-evaluation-contracts
 cargo xtask verify
 ```

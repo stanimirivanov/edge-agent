@@ -55,7 +55,7 @@ server/Wasm crash proof remains a separate CI execution.
 | Linux x64 | `b511598babcde8a8bc7898f6e0c7b06b3f51a2d26227fba1cc480b06af5a215c` | Not run locally. |
 
 Other platforms are outside this experiment. The test is only compiled on
-Windows x64 and Linux x64. The Wasm target is installed automatically by
+Linux x64. The Wasm target is installed automatically by
 `rustup` if necessary; this changes the contributor's existing Rust toolchain
 installation, but requires no manual step.
 

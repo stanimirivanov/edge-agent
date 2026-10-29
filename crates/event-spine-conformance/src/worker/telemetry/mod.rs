@@ -37,8 +37,8 @@ fn metric_stream() -> Option<Stream> {
 }
 
 fn is_otel_setting(key: &std::ffi::OsStr) -> bool {
-    // Windows environment lookups are case-insensitive. Match the ASCII
-    // prefix without requiring the rest of an OS-native name to be Unicode.
+    // Match the ASCII prefix conservatively without requiring the rest
+    // of an OS-native name to be Unicode.
     key.as_encoded_bytes()
         .get(..5)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"OTEL_"))
