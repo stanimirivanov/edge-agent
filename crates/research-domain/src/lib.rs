@@ -2,6 +2,8 @@
 //! Applications must authenticate owner assertions and verify retained bytes before use.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+pub mod momentum;
+
 use edgeagent_market_data_domain::{InstrumentId, ListingId, SessionDate, UsdPrice};
 
 /// Structural upper bound matching the research request universe ceiling.

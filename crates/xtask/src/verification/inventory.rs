@@ -806,6 +806,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Canonical persisted envelope bytes survive serde_json feature unification.",
         ),
         check(
+            "research-momentum",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research-domain",
+                "--test",
+                "momentum",
+                "--",
+            ],
+            "Raw USD endpoint return, exact ties-to-even ppm rounding, half-ppm error and range checks; no strategy approval or ranking.",
+        ),
+        check(
             "research-evidence",
             "T2",
             &["verify", "test"],
@@ -1449,6 +1465,22 @@ pub(super) fn checks() -> Vec<Check> {
                         "execution_wire_schema_and_constructor_reject_mutable_financial_input",
                         "settlement_wire_contracts_validate_balanced_and_bounded_committed_facts",
                         "published_settlement_schemas_retain_immutable_content_and_identity",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-momentum" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "exact_reference_vectors_include_positive_zero_and_negative_returns",
+                        "half_ppm_ties_round_to_even_symmetrically",
+                        "equivalent_scales_and_large_valid_intermediates_are_exact",
+                        "score_range_is_checked_without_clamping_or_payload_diagnostics",
+                        "complete_session_lookback_and_revision_are_retained",
+                        "exact_rational_error_is_bounded_by_half_a_ppm",
                     ],
                     ignored: false,
                 });
