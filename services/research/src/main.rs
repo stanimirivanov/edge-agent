@@ -13,5 +13,16 @@ const DESCRIPTOR: ServiceDescriptor = ServiceDescriptor::new(
 );
 
 fn main() -> ExitCode {
-    run(DESCRIPTOR)
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|a| a.starts_with("offline-")) {
+        match edgeagent_research::runtime::run(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => {
+                eprintln!("research worker failed closed");
+                ExitCode::from(2)
+            }
+        }
+    } else {
+        run(DESCRIPTOR)
+    }
 }

@@ -144,6 +144,19 @@ struct Target {
     identities: &'static [&'static str],
 }
 
+const RESEARCH_WORKER: Target = Target {
+    package: "edgeagent-research",
+    name: "worker",
+    identities: &[
+        "restart_and_lost_result_recover_before_owner_read_with_one_publication",
+        "corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_completion",
+    ],
+};
+const RESEARCH_WORKER_BROKER: Target = Target {
+    package: "edgeagent-research",
+    name: "broker",
+    identities: &["research_ack_relay_restart_poison_and_retry_exhaustion_preserve_completion"],
+};
 const RESEARCH_EVIDENCE_BROKER: Target = Target {
     package: "edgeagent-market-data",
     name: "research_broker",
@@ -334,6 +347,18 @@ const SPINE: Target = Target {
 
 pub(super) fn checks() -> Vec<Check> {
     vec![
+        suite(
+            "research-worker-postgres",
+            &RESEARCH_WORKER,
+            POSTGRES,
+            "Separate Research worker processes: exact first result recovery before owner reads, denied/corrupt abstention and unavailable-read noncompletion.",
+        ),
+        suite(
+            "research-worker-broker",
+            &RESEARCH_WORKER_BROKER,
+            EVENT_SPINE,
+            "Real Research consumer ACK after commit, exact outbox relay, restart recovery, poison quarantine and bounded unavailable-read retry exhaustion.",
+        ),
         suite(
             "research-evidence-broker",
             &RESEARCH_EVIDENCE_BROKER,
@@ -690,6 +715,8 @@ fn suite(
 pub(super) fn ignored_inventory() -> Vec<&'static str> {
     let mut identities = vec!["messaging::tests::payload_decode_throughput_probe"];
     for target in [
+        RESEARCH_WORKER,
+        RESEARCH_WORKER_BROKER,
         RESEARCH_EVIDENCE_BROKER,
         RESEARCH_EVIDENCE_PROCESSES,
         RESEARCH_CORRELATION,
@@ -1014,7 +1041,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 44);
+        assert_eq!(checks.len(), 46);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -1030,8 +1057,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 127);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 127);
+        assert_eq!(inventory.len(), 130);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 130);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

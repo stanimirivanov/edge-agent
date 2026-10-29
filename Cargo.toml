@@ -40,6 +40,7 @@ repository = "https://github.com/stanimirivanov/edge-agent"
 
 [workspace.dependencies]
 edgeagent-research-application = { path = "crates/research-application" }
+edgeagent-research-postgres = { path = "crates/research-postgres" }
 edgeagent-research-domain = { path = "crates/research-domain" }
 base64 = { version = "=0.23.1", default-features = false, features = ["std"] }
 fastwebsockets = { version = "=0.10.0", default-features = false }

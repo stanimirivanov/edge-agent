@@ -28,7 +28,12 @@ pub const ABSTAINED: MessageDefinition = MessageDefinition::event(
     "research-request",
     EventRetention::Workflow,
 );
-const DEFINITIONS: [MessageDefinition; 3] = [EVALUATE, PUBLISHED, ABSTAINED];
+const DEFINITIONS: [MessageDefinition; 4] = [
+    EVALUATE,
+    PUBLISHED,
+    ABSTAINED,
+    edgeagent_contracts::research_acquisition::DECIDED,
+];
 /// Validated local definitions; caller provisions any future broker topology separately.
 /// # Errors
 /// Rejects an invalid compiled message definition.
@@ -117,6 +122,14 @@ fn definition(r: &ResearchRecord) -> Result<MessageDefinition, PublicationError>
 /// # Errors
 /// Rejects wrong producer/type, invalid request data or scoped identity mismatch.
 pub fn evaluation_request(delivery: &MessageEnvelope) -> Result<ResearchRequest, PublicationError> {
+    if delivery.message_type() == edgeagent_contracts::research_acquisition::DECIDED.message_type()
+    {
+        return edgeagent_contracts::research_acquisition::ResearchEvidence::from_envelope(
+            delivery,
+        )
+        .map(|value| value.request().clone())
+        .map_err(|_| invalid());
+    }
     EVALUATE
         .validate_envelope(delivery)
         .map_err(|_| invalid())?;

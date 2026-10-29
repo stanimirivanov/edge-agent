@@ -35,6 +35,12 @@ reserving work. Neither accepts an acquisition ID, path, provider or rights from
 request data. The cutoff must include the installed admission's knowledge time;
 unsupported universe/lookback and future evidence become typed abstentions.
 
+`offline-research-read <acquisition-id>` accepts the exact retained correlated
+publication on stdin and returns canonical bytes only after current owner authority,
+retention and descriptor validation. It requires the same independent owner scope/
+profile. Read exits are 77 (denied/absent), 65 (invalid) and 75 (storage unavailable).
+See the [Research worker](research-worker.md) for the bounded consumer adapter.
+
 ## Contracts and durable recovery
 
 The command reuses the Research v1 Request record. The new versioned outcome carries
@@ -84,8 +90,7 @@ New Gateway requests use the new route. Retained PR7 direct-evaluation commands
 remain unchanged and retryable. Their original route must be provisioned/drained
 separately with the later Research worker; this change does not rewrite historical
 outbox state. Stop new intake before rollback and keep all authoritative state.
-The original Gateway and Research record schemas remain valid. Worker evaluation,
-projector queries and public access remain later slices.
+The original Gateway and Research record schemas remain valid. The [Research worker](research-worker.md) consumes these outcomes; projector queries and public access remain later slices.
 
 ## Verification
 

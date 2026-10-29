@@ -195,3 +195,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0081](0081-commit-research-completions-atomically.md) | Accepted | Commit research completions atomically. |
 | [ADR-0082](0082-admit-research-through-a-durable-local-gateway.md) | Accepted | Admit research through a durable local Gateway. |
 | [ADR-0083](0083-correlate-owner-approved-research-evidence.md) | Accepted | Correlate owner-approved research evidence. |
+| [ADR-0084](0084-run-receipt-first-research-workers.md) | Accepted | Run receipt-first Research workers. |

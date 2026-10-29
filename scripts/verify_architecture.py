@@ -241,9 +241,9 @@ PACKAGE_RULES = {
         frozenset({"tokio", "edgeagent-event-spine-conformance"}),
     ),
     "services/research": PackageRule(
-        "edgeagent-research",
-        "bin",
-        SERVICE_DEPENDENCIES,
+        "edgeagent-research", "bin",
+        frozenset({"edgeagent-contracts","edgeagent-service-runtime","edgeagent-research-application","edgeagent-research-domain","edgeagent-research-postgres","edgeagent-market-data-domain","edgeagent-inbox-postgres","edgeagent-outbox-postgres","edgeagent-outbox-relay","edgeagent-messaging","edgeagent-messaging-nats","async-nats","chrono","serde_json","sqlx","tokio","url"}),
+        frozenset({"futures-util"}),
     ),
 }
 
