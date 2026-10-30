@@ -4,6 +4,7 @@
 #![deny(missing_docs)]
 pub mod momentum;
 pub mod ranking;
+pub mod strategy;
 
 use edgeagent_market_data_domain::{InstrumentId, ListingId, SessionDate, UsdPrice};
 

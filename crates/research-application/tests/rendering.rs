@@ -98,10 +98,18 @@ fn abstention(out: &RenderedOutcome) -> Result<AbstentionReason> {
 fn canonical_artifact_and_abstention_match_frozen_bytes() -> Result {
     let out = render(&inputs()?)?;
     assert_eq!(out.bytes(), include_bytes!("fixtures/artifact-v1.json"));
+    assert_eq!(
+        out.digest(),
+        "ca63f729179bfb25aff4639d059eb7b321782e82fe5eee9af711d636dbe4e7bb"
+    );
     let failed = render(&[])?;
     assert_eq!(
         failed.bytes(),
         include_bytes!("fixtures/abstention-v1.json")
+    );
+    assert_eq!(
+        failed.digest(),
+        "1b66c0754e9beb6c64f70501f4a3ebab7f503ac8abb961ca54450a491fc354d3"
     );
     let ResearchRecord::Artifact(a) = out.record() else {
         return Err("expected artifact".into());
@@ -236,5 +244,61 @@ fn canonical_identity_retains_revision_and_availability_lineage() -> Result {
     };
     assert!(a.evidence.iter().all(|v| v.available_at_ms == 100));
     assert_eq!(a.request.configuration, "03".repeat(32));
+    Ok(())
+}
+
+#[test]
+fn registry_preserves_direct_ranking_metadata_and_calculation_errors() -> Result {
+    let selected = strategy::resolve(momentum::REVISION).ok_or("missing momentum")?;
+    let p = policy()?;
+    let mut data = inputs()?;
+    for reversed in [false, true] {
+        if reversed {
+            data.reverse();
+            for row in &mut data {
+                row.closes.reverse();
+            }
+        }
+        let eligible = p.assess(&data).map_err(|_| "unexpected abstention")?;
+        let direct = ranking::rank(&eligible)?;
+        let registered = selected.rank(&eligible)?;
+        assert_eq!(registered.len(), direct.len());
+        for (actual, expected) in registered.iter().zip(&direct) {
+            assert_eq!(actual.instrument(), expected.instrument());
+            assert!(actual.momentum() == expected.momentum());
+            assert_eq!(actual.momentum().revision(), selected.revision());
+        }
+        let out = render(&data)?;
+        let ResearchRecord::Artifact(artifact) = out.record() else {
+            return Err("expected artifact".into());
+        };
+        assert_eq!(artifact.ranking.len(), registered.len());
+        for (actual, expected) in artifact.ranking.iter().zip(&registered) {
+            assert_eq!(
+                actual.instrument,
+                format!("{:032x}", expected.instrument().get())
+            );
+            assert_eq!(actual.score_ppm, expected.momentum().score_ppm());
+        }
+    }
+    let mut data = inputs()?;
+    // Fail a later candidate after earlier candidates have calculated successfully.
+    data[3].closes[0].close = UsdPrice::new(1, 8)?;
+    data[3].closes[1].close = UsdPrice::new(10_i128.pow(28) - 1, 0)?;
+    let eligible = p.assess(&data).map_err(|_| "unexpected abstention")?;
+    assert_eq!(
+        ranking::rank(&eligible).err(),
+        Some(momentum::MomentumError::OutOfRange)
+    );
+    assert_eq!(
+        selected.rank(&eligible).err(),
+        Some(momentum::MomentumError::OutOfRange)
+    );
+    assert!(matches!(
+        evaluate(request(), &p, &data, 101),
+        Err(EvaluationError::Calculation(
+            momentum::MomentumError::OutOfRange
+        ))
+    ));
     Ok(())
 }
