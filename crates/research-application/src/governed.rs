@@ -16,6 +16,8 @@ pub enum Error {
     Binding,
     /// Exact liquidity calculation could not be represented.
     Liquidity(edgeagent_research_domain::liquidity::Error),
+    /// Market constraint arithmetic cannot be represented.
+    Market(edgeagent_research_domain::market_constraints::Error),
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,6 +31,7 @@ impl std::error::Error for Error {
             Self::Policy(e) => Some(e),
             Self::Binding => None,
             Self::Liquidity(e) => Some(e),
+            Self::Market(e) => Some(e),
         }
     }
 }
@@ -49,6 +52,36 @@ impl GovernedOutcome {
         self.decision.as_ref()
     }
 }
+/// Explicit owner-bound evidence for independently selected market constraints.
+#[derive(Clone, Copy)]
+pub struct ConstraintInputs<'a> {
+    /// Complete volume assertions when liquidity is selected.
+    pub volumes: &'a [edgeagent_research_domain::liquidity::Input],
+    /// Complete raw opening/action assertions when volatility/gaps are selected.
+    pub opens: &'a [edgeagent_research_domain::market_constraints::Input],
+}
+/// Governed evaluation with explicit evidence for every selected constraint.
+/// # Errors
+/// Preserves calculation/binding errors; selected missing evidence cannot bypass a gate.
+pub fn evaluate_with_market_inputs(
+    request: ResearchRequest,
+    evidence: &EvidencePolicy,
+    inputs: &[FrozenSeries],
+    expires_at_ms: i64,
+    policy: &Policy,
+    intent: Intent,
+    constraints: ConstraintInputs<'_>,
+) -> Result<GovernedOutcome, Error> {
+    evaluate_inner(
+        request,
+        evidence,
+        inputs,
+        expires_at_ms,
+        policy,
+        intent,
+        constraints,
+    )
+}
 /// Validate the full required evidence before narrowing; preserve scores and complete lineage.
 /// Direction/horizon are explicit trusted intent inputs, never inferred from score sign or TTL.
 /// # Errors
@@ -68,7 +101,10 @@ pub fn evaluate(
         expires_at_ms,
         policy,
         intent,
-        &[],
+        ConstraintInputs {
+            volumes: &[],
+            opens: &[],
+        },
     )
 }
 /// Governed evaluation with owner-bound volume rows; selected liquidity is never optional.
@@ -90,7 +126,10 @@ pub fn evaluate_with_liquidity(
         expires_at_ms,
         policy,
         intent,
-        volumes,
+        ConstraintInputs {
+            volumes,
+            opens: &[],
+        },
     )
 }
 fn evaluate_inner(
@@ -100,8 +139,9 @@ fn evaluate_inner(
     expires_at_ms: i64,
     policy: &Policy,
     intent: Intent,
-    volumes: &[edgeagent_research_domain::liquidity::Input],
+    constraints: ConstraintInputs<'_>,
 ) -> Result<GovernedOutcome, Error> {
+    let volumes = constraints.volumes;
     let expected: String = policy
         .configuration()
         .iter()
@@ -163,6 +203,55 @@ fn evaluate_inner(
                     outcome: crate::abstain(
                         request,
                         if error == L::InsufficientHistory {
+                            AbstentionReason::InsufficientHistory
+                        } else {
+                            AbstentionReason::InvalidEvidence
+                        },
+                    )
+                    .map_err(Error::Evaluation)?,
+                    decision: None,
+                });
+            }
+        }
+    }
+    if policy.requires_market_constraints() {
+        use edgeagent_research_domain::market_constraints::{self, Error as M};
+        let assessed = (|| {
+            let opens = constraints.opens;
+            if opens.len() > 64
+                || opens
+                    .iter()
+                    .enumerate()
+                    .any(|(i, v)| opens[..i].iter().any(|old| old.instrument == v.instrument))
+                || opens.iter().any(|v| !candidates.contains(&v.instrument))
+            {
+                return Err(M::InvalidEvidence);
+            }
+            let eligible = evidence.assess(inputs).map_err(|_| M::InvalidEvidence)?;
+            eligible
+                .series()
+                .iter()
+                .map(|s| {
+                    let input = opens
+                        .iter()
+                        .find(|v| v.instrument == s.frozen().selected.instrument)
+                        .ok_or(M::InsufficientHistory)?;
+                    market_constraints::calculate(s, input)
+                })
+                .collect::<Result<Vec<_>, M>>()
+        })();
+        match assessed {
+            Ok(values) => {
+                decision = policy
+                    .apply_market_constraints(decision, &values)
+                    .map_err(Error::Policy)?
+            }
+            Err(error @ (M::OutOfRange | M::Return(_))) => return Err(Error::Market(error)),
+            Err(error) => {
+                return Ok(GovernedOutcome {
+                    outcome: crate::abstain(
+                        request,
+                        if error == M::InsufficientHistory {
                             AbstentionReason::InsufficientHistory
                         } else {
                             AbstentionReason::InvalidEvidence

@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod liquidity;
+pub mod market_constraints;
 pub mod momentum;
 pub mod policy;
 pub mod ranking;

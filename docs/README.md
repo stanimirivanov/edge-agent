@@ -116,6 +116,8 @@ For M05 eligibility controls, read [independent Research policy](development/res
 
 For M05 close-volume limits, read [Research liquidity](development/research-liquidity.md).
 
+For M05 volatility/gaps, read [market constraints](development/market-constraints.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

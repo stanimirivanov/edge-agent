@@ -449,3 +449,47 @@ pub fn policy_volumes(
         rows,
     })
 }
+
+/// Convert an authorized policy companion into raw opens and explicit action annotations.
+/// This conversion grants no authority and must follow the existing authenticated owner read.
+pub fn policy_opens(
+    companion: &edgeagent_contracts::policy_evidence::PolicyEvidence,
+) -> Result<edgeagent_research_domain::market_constraints::Input, E> {
+    use edgeagent_research_domain::market_constraints::{Input, Open};
+    companion.bytes().map_err(|_| E::Invalid)?;
+    let edgeagent_contracts::policy_evidence::PolicyEvidence::V1 { request, daily, .. } = companion;
+    let n = usize::from(request.lookback_sessions) + 1;
+    let bars = &daily.data().bars;
+    if bars.len() < n {
+        return Err(E::Invalid);
+    }
+    let rows = bars[bars.len() - n..]
+        .iter()
+        .map(|b| {
+            let date = b.date.as_str().split('-').collect::<Vec<_>>();
+            Ok(Open {
+                session: SessionDate::new(
+                    date[0].parse().map_err(|_| E::Invalid)?,
+                    date[1].parse().map_err(|_| E::Invalid)?,
+                    date[2].parse().map_err(|_| E::Invalid)?,
+                )
+                .map_err(|_| E::Invalid)?,
+                price: UsdPrice::new(
+                    b.ohlc[0].coefficient.parse().map_err(|_| E::Invalid)?,
+                    u32::from(b.ohlc[0].scale),
+                )
+                .map_err(|_| E::Invalid)?,
+                action: !b.actions.is_empty(),
+            })
+        })
+        .collect::<Result<Vec<_>, E>>()?;
+    Ok(Input {
+        instrument: InstrumentId::new(
+            u128::from_str_radix(daily.data().scope.instrument.as_str(), 16)
+                .map_err(|_| E::Invalid)?,
+        )
+        .map_err(|_| E::Invalid)?,
+        evidence: digest(daily.digest().as_str())?,
+        rows,
+    })
+}
