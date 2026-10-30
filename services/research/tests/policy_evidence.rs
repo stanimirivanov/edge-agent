@@ -34,6 +34,17 @@ fn policy_conversion_requires_exact_request_and_daily_lineage() -> Result {
         )?;
         assert!(row.shares == expected);
     }
+    let opens = edgeagent_research::loader::policy_opens(&companion)?;
+    assert_eq!(opens.evidence, volumes.evidence);
+    assert_eq!(opens.instrument, volumes.instrument);
+    for (row, bar) in opens.rows.iter().zip(&daily.data().bars) {
+        let expected = edgeagent_market_data_domain::UsdPrice::new(
+            bar.ohlc[0].coefficient.parse()?,
+            u32::from(bar.ohlc[0].scale),
+        )?;
+        assert!(row.price == expected);
+        assert_eq!(row.action, !bar.actions.is_empty());
+    }
     let exported = companion.bytes()?;
     assert!(edgeagent_research::loader::convert_policy(&delivery, &exported).is_ok());
     let PolicyEvidence::V1 {

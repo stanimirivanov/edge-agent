@@ -1729,6 +1729,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "registry_preserves_direct_ranking_metadata_and_calculation_errors",
                         "governed_eligibility_preserves_scores_and_cannot_hide_failed_evidence",
                         "liquidity_is_required_and_narrows_without_rescoring_or_hiding_missing_rows",
+                        "volatility_and_gap_limits_are_inclusive_and_cannot_hide_unsafe_or_missing_evidence",
                     ],
                     ignored: false,
                 });

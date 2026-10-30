@@ -507,3 +507,189 @@ fn liquidity_is_required_and_narrows_without_rescoring_or_hiding_missing_rows() 
     );
     Ok(())
 }
+
+#[test]
+fn volatility_and_gap_limits_are_inclusive_and_cannot_hide_unsafe_or_missing_evidence() -> Result {
+    use edgeagent_research_application::governed::{self, ConstraintInputs};
+    use market_constraints::{GAP_REVISION, Input, Open, VOLATILITY_REVISION};
+    use policy::{Direction, Intent, Policy, Reason};
+    let make_policy = |vol, gap| -> Result<Policy> {
+        Ok(Policy::new(
+            [8; 32],
+            [3; 32],
+            (1..=4)
+                .map(InstrumentId::new)
+                .collect::<std::result::Result<_, _>>()?,
+            5,
+        )?
+        .with_market_constraints(VOLATILITY_REVISION, GAP_REVISION, vol, gap)?)
+    };
+    let mut data = inputs()?;
+    for s in &mut data {
+        let mut middle = s.closes[0].clone();
+        middle.session = SessionDate::new(2026, 10, 2)?;
+        middle.event_at_ms = 85;
+        s.closes[1].session = SessionDate::new(2026, 10, 3)?;
+        s.closes.insert(1, middle);
+    }
+    let p = policy()?;
+    let evidence = EvidencePolicy::new(
+        p.binding(),
+        p.universe().to_vec(),
+        (1..=3)
+            .map(|d| SessionDate::new(2026, 10, d))
+            .collect::<std::result::Result<_, _>>()?,
+        2,
+    )?;
+    let mut req = request();
+    req.lookback_sessions = 2;
+    let mut opens = data
+        .iter()
+        .map(|s| Input {
+            instrument: s.selected.instrument,
+            evidence: s.evidence,
+            rows: s
+                .closes
+                .iter()
+                .map(|c| Open {
+                    session: c.session,
+                    price: c.close,
+                    action: false,
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    let intent = Intent {
+        direction: Direction::Long,
+        horizon_sessions: 1,
+    };
+    let gate = make_policy(50_000, 100_000)?;
+    let allowed = governed::evaluate_with_market_inputs(
+        req.clone(),
+        &evidence,
+        &data,
+        101,
+        &gate,
+        intent,
+        ConstraintInputs {
+            volumes: &[],
+            opens: &opens,
+        },
+    )?;
+    assert_eq!(
+        allowed.outcome().bytes(),
+        evaluate(req.clone(), &evidence, &data, 101)?.bytes()
+    );
+    for gate in [
+        make_policy(49_999, 100_000)?,
+        make_policy(50_000, 99_999)?,
+        make_policy(0, 0)?,
+    ] {
+        let narrowed = governed::evaluate_with_market_inputs(
+            req.clone(),
+            &evidence,
+            &data,
+            101,
+            &gate,
+            intent,
+            ConstraintInputs {
+                volumes: &[],
+                opens: &opens,
+            },
+        )?;
+        let ResearchRecord::Artifact(a) = narrowed.outcome().record() else {
+            return Err("artifact".into());
+        };
+        assert_eq!(a.ranking.len(), 1);
+        assert_eq!(a.ranking[0].instrument, format!("{:032x}", 3));
+        assert_eq!(a.ranking[0].score_ppm, 0);
+        assert_eq!(a.evidence.len(), 4);
+        assert!(a.request == req);
+    }
+    let combined = make_policy(49_999, 99_999)?;
+    let narrowed = governed::evaluate_with_market_inputs(
+        req.clone(),
+        &evidence,
+        &data,
+        101,
+        &combined,
+        intent,
+        ConstraintInputs {
+            volumes: &[],
+            opens: &opens,
+        },
+    )?;
+    assert_eq!(
+        narrowed.decision().ok_or("decision")?.reasons(),
+        [Reason::VolatilityExceeded, Reason::GapExceeded]
+    );
+    let absent = governed::evaluate(req.clone(), &evidence, &data, 101, &gate, intent)?;
+    assert_eq!(
+        abstention(absent.outcome())?,
+        AbstentionReason::InsufficientHistory
+    );
+    let refusal = |opens: &[Input]| -> Result<AbstentionReason> {
+        let out = governed::evaluate_with_market_inputs(
+            req.clone(),
+            &evidence,
+            &data,
+            101,
+            &combined,
+            intent,
+            ConstraintInputs {
+                volumes: &[],
+                opens,
+            },
+        )?;
+        abstention(out.outcome())
+    };
+    opens[0].evidence = [9; 32];
+    assert_eq!(refusal(&opens)?, AbstentionReason::InvalidEvidence);
+    opens[0].evidence = data[0].evidence;
+    let second = opens[0].rows[1].session;
+    opens[0].rows[1].session = opens[0].rows[0].session;
+    assert_eq!(refusal(&opens)?, AbstentionReason::InvalidEvidence);
+    opens[0].rows[1].session = second;
+    opens[0].rows[0].action = true;
+    let unsafe_action = governed::evaluate_with_market_inputs(
+        req.clone(),
+        &evidence,
+        &data,
+        101,
+        &gate,
+        intent,
+        ConstraintInputs {
+            volumes: &[],
+            opens: &opens,
+        },
+    )?;
+    assert_eq!(
+        abstention(unsafe_action.outcome())?,
+        AbstentionReason::InvalidEvidence
+    );
+    assert!(unsafe_action.decision().is_none());
+    opens[0].rows[0].action = false;
+    opens[1].rows.pop();
+    let missing = governed::evaluate_with_market_inputs(
+        req.clone(),
+        &evidence,
+        &data,
+        101,
+        &gate,
+        intent,
+        ConstraintInputs {
+            volumes: &[],
+            opens: &opens,
+        },
+    )?;
+    assert_eq!(
+        abstention(missing.outcome())?,
+        AbstentionReason::InsufficientHistory
+    );
+    assert!(
+        Policy::new([8; 32], [3; 32], vec![InstrumentId::new(1)?], 1)?
+            .with_market_constraints("unknown", GAP_REVISION, 0, 0)
+            .is_err()
+    );
+    Ok(())
+}

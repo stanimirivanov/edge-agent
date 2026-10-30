@@ -208,3 +208,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0094](0094-export-owner-bound-policy-evidence.md) | Accepted | Export owner-bound policy evidence. |
 | [ADR-0095](0095-enforce-independent-research-eligibility.md) | Accepted | Enforce independent Research eligibility. |
 | [ADR-0096](0096-enforce-exact-close-volume-liquidity.md) | Accepted | Enforce exact close-volume liquidity. |
+| [ADR-0097](0097-enforce-volatility-and-opening-gap-limits.md) | Accepted | Enforce volatility and opening gap limits. |

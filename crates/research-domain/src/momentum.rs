@@ -61,7 +61,7 @@ impl Momentum {
         REVISION
     }
 }
-fn coefficient(price: UsdPrice) -> Result<i128, MomentumError> {
+pub(crate) fn coefficient(price: UsdPrice) -> Result<i128, MomentumError> {
     let (value, scale) = price.decimal_parts();
     // UsdPrice supports at most eight fractional places and 28 normalized digits.
     // Align to that existing exact representation, without changing price semantics.
@@ -73,7 +73,7 @@ fn coefficient(price: UsdPrice) -> Result<i128, MomentumError> {
         .filter(|v| *v > 0)
         .ok_or(MomentumError::OutOfRange)
 }
-fn score(first: UsdPrice, last: UsdPrice) -> Result<i64, MomentumError> {
+pub(crate) fn score(first: UsdPrice, last: UsdPrice) -> Result<i64, MomentumError> {
     let denominator = coefficient(first)?;
     let delta = coefficient(last)?
         .checked_sub(denominator)

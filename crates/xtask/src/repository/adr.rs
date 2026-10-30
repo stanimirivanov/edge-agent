@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 96] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 97] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -501,6 +501,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 96] = [
         number: 96,
         path: "docs/decisions/0096-enforce-exact-close-volume-liquidity.md",
         title: "Enforce exact close-volume liquidity",
+    },
+    PublishedIdentity {
+        number: 97,
+        path: "docs/decisions/0097-enforce-volatility-and-opening-gap-limits.md",
+        title: "Enforce volatility and opening gap limits",
     },
 ];
 

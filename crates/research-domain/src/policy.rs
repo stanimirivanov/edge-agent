@@ -36,6 +36,10 @@ pub enum Reason {
     HorizonExceeded,
     /// One or more candidates fall below the explicit inclusive liquidity minimum.
     LiquidityBelowMinimum,
+    /// Selected population volatility exceeds the inclusive ceiling.
+    VolatilityExceeded,
+    /// Selected maximum opening gap exceeds the inclusive ceiling.
+    GapExceeded,
 }
 impl Reason {
     /// Stable diagnostic code, without market values or caller data.
@@ -46,6 +50,8 @@ impl Reason {
             Self::DirectionNotAllowed => "direction_not_allowed",
             Self::HorizonExceeded => "horizon_exceeded",
             Self::LiquidityBelowMinimum => "liquidity_below_minimum",
+            Self::VolatilityExceeded => "volatility_exceeded",
+            Self::GapExceeded => "gap_exceeded",
         }
     }
 }
@@ -66,6 +72,7 @@ pub struct Policy {
     instruments: Vec<InstrumentId>,
     max_horizon: u16,
     liquidity: Option<u64>,
+    market: Option<(u32, u32)>,
 }
 /// Sealed deterministic decision, retaining all applicable reasons in stable order.
 #[derive(Debug, Eq, PartialEq)]
@@ -123,6 +130,7 @@ impl Policy {
             instruments,
             max_horizon,
             liquidity: None,
+            market: None,
         })
     }
     /// Require the compiled liquidity revision and explicit minimum; zero is not a disable flag.
@@ -169,6 +177,75 @@ impl Policy {
                     .any(|v| v.instrument() == *id && v.cents() >= minimum)
             });
         }
+        decision.status = if decision.eligible.is_empty() {
+            Status::Abstained
+        } else if decision.eligible.len() < decision.candidates.len() {
+            Status::Narrowed
+        } else {
+            Status::Approved
+        };
+        Ok(decision)
+    }
+    /// Select both exact market revisions and explicit inclusive ppm maxima.
+    /// # Errors
+    /// Unsupported formula revisions reject rather than defaulting to another calculation.
+    pub fn with_market_constraints(
+        mut self,
+        volatility: &str,
+        gap: &str,
+        max_volatility: u32,
+        max_gap: u32,
+    ) -> Result<Self, InvalidInput> {
+        if volatility != crate::market_constraints::VOLATILITY_REVISION
+            || gap != crate::market_constraints::GAP_REVISION
+        {
+            return Err(InvalidInput);
+        }
+        self.market = Some((max_volatility, max_gap));
+        Ok(self)
+    }
+    /// Whether the selected policy requires complete opening evidence.
+    #[must_use]
+    pub const fn requires_market_constraints(&self) -> bool {
+        self.market.is_some()
+    }
+    /// Apply metrics for the complete original universe, preserving earlier denials.
+    /// # Errors
+    /// Rejects absent configuration, foreign decisions and missing/duplicate/foreign metrics.
+    pub fn apply_market_constraints(
+        &self,
+        mut decision: Decision,
+        values: &[crate::market_constraints::Metrics],
+    ) -> Result<Decision, InvalidInput> {
+        let (vol, gap) = self.market.ok_or(InvalidInput)?;
+        if values.len() != decision.candidates.len() {
+            return Err(InvalidInput);
+        }
+        let mut ids = values.iter().map(|v| v.instrument()).collect::<Vec<_>>();
+        ids.sort_unstable();
+        if decision.revision != self.revision || ids != decision.candidates {
+            return Err(InvalidInput);
+        }
+        for (failed, reason) in [
+            (
+                values.iter().any(|v| v.volatility_ppm() > vol),
+                Reason::VolatilityExceeded,
+            ),
+            (
+                values.iter().any(|v| v.gap_ppm() > gap),
+                Reason::GapExceeded,
+            ),
+        ] {
+            if failed && !decision.reasons.contains(&reason) {
+                decision.reasons.push(reason);
+            }
+        }
+        decision.reasons.sort_unstable();
+        decision.eligible.retain(|id| {
+            values
+                .iter()
+                .any(|v| v.instrument() == *id && v.volatility_ppm() <= vol && v.gap_ppm() <= gap)
+        });
         decision.status = if decision.eligible.is_empty() {
             Status::Abstained
         } else if decision.eligible.len() < decision.candidates.len() {
