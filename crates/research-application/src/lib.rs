@@ -11,7 +11,7 @@ use edgeagent_contracts::research::{
     AbstentionReason, EvidenceRef, RankedCandidate, ResearchAbstention, ResearchArtifact,
     ResearchRecord, ResearchRequest, Unavailable,
 };
-use edgeagent_research_domain::{Abstention, EvidencePolicy, FrozenSeries, momentum, ranking};
+use edgeagent_research_domain::{Abstention, EvidencePolicy, FrozenSeries, momentum, strategy};
 /// Fixed template and application profile revision; implementation/configuration must pin it.
 pub const RENDERER_REVISION: &str = "research-ranking-raw-v1";
 /// Safe evaluation failure, distinct from an accepted-request evidence abstention.
@@ -161,7 +161,9 @@ pub fn evaluate(
     {
         return Err(EvaluationError::InvalidExpiry);
     }
-    let ranking = ranking::rank(&eligible)
+    let selected_strategy = strategy::MOMENTUM;
+    let ranking = selected_strategy
+        .rank(&eligible)
         .map_err(EvaluationError::Calculation)?
         .into_iter()
         .map(|c| RankedCandidate {
@@ -186,7 +188,7 @@ pub fn evaluate(
     evidence.sort_by(|a, b| (&a.instrument, &a.digest).cmp(&(&b.instrument, &b.digest)));
     let explanation = format!(
         "{RENDERER_REVISION}; {}; lookback_sessions={}; score_unit=ppm; basis=raw_usd; scenarios=not_qualified.",
-        momentum::REVISION,
+        selected_strategy.revision(),
         request.lookback_sessions
     );
     finish(ResearchRecord::Artifact(ResearchArtifact {

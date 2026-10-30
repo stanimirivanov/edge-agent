@@ -32,7 +32,23 @@ The domain [ranking module](../../crates/research-domain/src/ranking.rs) consume
 sealed eligible evidence and [versioned momentum](research-momentum.md). It sorts
 rounded integer ppm descending, then instrument identity ascending. Raw returns
 that round to the same ppm use the identity tie-break. A calculation failure returns
-an error and no partial ranking. No threshold, strategy registry or approval is added.
+an error and no partial ranking. No threshold or approval is added.
+
+M05-PR1 routes application evaluation through the closed compiled
+[strategy registry](../../crates/research-domain/src/strategy.rs). Its sole entry,
+`MOMENTUM`, delegates to the unchanged ranking implementation and supplies the same
+formula revision to the renderer. `resolve` accepts only the exact formula revision;
+unknown names, aliases and versions return no entry, never a fallback. The application
+continues to select its existing fixed momentum profile, not a client-selected name.
+Request implementation/configuration digests retain their existing binding meaning;
+they are not registry lookup keys.
+
+A compiled entry means implementation availability, not approval, entitlement or
+publication authority. It accepts only sealed evidence, returns the existing concrete
+momentum result/error types, and adds no trait hierarchy, dynamic plugins, dependencies
+or mutable registry. Approval and configuration loading remain separate M05 work.
+This internal refactor preserves ADR-0079 and ADR-0080 semantics and requires no
+wire, storage, revision or deployment migration; reverting it changes no stored data.
 
 The existing [evidence policy](research-evidence.md) abstains for the entire request
 when any required candidate fails. Empty evidence produces `insufficient_history`;
@@ -60,7 +76,12 @@ Identical admitted request, selected policy, evidence and expiry yield identical
 
 The default protected `research-rendering` gate enables the existing serde_json
 map-order feature and freezes artifact/abstention examples in
-[`fixtures`](../../crates/research-application/tests/fixtures/). Six tests cover
+[`fixtures`](../../crates/research-application/tests/fixtures/). Tests cover
 golden bytes, all 24 candidate permutations/session order, request binding,
 whole-request failure, expiry/overflow and lineage-sensitive canonical identity.
+The registry parity case compares direct ranking metadata and application output,
+including a later-candidate overflow that must never expose partial results. Frozen
+artifact and abstention SHA-256 values additionally guard content identity. Domain
+unit tests prove exact lookup and unknown-revision refusal. Run both package suites
+with `cargo test --locked -p edgeagent-research-domain -p edgeagent-research-application`.
 No test mutates process locale, requires a service, or claims source authentication.
