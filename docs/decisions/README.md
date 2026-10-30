@@ -202,3 +202,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0088](0088-append-and-project-owner-artifact-lifecycle.md) | Accepted | Append and project owner artifact lifecycle. |
 | [ADR-0089](0089-verify-retained-research-with-read-only-replay.md) | Accepted | Verify retained Research with read-only replay. |
 | [ADR-0090](0090-qualify-four-process-research-and-history-shortfalls.md) | Accepted | Qualify four-process Research and history shortfalls. |
+| [ADR-0091](0091-define-immutable-strategy-policy-bundles.md) | Accepted | Define immutable strategy policy bundles. |
