@@ -167,6 +167,19 @@ pub struct PreparedCompletion {
     definition: MessageDefinition,
 }
 impl PreparedCompletion {
+    /// Prepare an independently reconciled terminal result for the original delivery.
+    /// This staged typed path retains existing ingress/identity checks; owner approval
+    /// and transaction fencing remain persistence obligations.
+    /// # Errors
+    /// Rejects mismatched delivery/request identity and existing publication contract failures.
+    pub fn from_validated(
+        delivery: MessageEnvelope,
+        outcome: &crate::validation::ValidatedOutcome,
+        time: &str,
+    ) -> Result<Self, PublicationError> {
+        Self::new(delivery, outcome.rendered(), time)
+    }
+
     /// Bind the exact evaluation command, rendered outcome and explicit occurrence time.
     /// The outer adapter authenticates Gateway/MarketData and verifies evidence authority.
     /// # Errors

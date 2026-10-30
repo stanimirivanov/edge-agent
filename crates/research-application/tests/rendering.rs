@@ -1000,3 +1000,197 @@ fn context_gates_use_exact_regimes_closed_windows_and_critical_freshness() -> Re
     assert!(Rules::new(0, 0, 1, vec![Regime::Flat, Regime::Flat]).is_err());
     Ok(())
 }
+
+#[test]
+fn independent_validation_reconciles_proposals_and_seals_typed_preparation() -> Result {
+    use edgeagent_research_application::{
+        governed::{self, ConstraintInputs, ContextInputs},
+        publication::{EVALUATE, PreparedCompletion},
+        validation::{self, Inputs},
+    };
+    use policy::{Direction, Intent, Policy};
+    let data = inputs()?;
+    let evidence = policy()?;
+    let gate = Policy::new(
+        [8; 32],
+        [3; 32],
+        (1..=4)
+            .map(InstrumentId::new)
+            .collect::<std::result::Result<_, _>>()?,
+        5,
+    )?;
+    let intent = Intent {
+        direction: Direction::Long,
+        horizon_sessions: 1,
+    };
+    let selected = || Inputs {
+        request: request(),
+        evidence: &evidence,
+        series: &data,
+        expires_at_ms: 101,
+        policy: &gate,
+        intent,
+        context: ContextInputs {
+            constraints: ConstraintInputs {
+                volumes: &[],
+                opens: &[],
+            },
+            context: &[],
+        },
+    };
+    let expected = render(&data)?;
+    let validated = validation::validate(expected.bytes(), selected())?;
+    assert_eq!(validated.bytes(), expected.bytes());
+    assert_eq!(validated.digest(), expected.digest());
+    assert!(validated.record() == expected.record());
+    assert!(validated.decision().is_some());
+    let command = |r: ResearchRequest| -> Result<edgeagent_contracts::MessageEnvelope> {
+        let partition = format!("research-request/{}/{}", r.scope, r.request_id);
+        let record = ResearchRecord::Request(r);
+        Ok(edgeagent_contracts::MessageEnvelope::from_payload(
+            edgeagent_contracts::MessageMetadata {
+                id: "validator-delivery".into(),
+                source: edgeagent_contracts::Component::Gateway.source_uri().into(),
+                message_type: EVALUATE.message_type().into(),
+                subject: partition.clone(),
+                time: "2026-10-30T00:00:00Z".into(),
+                data_schema: EVALUATE.data_schema().into(),
+                correlation_id: "validation-correlation".into(),
+                causation_id: "validation-cause".into(),
+                idempotency_key: record.digest()?,
+                partition_key: partition,
+                trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
+                trace_state: None,
+            },
+            &record,
+        )?)
+    };
+    let prepared = PreparedCompletion::from_validated(
+        command(request())?,
+        &validated,
+        "2026-10-30T00:00:00Z",
+    )?;
+    assert_eq!(prepared.outcome_bytes(), expected.bytes());
+    let mut foreign = request();
+    foreign.request_id = "foreign".into();
+    assert!(
+        PreparedCompletion::from_validated(command(foreign)?, &validated, "2026-10-30T00:00:00Z")
+            .is_err()
+    );
+    for mutation in 0..10 {
+        let ResearchRecord::Artifact(mut artifact) = expected.record().clone() else {
+            return Err("artifact".into());
+        };
+        match mutation {
+            0 => artifact.ranking[0].score_ppm += 1,
+            1 => artifact.ranking[3].score_ppm -= 1,
+            2 => {
+                artifact.ranking.remove(0);
+            }
+            3 => artifact.evidence[0].digest = "09".repeat(32),
+            4 => artifact.evidence[0].available_at_ms = 99,
+            5 => artifact.expires_at_ms = 102,
+            6 => artifact.explanation = "PRIVATE_SENTINEL".into(),
+            7 => artifact.request.implementation = "08".repeat(32),
+            8 => artifact.request.scope = "foreign".into(),
+            _ => {
+                artifact.ranking.pop();
+                artifact.evidence.pop();
+            }
+        }
+        // All mutations here remain canonical valid v1: shape checks alone cannot catch them.
+        let bytes = ResearchRecord::Artifact(artifact).canonical_bytes()?;
+        let error = validation::validate(&bytes, selected())
+            .err()
+            .ok_or("expected mismatch")?;
+        assert!(matches!(error, validation::Error::Mismatch));
+        assert!(!format!("{error:?}").contains("PRIVATE_SENTINEL"));
+        assert_eq!(error.to_string(), "research proposal validation refused");
+    }
+    let fake =
+        edgeagent_research_application::abstain(request(), AbstentionReason::NoEligibleCandidate)?;
+    assert!(matches!(
+        validation::validate(fake.bytes(), selected()),
+        Err(validation::Error::Mismatch)
+    ));
+    assert!(matches!(
+        validation::validate(
+            &ResearchRecord::Request(request()).canonical_bytes()?,
+            selected()
+        ),
+        Err(validation::Error::NotTerminal)
+    ));
+    let malformed = validation::validate(b"PRIVATE_SENTINEL", selected())
+        .err()
+        .ok_or("error")?;
+    assert!(std::error::Error::source(&malformed).is_some());
+    assert!(!format!("{malformed:?}").contains("PRIVATE_SENTINEL"));
+    let oversize = vec![b'x'; edgeagent_contracts::research::MAX_RESEARCH_BYTES + 1];
+    assert!(matches!(
+        validation::validate(&oversize, selected()),
+        Err(validation::Error::Proposal(_))
+    ));
+    let mut ties: serde_json::Value = serde_json::from_slice(expected.bytes())?;
+    ties["data"]["ranking"]
+        .as_array_mut()
+        .ok_or("ranking")?
+        .swap(0, 1);
+    assert!(matches!(
+        validation::validate(&serde_json::to_vec(&ties)?, selected()),
+        Err(validation::Error::Proposal(_))
+    ));
+    let mut forged: serde_json::Value = serde_json::from_slice(expected.bytes())?;
+    forged["data"]["validated"] = true.into();
+    assert!(matches!(
+        validation::validate(&serde_json::to_vec(&forged)?, selected()),
+        Err(validation::Error::Proposal(_))
+    ));
+    let needs = Policy::new(
+        [8; 32],
+        [3; 32],
+        (1..=4)
+            .map(InstrumentId::new)
+            .collect::<std::result::Result<_, _>>()?,
+        5,
+    )?
+    .with_liquidity(liquidity::REVISION, 0)?;
+    let mut missing = selected();
+    missing.policy = &needs;
+    assert!(matches!(
+        validation::validate(expected.bytes(), missing),
+        Err(validation::Error::Mismatch)
+    ));
+
+    let mut invalid = selected();
+    invalid.expires_at_ms = 102;
+    let failure = validation::validate(expected.bytes(), invalid)
+        .err()
+        .ok_or("evaluation failure")?;
+    assert!(matches!(failure, validation::Error::Evaluation(_)));
+    assert!(std::error::Error::source(&failure).is_some());
+    let narrower = Policy::new(
+        [8; 32],
+        [3; 32],
+        vec![InstrumentId::new(1)?, InstrumentId::new(3)?],
+        5,
+    )?;
+    let proposal = governed::evaluate(request(), &evidence, &data, 101, &narrower, intent)?;
+    let mut narrow_inputs = selected();
+    narrow_inputs.policy = &narrower;
+    assert!(validation::validate(proposal.outcome().bytes(), narrow_inputs).is_ok());
+    let mut failed = inputs()?;
+    failed[0].entitled = false;
+    let abstained =
+        edgeagent_research_application::abstain(request(), AbstentionReason::MissingEntitlement)?;
+    let mut denied = selected();
+    denied.series = &failed;
+    let receipt = validation::validate(abstained.bytes(), denied)?;
+    assert!(receipt.decision().is_none());
+    let mut denied = selected();
+    denied.series = &failed;
+    assert!(matches!(
+        validation::validate(expected.bytes(), denied),
+        Err(validation::Error::Mismatch)
+    ));
+    Ok(())
+}

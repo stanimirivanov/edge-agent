@@ -7,6 +7,7 @@ pub mod governed;
 pub mod lifecycle;
 pub mod publication;
 pub mod replay;
+pub mod validation;
 pub mod worker;
 
 use edgeagent_contracts::research::{
