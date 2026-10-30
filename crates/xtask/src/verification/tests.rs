@@ -1202,3 +1202,26 @@ fn overrides_are_single_argv_values_and_ordinary_children_force_offline_sqlx()
     assert!(!child.get_envs().any(|(key, _)| key == "SQLX_OFFLINE"));
     Ok(())
 }
+
+#[test]
+fn research_process_wrapper_cannot_drift_from_protected_cargo_discovery() -> Result<(), String> {
+    let original = inventory::checks();
+    inventory::validate(&original)?;
+    let index = original
+        .iter()
+        .position(|c| c.id == "research-processes")
+        .ok_or("process gate")?;
+    for mutation in 0..3 {
+        let mut changed = original.clone();
+        match mutation {
+            0 => changed[index].command.args[0] = "scripts/unreviewed.py",
+            1 => changed[index].command.program = Program::Cargo,
+            _ => changed[index]
+                .command
+                .args
+                .push("--skip=four_process_owner_history_shortfall_is_a_stable_abstention"),
+        }
+        assert!(inventory::validate(&changed).is_err());
+    }
+    Ok(())
+}

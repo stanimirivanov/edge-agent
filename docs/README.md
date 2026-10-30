@@ -92,6 +92,8 @@ For M04 receipt-first Research execution, read [Research worker](development/res
 
 For M04 owner-correlated offline evidence, read [research acquisition](development/research-acquisition.md) and [ADR-0083](decisions/0083-correlate-owner-approved-research-evidence.md).
 
+For M04 real service acceptance, read [four-process Research qualification](development/research-processes.md).
+
 For M04 byte reproducibility, read [Research replay](development/research-replay.md) and [ADR-0089](decisions/0089-verify-retained-research-with-read-only-replay.md).
 
 For M04 owner artifact transitions, read [Research lifecycle](development/research-lifecycle.md) and [ADR-0088](decisions/0088-append-and-project-owner-artifact-lifecycle.md).
