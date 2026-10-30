@@ -108,6 +108,8 @@ For M05 immutable declarations, read [strategy and policy configuration](develop
 
 For M05 local approval, read [strategy governance](development/strategy-governance.md).
 
+For M05 isolated execution, read [strategy experiments](development/strategy-experiments.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

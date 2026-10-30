@@ -204,3 +204,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0090](0090-qualify-four-process-research-and-history-shortfalls.md) | Accepted | Qualify four-process Research and history shortfalls. |
 | [ADR-0091](0091-define-immutable-strategy-policy-bundles.md) | Accepted | Define immutable strategy policy bundles. |
 | [ADR-0092](0092-retain-exact-local-strategy-approval-authority.md) | Accepted | Retain exact local strategy approval authority. |
+| [ADR-0093](0093-isolate-experimental-research-results.md) | Accepted | Isolate experimental Research results. |
