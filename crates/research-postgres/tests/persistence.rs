@@ -550,27 +550,36 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         retire.await??;
         assert!(completion.await?.is_err());
         assert_eq!(h.counts().await?, (0, 0, 0));
-        // Authentication uses session_user: a separate login cannot assert an owner actor.
+        // Give the distinct login real object access: refusal must be ownership policy,
+        // not failed authentication, a wrong search_path or missing table privileges.
         let role = format!("governance_guest_{}", h.key);
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE ROLE {role} LOGIN")))
-            .execute(&h.pool)
-            .await?;
-        let url = std::env::var("EDGEAGENT_POSTGRES_URL")?;
-        let options: sqlx::postgres::PgConnectOptions = url.parse()?;
-        let guest = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
-            .connect_with(options.username(&role))
-            .await?;
-        assert!(
-            PostgresResearchStore::new(guest.clone())
-                .govern(&p, 2)
-                .await
-                .is_err()
-        );
-        guest.close().await;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP ROLE {role}")))
-            .execute(&h.pool)
-            .await?;
+        let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&h.pool).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals TO {role}"
+        ))).execute(&h.pool).await?;
+        let guest_result = AssertUnwindSafe(async {
+            let options: sqlx::postgres::PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
+            let guest = sqlx::postgres::PgPoolOptions::new().max_connections(1)
+                .connect_with(options.username(&role).password("governance-guest-test-only")
+                    .options([("search_path", schema.as_str())])).await?;
+            let result = AssertUnwindSafe(async {
+                let actor: String = sqlx::query_scalar("SELECT session_user::text").fetch_one(&guest).await?;
+                assert_eq!(actor, role);
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM edgeagent_research_profiles").fetch_one(&guest).await?;
+                assert_eq!(count, 1);
+                let refusal = PostgresResearchStore::new(guest.clone()).govern(&p, 2).await
+                    .err().ok_or("nonowner was allowed to administer")?;
+                assert_eq!(refusal.kind(), Kind::Invalid);
+                Result::Ok(())
+            }).catch_unwind().await;
+            guest.close().await;
+            match result { Ok(r) => r, Err(panic) => std::panic::resume_unwind(panic) }
+        }).catch_unwind().await;
+        // Always revoke fixture grants and remove the login, even after failed assertions.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
+        ))).execute(&h.pool).await?;
+        match guest_result { Ok(r) => r?, Err(panic) => std::panic::resume_unwind(panic) }
         Ok(())
     })
     .catch_unwind()
