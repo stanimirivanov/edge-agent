@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod experiment;
+pub mod governed;
 pub mod lifecycle;
 pub mod publication;
 pub mod replay;

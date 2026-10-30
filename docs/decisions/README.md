@@ -206,3 +206,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0092](0092-retain-exact-local-strategy-approval-authority.md) | Accepted | Retain exact local strategy approval authority. |
 | [ADR-0093](0093-isolate-experimental-research-results.md) | Accepted | Isolate experimental Research results. |
 | [ADR-0094](0094-export-owner-bound-policy-evidence.md) | Accepted | Export owner-bound policy evidence. |
+| [ADR-0095](0095-enforce-independent-research-eligibility.md) | Accepted | Enforce independent Research eligibility. |
