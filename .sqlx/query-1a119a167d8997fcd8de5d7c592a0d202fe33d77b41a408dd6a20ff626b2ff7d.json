@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT revision,action,actor FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_approvals",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_approvals",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "actor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_approvals",
+            "name": "actor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1a119a167d8997fcd8de5d7c592a0d202fe33d77b41a408dd6a20ff626b2ff7d"
+}

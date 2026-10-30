@@ -418,3 +418,171 @@ async fn lifecycle_statement_and_deferred_commit_failures_leave_no_revision_or_o
     }).catch_unwind().await;
     h.finish(result).await
 }
+
+fn governance_profile() -> edgeagent_contracts::strategy_governance::Profile {
+    edgeagent_contracts::strategy_governance::Profile {
+        scope: "scope".into(),
+        implementation: "02".repeat(32),
+        configuration: "03".repeat(32),
+        lookback_sessions: 1,
+        max_age_ms: 10,
+        ttl_ms: 1,
+        formula: "raw-usd-roc-ppm-half-even-v1".into(),
+        renderer: "research-ranking-raw-v1".into(),
+    }
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn governed_profiles_require_approval_preserve_receipts_and_retire_permanently() -> Result {
+    let h = Harness::new().await?;
+    let result = AssertUnwindSafe(async {
+        let p = governance_profile();
+        let store = PostgresResearchStore::governed(h.pool.clone(), p.clone());
+        let first = prepared("scope", "governed-1", "governed-delivery-1", 110, 3)?;
+        assert!(store.recover(first.delivery()).await.is_err());
+        store.govern(&p, 1).await?;
+        store.govern(&p, 1).await?;
+        assert!(store.commit(&first).await.is_err());
+        assert_eq!(h.counts().await?, (0, 0, 0));
+        let mut changed = p.clone();
+        changed.ttl_ms = 2;
+        assert!(store.govern(&changed, 1).await.is_err());
+        assert!(store.govern(&p, 3).await.is_err());
+        store.govern(&p, 2).await?;
+        store.govern(&p, 2).await?;
+        assert!(store.recover(first.delivery()).await?.is_none());
+        let receipt = store.commit(&first).await?;
+        let restarted = PostgresResearchStore::governed(h.reconnect().await?, p.clone());
+        assert_eq!(
+            restarted
+                .recover(first.delivery())
+                .await?
+                .ok_or("receipt")?
+                .bytes(),
+            receipt.bytes()
+        );
+        let mismatched = PostgresResearchStore::governed(h.pool.clone(), changed);
+        let next = prepared("scope", "governed-2", "governed-delivery-2", 110, 3)?;
+        assert!(mismatched.commit(&next).await.is_err());
+        store.govern(&p, 3).await?;
+        store.govern(&p, 3).await?;
+        assert!(store.commit(&next).await.is_err());
+        assert!(store.govern(&p, 2).await.is_err());
+        assert_eq!(
+            store
+                .recover(first.delivery())
+                .await?
+                .ok_or("receipt")?
+                .bytes(),
+            receipt.bytes()
+        );
+        assert_eq!(h.counts().await?, (1, 1, 1));
+        let rows: Vec<(i16, String, String)> = sqlx::query_as(
+            "SELECT revision,action,actor FROM edgeagent_research_approvals ORDER BY revision",
+        )
+        .fetch_all(&h.pool)
+        .await?;
+        assert_eq!(rows.iter().map(|r| r.0).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert!(rows.iter().all(|r| !r.2.is_empty()));
+        assert!(
+            sqlx::query("DELETE FROM edgeagent_research_approvals")
+                .execute(&h.pool)
+                .await
+                .is_err()
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    h.finish(result).await
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Result {
+    let h = Harness::new().await?;
+    let result = AssertUnwindSafe(async {
+        let p = governance_profile();
+        let store = PostgresResearchStore::governed(h.pool.clone(), p.clone());
+        store.govern(&p, 1).await?;
+        store.govern(&p, 2).await?;
+        // Hold the same definition lock retirement acquires; queue retirement before completion.
+        let mut barrier = h.pool.begin().await?;
+        sqlx::query("SELECT profile FROM edgeagent_research_profiles FOR UPDATE")
+            .fetch_all(&mut *barrier)
+            .await?;
+        let retire_pool = h.reconnect().await?;
+        let retire_profile = p.clone();
+        let retire_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&retire_pool)
+            .await?;
+        let retire = tokio::spawn(async move {
+            PostgresResearchStore::new(retire_pool)
+                .govern(&retire_profile, 3)
+                .await
+        });
+        // Wait for the actual ungranted lock rather than relying on scheduling sleeps.
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE NOT granted AND pid=$1)",
+                )
+                .bind(retire_pid)
+                .fetch_one(&h.pool)
+                .await?;
+                if waiting {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+            Result::Ok(())
+        })
+        .await??;
+        let completion_pool = h.reconnect().await?;
+        let completion_profile = p.clone();
+        let completion = tokio::spawn(async move {
+            PostgresResearchStore::governed(completion_pool, completion_profile)
+                .commit(&prepared("scope", "blocked", "blocked-delivery", 110, 3)?)
+                .await
+                .map(|_| ())
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        });
+        barrier.commit().await?;
+        retire.await??;
+        assert!(completion.await?.is_err());
+        assert_eq!(h.counts().await?, (0, 0, 0));
+        // Give the distinct login real object access: refusal must be ownership policy,
+        // not failed authentication, a wrong search_path or missing table privileges.
+        let role = format!("governance_guest_{}", h.key);
+        let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&h.pool).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals TO {role}"
+        ))).execute(&h.pool).await?;
+        let guest_result = AssertUnwindSafe(async {
+            let options: sqlx::postgres::PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
+            let guest = sqlx::postgres::PgPoolOptions::new().max_connections(1)
+                .connect_with(options.username(&role).password("governance-guest-test-only")
+                    .options([("search_path", schema.as_str())])).await?;
+            let result = AssertUnwindSafe(async {
+                let actor: String = sqlx::query_scalar("SELECT session_user::text").fetch_one(&guest).await?;
+                assert_eq!(actor, role);
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM edgeagent_research_profiles").fetch_one(&guest).await?;
+                assert_eq!(count, 1);
+                let refusal = PostgresResearchStore::new(guest.clone()).govern(&p, 2).await
+                    .err().ok_or("nonowner was allowed to administer")?;
+                assert_eq!(refusal.kind(), Kind::Invalid);
+                Result::Ok(())
+            }).catch_unwind().await;
+            guest.close().await;
+            match result { Ok(r) => r, Err(panic) => std::panic::resume_unwind(panic) }
+        }).catch_unwind().await;
+        // Always revoke fixture grants and remove the login, even after failed assertions.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
+        ))).execute(&h.pool).await?;
+        match guest_result { Ok(r) => r?, Err(panic) => std::panic::resume_unwind(panic) }
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    h.finish(result).await
+}

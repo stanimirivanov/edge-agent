@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT profile FROM edgeagent_research_profiles WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_profiles",
+            "name": "profile"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "397d4eca1643871e29e3ca8cf5bb23eaed937fa9bf0f67ae47205058646c446b"
+}

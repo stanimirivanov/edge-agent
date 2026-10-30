@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_research_profiles VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "910532a4311cd9f8234aa0f33b8c6e1ea88e547b908c568b1a43a72a866d0cca"
+}

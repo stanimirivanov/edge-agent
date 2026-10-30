@@ -85,6 +85,25 @@ impl OwnerLoader {
             ttl_ms,
         })
     }
+    /// Bind the exact legacy environment profile for governed execution.
+    pub fn governance_profile(
+        &self,
+        lookback_sessions: u16,
+    ) -> edgeagent_contracts::strategy_governance::Profile {
+        let hex = |bytes: &[u8; 32]| bytes.iter().map(|b| format!("{b:02x}")).collect();
+        edgeagent_contracts::strategy_governance::Profile {
+            scope: self.scope.clone(),
+            implementation: hex(&self.implementation),
+            configuration: hex(&self.configuration),
+            lookback_sessions,
+            max_age_ms: self.max_age_ms,
+            ttl_ms: self.ttl_ms,
+            formula: edgeagent_research_domain::strategy::MOMENTUM
+                .revision()
+                .into(),
+            renderer: edgeagent_research_application::RENDERER_REVISION.into(),
+        }
+    }
     /// Check trusted scope/revision selection even when replay needs no evidence read.
     /// # Errors
     /// Rejects foreign scope or a profile differing from the retained request revisions.

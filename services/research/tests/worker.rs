@@ -136,3 +136,113 @@ async fn corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_compl
     }).catch_unwind().await;
     db.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn governed_processes_require_owner_approval_and_retirement_preserves_original_receipt()
+-> Result {
+    async fn command(
+        profile: &Profile,
+        schema: &str,
+        mode: &str,
+        bytes: &[u8],
+    ) -> Result<std::process::Output> {
+        use tokio::io::AsyncWriteExt as _;
+        let mut cmd = profile.command(schema, mode);
+        cmd.env("EDGEAGENT_RESEARCH_LOOKBACK_SESSIONS", "1");
+        let mut child = tokio::process::Command::from(cmd)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        child.stdin.take().ok_or("stdin")?.write_all(bytes).await?;
+        Ok(
+            tokio::time::timeout(std::time::Duration::from_secs(30), child.wait_with_output())
+                .await??,
+        )
+    }
+    let db = Database::new().await?;
+    let result = std::panic::AssertUnwindSafe(async {
+        let (event, bytes) = event("governed-request")?;
+        let profile = Profile::new(&bytes)?;
+        let binding = edgeagent_contracts::strategy_governance::Profile {
+            scope: "operator".into(),
+            implementation: "02".repeat(32),
+            configuration: "03".repeat(32),
+            lookback_sessions: 1,
+            max_age_ms: 1_209_600_000,
+            ttl_ms: 60_000,
+            formula: edgeagent_research_domain::strategy::MOMENTUM
+                .revision()
+                .into(),
+            renderer: edgeagent_research_application::RENDERER_REVISION.into(),
+        }
+        .bytes()?;
+        let input = event.to_json()?;
+        assert!(
+            !command(&profile, &db.schema, "offline-governed-once", &input)
+                .await?
+                .status
+                .success()
+        );
+        for mode in ["offline-governance-install", "offline-governance-install"] {
+            assert!(
+                command(&profile, &db.schema, mode, &binding)
+                    .await?
+                    .status
+                    .success()
+            );
+        }
+        assert!(
+            !command(&profile, &db.schema, "offline-governed-once", &input)
+                .await?
+                .status
+                .success()
+        );
+        assert!(
+            command(&profile, &db.schema, "offline-governance-approve", &binding)
+                .await?
+                .status
+                .success()
+        );
+        let first = command(&profile, &db.schema, "offline-governed-once", &input).await?;
+        assert!(first.status.success());
+        assert!(matches!(
+            ResearchRecord::decode(&first.stdout)?,
+            ResearchRecord::Artifact(_)
+        ));
+        assert!(
+            command(&profile, &db.schema, "offline-governance-retire", &binding)
+                .await?
+                .status
+                .success()
+        );
+        profile.unavailable()?;
+        let recovered = command(&profile, &db.schema, "offline-governed-once", &input).await?;
+        assert!(recovered.status.success());
+        assert_eq!(recovered.stdout, first.stdout);
+        let (next, _) = support::event("governed-request-2")?;
+        assert!(
+            !command(
+                &profile,
+                &db.schema,
+                "offline-governed-once",
+                &next.to_json()?
+            )
+            .await?
+            .status
+            .success()
+        );
+        assert!(
+            !command(&profile, &db.schema, "offline-governance-approve", &binding)
+                .await?
+                .status
+                .success()
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    db.finish(result).await
+}
