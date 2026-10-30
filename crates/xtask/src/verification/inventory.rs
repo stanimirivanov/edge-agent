@@ -2139,7 +2139,15 @@ pub(super) fn validate(checks: &[Check]) -> Result<(), String> {
                     }
                     expected_command.extend(["--exact", check.command.args[exact + 1]]);
                 }
-                if expected_command != check.command.args || check.command.program != Program::Cargo
+                // This owned wrapper builds the four binaries, then forwards the exact
+                // protected Cargo argv unchanged. No arbitrary script gains this exception.
+                let wrapped = check.id == "research-processes"
+                    && check.command.program == Program::Python
+                    && check.command.args.first() == Some(&"scripts/verify_research_processes.py")
+                    && check.command.args.get(1..) == Some(expected_command.as_slice());
+                if !wrapped
+                    && (expected_command != check.command.args
+                        || check.command.program != Program::Cargo)
                 {
                     return Err(format!(
                         "discovery and execution argv differ for {}",

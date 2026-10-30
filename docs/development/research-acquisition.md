@@ -33,7 +33,9 @@ with a closed pipe. It performs the same owner validation and durable processing
 without a broker. Both modes reject foreign scope and malformed correlation before
 reserving work. Neither accepts an acquisition ID, path, provider or rights from
 request data. The cutoff must include the installed admission's knowledge time;
-unsupported universe/lookback and future evidence become typed abstentions.
+unsupported instruments return `UnsupportedUniverse`, lookback beyond the retained
+session count returns `InsufficientHistory`, and future evidence returns its typed
+abstention. Retained prior receipts keep their original bytes/reason.
 
 `offline-research-read <acquisition-id>` accepts the exact retained correlated
 publication on stdin and returns canonical bytes only after current owner authority,

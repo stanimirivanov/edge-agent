@@ -172,7 +172,9 @@ Work items:
 - Demonstrate that duplicate requests create no duplicate artifact.
 
 Completion means separate gateway, market-data, research, and projector processes
-produce a reproducible artifact or correct abstention from offline evidence.
+produce a reproducible artifact or correct abstention from offline evidence. The
+[process qualification gate](../development/research-processes.md) exercises those
+actual binaries with isolated resources and explicit evidence/relay boundaries.
 
 The expansion plan adds virtual time, deterministic input/ID/randomness manifests
 (P05) and separately qualified Greeks/IV analytics (P11). P11 can proceed in

@@ -170,6 +170,17 @@ async fn unsupported_selection_and_revoked_owner_rights_abstain_without_objects(
         assert!(matches!(
             ResearchEvidence::from_envelope(&event)?,
             ResearchEvidence::Abstained {
+                reason: AbstentionReason::InsufficientHistory,
+                ..
+            }
+        ));
+        let mut outside = request.clone();
+        outside.request_id = "unsupported-instrument".into();
+        outside.lookback_sessions = 5;
+        outside.instruments = vec![format!("{:032x}", 2)];
+        assert!(matches!(
+            ResearchEvidence::from_envelope(&h.once(&delivery(&outside, "outside")?).await?)?,
+            ResearchEvidence::Abstained {
                 reason: AbstentionReason::UnsupportedUniverse,
                 ..
             }

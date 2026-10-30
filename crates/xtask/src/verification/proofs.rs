@@ -159,6 +159,14 @@ const PROJECTOR_BROKER: Target = Target {
     name: "broker",
     identities: &["broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_progress"],
 };
+const RESEARCH_PROCESSES: Target = Target {
+    package: "edgeagent-research",
+    name: "processes",
+    identities: &[
+        "four_process_artifact_survives_death_redelivery_rebuild_and_lifecycle",
+        "four_process_owner_history_shortfall_is_a_stable_abstention",
+    ],
+};
 const RESEARCH_REPLAY: Target = Target {
     package: "edgeagent-research",
     name: "replay_process",
@@ -383,6 +391,12 @@ pub(super) fn checks() -> Vec<Check> {
             &PROJECTOR_BROKER,
             EVENT_SPINE,
             "Real finite projector workers: ACK after commit, duplicate process recovery, both owner terminal routes, misroute quarantine and unresolved conflict without progress advancement.",
+        ),
+        suite(
+            "research-processes",
+            &RESEARCH_PROCESSES,
+            EVENT_SPINE,
+            "Four real service binaries, authorized retained evidence, HTTP, durable broker death/redelivery, exact output, replay/lifecycle and projection rebuild.",
         ),
         suite(
             "research-replay-postgres",
@@ -725,7 +739,7 @@ fn suite(
         // retain every scenario's internal contention and original deadlines.
         args.push("--test-threads=2");
     }
-    if id == "offline-worker-recovery" {
+    if matches!(id, "offline-worker-recovery" | "research-processes") {
         // Each case owns child processes, a file broker and a private schema.
         args.push("--test-threads=1");
     }
@@ -739,9 +753,18 @@ fn suite(
         } else {
             &["local-platform"]
         },
-        command: CommandSpec {
-            program: Program::Cargo,
-            args,
+        command: if id == "research-processes" {
+            CommandSpec {
+                program: Program::Python,
+                args: std::iter::once("scripts/verify_research_processes.py")
+                    .chain(args)
+                    .collect(),
+            }
+        } else {
+            CommandSpec {
+                program: Program::Cargo,
+                args,
+            }
         },
         prerequisites,
         // List the whole target, not the filtered test: otherwise a newly
@@ -762,6 +785,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         PROJECTOR_BROKER,
         RESEARCH_WORKER,
         RESEARCH_REPLAY,
+        RESEARCH_PROCESSES,
         RESEARCH_WORKER_BROKER,
         RESEARCH_EVIDENCE_BROKER,
         RESEARCH_EVIDENCE_PROCESSES,
@@ -1087,7 +1111,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 49);
+        assert_eq!(checks.len(), 50);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -1103,8 +1127,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 139);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 139);
+        assert_eq!(inventory.len(), 141);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 141);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

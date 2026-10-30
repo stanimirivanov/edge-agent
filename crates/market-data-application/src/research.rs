@@ -13,10 +13,11 @@ pub fn select(
     ResearchRecord::Request(request.clone())
         .canonical_bytes()
         .map_err(|_| AbstentionReason::InvalidEvidence)?;
-    if request.instruments != [format!("{:032x}", record.request().scope.instrument.get())]
-        || request.lookback_sessions >= sessions
-    {
+    if request.instruments != [format!("{:032x}", record.request().scope.instrument.get())] {
         return Err(AbstentionReason::UnsupportedUniverse);
+    }
+    if request.lookback_sessions >= sessions {
+        return Err(AbstentionReason::InsufficientHistory);
     }
     if request.decision_at_ms < record.request().admitted_at.unix_millis() {
         return Err(AbstentionReason::FutureEvidence);
