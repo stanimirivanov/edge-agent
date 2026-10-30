@@ -10,6 +10,7 @@ pub mod evidence;
 pub mod execution;
 mod message_type;
 mod messaging;
+pub mod policy_evidence;
 pub mod research;
 pub mod research_acquisition;
 mod routing;

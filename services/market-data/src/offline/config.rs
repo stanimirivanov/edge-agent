@@ -92,7 +92,7 @@ impl Config {
                 let id = EvidenceId::new(&args[1]).map_err(|_| ConfigError("seed requires one canonical nonzero hexadecimal request identity"))?;
                 request = Some(u128::from_str_radix(id.as_str(), 16)?);
             }
-            "offline-research-once" | "offline-research-worker" | "offline-research-read" if args.len() == 2 => {
+            "offline-research-once" | "offline-research-worker" | "offline-research-read" | "offline-research-policy-read" if args.len() == 2 => {
                 let id=EvidenceId::new(&args[1]).map_err(|_|ConfigError("research requires one owner-installed acquisition ID"))?;
                 request=Some(u128::from_str_radix(id.as_str(),16)?);
                 let scope=required("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?;
@@ -172,7 +172,10 @@ impl Config {
             .open(self.root.join("offline.lock"))?;
         lock.try_lock()
             .map_err(|error| -> Box<dyn std::error::Error + Send + Sync> {
-                if self.command == "offline-research-read" {
+                if matches!(
+                    self.command.as_str(),
+                    "offline-research-read" | "offline-research-policy-read"
+                ) {
                     BudgetError::with_source(BudgetErrorKind::Storage, error).into()
                 } else {
                     ConfigError("offline profile already has an owner or locking is unsupported")

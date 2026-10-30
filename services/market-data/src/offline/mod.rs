@@ -71,7 +71,12 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                     "offline worker failed closed: dependency, policy or confirmation failure"
                 );
             }
-            if args.first().is_some_and(|a| a == "offline-research-read") {
+            if args.first().is_some_and(|a| {
+                matches!(
+                    a.as_str(),
+                    "offline-research-read" | "offline-research-policy-read"
+                )
+            }) {
                 let mut cause = Some(error.as_ref() as &(dyn std::error::Error + 'static));
                 while let Some(e) = cause {
                     if e.downcast_ref::<BudgetError>()
@@ -132,7 +137,7 @@ async fn execute(config: &config::Config) -> Result {
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
         let mut confirmed = config.confirmed.clone();
-        if config.command == "offline-research-read" {
+        if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read") {
             use std::io::{Read as _,Write as _};
             let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let event=MessageEnvelope::from_json(&bytes)?;
@@ -142,11 +147,18 @@ async fn execute(config: &config::Config) -> Result {
             if Some(retained.admission.request().id.get())!=config.request {return Err(BudgetError::new(BudgetErrorKind::Denied).into());}
             let job=Job::restore(&retained.admission)?;
             let access=Access{job:&job,captured:now()?};
-            let edgeagent_contracts::research_acquisition::ResearchEvidence::Ready{decision,..}=outcome else {return Err(BudgetError::new(BudgetErrorKind::Denied).into());};
+            let edgeagent_contracts::research_acquisition::ResearchEvidence::Ready{decision,..}=&outcome else {return Err(BudgetError::new(BudgetErrorKind::Denied).into());};
             let EvidenceOutcome::Ready{object}=&decision.outcome else {return Err(BudgetError::new(BudgetErrorKind::Invalid).into());};
             let managed=RetainedEvidenceStorage::new(&storage,&ledger);
             let artifact=managed.get(object,&access).await?;
-            std::io::stdout().write_all(artifact.bytes())?;
+            if config.command=="offline-research-policy-read" {
+                use edgeagent_contracts::policy_evidence::{PolicyEvidence,EventCoverage};
+                let events=if Job::with_recipe(job.record.request().id.get(),job.record.request().admitted_at.unix_millis(),fixture::Recipe::PolicyHistory)?.record==job.record {
+                    EventCoverage::SyntheticComplete { revision:DailyEvidenceArtifact::hash(include_bytes!("../../fixtures/offline-policy-history-v1/events.json")),known_at_ms:job.record.request().admitted_at.unix_millis(),interval:[artifact.data().bars.first().ok_or("missing daily history")?.bucket[0].seconds.checked_mul(1000).ok_or("invalid coverage start")?,object.delete_by.seconds.checked_mul(1000).ok_or("invalid retention time")?],events:vec![] }
+                } else {EventCoverage::Unknown};
+                let companion=PolicyEvidence::V1 {request:outcome.request().clone(),daily:Box::new(artifact),events};
+                std::io::stdout().write_all(&companion.bytes()?)?;
+            } else {std::io::stdout().write_all(artifact.bytes())?;}
             return Ok(());
         }
         if config.command == "offline-research-once" {

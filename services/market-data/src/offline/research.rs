@@ -32,7 +32,7 @@ pub(super) async fn fulfil(
     }
     // Restore only a compiled owner recipe, using the retained first binding on restart.
     let job = Job::restore(&pending.admission)?;
-    // Restore admits only Single (one session) or the three six-session owner recipes.
+    // Restore admits only Single (one session) or the bounded six-session owner recipes.
     // Compare the immutable profile, without changing its code-byte configuration fingerprint.
     let single = Job::with_recipe(
         job.record.request().id.get(),

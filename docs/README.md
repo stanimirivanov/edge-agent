@@ -110,6 +110,8 @@ For M05 local approval, read [strategy governance](development/strategy-governan
 
 For M05 isolated execution, read [strategy experiments](development/strategy-experiments.md).
 
+For M05 policy inputs, read [owner-bound policy evidence](development/policy-evidence.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object
