@@ -28,8 +28,9 @@ pub const ABSTAINED: MessageDefinition = MessageDefinition::event(
     "research-request",
     EventRetention::Workflow,
 );
-const DEFINITIONS: [MessageDefinition; 4] = [
+const DEFINITIONS: [MessageDefinition; 5] = [
     EVALUATE,
+    crate::lifecycle::CHANGED,
     PUBLISHED,
     ABSTAINED,
     edgeagent_contracts::research_acquisition::DECIDED,

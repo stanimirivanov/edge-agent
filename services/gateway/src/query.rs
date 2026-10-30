@@ -101,7 +101,7 @@ impl ProjectorClient {
             .await
             .map_err(cause)?;
         let status = response.status();
-        if !matches!(status.as_u16(), 200 | 202 | 404 | 409)
+        if !matches!(status.as_u16(), 200 | 202 | 404 | 409 | 410)
             || response.headers().contains_key("content-encoding")
             || response
                 .headers()
@@ -154,6 +154,15 @@ impl ProjectorClient {
                 StatusCode::NOT_FOUND => "not_observed",
                 StatusCode::ACCEPTED if outcome => "pending",
                 StatusCode::CONFLICT if outcome => "gap",
+                StatusCode::GONE
+                    if outcome
+                        && matches!(
+                            state.status.as_str(),
+                            "invalidated" | "expired" | "withdrawn" | "corrected"
+                        ) =>
+                {
+                    state.status.as_str()
+                }
                 _ => return Err(unavailable()),
             };
             if state.status != expected {
@@ -177,18 +186,51 @@ struct View {
     projection_revision: u64,
     status: String,
     applied_delivery_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lifecycle: Option<edgeagent_contracts::research::ResearchLifecycle>,
 }
 impl View {
     fn valid(&self) -> bool {
         let key = self.applied_delivery_key.as_ref().is_some_and(|s| {
             !s.is_empty() && s.len() <= 512 && s.bytes().all(|b| b.is_ascii_graphic())
         });
+        let closed = |event: &edgeagent_contracts::research::ResearchLifecycle| {
+            use edgeagent_contracts::research::{LifecycleChange, ResearchRecord};
+            let state = match event.change {
+                LifecycleChange::Invalidated => "invalidated",
+                LifecycleChange::Expired => "expired",
+                LifecycleChange::Withdrawn => "withdrawn",
+                LifecycleChange::Corrected { .. } => "corrected",
+            };
+            (2..=3).contains(&self.projection_revision)
+                && key
+                && event.revision == self.projection_revision - 1
+                && event.scope == self.scope
+                && event.request_id == self.request_id
+                && (self.status == state || self.status == "gap")
+                && ResearchRecord::Lifecycle(event.clone())
+                    .canonical_bytes()
+                    .is_ok()
+        };
         match self.status.as_str() {
-            "pending" => self.projection_revision == 0 && self.applied_delivery_key.is_none(),
-            "artifact" | "abstained" => self.projection_revision == 1 && key,
+            "pending" => {
+                self.projection_revision == 0
+                    && self.applied_delivery_key.is_none()
+                    && self.lifecycle.is_none()
+            }
+            "artifact" | "abstained" => {
+                self.projection_revision == 1 && key && self.lifecycle.is_none()
+            }
+            "invalidated" | "expired" | "withdrawn" | "corrected" => {
+                self.lifecycle.as_ref().is_some_and(closed)
+            }
             "gap" => {
-                (self.projection_revision == 0 && self.applied_delivery_key.is_none())
-                    || (self.projection_revision == 1 && key)
+                if let Some(event) = &self.lifecycle {
+                    closed(event)
+                } else {
+                    (self.projection_revision == 0 && self.applied_delivery_key.is_none())
+                        || (self.projection_revision == 1 && key)
+                }
             }
             _ => false,
         }

@@ -199,3 +199,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0085](0085-project-immutable-research-outcomes.md) | Accepted | Project immutable Research outcomes. |
 | [ADR-0086](0086-persist-and-serve-scoped-research-projections.md) | Accepted | Persist and serve scoped Research projections. |
 | [ADR-0087](0087-query-research-through-the-local-gateway.md) | Accepted | Query Research through the local Gateway. |
+| [ADR-0088](0088-append-and-project-owner-artifact-lifecycle.md) | Accepted | Append and project owner artifact lifecycle. |

@@ -1,5 +1,6 @@
 //! Research-owned exact completion/inbox/outbox transaction; no external I/O.
 #![forbid(unsafe_code)]
+pub mod lifecycle;
 use edgeagent_contracts::{
     MessageEnvelope,
     research::{ResearchRecord, ResearchRequest},

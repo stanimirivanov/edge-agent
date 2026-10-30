@@ -30,11 +30,14 @@ may therefore be not-observed until trusted tracking or its terminal event arriv
 | `/v1/research-requests/{scope}/{id}/outcome` | 200 exact canonical artifact/abstention record bytes |
 
 Metadata preserves `scope`, `request_id`, `projection_revision`, `status` and
-`applied_delivery_key`. Current terminal-only projection revisions are zero/one;
+`applied_delivery_key`. Before lifecycle, projection revisions are zero/one;
 status is pending/artifact/abstained/gap. The applied key is opaque evidence of the
 first successful application, not a stream cursor, freshness clock or watermark.
 A terminal/gap revision of one requires that key; pending has revision zero and
-no key. Future lifecycle support must evolve this validator with the projector.
+no key. [Lifecycle changes](research-lifecycle.md) add optional last `lifecycle` fact
+and closed states at projection revision two/three; Gateway validates the owner
+revision, scope/ID and state relation. Closed outcome GETs return 410 with their
+status; correction digests remain metadata and are never followed automatically.
 
 A pending outcome returns 202 `{"status":"pending"}`; a gap returns 409
 `{"status":"gap"}`. Unknown IDs return 404 `{"status":"not_observed"}` on
@@ -83,10 +86,9 @@ query refusal, exact artifact/abstention bytes, observation states, upstream sha
 size/timeout/saturation failures and destination restrictions. The focused gate is part of
 default acceptance and protects exact test discovery. Existing real PostgreSQL
 admission proofs remain `cargo xtask verify --check gateway-admission --python python3`.
-These adapter tests use a controlled HTTP projector double; they do not claim a
+These adapter tests include lifecycle metadata and 410 responses and use a controlled HTTP projector double; they do not claim a
 full multi-service owner-to-Gateway acceptance run, which remains later work.
 
 No migrations or persistent state changes are introduced. Rollback stops serving
 and deploys the prior Gateway; admissions and projector state remain intact.
-Unset the endpoint to return safely to admission-only operation. Lifecycle queries
-and public authentication remain separately reviewed work.
+Unset the endpoint to return safely to admission-only operation. Public authentication remains separately reviewed work.

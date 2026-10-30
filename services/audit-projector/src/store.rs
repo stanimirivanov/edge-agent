@@ -23,10 +23,13 @@ pub struct View {
     pub projection_revision: u64,
     /// pending/artifact/abstained/gap observation.
     pub status: &'static str,
-    /// First successfully applied delivery key; opaque, not globally ordered.
+    /// Latest successfully applied delivery key; opaque, not globally ordered.
     pub applied_delivery_key: Option<String>,
     #[serde(skip)]
     outcome: Option<Vec<u8>>,
+    /// Last consecutive owner lifecycle fact, absent on original views.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<edgeagent_contracts::research::ResearchLifecycle>,
 }
 impl View {
     /// Exact canonical terminal bytes; None when pending or gapped.
@@ -159,8 +162,30 @@ impl ProjectionStore {
     ) -> Result<ReplayOutcome, Error> {
         edgeagent_messaging::DeliveryMessageKey::new(key)
             .map_err(|e| Error::caused(Kind::Invalid, e))?;
-        let record = terminal(envelope)?;
-        let req = request(&record)?.clone();
+        let record = if envelope.message_type()
+            == edgeagent_research_application::lifecycle::CHANGED.message_type()
+        {
+            ResearchRecord::Lifecycle(
+                edgeagent_research_application::lifecycle::decode(envelope)
+                    .map_err(|e| Error::caused(Kind::Invalid, e))?,
+            )
+        } else {
+            terminal(envelope)?
+        };
+        let req = if let ResearchRecord::Lifecycle(change) = &record {
+            if change.scope != self.scope {
+                return Err(Error::new(Kind::Scope));
+            }
+            let row=sqlx::query!("SELECT request FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2",change.scope,change.request_id).fetch_optional(&self.pool).await?.ok_or_else(||Error::new(Kind::Gap))?;
+            let ResearchRecord::Request(req) = ResearchRecord::decode(&row.request)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?
+            else {
+                return Err(Error::new(Kind::Corrupt));
+            };
+            req
+        } else {
+            request(&record)?.clone()
+        };
         if req.scope != self.scope {
             return Err(Error::new(Kind::Scope));
         }
@@ -172,7 +197,18 @@ impl ProjectionStore {
         Self::seed(&mut tx, &initial).await?;
         let row=sqlx::query!("SELECT request,checkpoint,applied_delivery_key,gap_envelope FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2 FOR UPDATE",req.scope,req.request_id).fetch_one(&mut *tx).await?;
         let mut view = restore(&req.scope, &req.request_id, &row.request, &row.checkpoint)?;
-        if row.gap_envelope.is_some() {
+        // A missing lifecycle predecessor may be backfilled; owner conflicts stay blocked.
+        let recoverable_gap = row.gap_envelope.as_ref().is_some_and(|bytes| {
+            MessageEnvelope::from_json(bytes)
+                .ok()
+                .and_then(|e| edgeagent_research_application::lifecycle::decode(&e).ok())
+                .is_some_and(|e| {
+                    e.revision > view.lifecycle_records().len() as u64 + 1
+                        || view.outcome_bytes().is_none()
+                })
+        });
+        let resolving_gap = row.gap_envelope.as_ref() == Some(&bytes);
+        if row.gap_envelope.is_some() && !recoverable_gap && !resolving_gap {
             tx.commit().await?;
             return Err(Error::new(Kind::Gap));
         }
@@ -213,6 +249,9 @@ impl ProjectionStore {
             sqlx::query!("UPDATE edgeagent_research_views SET checkpoint=$3,applied_delivery_key=$4 WHERE caller_scope=$1 AND request_id=$2",req.scope,req.request_id,checkpoint,key).execute(&mut *tx).await?;
         } else if was_pending || row.applied_delivery_key.is_none() {
             return Err(Error::new(Kind::Corrupt));
+        }
+        if resolving_gap {
+            sqlx::query!("UPDATE edgeagent_research_views SET gap_envelope=NULL,gap_delivery_key=NULL WHERE caller_scope=$1 AND request_id=$2",req.scope,req.request_id).execute(&mut *tx).await?;
         }
         tx.commit().await?;
         Ok(applied)
@@ -256,6 +295,29 @@ impl ProjectionStore {
                 return Err(Error::new(Kind::Corrupt));
             }
         }
+        let mut lifecycle = None;
+        for bytes in view.lifecycle_records() {
+            let record =
+                ResearchRecord::decode(bytes).map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let id = record
+                .digest()
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let source = edgeagent_contracts::Component::Research.source_uri();
+            let proof=sqlx::query!("SELECT envelope,message_type FROM edgeagent_message_inbox WHERE consumer_name='research-projector' AND message_source=$1 AND message_id=$2",source,id).fetch_optional(&self.pool).await?.ok_or_else(||Error::new(Kind::Corrupt))?;
+            let envelope = MessageEnvelope::from_json(&proof.envelope)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let event = edgeagent_research_application::lifecycle::decode(&envelope)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            if proof.message_type != envelope.message_type()
+                || ResearchRecord::Lifecycle(event.clone())
+                    .canonical_bytes()
+                    .map_err(|e| Error::caused(Kind::Corrupt, e))?
+                    != *bytes
+            {
+                return Err(Error::new(Kind::Corrupt));
+            }
+            lifecycle = Some(event);
+        }
         let gap = row.gap_envelope.is_some();
         Ok(Some(View {
             scope: scope.into(),
@@ -268,9 +330,14 @@ impl ProjectionStore {
                     ResearchStatus::Pending => "pending",
                     ResearchStatus::Artifact => "artifact",
                     ResearchStatus::Abstained => "abstained",
+                    ResearchStatus::Invalidated => "invalidated",
+                    ResearchStatus::Expired => "expired",
+                    ResearchStatus::Withdrawn => "withdrawn",
+                    ResearchStatus::Corrected => "corrected",
                 }
             },
             applied_delivery_key: row.applied_delivery_key,
+            lifecycle,
             outcome: if gap {
                 None
             } else {

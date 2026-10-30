@@ -330,3 +330,5 @@ impl<'a> EligibleSeries<'a> {
         &self.closes
     }
 }
+
+pub mod lifecycle;

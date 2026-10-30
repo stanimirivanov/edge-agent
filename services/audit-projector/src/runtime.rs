@@ -111,14 +111,14 @@ async fn execute(mode: &str) -> Result {
         let context=async_nats::jetstream::new(client.clone());let stream=context.get_stream(name).await?;
         let consumer:async_nats::jetstream::consumer::PullConsumer=stream.get_consumer(&durable).await?;
         let c=&consumer.cached_info().config;
-        let mut expected=vec![PUBLISHED.subject()?,ABSTAINED.subject()?];expected.sort();let mut actual=c.filter_subjects.clone();actual.sort();
+        let mut expected=vec![PUBLISHED.subject()?,ABSTAINED.subject()?,edgeagent_research_application::lifecycle::CHANGED.subject()?];expected.sort();let mut actual=c.filter_subjects.clone();actual.sort();
         if !c.filter_subject.is_empty() || actual!=expected || c.ack_wait<Duration::from_secs(60) || c.max_deliver!=3 || !(1..=32).contains(&c.max_ack_pending) {return Err("incompatible projector consumer bounds".into());}
         let mut consumer=edgeagent_messaging_nats::JetStreamConsumer::new(consumer).await?;
         for _ in 0..maximum {
             let delivery=tokio::select! {_=stop()=>break,result=tokio::time::timeout(Duration::from_secs(30),consumer.receive())=>result??};
             let envelope=MessageEnvelope::from_json(delivery.payload());
             let valid=envelope.as_ref().is_ok_and(|e| {
-                let def=if e.message_type()==PUBLISHED.message_type() {PUBLISHED} else {ABSTAINED};
+                let def=if e.message_type()==PUBLISHED.message_type() {PUBLISHED} else if e.message_type()==ABSTAINED.message_type() {ABSTAINED} else {edgeagent_research_application::lifecycle::CHANGED};
                 def.subject().is_ok_and(|s|s==delivery.metadata().subject())
             });
             let result=if valid {Some(tokio::time::timeout(Duration::from_secs(25),store.project(envelope.as_ref().map_err(|_|"invalid envelope")?,delivery.metadata().message_key())).await?)} else {None};
