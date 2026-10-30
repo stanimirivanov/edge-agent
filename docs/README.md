@@ -118,6 +118,8 @@ For M05 close-volume limits, read [Research liquidity](development/research-liqu
 
 For M05 volatility/gaps, read [market constraints](development/market-constraints.md).
 
+For M05 event/regime/quality controls, read [Research context policy](development/context-policy.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

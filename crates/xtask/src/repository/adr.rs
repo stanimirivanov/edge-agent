@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 97] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 98] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -506,6 +506,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 97] = [
         number: 97,
         path: "docs/decisions/0097-enforce-volatility-and-opening-gap-limits.md",
         title: "Enforce volatility and opening gap limits",
+    },
+    PublishedIdentity {
+        number: 98,
+        path: "docs/decisions/0098-enforce-independent-research-context.md",
+        title: "Enforce independent Research context",
     },
 ];
 

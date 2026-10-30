@@ -693,3 +693,310 @@ fn volatility_and_gap_limits_are_inclusive_and_cannot_hide_unsafe_or_missing_evi
     );
     Ok(())
 }
+
+#[test]
+fn context_gates_use_exact_regimes_closed_windows_and_critical_freshness() -> Result {
+    use context_policy::{
+        Coverage, EVENT_REVISION, Input, QUALITY_REVISION, REGIME_REVISION, Regime, Rules,
+    };
+    use edgeagent_research_application::governed::{self, ConstraintInputs, ContextInputs};
+    use policy::{Direction, Intent, Policy, Reason};
+    let data = inputs()?;
+    let evidence = policy()?;
+    let intent = Intent {
+        direction: Direction::Long,
+        horizon_sessions: 1,
+    };
+    let gate = |before, after, age, allowed| -> Result<Policy> {
+        Ok(Policy::new(
+            [8; 32],
+            [3; 32],
+            (1..=4)
+                .map(InstrumentId::new)
+                .collect::<std::result::Result<_, _>>()?,
+            5,
+        )?
+        .with_context(
+            EVENT_REVISION,
+            REGIME_REVISION,
+            QUALITY_REVISION,
+            Rules::new(before, after, age, allowed)?,
+        )?)
+    };
+    let coverage = |known, interval, events| Coverage::Complete {
+        source: [9; 32],
+        known_at_ms: known,
+        interval,
+        events,
+    };
+    let contexts = || {
+        data.iter()
+            .map(|s| Input {
+                instrument: s.selected.instrument,
+                evidence: s.evidence,
+                coverage: coverage(90, [0, 101], vec![]),
+            })
+            .collect::<Vec<_>>()
+    };
+    let constraints = || ConstraintInputs {
+        volumes: &[],
+        opens: &[],
+    };
+    let all = gate(
+        1,
+        0,
+        10,
+        vec![Regime::Falling, Regime::Flat, Regime::Rising],
+    )?;
+    let all_context = contexts();
+    let out = governed::evaluate_with_context_inputs(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &all,
+        intent,
+        ContextInputs {
+            constraints: constraints(),
+            context: &all_context,
+        },
+    )?;
+    assert_eq!(out.outcome().bytes(), render(&data)?.bytes());
+    let flat = gate(1, 0, 10, vec![Regime::Flat])?;
+    let narrowed = governed::evaluate_with_context_inputs(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &flat,
+        intent,
+        ContextInputs {
+            constraints: constraints(),
+            context: &all_context,
+        },
+    )?;
+    assert_eq!(
+        narrowed.decision().ok_or("decision")?.reasons(),
+        [Reason::RegimeNotAllowed]
+    );
+    let ResearchRecord::Artifact(a) = narrowed.outcome().record() else {
+        return Err("artifact".into());
+    };
+    assert_eq!(a.ranking.len(), 1);
+    assert_eq!(a.ranking[0].instrument, format!("{:032x}", 3));
+    assert_eq!(a.ranking[0].score_ppm, 0);
+    assert_eq!(a.evidence.len(), 4);
+    let mut tiny = inputs()?;
+    tiny[2].closes[1].close = UsdPrice::new(100_000_001, 6)?;
+    let exact = governed::evaluate_with_context_inputs(
+        request(),
+        &evidence,
+        &tiny,
+        101,
+        &flat,
+        intent,
+        ContextInputs {
+            constraints: constraints(),
+            context: &all_context,
+        },
+    )?;
+    assert_eq!(
+        abstention(exact.outcome())?,
+        AbstentionReason::NoEligibleCandidate
+    );
+    for point in [99, 100] {
+        let mut event = contexts();
+        event[2].coverage = coverage(90, [0, 101], vec![point]);
+        let denied = governed::evaluate_with_context_inputs(
+            request(),
+            &evidence,
+            &data,
+            101,
+            &flat,
+            intent,
+            ContextInputs {
+                constraints: constraints(),
+                context: &event,
+            },
+        )?;
+        assert_eq!(
+            abstention(denied.outcome())?,
+            AbstentionReason::NoEligibleCandidate
+        );
+        assert_eq!(
+            denied.decision().ok_or("decision")?.reasons(),
+            [Reason::EventExcluded, Reason::RegimeNotAllowed]
+        );
+    }
+    let mut extended = inputs()?;
+    for s in &mut extended {
+        s.rights_until_ms = 103;
+    }
+    let future_window = gate(0, 1, 10, vec![Regime::Flat])?;
+    for (point, blocked) in [(101, true), (102, false)] {
+        let future_context = extended
+            .iter()
+            .enumerate()
+            .map(|(i, s)| Input {
+                instrument: s.selected.instrument,
+                evidence: s.evidence,
+                coverage: coverage(90, [0, 103], if i == 2 { vec![point] } else { vec![] }),
+            })
+            .collect::<Vec<_>>();
+        let out = governed::evaluate_with_context_inputs(
+            request(),
+            &evidence,
+            &extended,
+            101,
+            &future_window,
+            intent,
+            ContextInputs {
+                constraints: constraints(),
+                context: &future_context,
+            },
+        )?;
+        assert_eq!(
+            matches!(out.outcome().record(), ResearchRecord::Abstention(_)),
+            blocked
+        );
+    }
+    let zero = gate(0, 0, 10, vec![Regime::Flat])?;
+    let mut event = contexts();
+    event[2].coverage = coverage(90, [0, 101], vec![99]);
+    assert!(matches!(
+        governed::evaluate_with_context_inputs(
+            request(),
+            &evidence,
+            &data,
+            101,
+            &zero,
+            intent,
+            ContextInputs {
+                constraints: constraints(),
+                context: &event
+            }
+        )?
+        .outcome()
+        .record(),
+        ResearchRecord::Artifact(_)
+    ));
+    for (changed, expected) in [
+        (Coverage::Unknown, AbstentionReason::InsufficientHistory),
+        (
+            coverage(90, [0, 100], vec![]),
+            AbstentionReason::InsufficientHistory,
+        ),
+        (
+            coverage(101, [0, 101], vec![]),
+            AbstentionReason::FutureEvidence,
+        ),
+        (
+            coverage(89, [0, 101], vec![]),
+            AbstentionReason::StaleEvidence,
+        ),
+        (
+            coverage(90, [0, 102], vec![]),
+            AbstentionReason::MissingEntitlement,
+        ),
+        (
+            coverage(90, [0, 101], vec![99, 99]),
+            AbstentionReason::InvalidEvidence,
+        ),
+    ] {
+        let mut critical = contexts();
+        critical[0].coverage = changed;
+        let out = governed::evaluate_with_context_inputs(
+            request(),
+            &evidence,
+            &data,
+            101,
+            &flat,
+            intent,
+            ContextInputs {
+                constraints: constraints(),
+                context: &critical,
+            },
+        )?;
+        assert_eq!(abstention(out.outcome())?, expected);
+        assert!(out.decision().is_none());
+    }
+    let stale = gate(0, 0, 9, vec![Regime::Flat])?;
+    let mut fresh_calendar = contexts();
+    for c in &mut fresh_calendar {
+        c.coverage = coverage(95, [0, 101], vec![]);
+    }
+    assert_eq!(
+        abstention(
+            governed::evaluate_with_context_inputs(
+                request(),
+                &evidence,
+                &data,
+                101,
+                &stale,
+                intent,
+                ContextInputs {
+                    constraints: constraints(),
+                    context: &fresh_calendar
+                }
+            )?
+            .outcome()
+        )?,
+        AbstentionReason::StaleEvidence
+    );
+    assert_eq!(
+        abstention(governed::evaluate(request(), &evidence, &data, 101, &all, intent)?.outcome())?,
+        AbstentionReason::InsufficientHistory
+    );
+    let mut mixed = contexts();
+    mixed[0].coverage = Coverage::Unknown;
+    mixed[1].coverage = coverage(101, [0, 101], vec![]);
+    for reverse in [false, true] {
+        if reverse {
+            mixed.reverse();
+        }
+        let out = governed::evaluate_with_context_inputs(
+            request(),
+            &evidence,
+            &data,
+            101,
+            &all,
+            intent,
+            ContextInputs {
+                constraints: constraints(),
+                context: &mixed,
+            },
+        )?;
+        assert_eq!(abstention(out.outcome())?, AbstentionReason::FutureEvidence);
+    }
+    let mut rebound = contexts();
+    rebound[0].evidence = [0; 32];
+    let invalid = governed::evaluate_with_context_inputs(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &all,
+        intent,
+        ContextInputs {
+            constraints: constraints(),
+            context: &rebound,
+        },
+    )?;
+    assert_eq!(
+        abstention(invalid.outcome())?,
+        AbstentionReason::InvalidEvidence
+    );
+    assert!(
+        Policy::new([8; 32], [3; 32], vec![InstrumentId::new(1)?], 1)?
+            .with_context(
+                "unknown",
+                REGIME_REVISION,
+                QUALITY_REVISION,
+                Rules::new(0, 0, 10, vec![Regime::Flat])?
+            )
+            .is_err()
+    );
+    assert!(Rules::new(0, 0, 0, vec![Regime::Flat]).is_err());
+    assert!(Rules::new(0, 0, 1, vec![Regime::Flat, Regime::Flat]).is_err());
+    Ok(())
+}

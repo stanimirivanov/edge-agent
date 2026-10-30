@@ -60,6 +60,35 @@ pub struct ConstraintInputs<'a> {
     /// Complete raw opening/action assertions when volatility/gaps are selected.
     pub opens: &'a [edgeagent_research_domain::market_constraints::Input],
 }
+/// Explicit context and prior market inputs; no new fields are added to older input contracts.
+pub struct ContextInputs<'a> {
+    /// Existing independent volume/open evidence.
+    pub constraints: ConstraintInputs<'a>,
+    /// Owner-bound event context for every required instrument.
+    pub context: &'a [edgeagent_research_domain::context_policy::Input],
+}
+/// Governed evaluation with critical event/regime/quality context.
+/// # Errors
+/// Preserves prior errors and selected constraints; missing context abstains.
+pub fn evaluate_with_context_inputs(
+    request: ResearchRequest,
+    evidence: &EvidencePolicy,
+    inputs: &[FrozenSeries],
+    expires_at_ms: i64,
+    policy: &Policy,
+    intent: Intent,
+    context: ContextInputs<'_>,
+) -> Result<GovernedOutcome, Error> {
+    evaluate_inner(
+        request,
+        evidence,
+        inputs,
+        expires_at_ms,
+        policy,
+        intent,
+        context,
+    )
+}
 /// Governed evaluation with explicit evidence for every selected constraint.
 /// # Errors
 /// Preserves calculation/binding errors; selected missing evidence cannot bypass a gate.
@@ -79,7 +108,10 @@ pub fn evaluate_with_market_inputs(
         expires_at_ms,
         policy,
         intent,
-        constraints,
+        ContextInputs {
+            constraints,
+            context: &[],
+        },
     )
 }
 /// Validate the full required evidence before narrowing; preserve scores and complete lineage.
@@ -101,9 +133,12 @@ pub fn evaluate(
         expires_at_ms,
         policy,
         intent,
-        ConstraintInputs {
-            volumes: &[],
-            opens: &[],
+        ContextInputs {
+            constraints: ConstraintInputs {
+                volumes: &[],
+                opens: &[],
+            },
+            context: &[],
         },
     )
 }
@@ -126,9 +161,12 @@ pub fn evaluate_with_liquidity(
         expires_at_ms,
         policy,
         intent,
-        ConstraintInputs {
-            volumes,
-            opens: &[],
+        ContextInputs {
+            constraints: ConstraintInputs {
+                volumes,
+                opens: &[],
+            },
+            context: &[],
         },
     )
 }
@@ -139,8 +177,10 @@ fn evaluate_inner(
     expires_at_ms: i64,
     policy: &Policy,
     intent: Intent,
-    constraints: ConstraintInputs<'_>,
+    context: ContextInputs<'_>,
 ) -> Result<GovernedOutcome, Error> {
+    let constraints = context.constraints;
+    let contexts = context.context;
     let volumes = constraints.volumes;
     let expected: String = policy
         .configuration()
@@ -255,6 +295,63 @@ fn evaluate_inner(
                             AbstentionReason::InsufficientHistory
                         } else {
                             AbstentionReason::InvalidEvidence
+                        },
+                    )
+                    .map_err(Error::Evaluation)?,
+                    decision: None,
+                });
+            }
+        }
+    }
+    if let Some(rules) = policy.context() {
+        use edgeagent_research_domain::context_policy::Error as C;
+        let assessed = (|| {
+            if contexts.len() > 64
+                || contexts.iter().enumerate().any(|(i, v)| {
+                    contexts[..i]
+                        .iter()
+                        .any(|old| old.instrument == v.instrument)
+                })
+                || contexts.iter().any(|v| !candidates.contains(&v.instrument))
+            {
+                return Err(C::InvalidEvidence);
+            }
+            let eligible = evidence.assess(inputs).map_err(|_| C::InvalidEvidence)?;
+            let mut failure: Option<C> = None;
+            let mut values = Vec::new();
+            for s in eligible.series() {
+                let result = contexts
+                    .iter()
+                    .find(|v| v.instrument == s.frozen().selected.instrument)
+                    .ok_or(C::CoverageUnavailable)
+                    .and_then(|v| rules.assess(s, v, request.decision_at_ms));
+                match result {
+                    Ok(value) => values.push(value),
+                    Err(error) => failure = Some(failure.map_or(error, |old| old.min(error))),
+                }
+            }
+            if let Some(error) = failure {
+                Err(error)
+            } else {
+                Ok(values)
+            }
+        })();
+        match assessed {
+            Ok(values) => {
+                decision = policy
+                    .apply_context(decision, &values)
+                    .map_err(Error::Policy)?
+            }
+            Err(error) => {
+                return Ok(GovernedOutcome {
+                    outcome: crate::abstain(
+                        request,
+                        match error {
+                            C::MissingEntitlement => AbstentionReason::MissingEntitlement,
+                            C::InvalidEvidence => AbstentionReason::InvalidEvidence,
+                            C::FutureEvidence => AbstentionReason::FutureEvidence,
+                            C::StaleEvidence => AbstentionReason::StaleEvidence,
+                            C::CoverageUnavailable => AbstentionReason::InsufficientHistory,
                         },
                     )
                     .map_err(Error::Evaluation)?,

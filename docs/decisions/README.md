@@ -209,3 +209,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0095](0095-enforce-independent-research-eligibility.md) | Accepted | Enforce independent Research eligibility. |
 | [ADR-0096](0096-enforce-exact-close-volume-liquidity.md) | Accepted | Enforce exact close-volume liquidity. |
 | [ADR-0097](0097-enforce-volatility-and-opening-gap-limits.md) | Accepted | Enforce volatility and opening gap limits. |
+| [ADR-0098](0098-enforce-independent-research-context.md) | Accepted | Enforce independent Research context. |

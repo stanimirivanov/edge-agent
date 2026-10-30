@@ -40,6 +40,10 @@ pub enum Reason {
     VolatilityExceeded,
     /// Selected maximum opening gap exceeds the inclusive ceiling.
     GapExceeded,
+    /// An event intersects the selected closed exclusion window.
+    EventExcluded,
+    /// Exact endpoint regime is outside the explicit allowed set.
+    RegimeNotAllowed,
 }
 impl Reason {
     /// Stable diagnostic code, without market values or caller data.
@@ -52,6 +56,8 @@ impl Reason {
             Self::LiquidityBelowMinimum => "liquidity_below_minimum",
             Self::VolatilityExceeded => "volatility_exceeded",
             Self::GapExceeded => "gap_exceeded",
+            Self::EventExcluded => "event_excluded",
+            Self::RegimeNotAllowed => "regime_not_allowed",
         }
     }
 }
@@ -73,6 +79,7 @@ pub struct Policy {
     max_horizon: u16,
     liquidity: Option<u64>,
     market: Option<(u32, u32)>,
+    context: Option<crate::context_policy::Rules>,
 }
 /// Sealed deterministic decision, retaining all applicable reasons in stable order.
 #[derive(Debug, Eq, PartialEq)]
@@ -131,6 +138,7 @@ impl Policy {
             max_horizon,
             liquidity: None,
             market: None,
+            context: None,
         })
     }
     /// Require the compiled liquidity revision and explicit minimum; zero is not a disable flag.
@@ -245,6 +253,77 @@ impl Policy {
             values
                 .iter()
                 .any(|v| v.instrument() == *id && v.volatility_ppm() <= vol && v.gap_ppm() <= gap)
+        });
+        decision.status = if decision.eligible.is_empty() {
+            Status::Abstained
+        } else if decision.eligible.len() < decision.candidates.len() {
+            Status::Narrowed
+        } else {
+            Status::Approved
+        };
+        Ok(decision)
+    }
+    /// Select exact context revisions and explicit immutable rule parameters.
+    /// # Errors
+    /// Unsupported event, regime or quality revisions reject without fallback.
+    pub fn with_context(
+        mut self,
+        event: &str,
+        regime: &str,
+        quality: &str,
+        rules: crate::context_policy::Rules,
+    ) -> Result<Self, InvalidInput> {
+        use crate::context_policy as c;
+        if event != c::EVENT_REVISION
+            || regime != c::REGIME_REVISION
+            || quality != c::QUALITY_REVISION
+        {
+            return Err(InvalidInput);
+        }
+        self.context = Some(rules);
+        Ok(self)
+    }
+    /// Selected context rules, if this staged policy requires them.
+    #[must_use]
+    pub fn context(&self) -> Option<&crate::context_policy::Rules> {
+        self.context.as_ref()
+    }
+    /// Apply sealed facts for every original candidate, retaining prior denials.
+    /// # Errors
+    /// Rejects absent configuration, foreign decisions or incomplete/duplicate fact census.
+    pub fn apply_context(
+        &self,
+        mut decision: Decision,
+        values: &[crate::context_policy::Facts],
+    ) -> Result<Decision, InvalidInput> {
+        let rules = self.context.as_ref().ok_or(InvalidInput)?;
+        if values.len() != decision.candidates.len() {
+            return Err(InvalidInput);
+        }
+        let mut ids = values.iter().map(|v| v.instrument()).collect::<Vec<_>>();
+        ids.sort_unstable();
+        if decision.revision != self.revision || ids != decision.candidates {
+            return Err(InvalidInput);
+        }
+        for (failed, reason) in [
+            (
+                values.iter().any(|v| v.event_conflict()),
+                Reason::EventExcluded,
+            ),
+            (
+                values.iter().any(|v| !rules.allows(v.regime())),
+                Reason::RegimeNotAllowed,
+            ),
+        ] {
+            if failed && !decision.reasons.contains(&reason) {
+                decision.reasons.push(reason);
+            }
+        }
+        decision.reasons.sort_unstable();
+        decision.eligible.retain(|id| {
+            values
+                .iter()
+                .any(|v| v.instrument() == *id && !v.event_conflict() && rules.allows(v.regime()))
         });
         decision.status = if decision.eligible.is_empty() {
             Status::Abstained

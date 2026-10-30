@@ -493,3 +493,37 @@ pub fn policy_opens(
         rows,
     })
 }
+
+/// Convert authorized owner context without accepting a caller-provided regime or quality label.
+/// The domain classifier consumes eligible closes independently; this conversion grants no authority.
+pub fn policy_context(
+    companion: &edgeagent_contracts::policy_evidence::PolicyEvidence,
+) -> Result<edgeagent_research_domain::context_policy::Input, E> {
+    use edgeagent_contracts::policy_evidence::{EventCoverage, PolicyEvidence};
+    use edgeagent_research_domain::context_policy::{Coverage, Input};
+    companion.bytes().map_err(|_| E::Invalid)?;
+    let PolicyEvidence::V1 { daily, events, .. } = companion;
+    let coverage = match events {
+        EventCoverage::Unknown => Coverage::Unknown,
+        EventCoverage::SyntheticComplete {
+            revision,
+            known_at_ms,
+            interval,
+            events,
+        } => Coverage::Complete {
+            source: digest(revision.as_str())?,
+            known_at_ms: *known_at_ms,
+            interval: *interval,
+            events: events.clone(),
+        },
+    };
+    Ok(Input {
+        instrument: InstrumentId::new(
+            u128::from_str_radix(daily.data().scope.instrument.as_str(), 16)
+                .map_err(|_| E::Invalid)?,
+        )
+        .map_err(|_| E::Invalid)?,
+        evidence: digest(daily.digest().as_str())?,
+        coverage,
+    })
+}
