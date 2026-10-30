@@ -14,6 +14,8 @@ pub enum Error {
     Policy(InvalidInput),
     /// Independent policy targets a different configuration.
     Binding,
+    /// Exact liquidity calculation could not be represented.
+    Liquidity(edgeagent_research_domain::liquidity::Error),
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,6 +28,7 @@ impl std::error::Error for Error {
             Self::Evaluation(e) => Some(e),
             Self::Policy(e) => Some(e),
             Self::Binding => None,
+            Self::Liquidity(e) => Some(e),
         }
     }
 }
@@ -58,6 +61,47 @@ pub fn evaluate(
     policy: &Policy,
     intent: Intent,
 ) -> Result<GovernedOutcome, Error> {
+    evaluate_inner(
+        request,
+        evidence,
+        inputs,
+        expires_at_ms,
+        policy,
+        intent,
+        &[],
+    )
+}
+/// Governed evaluation with owner-bound volume rows; selected liquidity is never optional.
+/// # Errors
+/// Preserves ordinary errors and rejects unrepresentable liquidity without partial results.
+pub fn evaluate_with_liquidity(
+    request: ResearchRequest,
+    evidence: &EvidencePolicy,
+    inputs: &[FrozenSeries],
+    expires_at_ms: i64,
+    policy: &Policy,
+    intent: Intent,
+    volumes: &[edgeagent_research_domain::liquidity::Input],
+) -> Result<GovernedOutcome, Error> {
+    evaluate_inner(
+        request,
+        evidence,
+        inputs,
+        expires_at_ms,
+        policy,
+        intent,
+        volumes,
+    )
+}
+fn evaluate_inner(
+    request: ResearchRequest,
+    evidence: &EvidencePolicy,
+    inputs: &[FrozenSeries],
+    expires_at_ms: i64,
+    policy: &Policy,
+    intent: Intent,
+    volumes: &[edgeagent_research_domain::liquidity::Input],
+) -> Result<GovernedOutcome, Error> {
     let expected: String = policy
         .configuration()
         .iter()
@@ -72,7 +116,7 @@ pub fn evaluate(
         .map(|s| s.instrument)
         .collect::<Vec<_>>();
     // Validate intent even if evidence will abstain; retain no apparent decision in that case.
-    let decision = policy.assess(&candidates, intent).map_err(Error::Policy)?;
+    let mut decision = policy.assess(&candidates, intent).map_err(Error::Policy)?;
     let base = crate::evaluate(request.clone(), evidence, inputs, expires_at_ms)
         .map_err(Error::Evaluation)?;
     let ResearchRecord::Artifact(artifact) = base.record() else {
@@ -81,6 +125,55 @@ pub fn evaluate(
             decision: None,
         });
     };
+    if policy.requires_liquidity() {
+        use edgeagent_research_domain::liquidity::{self, Error as L};
+        let assessed = (|| {
+            if volumes.len() > 64
+                || volumes.iter().enumerate().any(|(i, v)| {
+                    volumes[..i]
+                        .iter()
+                        .any(|old| old.instrument == v.instrument)
+                })
+                || volumes.iter().any(|v| !candidates.contains(&v.instrument))
+            {
+                return Err(L::InvalidEvidence);
+            }
+            let eligible = evidence.assess(inputs).map_err(|_| L::InvalidEvidence)?;
+            eligible
+                .series()
+                .iter()
+                .map(|s| {
+                    let input = volumes
+                        .iter()
+                        .find(|v| v.instrument == s.frozen().selected.instrument)
+                        .ok_or(L::InsufficientHistory)?;
+                    liquidity::calculate(s, input)
+                })
+                .collect::<Result<Vec<_>, L>>()
+        })();
+        match assessed {
+            Ok(values) => {
+                decision = policy
+                    .apply_liquidity(decision, &values)
+                    .map_err(Error::Policy)?
+            }
+            Err(L::OutOfRange) => return Err(Error::Liquidity(L::OutOfRange)),
+            Err(error) => {
+                return Ok(GovernedOutcome {
+                    outcome: crate::abstain(
+                        request,
+                        if error == L::InsufficientHistory {
+                            AbstentionReason::InsufficientHistory
+                        } else {
+                            AbstentionReason::InvalidEvidence
+                        },
+                    )
+                    .map_err(Error::Evaluation)?,
+                    decision: None,
+                });
+            }
+        }
+    }
     let outcome = match decision.status() {
         Status::Approved => base,
         Status::Abstained => crate::abstain(request, AbstentionReason::NoEligibleCandidate)

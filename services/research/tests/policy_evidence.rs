@@ -20,6 +20,20 @@ fn policy_conversion_requires_exact_request_and_daily_lineage() -> Result {
         daily: Box::new(daily),
         events: EventCoverage::Unknown,
     };
+    let volumes = edgeagent_research::loader::policy_volumes(&companion)?;
+    assert_eq!(volumes.rows.len(), 2);
+    let PolicyEvidence::V1 { daily, .. } = &companion;
+    assert_eq!(
+        volumes.evidence,
+        edgeagent_research::loader::digest(daily.digest().as_str())?
+    );
+    for (row, bar) in volumes.rows.iter().zip(&daily.data().bars) {
+        let expected = edgeagent_market_data_domain::ShareVolume::new(
+            bar.volume.coefficient.parse()?,
+            u32::from(bar.volume.scale),
+        )?;
+        assert!(row.shares == expected);
+    }
     let exported = companion.bytes()?;
     assert!(edgeagent_research::loader::convert_policy(&delivery, &exported).is_ok());
     let PolicyEvidence::V1 {

@@ -38,6 +38,9 @@ wire abstention while retaining detailed reasons in the in-memory decision. Exis
 Research v1 payloads gain no fields. Evidence failures retain their original wire reasons.
 Malformed input and binding mismatch remain errors, not accepted-request denials.
 
+The opt-in [liquidity gate](research-liquidity.md) adds an explicit versioned minimum
+and complete owner-bound share-volume requirements to this evaluator.
+
 ## Staging, verification and rollback
 
 Workers continue using their existing paths during staged rollout. This API is directly

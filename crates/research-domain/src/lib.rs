@@ -2,6 +2,7 @@
 //! Applications must authenticate owner assertions and verify retained bytes before use.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+pub mod liquidity;
 pub mod momentum;
 pub mod policy;
 pub mod ranking;

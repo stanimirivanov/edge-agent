@@ -405,3 +405,47 @@ pub fn convert(
         expires_at_ms,
     })
 }
+
+/// Convert an already authorized policy companion into the exact selected volume census.
+/// Caller must use `load_policy`/`convert_policy` first; this function grants no authority.
+pub fn policy_volumes(
+    companion: &edgeagent_contracts::policy_evidence::PolicyEvidence,
+) -> Result<edgeagent_research_domain::liquidity::Input, E> {
+    use edgeagent_market_data_domain::ShareVolume;
+    use edgeagent_research_domain::liquidity::{Input, Volume};
+    companion.bytes().map_err(|_| E::Invalid)?;
+    let edgeagent_contracts::policy_evidence::PolicyEvidence::V1 { request, daily, .. } = companion;
+    let n = usize::from(request.lookback_sessions) + 1;
+    let bars = &daily.data().bars;
+    if bars.len() < n {
+        return Err(E::Invalid);
+    }
+    let rows = bars[bars.len() - n..]
+        .iter()
+        .map(|b| {
+            let date = b.date.as_str().split('-').collect::<Vec<_>>();
+            Ok(Volume {
+                session: SessionDate::new(
+                    date[0].parse().map_err(|_| E::Invalid)?,
+                    date[1].parse().map_err(|_| E::Invalid)?,
+                    date[2].parse().map_err(|_| E::Invalid)?,
+                )
+                .map_err(|_| E::Invalid)?,
+                shares: ShareVolume::new(
+                    b.volume.coefficient.parse().map_err(|_| E::Invalid)?,
+                    u32::from(b.volume.scale),
+                )
+                .map_err(|_| E::Invalid)?,
+            })
+        })
+        .collect::<Result<Vec<_>, E>>()?;
+    Ok(Input {
+        instrument: InstrumentId::new(
+            u128::from_str_radix(daily.data().scope.instrument.as_str(), 16)
+                .map_err(|_| E::Invalid)?,
+        )
+        .map_err(|_| E::Invalid)?,
+        evidence: digest(daily.digest().as_str())?,
+        rows,
+    })
+}
