@@ -45,6 +45,31 @@ fn policy_conversion_requires_exact_request_and_daily_lineage() -> Result {
         assert!(row.price == expected);
         assert_eq!(row.action, !bar.actions.is_empty());
     }
+    let context = edgeagent_research::loader::policy_context(&companion)?;
+    assert_eq!(context.evidence, volumes.evidence);
+    assert_eq!(context.instrument, volumes.instrument);
+    assert!(matches!(
+        context.coverage,
+        edgeagent_research_domain::context_policy::Coverage::Unknown
+    ));
+    let PolicyEvidence::V1 {
+        request: bound,
+        daily: object,
+        ..
+    } = &companion;
+    let positive = PolicyEvidence::V1 {
+        request: bound.clone(),
+        daily: object.clone(),
+        events: EventCoverage::SyntheticComplete {
+            revision: DailyEvidenceArtifact::hash(b"invented"),
+            known_at_ms: bound.decision_at_ms,
+            interval: [0, object.data().delete_by.seconds * 1000],
+            events: vec![bound.decision_at_ms],
+        },
+    };
+    assert!(
+        matches!(edgeagent_research::loader::policy_context(&positive)?.coverage,edgeagent_research_domain::context_policy::Coverage::Complete{events,..} if events==[bound.decision_at_ms])
+    );
     let exported = companion.bytes()?;
     assert!(edgeagent_research::loader::convert_policy(&delivery, &exported).is_ok());
     let PolicyEvidence::V1 {
