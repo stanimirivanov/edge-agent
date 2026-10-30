@@ -104,6 +104,8 @@ For M04 durable HTTP submission, read [Gateway admission](development/gateway-ad
 
 For M04 atomic research completion, read [research persistence](development/research-persistence.md).
 
+For M05 immutable declarations, read [strategy and policy configuration](development/strategy-policy.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

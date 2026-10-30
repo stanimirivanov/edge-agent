@@ -15,6 +15,7 @@ pub mod research_acquisition;
 mod routing;
 pub mod settlement;
 pub mod simulation;
+pub mod strategy;
 
 pub use messaging::{MessageContractError, MessageEnvelope, MessageMetadata};
 pub use routing::{
