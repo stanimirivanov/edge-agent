@@ -1727,6 +1727,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "expiry_and_numeric_failure_never_publish_an_artifact",
                         "canonical_identity_retains_revision_and_availability_lineage",
                         "registry_preserves_direct_ranking_metadata_and_calculation_errors",
+                        "governed_eligibility_preserves_scores_and_cannot_hide_failed_evidence",
                     ],
                     ignored: false,
                 });

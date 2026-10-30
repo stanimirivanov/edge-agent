@@ -112,6 +112,8 @@ For M05 isolated execution, read [strategy experiments](development/strategy-exp
 
 For M05 policy inputs, read [owner-bound policy evidence](development/policy-evidence.md).
 
+For M05 eligibility controls, read [independent Research policy](development/research-policy.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

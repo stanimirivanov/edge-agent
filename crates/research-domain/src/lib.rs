@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod momentum;
+pub mod policy;
 pub mod ranking;
 pub mod strategy;
 

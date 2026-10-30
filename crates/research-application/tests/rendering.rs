@@ -302,3 +302,86 @@ fn registry_preserves_direct_ranking_metadata_and_calculation_errors() -> Result
     ));
     Ok(())
 }
+
+#[test]
+fn governed_eligibility_preserves_scores_and_cannot_hide_failed_evidence() -> Result {
+    use edgeagent_research_application::governed;
+    use policy::{Direction, Intent, Policy, Status};
+    let all = (1..=4)
+        .map(InstrumentId::new)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let allowed = Policy::new([8; 32], [3; 32], all, 5)?;
+    let intent = Intent {
+        direction: Direction::Long,
+        horizon_sessions: 5,
+    };
+    let data = inputs()?;
+    let evidence = policy()?;
+    let base = render(&data)?;
+    let approved = governed::evaluate(request(), &evidence, &data, 101, &allowed, intent)?;
+    assert_eq!(approved.outcome().bytes(), base.bytes());
+    assert_eq!(
+        approved.decision().ok_or("decision")?.status(),
+        Status::Approved
+    );
+    let subset = Policy::new(
+        [8; 32],
+        [3; 32],
+        vec![InstrumentId::new(1)?, InstrumentId::new(3)?],
+        5,
+    )?;
+    let narrowed = governed::evaluate(request(), &evidence, &data, 101, &subset, intent)?;
+    assert_eq!(
+        narrowed.decision().ok_or("decision")?.status(),
+        Status::Narrowed
+    );
+    let ResearchRecord::Artifact(a) = narrowed.outcome().record() else {
+        return Err("artifact".into());
+    };
+    let ResearchRecord::Artifact(original) = base.record() else {
+        return Err("artifact".into());
+    };
+    assert!(a.request == original.request);
+    assert!(a.evidence == original.evidence);
+    assert_eq!(
+        a.ranking.iter().map(|c| c.score_ppm).collect::<Vec<_>>(),
+        vec![100_000, 0]
+    );
+    assert_eq!(a.expires_at_ms, original.expires_at_ms);
+    for denied in [
+        Intent {
+            direction: Direction::Short,
+            horizon_sessions: 5,
+        },
+        Intent {
+            direction: Direction::Long,
+            horizon_sessions: 6,
+        },
+    ] {
+        let outcome = governed::evaluate(request(), &evidence, &data, 101, &subset, denied)?;
+        assert_eq!(
+            abstention(outcome.outcome())?,
+            AbstentionReason::NoEligibleCandidate
+        );
+    }
+    let none = Policy::new([8; 32], [3; 32], vec![InstrumentId::new(9)?], 5)?;
+    let outcome = governed::evaluate(request(), &evidence, &data, 101, &none, intent)?;
+    assert_eq!(
+        abstention(outcome.outcome())?,
+        AbstentionReason::NoEligibleCandidate
+    );
+    let mut invalid = data;
+    invalid[1].entitled = false;
+    let outcome = governed::evaluate(request(), &evidence, &invalid, 101, &subset, intent)?;
+    assert_eq!(
+        abstention(outcome.outcome())?,
+        AbstentionReason::MissingEntitlement
+    );
+    assert!(outcome.decision().is_none());
+    let foreign = Policy::new([8; 32], [9; 32], vec![InstrumentId::new(1)?], 5)?;
+    assert!(matches!(
+        governed::evaluate(request(), &evidence, &invalid, 101, &foreign, intent),
+        Err(governed::Error::Binding)
+    ));
+    Ok(())
+}
