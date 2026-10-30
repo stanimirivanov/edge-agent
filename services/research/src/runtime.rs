@@ -54,7 +54,8 @@ pub fn run(args: &[String]) -> Result {
     if args.len() != 1
         || !matches!(
             args[0].as_str(),
-            "offline-governed-once"
+            "offline-experiment"
+                | "offline-governed-once"
                 | "offline-governance-install"
                 | "offline-governance-approve"
                 | "offline-governance-retire"
@@ -76,6 +77,35 @@ pub fn run(args: &[String]) -> Result {
     result
 }
 async fn execute(mode: &str) -> Result {
+    if mode == "offline-experiment" {
+        use std::io::{Read as _, Write as _};
+        let mut bytes = Vec::new();
+        std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
+        let delivery = MessageEnvelope::from_json(&bytes)?;
+        let request = publication::evaluation_request(&delivery)?;
+        // This branch owns no Research pool, store, approval or broker connection.
+        let loader = OwnerLoader::from_environment()?;
+        loader.validate_request(&request)?;
+        if !matches!(
+            edgeagent_contracts::research_acquisition::ResearchEvidence::from_envelope(&delivery)?,
+            edgeagent_contracts::research_acquisition::ResearchEvidence::Ready { .. }
+        ) {
+            return Err("experiment requires owner-ready evidence".into());
+        }
+        let result = tokio::time::timeout(Duration::from_secs(25), async {
+            let loaded = loader.load(&delivery).await?;
+            edgeagent_research_application::experiment::evaluate(
+                request,
+                &loaded.policy,
+                &loaded.series,
+                loaded.expires_at_ms,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        })
+        .await??;
+        std::io::stdout().write_all(result.bytes())?;
+        return Ok(());
+    }
     let database = required("EDGEAGENT_POSTGRES_URL")?;
     local(&database, &["postgres", "postgresql"])?;
     let schema = required("EDGEAGENT_RESEARCH_SCHEMA")?;
