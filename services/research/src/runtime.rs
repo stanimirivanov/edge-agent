@@ -54,7 +54,11 @@ pub fn run(args: &[String]) -> Result {
     if args.len() != 1
         || !matches!(
             args[0].as_str(),
-            "offline-once" | "offline-worker" | "offline-relay" | "offline-lifecycle"
+            "offline-once"
+                | "offline-worker"
+                | "offline-relay"
+                | "offline-lifecycle"
+                | "offline-replay"
         )
     {
         return Err("invalid research mode".into());
@@ -97,6 +101,19 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode=="offline-replay" {
+            use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
+            let delivery=MessageEnvelope::from_json(&bytes)?;
+            if publication::evaluation_request(&delivery)?.scope!=scope {return Err("foreign replay scope".into());}
+            let renderer=required("EDGEAGENT_RESEARCH_REPLAY_RENDERER")?;let momentum=required("EDGEAGENT_RESEARCH_REPLAY_MOMENTUM")?;
+            let loader=OwnerLoader::from_environment()?;
+            loader.validate_request(&publication::evaluation_request(&delivery)?)?;
+            let result=tokio::time::timeout(Duration::from_secs(25),async {
+                let receipt=store.retained_for_replay(&delivery).await?.ok_or("replay completion not retained")?;
+                edgeagent_research_application::replay::verify(&loader,&delivery,&receipt,&renderer,&momentum).await.map_err(|e|Box::new(e) as Box<dyn std::error::Error+Send+Sync>)
+            }).await??;
+            std::io::stdout().write_all(result.bytes())?;return Ok(());
+        }
         if mode=="offline-lifecycle" {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(131_073).read_to_end(&mut bytes)?;
             let edgeagent_contracts::research::ResearchRecord::Lifecycle(event)=edgeagent_contracts::research::ResearchRecord::decode(&bytes)? else {return Err("expected lifecycle owner command".into());};

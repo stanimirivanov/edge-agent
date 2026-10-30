@@ -23,6 +23,37 @@ impl PostgresResearchStore {
     pub const fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
+    /// Load an intact original completion/input for replay in a read-only transaction.
+    /// Unlike recovery this never records a new inbox delivery.
+    /// # Errors
+    /// Rejects changed intent, nonoriginal input or missing/corrupt retained integrity.
+    pub async fn retained_for_replay(
+        &self,
+        delivery: &MessageEnvelope,
+    ) -> Result<Option<CommittedOutcome>, Error> {
+        let request = publication::evaluation_request(delivery)?;
+        let mut tx = transaction(&self.pool).await?;
+        sqlx::query!("SET TRANSACTION READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let receipt = read(&mut tx, &request).await?;
+        if let Some(receipt) = &receipt {
+            let bytes = delivery
+                .to_json()
+                .map_err(|e| Error::with_source(Kind::Invalid, e))?;
+            let intact=sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_message_inbox WHERE consumer_name='research-completion' AND message_source=$1 AND message_id=$2 AND envelope=$3 AND message_type=$4) AS "intact!""#,delivery.source(),delivery.id(),bytes,delivery.message_type()).fetch_one(&mut *tx).await.map_err(storage)?;
+            if !intact
+                || receipt.publication().extension("causationid") != Some(delivery.id())
+                || receipt.publication().extension("correlationid")
+                    != delivery.extension("correlationid")
+            {
+                return Err(Error::new(Kind::Invalid));
+            }
+        }
+        tx.commit().await.map_err(storage)?;
+        Ok(receipt)
+    }
 }
 fn storage(error: sqlx::Error) -> Error {
     Error::with_source(Kind::Storage, error)

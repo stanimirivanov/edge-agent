@@ -31,6 +31,12 @@ pub enum LoadError {
     /// Transient owner/storage/process unavailability; retry without completing.
     Unavailable,
 }
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("research evidence read refused")
+    }
+}
+impl std::error::Error for LoadError {}
 /// Consumer-owned substitution boundary; the concrete adapter authenticates owner reads.
 pub trait EvidenceLoader: Sync {
     /// Load only exact authorized evidence, never arbitrary client locations.

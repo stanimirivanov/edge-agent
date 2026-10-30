@@ -888,6 +888,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Pure scoped Research replay, immutable outcomes, lifecycle gap refusal and anchored bounded checkpoint integrity under map-order feature unification.",
         ),
         check(
+            "research-replay",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research",
+                "--test",
+                "replay",
+                "--features",
+                "edgeagent-research-application/map-order-test",
+                "--",
+            ],
+            "Read-only replay recalculation, exact/permuted bytes, pinned revisions, binding and read-failure refusal under map-order feature unification.",
+        ),
+        check(
             "research-worker-contracts",
             "T2",
             &["verify", "test"],
@@ -1666,6 +1684,20 @@ pub(super) fn checks() -> Vec<Check> {
                         "reordered_lifecycle_records_remain_explicit_gaps_without_cursor_or_state_advance",
                         "restore_rejects_corruption_wrong_anchor_versions_and_rechecks_sealed_outcomes",
                         "lifecycle_replay_duplicates_gaps_and_checkpoint_versions_preserve_original_bytes",
+                    ],
+                    ignored: false,
+                });
+            }
+            "research-replay" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "replay_recalculates_exact_bytes_under_input_permutation",
+                        "replay_refuses_changed_revisions_intent_and_output",
+                        "replay_read_failures_never_become_successful_abstentions",
+                        "replay_owner_declared_abstention_is_verified_without_evidence_reads",
                     ],
                     ignored: false,
                 });

@@ -200,3 +200,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0086](0086-persist-and-serve-scoped-research-projections.md) | Accepted | Persist and serve scoped Research projections. |
 | [ADR-0087](0087-query-research-through-the-local-gateway.md) | Accepted | Query Research through the local Gateway. |
 | [ADR-0088](0088-append-and-project-owner-artifact-lifecycle.md) | Accepted | Append and project owner artifact lifecycle. |
+| [ADR-0089](0089-verify-retained-research-with-read-only-replay.md) | Accepted | Verify retained Research with read-only replay. |
