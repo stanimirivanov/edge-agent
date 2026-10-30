@@ -114,6 +114,8 @@ For M05 policy inputs, read [owner-bound policy evidence](development/policy-evi
 
 For M05 eligibility controls, read [independent Research policy](development/research-policy.md).
 
+For M05 close-volume limits, read [Research liquidity](development/research-liquidity.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

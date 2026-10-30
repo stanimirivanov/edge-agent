@@ -385,3 +385,125 @@ fn governed_eligibility_preserves_scores_and_cannot_hide_failed_evidence() -> Re
     ));
     Ok(())
 }
+
+#[test]
+fn liquidity_is_required_and_narrows_without_rescoring_or_hiding_missing_rows() -> Result {
+    use edgeagent_market_data_domain::ShareVolume;
+    use edgeagent_research_application::governed;
+    use liquidity::{Input, REVISION, Volume};
+    use policy::{Direction, Intent, Policy, Reason};
+    let make_policy = |minimum| -> Result<Policy> {
+        Ok(Policy::new(
+            [8; 32],
+            [3; 32],
+            (1..=4)
+                .map(InstrumentId::new)
+                .collect::<std::result::Result<_, _>>()?,
+            5,
+        )?
+        .with_liquidity(REVISION, minimum)?)
+    };
+    let data = inputs()?;
+    let evidence = policy()?;
+    let intent = Intent {
+        direction: Direction::Long,
+        horizon_sessions: 1,
+    };
+    let mut volumes = data
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            Ok(Input {
+                instrument: s.selected.instrument,
+                evidence: s.evidence,
+                rows: s
+                    .closes
+                    .iter()
+                    .map(|c| {
+                        Ok(Volume {
+                            session: c.session,
+                            shares: ShareVolume::new(if i == 0 || i == 2 { 100 } else { 0 }, 0)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let zero = make_policy(0)?;
+    let allowed = governed::evaluate_with_liquidity(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &zero,
+        intent,
+        &volumes,
+    )?;
+    assert_eq!(allowed.outcome().bytes(), render(&data)?.bytes());
+    let required = governed::evaluate(request(), &evidence, &data, 101, &zero, intent)?;
+    assert_eq!(
+        abstention(required.outcome())?,
+        AbstentionReason::InsufficientHistory
+    );
+    let gate = make_policy(1_000_000)?;
+    let narrowed = governed::evaluate_with_liquidity(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &gate,
+        intent,
+        &volumes,
+    )?;
+    assert_eq!(
+        narrowed.decision().ok_or("decision")?.reasons(),
+        [Reason::LiquidityBelowMinimum]
+    );
+    let ResearchRecord::Artifact(a) = narrowed.outcome().record() else {
+        return Err("artifact".into());
+    };
+    assert_eq!(
+        a.ranking.iter().map(|c| c.score_ppm).collect::<Vec<_>>(),
+        vec![100_000, 0]
+    );
+    let ResearchRecord::Artifact(original) = render(&data)?.record().clone() else {
+        return Err("artifact".into());
+    };
+    assert!(a.evidence == original.evidence);
+    assert!(a.request == original.request);
+    let all_denied = make_policy(u64::MAX)?;
+    let denied = governed::evaluate_with_liquidity(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &all_denied,
+        intent,
+        &volumes,
+    )?;
+    assert_eq!(
+        abstention(denied.outcome())?,
+        AbstentionReason::NoEligibleCandidate
+    );
+    volumes[1].rows.pop();
+    let missing = governed::evaluate_with_liquidity(
+        request(),
+        &evidence,
+        &data,
+        101,
+        &gate,
+        intent,
+        &volumes,
+    )?;
+    assert_eq!(
+        abstention(missing.outcome())?,
+        AbstentionReason::InsufficientHistory
+    );
+    assert!(missing.decision().is_none());
+    assert!(
+        Policy::new([8; 32], [3; 32], vec![InstrumentId::new(1)?], 1)?
+            .with_liquidity("unknown", 0)
+            .is_err()
+    );
+    Ok(())
+}

@@ -34,6 +34,8 @@ pub enum Reason {
     DirectionNotAllowed,
     /// Valid holding horizon exceeds the inclusive policy ceiling.
     HorizonExceeded,
+    /// One or more candidates fall below the explicit inclusive liquidity minimum.
+    LiquidityBelowMinimum,
 }
 impl Reason {
     /// Stable diagnostic code, without market values or caller data.
@@ -43,6 +45,7 @@ impl Reason {
             Self::InstrumentNotAllowed => "instrument_not_allowed",
             Self::DirectionNotAllowed => "direction_not_allowed",
             Self::HorizonExceeded => "horizon_exceeded",
+            Self::LiquidityBelowMinimum => "liquidity_below_minimum",
         }
     }
 }
@@ -62,6 +65,7 @@ pub struct Policy {
     configuration: [u8; 32],
     instruments: Vec<InstrumentId>,
     max_horizon: u16,
+    liquidity: Option<u64>,
 }
 /// Sealed deterministic decision, retaining all applicable reasons in stable order.
 #[derive(Debug, Eq, PartialEq)]
@@ -70,6 +74,7 @@ pub struct Decision {
     status: Status,
     eligible: Vec<InstrumentId>,
     reasons: Vec<Reason>,
+    candidates: Vec<InstrumentId>,
 }
 impl Decision {
     /// Exact immutable policy revision.
@@ -117,7 +122,61 @@ impl Policy {
             configuration,
             instruments,
             max_horizon,
+            liquidity: None,
         })
+    }
+    /// Require the compiled liquidity revision and explicit minimum; zero is not a disable flag.
+    pub fn with_liquidity(
+        mut self,
+        revision: &str,
+        minimum_cents: u64,
+    ) -> Result<Self, InvalidInput> {
+        if revision != crate::liquidity::REVISION {
+            return Err(InvalidInput);
+        }
+        self.liquidity = Some(minimum_cents);
+        Ok(self)
+    }
+    /// Whether selected configuration requires liquidity evidence.
+    #[must_use]
+    pub const fn requires_liquidity(&self) -> bool {
+        self.liquidity.is_some()
+    }
+    /// Apply sealed metrics for every original candidate, preserving previous denials.
+    /// # Errors
+    /// Rejects a foreign decision, missing/duplicate/foreign metrics or an unconfigured gate.
+    pub fn apply_liquidity(
+        &self,
+        mut decision: Decision,
+        values: &[crate::liquidity::Liquidity],
+    ) -> Result<Decision, InvalidInput> {
+        let minimum = self.liquidity.ok_or(InvalidInput)?;
+        if values.len() != decision.candidates.len() {
+            return Err(InvalidInput);
+        }
+        let mut ids = values.iter().map(|v| v.instrument()).collect::<Vec<_>>();
+        ids.sort_unstable();
+        if decision.revision != self.revision || ids != decision.candidates {
+            return Err(InvalidInput);
+        }
+        if values.iter().any(|v| v.cents() < minimum) {
+            if !decision.reasons.contains(&Reason::LiquidityBelowMinimum) {
+                decision.reasons.push(Reason::LiquidityBelowMinimum);
+            }
+            decision.eligible.retain(|id| {
+                values
+                    .iter()
+                    .any(|v| v.instrument() == *id && v.cents() >= minimum)
+            });
+        }
+        decision.status = if decision.eligible.is_empty() {
+            Status::Abstained
+        } else if decision.eligible.len() < decision.candidates.len() {
+            Status::Narrowed
+        } else {
+            Status::Approved
+        };
+        Ok(decision)
     }
     /// Exact selected configuration identity; callers must authenticate its resolution.
     #[must_use]
@@ -173,6 +232,7 @@ impl Policy {
             status,
             eligible,
             reasons,
+            candidates: ordered,
         })
     }
 }
