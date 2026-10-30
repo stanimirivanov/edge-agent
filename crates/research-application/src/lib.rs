@@ -4,6 +4,7 @@
 #![deny(missing_docs)]
 pub mod lifecycle;
 pub mod publication;
+pub mod replay;
 pub mod worker;
 
 use edgeagent_contracts::research::{

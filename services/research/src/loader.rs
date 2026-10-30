@@ -85,6 +85,23 @@ impl OwnerLoader {
             ttl_ms,
         })
     }
+    /// Check trusted scope/revision selection even when replay needs no evidence read.
+    /// # Errors
+    /// Rejects foreign scope or a profile differing from the retained request revisions.
+    pub fn validate_request(
+        &self,
+        request: &edgeagent_contracts::research::ResearchRequest,
+    ) -> Result<(), E> {
+        if request.scope != self.scope {
+            return Err(E::Denied);
+        }
+        if digest(&request.implementation)? != self.implementation
+            || digest(&request.configuration)? != self.configuration
+        {
+            return Err(E::Unsupported);
+        }
+        Ok(())
+    }
     async fn read(&self, delivery: &MessageEnvelope) -> Result<Vec<u8>, E> {
         let mut child = tokio::process::Command::new(&self.binary)
             .args(["offline-research-read", &self.owner_id])
@@ -138,14 +155,7 @@ impl EvidenceLoader for OwnerLoader {
     async fn load(&self, delivery: &MessageEnvelope) -> Result<LoadedEvidence, E> {
         let outcome = ResearchEvidence::from_envelope(delivery).map_err(|_| E::Invalid)?;
         let request = outcome.request();
-        if request.scope != self.scope {
-            return Err(E::Denied);
-        }
-        if digest(&request.implementation)? != self.implementation
-            || digest(&request.configuration)? != self.configuration
-        {
-            return Err(E::Unsupported);
-        }
+        self.validate_request(request)?;
         let ResearchEvidence::Ready { decision, .. } = &outcome else {
             return Err(E::Invalid);
         };

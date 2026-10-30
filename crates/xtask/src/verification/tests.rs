@@ -860,6 +860,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "projector-query-contracts",
             "research-lifecycle",
             "research-projection-contracts",
+            "research-replay",
             "research-worker-contracts",
             "research-rendering",
             "research-momentum",

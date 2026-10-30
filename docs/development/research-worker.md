@@ -10,7 +10,8 @@
 ## Configuration and modes
 
 `edgeagent-research` keeps its descriptor commands. The new single-argument modes are
-`offline-once`, `offline-worker` and `offline-relay`. Prepare existing Research,
+`offline-once`, `offline-worker` and `offline-relay`. [Read-only replay](research-replay.md)
+and [owner lifecycle](research-lifecycle.md) add separate explicit operator commands. Prepare existing Research,
 inbox and outbox migrations in an independent Research-owned schema; startup checks
 completion-table readiness and never runs DDL. Use a restricted runtime role with
 existing completion/inbox/outbox permissions and no completion mutation or DDL.
