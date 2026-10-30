@@ -203,6 +203,7 @@ const RESEARCH_EVIDENCE_PROCESSES: Target = Target {
         "pending_research_restarts_and_reordered_duplicates_reuse_one_acquisition",
         "unsupported_selection_and_revoked_owner_rights_abstain_without_objects",
         "incomplete_owner_history_abstains_without_a_ready_reference",
+        "policy_companions_preserve_daily_evidence_and_distinguish_synthetic_coverage",
     ],
 };
 const RESEARCH_CORRELATION: Target = Target {
@@ -1130,8 +1131,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 144);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 144);
+        assert_eq!(inventory.len(), 145);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 145);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

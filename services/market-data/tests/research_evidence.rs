@@ -254,3 +254,81 @@ async fn incomplete_owner_history_abstains_without_a_ready_reference() -> Result
     .await;
     h.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn policy_companions_preserve_daily_evidence_and_distinguish_synthetic_coverage() -> Result {
+    use edgeagent_contracts::policy_evidence::{EventCoverage, PolicyEvidence};
+    for recipe in ["history-v1", "policy-history-v1"] {
+        let h = Harness::new().await?;
+        let result = std::panic::AssertUnwindSafe(async {
+            let mut request = h.seed(recipe).await?;
+            // Explicit future synthetic cutoff covers this process's acquisition time.
+            request.decision_at_ms += 60_000;
+            let event = h.once(&delivery(&request, "policy-delivery")?).await?;
+            let input = event.to_json()?;
+            let daily = h
+                .success(
+                    &["offline-research-read", "00000000000000000000000000000001"],
+                    Some(&input),
+                )
+                .await?;
+            let bytes = h
+                .success(
+                    &[
+                        "offline-research-policy-read",
+                        "00000000000000000000000000000001",
+                    ],
+                    Some(&input),
+                )
+                .await?;
+            let companion = PolicyEvidence::decode(&bytes)?;
+            let PolicyEvidence::V1 {
+                request: bound,
+                daily: retained,
+                events,
+            } = &companion;
+            assert!(bound == &request);
+            assert_eq!(retained.bytes(), daily);
+            assert_eq!(retained.data().bars.len(), 6);
+            assert!(
+                matches!(events,EventCoverage::SyntheticComplete{events,..} if events.is_empty())
+                    == (recipe == "policy-history-v1")
+            );
+            assert_eq!(
+                bytes,
+                h.success(
+                    &[
+                        "offline-research-policy-read",
+                        "00000000000000000000000000000001"
+                    ],
+                    Some(&input)
+                )
+                .await?
+            );
+            // Revoke the actual owner before another export; references grant no continuing rights.
+            let owner = PostgresResearchEvidence::new(h.pool.clone())
+                .owner_record(&EvidenceId::new("00000000000000000000000000000001")?)
+                .await?;
+            PostgresAcquisitionLedger::new(h.pool.clone())
+                .revoke_evidence_scope(&owner.retention_scope()?)
+                .await?;
+            let denied = h
+                .run(
+                    &[
+                        "offline-research-policy-read",
+                        "00000000000000000000000000000001",
+                    ],
+                    Some(&input),
+                )
+                .await?;
+            assert_eq!(denied.status.code(), Some(77));
+            assert!(denied.stdout.is_empty());
+            Ok(())
+        })
+        .catch_unwind()
+        .await;
+        h.finish(result).await?;
+    }
+    Ok(())
+}

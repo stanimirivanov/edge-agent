@@ -121,9 +121,16 @@ impl OwnerLoader {
         }
         Ok(())
     }
-    async fn read(&self, delivery: &MessageEnvelope) -> Result<Vec<u8>, E> {
+    async fn read(&self, delivery: &MessageEnvelope, policy: bool) -> Result<Vec<u8>, E> {
         let mut child = tokio::process::Command::new(&self.binary)
-            .args(["offline-research-read", &self.owner_id])
+            .args([
+                if policy {
+                    "offline-research-policy-read"
+                } else {
+                    "offline-research-read"
+                },
+                &self.owner_id,
+            ])
             .env_clear()
             .env("USE_MOCK", "1")
             .env("EDGEAGENT_MARKET_DATA_PROVIDER", "synthetic-daily-v1")
@@ -136,6 +143,11 @@ impl OwnerLoader {
             .kill_on_drop(true)
             .spawn()
             .map_err(|_| E::Unavailable)?;
+        let limit = if policy {
+            edgeagent_contracts::policy_evidence::MAX_POLICY_BYTES
+        } else {
+            MAX_EVIDENCE_BYTES
+        };
         let result = tokio::time::timeout(Duration::from_secs(15), async {
             let bytes = delivery.to_json().map_err(|_| E::Invalid)?;
             let mut stdin = child.stdin.take().ok_or(E::Unavailable)?;
@@ -146,11 +158,11 @@ impl OwnerLoader {
                 .stdout
                 .take()
                 .ok_or(E::Unavailable)?
-                .take((MAX_EVIDENCE_BYTES + 1) as u64)
+                .take((limit + 1) as u64)
                 .read_to_end(&mut bytes)
                 .await
                 .map_err(|_| E::Unavailable)?;
-            if bytes.len() > MAX_EVIDENCE_BYTES {
+            if bytes.len() > limit {
                 return Err(E::Invalid);
             }
             let status = child.wait().await.map_err(|_| E::Unavailable)?;
@@ -170,8 +182,12 @@ impl OwnerLoader {
         result
     }
 }
-impl EvidenceLoader for OwnerLoader {
-    async fn load(&self, delivery: &MessageEnvelope) -> Result<LoadedEvidence, E> {
+impl OwnerLoader {
+    async fn authorized_bytes(
+        &self,
+        delivery: &MessageEnvelope,
+        policy: bool,
+    ) -> Result<Vec<u8>, E> {
         let outcome = ResearchEvidence::from_envelope(delivery).map_err(|_| E::Invalid)?;
         let request = outcome.request();
         self.validate_request(request)?;
@@ -195,8 +211,22 @@ impl EvidenceLoader for OwnerLoader {
             Ok(())
         };
         current()?;
-        let bytes = self.read(delivery).await?;
+        let bytes = self.read(delivery, policy).await?;
         current()?;
+        Ok(bytes)
+    }
+    /// Read the opt-in owner policy companion, preserving authorization and retention fences.
+    pub async fn load_policy(
+        &self,
+        delivery: &MessageEnvelope,
+    ) -> Result<edgeagent_contracts::policy_evidence::PolicyEvidence, E> {
+        let bytes = self.authorized_bytes(delivery, true).await?;
+        convert_policy(delivery, &bytes)
+    }
+}
+impl EvidenceLoader for OwnerLoader {
+    async fn load(&self, delivery: &MessageEnvelope) -> Result<LoadedEvidence, E> {
+        let bytes = self.authorized_bytes(delivery, false).await?;
         convert(
             delivery,
             &bytes,
@@ -207,6 +237,36 @@ impl EvidenceLoader for OwnerLoader {
         )
     }
 }
+/// Bind already owner-authorized companion bytes to the exact request and retained daily object.
+/// This conversion alone grants no entitlement or trust in an arbitrary source of bytes.
+pub fn convert_policy(
+    delivery: &MessageEnvelope,
+    bytes: &[u8],
+) -> Result<edgeagent_contracts::policy_evidence::PolicyEvidence, E> {
+    use edgeagent_contracts::policy_evidence::PolicyEvidence;
+    let ResearchEvidence::Ready { request, decision } =
+        ResearchEvidence::from_envelope(delivery).map_err(|_| E::Invalid)?
+    else {
+        return Err(E::Invalid);
+    };
+    let EvidenceOutcome::Ready { object } = &decision.outcome else {
+        return Err(E::Invalid);
+    };
+    let companion = PolicyEvidence::decode(bytes).map_err(|_| E::Invalid)?;
+    companion
+        .bind(&request, &object.sha256)
+        .map_err(|_| E::Invalid)?;
+    let PolicyEvidence::V1 { daily, .. } = &companion;
+    if EvidenceDecision::ready(decision.request.clone(), daily)
+        .map_err(|_| E::Invalid)?
+        .data()
+        != decision.as_ref()
+    {
+        return Err(E::Invalid);
+    }
+    Ok(companion)
+}
+
 fn millis(t: EvidenceTime) -> Result<i64, E> {
     if !t.nanos.is_multiple_of(1_000_000) {
         return Err(E::Invalid);

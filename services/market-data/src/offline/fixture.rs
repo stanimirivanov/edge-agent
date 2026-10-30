@@ -10,6 +10,7 @@ use std::num::NonZeroU32;
 pub(super) enum Recipe {
     Single,
     History,
+    PolicyHistory,
     Missing,
     ActionMismatch,
 }
@@ -18,6 +19,7 @@ impl Recipe {
         match self {
             Self::Single => "single-v1",
             Self::History => "history-v1",
+            Self::PolicyHistory => "policy-history-v1",
             Self::Missing => "history-missing-v1",
             Self::ActionMismatch => "history-action-mismatch-v1",
         }
@@ -26,6 +28,7 @@ impl Recipe {
         [
             Self::Single,
             Self::History,
+            Self::PolicyHistory,
             Self::Missing,
             Self::ActionMismatch,
         ]
@@ -373,10 +376,17 @@ impl Job {
             .collect::<Result<Vec<_>>>()?;
         let implementation: &[u8] = if recipe == Recipe::Single {
             include_bytes!("../../fixtures/offline-single-v1/fixture.rs")
-        } else {
+        } else if recipe == Recipe::PolicyHistory {
             include_bytes!("fixture.rs")
+        } else {
+            include_bytes!("../../fixtures/offline-history-v1/fixture.rs")
         };
         let mut config = selected.binding_bytes()?;
+        if recipe == Recipe::PolicyHistory {
+            config.extend_from_slice(include_bytes!(
+                "../../fixtures/offline-policy-history-v1/events.json"
+            ));
+        }
         config.extend_from_slice(implementation);
         if recipe != Recipe::Single {
             config.extend_from_slice(recipe.name().as_bytes());
@@ -413,6 +423,7 @@ impl Job {
         for recipe in [
             Recipe::Single,
             Recipe::History,
+            Recipe::PolicyHistory,
             Recipe::Missing,
             Recipe::ActionMismatch,
         ] {
