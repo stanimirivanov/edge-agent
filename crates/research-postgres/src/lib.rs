@@ -1,5 +1,6 @@
 //! Research-owned exact completion/inbox/outbox transaction; no external I/O.
 #![forbid(unsafe_code)]
+pub mod governance;
 pub mod lifecycle;
 use edgeagent_contracts::{
     MessageEnvelope,
@@ -16,12 +17,43 @@ pub const MIGRATION: &str = include_str!("../migrations/0001_research_completion
 /// Caller supplies a pool scoped to the Research-owned schema.
 pub struct PostgresResearchStore {
     pool: sqlx::PgPool,
+    governed: Option<edgeagent_contracts::strategy_governance::Profile>,
 }
 impl PostgresResearchStore {
     /// Bind the service-owned database pool; does not migrate or access the database.
     #[must_use]
     pub const fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            governed: None,
+        }
+    }
+    /// Explicit staged governed path; legacy callers remain unchanged until M05-PR12.
+    pub fn governed(
+        pool: sqlx::PgPool,
+        profile: edgeagent_contracts::strategy_governance::Profile,
+    ) -> Self {
+        Self {
+            pool,
+            governed: Some(profile),
+        }
+    }
+    async fn check_governance(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        request: &ResearchRequest,
+    ) -> Result<(), Error> {
+        if let Some(p) = &self.governed {
+            if request.scope != p.scope
+                || request.implementation != p.implementation
+                || request.configuration != p.configuration
+                || request.lookback_sessions != p.lookback_sessions
+            {
+                return Err(Error::new(Kind::Invalid));
+            }
+            governance::check(tx, p).await?;
+        }
+        Ok(())
     }
     /// Load an intact original completion/input for replay in a read-only transaction.
     /// Unlike recovery this never records a new inbox delivery.
@@ -139,6 +171,9 @@ impl ResearchPublication for PostgresResearchStore {
         let request = publication::evaluation_request(delivery)?;
         let mut tx = transaction(&self.pool).await?;
         let receipt = read(&mut tx, &request).await?;
+        if receipt.is_none() {
+            self.check_governance(&mut tx, &request).await?;
+        }
         if receipt.is_some() {
             inbox(&mut tx, delivery).await?;
         }
@@ -147,6 +182,9 @@ impl ResearchPublication for PostgresResearchStore {
     }
     async fn commit(&self, p: &PreparedCompletion) -> Result<CommittedOutcome, Error> {
         let mut tx = transaction(&self.pool).await?;
+        if read(&mut tx, p.request()).await?.is_none() {
+            self.check_governance(&mut tx, p.request()).await?;
+        }
         let disposition = inbox(&mut tx, p.delivery()).await?;
         let publication = p
             .publication()

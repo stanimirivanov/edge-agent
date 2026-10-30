@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT session_user::text AS \"actor!\" FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner WHERE n.nspname=current_schema() AND r.rolname=session_user",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "actor!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e1e3c53c4cc569a16c51062e6d64973042800993f9fd6a5bffd9568dce4034d0"
+}

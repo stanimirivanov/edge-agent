@@ -38,6 +38,7 @@ impl Database {
             .chain([
                 edgeagent_research_postgres::MIGRATION,
                 edgeagent_research_postgres::lifecycle::MIGRATION,
+                edgeagent_research_postgres::governance::MIGRATION,
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;

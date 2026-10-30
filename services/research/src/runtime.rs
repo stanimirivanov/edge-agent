@@ -54,7 +54,11 @@ pub fn run(args: &[String]) -> Result {
     if args.len() != 1
         || !matches!(
             args[0].as_str(),
-            "offline-once"
+            "offline-governed-once"
+                | "offline-governance-install"
+                | "offline-governance-approve"
+                | "offline-governance-retire"
+                | "offline-once"
                 | "offline-worker"
                 | "offline-relay"
                 | "offline-lifecycle"
@@ -101,6 +105,14 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode.starts_with("offline-governance-") {
+            use std::io::Read as _;
+            let mut bytes=Vec::new(); std::io::stdin().take(4097).read_to_end(&mut bytes)?;
+            let profile=edgeagent_contracts::strategy_governance::Profile::decode(&bytes)?;
+            if profile.scope!=scope {return Err("foreign governance scope".into());}
+            let revision=match mode {"offline-governance-install"=>1,"offline-governance-approve"=>2,_=>3};
+            store.govern(&profile,revision).await?;return Ok(());
+        }
         if mode=="offline-replay" {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let delivery=MessageEnvelope::from_json(&bytes)?;
@@ -120,11 +132,15 @@ async fn execute(mode: &str) -> Result {
             let event=tokio::time::timeout(Duration::from_secs(25),store.append_lifecycle(&scope,event,&time()?)).await??;
             std::io::stdout().write_all(&event.to_json()?)?;return Ok(());
         }
-        if mode=="offline-once" {
+        if mode=="offline-once" || mode=="offline-governed-once" {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let delivery=MessageEnvelope::from_json(&bytes)?;
             if publication::evaluation_request(&delivery)?.scope!=scope {return Err("foreign research scope".into());}
             let loader=OwnerLoader::from_environment()?;
+            let store=if mode=="offline-governed-once" {
+                let lookback=required("EDGEAGENT_RESEARCH_LOOKBACK_SESSIONS")?.parse()?;
+                PostgresResearchStore::governed(pool.clone(),loader.governance_profile(lookback))
+            } else {store};
             let receipt=tokio::time::timeout(Duration::from_secs(25),worker::process(&store,&loader,&delivery,&time()?)).await??;
             std::io::stdout().write_all(receipt.bytes())?;return Ok(());
         }

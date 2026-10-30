@@ -166,6 +166,7 @@ impl Harness {
             .chain([
                 edgeagent_research_postgres::MIGRATION,
                 edgeagent_research_postgres::lifecycle::MIGRATION,
+                edgeagent_research_postgres::governance::MIGRATION,
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
@@ -180,7 +181,7 @@ impl Harness {
     }
     pub async fn reconnect(&self) -> Result<PgPool> {
         Ok(PgPoolOptions::new()
-            .max_connections(2)
+            .max_connections(1)
             .connect_with(self.options.clone())
             .await?)
     }

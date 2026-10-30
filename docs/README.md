@@ -106,6 +106,8 @@ For M04 atomic research completion, read [research persistence](development/rese
 
 For M05 immutable declarations, read [strategy and policy configuration](development/strategy-policy.md).
 
+For M05 local approval, read [strategy governance](development/strategy-governance.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

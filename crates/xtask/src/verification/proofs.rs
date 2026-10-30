@@ -181,6 +181,7 @@ const RESEARCH_WORKER: Target = Target {
     identities: &[
         "restart_and_lost_result_recover_before_owner_read_with_one_publication",
         "corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_completion",
+        "governed_processes_require_owner_approval_and_retirement_preserves_original_receipt",
     ],
 };
 const RESEARCH_WORKER_BROKER: Target = Target {
@@ -230,6 +231,8 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "immutable_completion_and_corrupt_retained_outbox_fail_closed",
         "lifecycle_commands_are_ordered_idempotent_and_corrections_cannot_cycle",
         "lifecycle_statement_and_deferred_commit_failures_leave_no_revision_or_outbox",
+        "governed_profiles_require_approval_preserve_receipts_and_retire_permanently",
+        "retirement_fences_new_completion_and_nonowner_cannot_administer",
     ],
 };
 const PUBLISH: Target = Target {
@@ -1127,8 +1130,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 141);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 141);
+        assert_eq!(inventory.len(), 144);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 144);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
