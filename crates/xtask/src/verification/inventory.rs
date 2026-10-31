@@ -1684,6 +1684,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "reordered_lifecycle_records_remain_explicit_gaps_without_cursor_or_state_advance",
                         "restore_rejects_corruption_wrong_anchor_versions_and_rechecks_sealed_outcomes",
                         "lifecycle_replay_duplicates_gaps_and_checkpoint_versions_preserve_original_bytes",
+                        "decision_provenance_replays_with_gaps_conflicts_and_legacy_checkpoint_compatibility",
                     ],
                     ignored: false,
                 });
