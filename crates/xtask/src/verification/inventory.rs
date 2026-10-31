@@ -1734,6 +1734,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "context_gates_use_exact_regimes_closed_windows_and_critical_freshness",
                         "independent_validation_reconciles_proposals_and_seals_typed_preparation",
                         "complete_execution_has_no_legacy_or_unknown_revision_defaults",
+                        "configured_invalidation_requires_complete_compatible_later_decisions",
                     ],
                     ignored: false,
                 });
