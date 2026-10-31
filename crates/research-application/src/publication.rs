@@ -54,6 +54,8 @@ pub fn registry() -> Result<MessageRegistry<'static>, PublicationError> {
 /// Payload-free persistence classification; ambiguous commits require retry by identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublicationErrorKind {
+    /// Operator kill switch blocks fresh execution; not malformed caller intent.
+    Disabled,
     /// Invalid binding, receipt or retained integrity.
     Invalid,
     /// Reused identity with different immutable bytes.

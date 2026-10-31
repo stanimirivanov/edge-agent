@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\" FROM edgeagent_research_controls WHERE caller_scope=$1 AND enabled AND ((implementation='' AND revision=$3) OR (implementation=$2 AND revision=$4))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e1676e2eac2c2ff3ac09388909548a94d6b031d957d10d2ef7bc826830a66b57"
+}

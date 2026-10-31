@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT request,outcome,publication,requires_decision FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",
+  "query": "SELECT request,outcome,publication,requires_decision,requires_controls FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "requires_decision"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "requires_controls",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_completions",
+            "name": "requires_controls"
+          }
+        }
       }
     ],
     "parameters": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ce866fbb7bf1c2ed25cebdce24de77283c679e5b001c2651895f62515cf2b6d2"
+  "hash": "819343562a3dc99bf83293fceb3e588ec426beb4e8e9f7630fb400e76a31d22f"
 }

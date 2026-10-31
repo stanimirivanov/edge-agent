@@ -57,7 +57,7 @@ impl PostgresResearchStore {
 pub(super) async fn check(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     profile: &Profile,
-) -> Result<(), Error> {
+) -> Result<super::controls::Snapshot, Error> {
     let bytes = profile.bytes().map_err(|_| invalid())?;
     // Scope-wide shared advisory fencing pairs with administration's exclusive lock.
     // Queueing cannot overtake retirement when the immutable row itself is unchanged.
@@ -73,7 +73,7 @@ pub(super) async fn check(
     if retained != bytes || action.as_deref() != Some("approved") {
         return Err(invalid());
     }
-    Ok(())
+    super::controls::check(tx, &profile.scope, &profile.implementation).await
 }
 
 /// Verify retained immutable approval evidence without requiring that it is still current.

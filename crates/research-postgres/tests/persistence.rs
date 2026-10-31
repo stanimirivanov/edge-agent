@@ -551,7 +551,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         let role = format!("governance_guest_{}", h.key);
         let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&h.pool).await?;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals TO {role}"
+            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls TO {role}"
         ))).execute(&h.pool).await?;
         let guest_result = AssertUnwindSafe(async {
             let options: sqlx::postgres::PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
@@ -566,6 +566,9 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
                 let refusal = PostgresResearchStore::new(guest.clone()).govern(&p, 2).await
                     .err().ok_or("nonowner was allowed to administer")?;
                 assert_eq!(refusal.kind(), Kind::Invalid);
+                let control=edgeagent_contracts::research_controls::Command::V1{scope:"scope".into(),target:edgeagent_contracts::research_controls::Target::Scope,revision:1,enabled:false,reason_code:"maintenance".into()};
+                assert_eq!(PostgresResearchStore::new(guest.clone()).control(&control).await.err().ok_or("nonowner control")?.kind(),Kind::Invalid);
+
                 Result::Ok(())
             }).catch_unwind().await;
             guest.close().await;
@@ -573,7 +576,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         }).catch_unwind().await;
         // Always revoke fixture grants and remove the login, even after failed assertions.
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
+            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
         ))).execute(&h.pool).await?;
         match guest_result { Ok(r) => r?, Err(panic) => std::panic::resume_unwind(panic) }
         Ok(())
@@ -645,11 +648,11 @@ async fn historical_absence_recovers_but_database_refuses_unaccompanied_new_inse
         let publication=candidate.publication().to_json()?;
         // Simulate the exact pre-migration snapshot. Only the isolated schema owner may seed it.
         let mut tx=h.pool.begin().await?;
-        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions DISABLE TRIGGER edgeagent_research_require_decision").execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO edgeagent_research_completions(caller_scope,request_id,request,outcome,publication,requires_decision) VALUES($1,$2,$3,$4,$5,FALSE)")
+        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions DISABLE TRIGGER edgeagent_research_require_decision; ALTER TABLE edgeagent_research_completions DISABLE TRIGGER edgeagent_research_require_controls").execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO edgeagent_research_completions(caller_scope,request_id,request,outcome,publication,requires_decision,requires_controls) VALUES($1,$2,$3,$4,$5,FALSE,FALSE)")
             .bind(candidate.request().scope.as_str()).bind(candidate.request().request_id.as_str()).bind(candidate.request_bytes()).bind(candidate.outcome_bytes()).bind(publication).execute(&mut *tx).await?;
         edgeagent_outbox_postgres::PostgresOutbox.enqueue(&mut tx,candidate.definition(),candidate.publication()).await?;
-        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions ENABLE TRIGGER edgeagent_research_require_decision").execute(&mut *tx).await?;
+        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions ENABLE TRIGGER edgeagent_research_require_decision; ALTER TABLE edgeagent_research_completions ENABLE TRIGGER edgeagent_research_require_controls").execute(&mut *tx).await?;
         tx.commit().await?;
         let store=PostgresResearchStore::new(h.pool.clone());
         let old=store.recover(candidate.delivery()).await?.ok_or("legacy receipt")?;
@@ -663,3 +666,6 @@ async fn historical_absence_recovers_but_database_refuses_unaccompanied_new_inse
     }).catch_unwind().await;
     h.finish(result).await
 }
+
+#[path = "persistence/controls.rs"]
+mod controls;

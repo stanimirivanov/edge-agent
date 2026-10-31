@@ -14,6 +14,15 @@ use futures_util::{FutureExt, StreamExt};
 use std::time::Duration;
 use support::governed_event as event;
 use support::*;
+fn control(revision: u64, enabled: bool) -> edgeagent_contracts::research_controls::Command {
+    edgeagent_contracts::research_controls::Command::V1 {
+        scope: "operator".into(),
+        target: edgeagent_contracts::research_controls::Target::Scope,
+        revision,
+        enabled,
+        reason_code: "broker-proof".into(),
+    }
+}
 async fn worker(
     profile: &Profile,
     schema: &str,
@@ -110,6 +119,8 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
                 .success()
         );
         assert_eq!(consumer.info().await?.num_ack_pending, 0);
+        let controls = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
+        controls.control(&control(1, false)).await?;
         let mut events = client.subscribe(PUBLISHED.subject()?).await?;
         client.flush().await?;
         assert!(
@@ -125,6 +136,7 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             MessageEnvelope::from_json(&message.payload)?.to_json()?,
             retained
         );
+        controls.control(&control(2, true)).await?;
         let (pending, _) = support::governed_event("unavailable")?;
         context
             .publish(subject.clone(), pending.to_json()?.into())
@@ -163,6 +175,41 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
                 .fetch_one(&db.pool)
                 .await?,
             1
+        );
+        controls.control(&control(3, false)).await?;
+        let (blocked, _) = support::governed_event("disabled")?;
+        context
+            .publish(DECIDED.subject()?, blocked.to_json()?.into())
+            .await?
+            .await?;
+        for _ in 0..3 {
+            assert!(
+                worker(&profile, &db.schema, &broker, &name, false)
+                    .await?
+                    .status
+                    .success()
+            );
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine")
+                .fetch_one(&db.pool)
+                .await?,
+            2
+        );
+        assert!(
+            !sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM edgeagent_message_inbox WHERE message_id=$1)"
+            )
+            .bind(blocked.id())
+            .fetch_one(&db.pool)
+            .await?
+        );
+        let retained = stream
+            .get_last_raw_message_by_subject(&DECIDED.subject()?)
+            .await?;
+        assert_eq!(
+            MessageEnvelope::from_json(&retained.payload)?.to_json()?,
+            blocked.to_json()?
         );
         Ok(())
     })
