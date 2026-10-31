@@ -189,6 +189,21 @@ async fn queries_preserve_observations_and_exact_terminal_bytes_without_forwarde
         assert!(!calls[0].1.contains_key("authorization"));
         assert!(!calls[0].1.contains_key("x-forwarded-host"));
     }
+    for status in ["artifact", "abstained", "gap"] {
+        let mut metadata: serde_json::Value =
+            serde_json::from_slice(&view(status, 2, "paired".into()))?;
+        metadata["decision"] = "ab".repeat(32).into();
+        let (gateway, _owner, _) = setup(
+            200,
+            serde_json::to_vec(&metadata)?,
+            "application/json",
+            false,
+        )
+        .await?;
+        let response = gateway.get(PATH, "").await?;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(body(&response)?.contains(&"ab".repeat(32)));
+    }
     for (status, change) in [
         (
             "invalidated",

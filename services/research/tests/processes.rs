@@ -38,6 +38,7 @@ async fn submit(h: &Journey, lookback: u16) -> Result {
 async fn result(h: &Journey, status: &str) -> Result<Vec<u8>> {
     h.run("research", "offline-relay", &[]).await?;
     h.run("projector", "offline-worker", &[]).await?;
+    h.run("projector", "offline-worker", &[]).await?;
     let response = h
         .request(
             "GET",
@@ -94,10 +95,11 @@ async fn four_process_artifact_survives_death_redelivery_rebuild_and_lifecycle()
         h.context.publish(edgeagent_contracts::research_acquisition::DECIDED.subject()?,input.into()).await?.await?;
         h.run("research","offline-worker",&[]).await?;
         assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM edgeagent_research_completions").fetch_one(&h.research.pool).await?,1);
-        assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM edgeagent_message_outbox").fetch_one(&h.research.pool).await?,1);
+        assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM edgeagent_message_outbox").fetch_one(&h.research.pool).await?,2);
         assert_eq!(ready.message_type(),edgeagent_contracts::research_acquisition::DECIDED.message_type());
         h.rebuild().await?;
         assert_eq!(h.request("GET","/v1/research-requests/operator/qualification/outcome",&[]).await?.0,404);
+        h.run("projector","offline-worker",&[]).await?;
         h.run("projector","offline-worker",&[]).await?;
         assert_eq!(h.request("GET","/v1/research-requests/operator/qualification/outcome",&[]).await?.1,original);
         let event=ResearchRecord::Lifecycle(ResearchLifecycle{scope:"operator".into(),request_id:"qualification".into(),artifact:ResearchRecord::Artifact(artifact.clone()).digest()?,revision:1,effective_at_ms:artifact.expires_at_ms,change:LifecycleChange::Expired});

@@ -277,3 +277,121 @@ async fn lifecycle_gaps_backfill_atomically_and_closed_queries_preserve_exact_hi
     }).catch_unwind().await;
     db.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn decision_reordering_replays_exact_companion_and_queries_require_inbox_proof() -> Result {
+    use edgeagent_contracts::{
+        Component, MessageEnvelope, MessageMetadata,
+        research_decision::{DecisionProvenance, DecisionRecord},
+    };
+    use edgeagent_research_application::publication::DECISION;
+    let db = Database::new().await?;
+    let result = AssertUnwindSafe(async {
+        let record = record("decision", false)?;
+        let terminal = event(&record)?;
+        let req = request(&record)?;
+        let mut companion = DecisionProvenance::decode(include_bytes!(
+            "../../../crates/contracts/fixtures/research/decision-v1.json"
+        ))?;
+        companion.request = req.clone();
+        companion.outcome = record.digest()?;
+        let bytes = companion.canonical_bytes()?;
+        let id = companion.digest()?;
+        let partition = format!("research-request/{}/{}", req.scope, req.request_id);
+        let envelope = MessageEnvelope::from_payload(
+            MessageMetadata {
+                id: id.clone(),
+                source: Component::Research.source_uri().into(),
+                message_type: DECISION.message_type().into(),
+                subject: partition.clone(),
+                time: "2026-10-31T00:00:00Z".into(),
+                data_schema: DECISION.data_schema().into(),
+                correlation_id: terminal
+                    .extension("correlationid")
+                    .ok_or("correlation")?
+                    .into(),
+                causation_id: record.digest()?,
+                idempotency_key: id.clone(),
+                partition_key: partition,
+                trace_parent: terminal.extension("traceparent").ok_or("trace")?.into(),
+                trace_state: None,
+            },
+            &DecisionRecord::V1(companion),
+        )?;
+        let store = Arc::new(edgeagent_audit_projector::store::ProjectionStore::new(
+            db.pool.clone(),
+            req.scope.clone(),
+        )?);
+        assert_eq!(
+            store
+                .project(&envelope, "decision-first")
+                .await
+                .err()
+                .ok_or("gap")?
+                .kind(),
+            Kind::Gap
+        );
+        let gap = store
+            .get(&req.scope, &req.request_id)
+            .await?
+            .ok_or("view")?;
+        assert_eq!(gap.projection_revision, 0);
+        assert_eq!(gap.status, "gap");
+        assert!(gap.applied_delivery_key.is_none());
+        store.project(&terminal, "terminal").await?;
+        store.project(&envelope, "decision-retry").await?;
+        store.project(&envelope, "duplicate").await?;
+        let view = store
+            .get(&req.scope, &req.request_id)
+            .await?
+            .ok_or("view")?;
+        assert_eq!(view.projection_revision, 2);
+        assert_eq!(view.status, "artifact");
+        assert_eq!(view.provenance_bytes(), Some(bytes.as_slice()));
+        assert_eq!(view.decision, Some(id.clone()));
+        let server = Server::new(store.clone()).await?;
+        let path = format!(
+            "/internal/v1/research-requests/{}/{}/decision",
+            req.scope, req.request_id
+        );
+        let response = server.query("GET", &path, "").await?;
+        assert!(response.starts_with("HTTP/1.1 200"));
+        assert!(response.ends_with(std::str::from_utf8(&bytes)?));
+        assert!(
+            server
+                .query("GET", &path, "Origin: http://localhost\r\n")
+                .await?
+                .starts_with("HTTP/1.1 403")
+        );
+        let restarted = edgeagent_audit_projector::store::ProjectionStore::new(
+            db.pool.clone(),
+            req.scope.clone(),
+        )?;
+        assert_eq!(
+            restarted
+                .get(&req.scope, &req.request_id)
+                .await?
+                .ok_or("restart")?
+                .provenance_bytes(),
+            Some(bytes.as_slice())
+        );
+        sqlx::query("DELETE FROM edgeagent_message_inbox WHERE message_id=$1")
+            .bind(id)
+            .execute(&db.pool)
+            .await?;
+        assert_eq!(
+            store
+                .get(&req.scope, &req.request_id)
+                .await
+                .err()
+                .ok_or("proof")?
+                .kind(),
+            Kind::Corrupt
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    db.finish(result).await
+}

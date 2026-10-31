@@ -166,12 +166,13 @@ async fn execute(mode: &str) -> Result {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let delivery=MessageEnvelope::from_json(&bytes)?;
             if publication::evaluation_request(&delivery)?.scope!=scope {return Err("foreign research scope".into());}
+            if let Some(receipt)=store.recover_existing(&delivery).await? {std::io::stdout().write_all(receipt.bytes())?;return Ok(());}
             let loader=OwnerLoader::from_environment()?;
-            let store=if mode=="offline-governed-once" {
-                let lookback=required("EDGEAGENT_RESEARCH_LOOKBACK_SESSIONS")?.parse()?;
-                PostgresResearchStore::governed(pool.clone(),loader.governance_profile(lookback))
-            } else {store};
-            let receipt=tokio::time::timeout(Duration::from_secs(25),worker::process(&store,&loader,&delivery,&time()?)).await??;
+            let selection=execution_selection()?;
+            let profile=selection.profile(&scope);
+            if loader.governance_profile(profile.lookback_sessions)!=profile {return Err("execution profile mismatch".into());}
+            let store=PostgresResearchStore::governed(pool.clone(),profile);
+            let receipt=tokio::time::timeout(Duration::from_secs(25),worker::process_execution(&store,&loader,selection,&delivery,&time()?)).await??;
             std::io::stdout().write_all(receipt.bytes())?;return Ok(());
         }
         let broker=required("EDGEAGENT_NATS_URL")?;local(&broker,&["nats","tls"])?;
@@ -189,6 +190,9 @@ async fn execute(mode: &str) -> Result {
             }
         } else {
             let loader=OwnerLoader::from_environment()?;
+            let selected=execution_selection()?.profile(&scope);
+            if loader.governance_profile(selected.lookback_sessions)!=selected {return Err("execution profile mismatch".into());}
+            let store=PostgresResearchStore::governed(pool.clone(),selected);
             let name=required("EDGEAGENT_RESEARCH_STREAM")?;let durable=required("EDGEAGENT_RESEARCH_CONSUMER")?;
             if !token(&name)||!token(&durable) {return Err("invalid research consumer identity".into());}
             let stream=context.get_stream(name).await?;
@@ -214,7 +218,7 @@ async fn execute(mode: &str) -> Result {
 pub async fn handle(
     pool: &sqlx::PgPool,
     store: &impl ResearchPublication,
-    loader: &impl EvidenceLoader,
+    loader: &impl worker::ExecutionLoader,
     delivery: MessageDelivery,
     scope: &str,
 ) -> Result {
@@ -229,7 +233,9 @@ pub async fn handle(
     let mut success = false;
     if valid {
         let envelope = envelope.as_ref().map_err(|_| "invalid delivery")?;
-        match worker::process(store, loader, envelope, &time()?).await {
+        match worker::process_execution(store, loader, execution_selection()?, envelope, &time()?)
+            .await
+        {
             Ok(_) => success = true,
             Err(error) if error.kind() != Kind::Storage => poison = true,
             Err(_) if delivery.metadata().delivery_attempt() >= 3 => {
@@ -277,4 +283,14 @@ async fn stop() {
         return;
     };
     tokio::select! {_=tokio::signal::ctrl_c()=>{},_=terminate.recv()=>{}}
+}
+
+fn execution_selection() -> Result<edgeagent_research_application::execution::Selection> {
+    use std::io::Read as _;
+    let path = required("EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION")?;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take((edgeagent_contracts::strategy::MAX_BUNDLE_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    Ok(edgeagent_research_application::execution::Selection::decode(&bytes)?)
 }

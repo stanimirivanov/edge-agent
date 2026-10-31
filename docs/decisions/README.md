@@ -212,3 +212,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0098](0098-enforce-independent-research-context.md) | Accepted | Enforce independent Research context. |
 | [ADR-0099](0099-reconcile-independent-research-proposals.md) | Accepted | Reconcile independent Research proposals. |
 | [ADR-0100](0100-project-versioned-research-decision-provenance.md) | Accepted | Project versioned Research decision provenance. |
+| [ADR-0101](0101-commit-validated-research-decisions-with-publication.md) | Accepted | Commit validated Research decisions with publication. |

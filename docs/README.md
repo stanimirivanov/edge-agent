@@ -124,6 +124,8 @@ For M05 artifact reconciliation, read [Research validation](development/research
 
 For M05 decision observations, read [decision provenance](development/decision-provenance.md).
 
+For M05 mandatory publication, read [validated publication](development/validated-publication.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

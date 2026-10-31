@@ -188,9 +188,20 @@ struct View {
     applied_delivery_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lifecycle: Option<edgeagent_contracts::research::ResearchLifecycle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    decision: Option<String>,
 }
 impl View {
     fn valid(&self) -> bool {
+        let additional = u64::from(self.decision.is_some());
+        if self.decision.as_ref().is_some_and(|v| {
+            v.len() != 64
+                || !v
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }) {
+            return false;
+        }
         let key = self.applied_delivery_key.as_ref().is_some_and(|s| {
             !s.is_empty() && s.len() <= 512 && s.bytes().all(|b| b.is_ascii_graphic())
         });
@@ -202,9 +213,9 @@ impl View {
                 LifecycleChange::Withdrawn => "withdrawn",
                 LifecycleChange::Corrected { .. } => "corrected",
             };
-            (2..=3).contains(&self.projection_revision)
+            (2 + additional..=3 + additional).contains(&self.projection_revision)
                 && key
-                && event.revision == self.projection_revision - 1
+                && event.revision == self.projection_revision - 1 - additional
                 && event.scope == self.scope
                 && event.request_id == self.request_id
                 && (self.status == state || self.status == "gap")
@@ -215,11 +226,12 @@ impl View {
         match self.status.as_str() {
             "pending" => {
                 self.projection_revision == 0
+                    && self.decision.is_none()
                     && self.applied_delivery_key.is_none()
                     && self.lifecycle.is_none()
             }
             "artifact" | "abstained" => {
-                self.projection_revision == 1 && key && self.lifecycle.is_none()
+                self.projection_revision == 1 + additional && key && self.lifecycle.is_none()
             }
             "invalidated" | "expired" | "withdrawn" | "corrected" => {
                 self.lifecycle.as_ref().is_some_and(closed)
@@ -228,8 +240,10 @@ impl View {
                 if let Some(event) = &self.lifecycle {
                     closed(event)
                 } else {
-                    (self.projection_revision == 0 && self.applied_delivery_key.is_none())
-                        || (self.projection_revision == 1 && key)
+                    (self.projection_revision == 0
+                        && self.decision.is_none()
+                        && self.applied_delivery_key.is_none())
+                        || (self.projection_revision == 1 + additional && key)
                 }
             }
             _ => false,

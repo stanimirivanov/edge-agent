@@ -3,7 +3,7 @@
 ## TL;DR
 
 - M05-PR3 installs exact M04 profiles, then appends approval and terminal retirement.
-- Use `offline-governed-once` to require durable approval; M04 modes remain during rollout.
+- Every fresh publication now requires complete validated execution and exact durable approval.
 - Governance is local schema-owner authority, not multi-user production authorization.
 
 ## Identity and authority
@@ -43,11 +43,12 @@ Repeating the latest identical action with the same authenticated actor is an ex
 retry. Skipped transitions, stale actions and changed definitions reject atomically.
 No general promotion of another strategy is available; PR16 adds validation evidence.
 
-`offline-governed-once` accepts the existing evidence delivery on stdin. Its environment
-must include all existing owner settings plus `EDGEAGENT_RESEARCH_LOOKBACK_SESSIONS`.
-It constructs the exact binding from those settings, requires approval before owner
-reads, and holds a profile share lock through the new completion transaction. Retirement
-uses the corresponding write lock. If retirement commits first, new completion rejects;
+`offline-once` and `offline-governed-once` accept the existing evidence delivery on stdin.
+Fresh execution requires the complete canonical file selected by
+`EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION`, matching existing owner settings.
+Lookback comes from that file; the old lookback environment setting no longer selects it.
+The worker requires approval before owner reads and holds shared scope-advisory/profile
+locks through completion; administration acquires the corresponding exclusive locks. If retirement commits first, new completion rejects;
 if completion commits first, retirement stops later completions without rewriting it.
 No external owner call runs inside a transaction. Changed/experimental/unknown/retired
 profiles fail closed without a new completion, inbox effect or publication intent.
@@ -59,11 +60,12 @@ entitlement, strategy performance validation, or an account-risk override.
 
 ## Rollout and rollback
 
-Install the additive migration and reviewed profile before using the explicit governed
-command. Existing M04 `offline-once` and broker worker modes remain available during
-staged rollout, as agreed; PR12 must make governance mandatory for new publication.
-Do not claim these modes already enforce governance or expose them as production ingress.
-Full PR2 feature requirements and policy rules are adopted by later slices.
+[Validated publication](validated-publication.md) now requires a complete canonical
+execution configuration and approval of its new digest for every fresh completion.
+Legacy modes no longer bypass approval/validation. The profile format and explicit
+administration remain unchanged; historical receipt recovery does not transfer
+approval to a new configuration. Apply migration 0004 and provision the companion
+route/reader upgrade before new publication.
 
 Retain definitions and retirement history on rollback. Reverting to a legacy binary
 removes enforcement, so stop governed ingestion before rollback; never delete retirement

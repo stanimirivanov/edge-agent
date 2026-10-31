@@ -10,11 +10,13 @@ mod support;
 use database::Database;
 use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
+use support::governed_event as event;
 use support::*;
 async fn snapshot(db: &Database) -> Result<Vec<String>> {
     let mut rows = Vec::new();
     for table in [
         "edgeagent_research_completions",
+        "edgeagent_research_decisions",
         "edgeagent_research_lifecycle",
         "edgeagent_message_inbox",
         "edgeagent_message_outbox",
@@ -80,7 +82,7 @@ async fn replay_restart_and_refusals_preserve_all_retained_rows() -> Result {
         }
         let mut changed:serde_json::Value=serde_json::from_slice(&input)?;changed["id"]="new-delivery".into();
         assert!(!replay(&profile,&db.schema,&serde_json::to_vec(&changed)?,None).await?.status.success());
-        let (unknown,_)=support::event("unknown")?;
+        let (unknown,_)=support::governed_event("unknown")?;
         assert!(!replay(&profile,&db.schema,&unknown.to_json()?,None).await?.status.success());
         for exit in [75,77] {
             std::fs::write(&profile.owner,format!("#!/bin/sh\nexit {exit}\n"))?;

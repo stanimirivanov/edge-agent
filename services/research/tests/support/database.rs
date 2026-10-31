@@ -39,6 +39,7 @@ impl Database {
                 edgeagent_research_postgres::MIGRATION,
                 edgeagent_research_postgres::lifecycle::MIGRATION,
                 edgeagent_research_postgres::governance::MIGRATION,
+                edgeagent_research_postgres::DECISION_MIGRATION,
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;

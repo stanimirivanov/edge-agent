@@ -12,6 +12,7 @@ use edgeagent_contracts::{MessageEnvelope, research_acquisition::DECIDED};
 use edgeagent_research_application::publication::{ABSTAINED, PUBLISHED};
 use futures_util::{FutureExt, StreamExt};
 use std::time::Duration;
+use support::governed_event as event;
 use support::*;
 async fn worker(
     profile: &Profile,
@@ -52,11 +53,17 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
     let result = std::panic::AssertUnwindSafe(async {
         let (event, bytes) = event("first")?;
         let profile = Profile::new(&bytes)?;
+        approve(&db.schema).await?;
         let subject = DECIDED.subject()?;
         let stream = context
             .create_stream(async_nats::jetstream::stream::Config {
                 name: name.clone(),
-                subjects: vec![subject.clone(), PUBLISHED.subject()?, ABSTAINED.subject()?],
+                subjects: vec![
+                    subject.clone(),
+                    PUBLISHED.subject()?,
+                    ABSTAINED.subject()?,
+                    edgeagent_research_application::publication::DECISION.subject()?,
+                ],
                 max_messages: 32,
                 max_bytes: 16_777_216,
                 max_age: Duration::from_secs(600),
@@ -118,7 +125,7 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             MessageEnvelope::from_json(&message.payload)?.to_json()?,
             retained
         );
-        let (pending, _) = support::event("unavailable")?;
+        let (pending, _) = support::governed_event("unavailable")?;
         context
             .publish(subject.clone(), pending.to_json()?.into())
             .await?

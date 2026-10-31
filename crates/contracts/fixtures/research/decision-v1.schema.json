@@ -1,0 +1,255 @@
+{
+  "$defs": {
+    "AbstentionReason": {
+      "description": "Stable v1 terminal abstention vocabulary; additions require compatibility review.",
+      "oneOf": [
+        {
+          "const": "insufficient_history",
+          "description": "No complete lookback.",
+          "type": "string"
+        },
+        {
+          "const": "future_evidence",
+          "description": "Evidence was unavailable at decision time.",
+          "type": "string"
+        },
+        {
+          "const": "stale_evidence",
+          "description": "Evidence exceeded the selected freshness policy.",
+          "type": "string"
+        },
+        {
+          "const": "invalid_evidence",
+          "description": "Conflicting or corrupt evidence.",
+          "type": "string"
+        },
+        {
+          "const": "unsupported_universe",
+          "description": "Selected instruments cannot be evaluated by this implementation.",
+          "type": "string"
+        },
+        {
+          "const": "missing_entitlement",
+          "description": "Evidence use is not authorized.",
+          "type": "string"
+        },
+        {
+          "const": "no_eligible_candidate",
+          "description": "No candidate passes the selected minimum policy.",
+          "type": "string"
+        }
+      ]
+    },
+    "Assessment": {
+      "description": "Critical evidence failures must not manufacture an evaluated policy decision.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "assessment": {
+              "const": "evaluated",
+              "type": "string"
+            },
+            "eligible": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "reasons": {
+              "items": {
+                "$ref": "#/$defs/Reason"
+              },
+              "type": "array"
+            },
+            "status": {
+              "$ref": "#/$defs/Status"
+            }
+          },
+          "required": [
+            "assessment",
+            "status",
+            "eligible",
+            "reasons"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "assessment": {
+              "const": "not_evaluated",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AbstentionReason"
+            }
+          },
+          "required": [
+            "assessment",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "DecisionProvenance": {
+      "additionalProperties": false,
+      "description": "Required fields have no inferred legacy defaults. No payload-bearing Debug.",
+      "properties": {
+        "approval_profile": {
+          "description": "Digest of immutable owner approval profile, not a caller approval Boolean.",
+          "type": "string"
+        },
+        "approval_revision": {
+          "description": "Exact observed owner approval revision; freshness is checked separately.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "assessment": {
+          "$ref": "#/$defs/Assessment"
+        },
+        "direction": {
+          "$ref": "#/$defs/Direction"
+        },
+        "horizon_sessions": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outcome": {
+          "description": "Digest of exact canonical artifact or abstention bytes.",
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/ResearchRequest"
+        },
+        "validator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "request",
+        "outcome",
+        "policy",
+        "direction",
+        "horizon_sessions",
+        "approval_profile",
+        "approval_revision",
+        "validator",
+        "assessment"
+      ],
+      "type": "object"
+    },
+    "Direction": {
+      "description": "Explicit intent, separate from historical lookback and artifact expiry.",
+      "enum": [
+        "long",
+        "short"
+      ],
+      "type": "string"
+    },
+    "Reason": {
+      "description": "Stable eligibility reason order, matching the deterministic policy revision.",
+      "enum": [
+        "instrument_not_allowed",
+        "direction_not_allowed",
+        "horizon_exceeded",
+        "liquidity_below_minimum",
+        "volatility_exceeded",
+        "gap_exceeded",
+        "event_excluded",
+        "regime_not_allowed"
+      ],
+      "type": "string"
+    },
+    "ResearchRequest": {
+      "additionalProperties": false,
+      "description": "Bounded research intent; policy configuration is identified, not interpreted here.",
+      "properties": {
+        "configuration": {
+          "description": "Immutable strategy/numeric/evidence policy configuration digest.",
+          "type": "string"
+        },
+        "decision_at_ms": {
+          "description": "Point-in-time decision cutoff, Unix milliseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "implementation": {
+          "description": "Immutable implementation revision digest.",
+          "type": "string"
+        },
+        "instruments": {
+          "description": "Explicit historical universe, in stable instrument-token order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lookback_sessions": {
+          "description": "Lookback in trading sessions; not calendar days or holding horizon.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "request_id": {
+          "description": "Caller-scoped stable request token; not a CloudEvents delivery ID.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Explicit caller/tenant scope supplied by authenticated ingress.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "scope",
+        "implementation",
+        "configuration",
+        "decision_at_ms",
+        "lookback_sessions",
+        "instruments"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "description": "Eligibility only, never strategy approval or account-risk authorization.",
+      "enum": [
+        "approved",
+        "narrowed",
+        "abstained"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:edgeagent:schema:research:decision:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Versioned envelope for authenticated message payload decoding. Validate the inner DTO.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/DecisionProvenance"
+        },
+        "kind": {
+          "const": "research.decision.v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "data"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "DecisionRecord"
+}

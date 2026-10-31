@@ -380,3 +380,14 @@ fn evaluate_inner(
         decision: Some(decision),
     })
 }
+
+/// A trusted negative owner-read classification never produces an artifact or eligibility approval.
+pub(crate) fn refused(
+    request: ResearchRequest,
+    reason: AbstentionReason,
+) -> Result<GovernedOutcome, Error> {
+    Ok(GovernedOutcome {
+        outcome: crate::abstain(request, reason).map_err(Error::Evaluation)?,
+        decision: None,
+    })
+}

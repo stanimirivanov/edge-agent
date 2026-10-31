@@ -30,9 +30,18 @@ pub struct View {
     /// Last consecutive owner lifecycle fact, absent on original views.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<edgeagent_contracts::research::ResearchLifecycle>,
+    /// Digest of observed historical provenance, never a current approval claim.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(skip)]
+    provenance: Option<Vec<u8>>,
 }
 impl View {
     /// Exact canonical terminal bytes; None when pending or gapped.
+    /// Exact canonical historical companion, absent when unobserved/gapped.
+    pub fn provenance_bytes(&self) -> Option<&[u8]> {
+        self.provenance.as_deref()
+    }
     pub fn outcome_bytes(&self) -> Option<&[u8]> {
         self.outcome.as_deref()
     }
@@ -162,7 +171,17 @@ impl ProjectionStore {
     ) -> Result<ReplayOutcome, Error> {
         edgeagent_messaging::DeliveryMessageKey::new(key)
             .map_err(|e| Error::caused(Kind::Invalid, e))?;
-        let record = if envelope.message_type()
+        let companion = if envelope.message_type() == publication::DECISION.message_type() {
+            Some(
+                publication::decode_decision(envelope)
+                    .map_err(|e| Error::caused(Kind::Invalid, e))?,
+            )
+        } else {
+            None
+        };
+        let record = if let Some(decision) = &companion {
+            ResearchRecord::Request(decision.request.clone())
+        } else if envelope.message_type()
             == edgeagent_research_application::lifecycle::CHANGED.message_type()
         {
             ResearchRecord::Lifecycle(
@@ -199,6 +218,13 @@ impl ProjectionStore {
         let mut view = restore(&req.scope, &req.request_id, &row.request, &row.checkpoint)?;
         // A missing lifecycle predecessor may be backfilled; owner conflicts stay blocked.
         let recoverable_gap = row.gap_envelope.as_ref().is_some_and(|bytes| {
+            if view.outcome_bytes().is_none()
+                && MessageEnvelope::from_json(bytes)
+                    .ok()
+                    .is_some_and(|e| publication::decode_decision(&e).is_ok())
+            {
+                return true;
+            }
             MessageEnvelope::from_json(bytes)
                 .ok()
                 .and_then(|e| edgeagent_research_application::lifecycle::decode(&e).ok())
@@ -216,7 +242,11 @@ impl ProjectionStore {
         if was_pending != row.applied_delivery_key.is_none() {
             return Err(Error::new(Kind::Corrupt));
         }
-        let applied = match view.apply(record) {
+        let applied = match if let Some(companion) = companion {
+            view.apply_provenance(companion)
+        } else {
+            view.apply(record)
+        } {
             Ok(value) => value,
             Err(error @ (ReplayError::Conflict | ReplayError::Gap)) => {
                 Self::gap(&mut tx, &req.scope, &req.request_id, &bytes, key).await?;
@@ -318,6 +348,28 @@ impl ProjectionStore {
             }
             lifecycle = Some(event);
         }
+        let mut decision = None;
+        if let Some(bytes) = view.provenance_bytes() {
+            let record = edgeagent_contracts::research_decision::DecisionProvenance::decode(bytes)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let id = record
+                .digest()
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let source = edgeagent_contracts::Component::Research.source_uri();
+            let proof=sqlx::query!("SELECT envelope,message_type FROM edgeagent_message_inbox WHERE consumer_name='research-projector' AND message_source=$1 AND message_id=$2",source,id).fetch_optional(&self.pool).await?.ok_or_else(||Error::new(Kind::Corrupt))?;
+            let envelope = MessageEnvelope::from_json(&proof.envelope)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            if proof.message_type != envelope.message_type()
+                || publication::decode_decision(&envelope)
+                    .map_err(|e| Error::caused(Kind::Corrupt, e))?
+                    .canonical_bytes()
+                    .map_err(|e| Error::caused(Kind::Corrupt, e))?
+                    != bytes
+            {
+                return Err(Error::new(Kind::Corrupt));
+            }
+            decision = Some(id);
+        }
         let gap = row.gap_envelope.is_some();
         Ok(Some(View {
             scope: scope.into(),
@@ -338,6 +390,12 @@ impl ProjectionStore {
             },
             applied_delivery_key: row.applied_delivery_key,
             lifecycle,
+            decision,
+            provenance: if gap {
+                None
+            } else {
+                view.provenance_bytes().map(<[u8]>::to_vec)
+            },
             outcome: if gap {
                 None
             } else {

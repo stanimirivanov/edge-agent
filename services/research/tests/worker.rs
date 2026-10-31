@@ -10,6 +10,7 @@ mod support;
 use database::Database;
 use edgeagent_contracts::research::ResearchRecord;
 use futures_util::FutureExt;
+use support::governed_event as event;
 use support::*;
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
@@ -24,10 +25,14 @@ async fn restart_and_lost_result_recover_before_owner_read_with_one_publication(
             "{}",
             String::from_utf8_lossy(&first.stderr)
         );
-        assert!(matches!(
-            ResearchRecord::decode(&first.stdout)?,
-            ResearchRecord::Artifact(_)
-        ));
+        assert!(
+            matches!(
+                ResearchRecord::decode(&first.stdout)?,
+                ResearchRecord::Artifact(_)
+            ),
+            "synthetic outcome: {}",
+            String::from_utf8_lossy(&first.stdout)
+        );
         profile.unavailable()?;
         std::fs::remove_file(&profile.owner)?;
         // Lost result and all process state; the second process must not need its failed owner.
@@ -36,6 +41,7 @@ async fn restart_and_lost_result_recover_before_owner_read_with_one_publication(
         assert_eq!(first.stdout, again.stdout);
         for table in [
             "edgeagent_research_completions",
+            "edgeagent_research_decisions",
             "edgeagent_message_outbox",
             "edgeagent_message_inbox",
         ] {
@@ -43,7 +49,14 @@ async fn restart_and_lost_result_recover_before_owner_read_with_one_publication(
                 sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
                     .fetch_one(&db.pool)
                     .await?;
-            assert_eq!(count, 1);
+            assert_eq!(
+                count,
+                if table == "edgeagent_message_outbox" {
+                    2
+                } else {
+                    1
+                }
+            );
         }
         let publication: Vec<u8> =
             sqlx::query_scalar("SELECT publication FROM edgeagent_research_completions")
@@ -115,7 +128,7 @@ async fn corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_compl
         std::fs::write(&profile.artifact,b"corrupt invented bytes")?;
         let output=run(&profile,&db.schema,&event.to_json()?).await?;assert!(output.status.success());
         assert!(matches!(ResearchRecord::decode(&output.stdout)?,ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::InvalidEvidence));
-        let (denied,_)=support::event("denied")?;std::fs::write(&profile.owner,"#!/bin/sh\nexit 77\n")?;
+        let (denied,_)=support::governed_event("denied")?;std::fs::write(&profile.owner,"#!/bin/sh\nexit 77\n")?;
         let output=run(&profile,&db.schema,&denied.to_json()?).await?;assert!(output.status.success());
         assert!(matches!(ResearchRecord::decode(&output.stdout)?,ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::MissingEntitlement));
         let mut legacy:serde_json::Value=serde_json::from_slice(&denied.to_json()?)?;
@@ -127,10 +140,10 @@ async fn corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_compl
         assert!(matches!(ResearchRecord::decode(&output.stdout)?,ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::MissingEntitlement));
         std::fs::write(&profile.artifact,vec![b' ';edgeagent_contracts::evidence::MAX_EVIDENCE_BYTES+1])?;
         std::fs::write(&profile.owner,format!("#!/bin/sh\n/bin/cat '{}'\n",profile.artifact.display()))?;
-        let (oversized,_)=support::event("oversized")?;
+        let (oversized,_)=support::governed_event("oversized")?;
         let output=run(&profile,&db.schema,&oversized.to_json()?).await?;assert!(output.status.success());
         assert!(matches!(ResearchRecord::decode(&output.stdout)?,ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::InvalidEvidence));
-        let (unavailable,_)=support::event("unavailable")?;profile.unavailable()?;
+        let (unavailable,_)=support::governed_event("unavailable")?;profile.unavailable()?;
         assert!(!run(&profile,&db.schema,&unavailable.to_json()?).await?.status.success());
         assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM edgeagent_research_completions").fetch_one(&db.pool).await?,4);Ok(())
     }).catch_unwind().await;
@@ -166,19 +179,7 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
     let result = std::panic::AssertUnwindSafe(async {
         let (event, bytes) = event("governed-request")?;
         let profile = Profile::new(&bytes)?;
-        let binding = edgeagent_contracts::strategy_governance::Profile {
-            scope: "operator".into(),
-            implementation: "02".repeat(32),
-            configuration: "03".repeat(32),
-            lookback_sessions: 1,
-            max_age_ms: 1_209_600_000,
-            ttl_ms: 60_000,
-            formula: edgeagent_research_domain::strategy::MOMENTUM
-                .revision()
-                .into(),
-            renderer: edgeagent_research_application::RENDERER_REVISION.into(),
-        }
-        .bytes()?;
+        let binding = support::governance_profile()?.bytes()?;
         let input = event.to_json()?;
         assert!(
             !command(&profile, &db.schema, "offline-governed-once", &input)
@@ -208,10 +209,14 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
         );
         let first = command(&profile, &db.schema, "offline-governed-once", &input).await?;
         assert!(first.status.success());
-        assert!(matches!(
-            ResearchRecord::decode(&first.stdout)?,
-            ResearchRecord::Artifact(_)
-        ));
+        assert!(
+            matches!(
+                ResearchRecord::decode(&first.stdout)?,
+                ResearchRecord::Artifact(_)
+            ),
+            "synthetic outcome: {}",
+            String::from_utf8_lossy(&first.stdout)
+        );
         assert!(
             command(&profile, &db.schema, "offline-governance-retire", &binding)
                 .await?
@@ -222,7 +227,7 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
         let recovered = command(&profile, &db.schema, "offline-governed-once", &input).await?;
         assert!(recovered.status.success());
         assert_eq!(recovered.stdout, first.stdout);
-        let (next, _) = support::event("governed-request-2")?;
+        let (next, _) = support::governed_event("governed-request-2")?;
         assert!(
             !command(
                 &profile,

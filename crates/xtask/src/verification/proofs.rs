@@ -152,6 +152,7 @@ const PROJECTOR_POSTGRES: Target = Target {
         "statement_commit_and_worker_death_rollback_checkpoint_inbox_and_progress",
         "conflicting_owner_data_stays_gapped_and_corrupt_or_unavailable_views_fail_closed",
         "lifecycle_gaps_backfill_atomically_and_closed_queries_preserve_exact_history",
+        "decision_reordering_replays_exact_companion_and_queries_require_inbox_proof",
     ],
 };
 const PROJECTOR_BROKER: Target = Target {
@@ -234,6 +235,8 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "lifecycle_statement_and_deferred_commit_failures_leave_no_revision_or_outbox",
         "governed_profiles_require_approval_preserve_receipts_and_retire_permanently",
         "retirement_fences_new_completion_and_nonowner_cannot_administer",
+        "validated_companions_are_atomic_immutable_and_required_for_fresh_completion",
+        "historical_absence_recovers_but_database_refuses_unaccompanied_new_inserts",
     ],
 };
 const PUBLISH: Target = Target {
@@ -1131,8 +1134,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 145);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 145);
+        assert_eq!(inventory.len(), 148);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 148);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

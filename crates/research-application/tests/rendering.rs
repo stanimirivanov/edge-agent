@@ -1194,3 +1194,64 @@ fn independent_validation_reconciles_proposals_and_seals_typed_preparation() -> 
     ));
     Ok(())
 }
+
+// Complete configuration selection; strict declarations remain immutable.
+use edgeagent_contracts::strategy::ExecutionConfiguration;
+use edgeagent_research_application::execution::Selection;
+#[test]
+fn complete_execution_has_no_legacy_or_unknown_revision_defaults() -> Result {
+    let bytes = include_bytes!("../../contracts/fixtures/strategy/execution-v1.json");
+    let selected = Selection::decode(bytes)?;
+    assert_eq!(selected.bytes(), bytes);
+    assert_ne!(selected.profile("scope").configuration, "03".repeat(32));
+    assert!(
+        Selection::decode(include_bytes!(
+            "../../contracts/fixtures/strategy/configuration-v1.json"
+        ))
+        .is_err()
+    );
+    let original = ExecutionConfiguration::decode(bytes)?;
+    for field in 0..9 {
+        let mut changed = original.clone();
+        let ExecutionConfiguration::V1 {
+            bundle,
+            event_revision,
+            context_max_age_ms,
+            allowed_regimes,
+        } = &mut changed;
+        let edgeagent_contracts::strategy::Configuration::V1 {
+            strategy, policy, ..
+        } = bundle;
+        match field {
+            0 => *context_max_age_ms = 0,
+            1 => allowed_regimes.clear(),
+            2 => *event_revision = "unknown-v1".into(),
+            3 => strategy.score_revision = "unknown-v1".into(),
+            4 => policy.liquidity_revision = "unknown-v1".into(),
+            5 => policy.volatility_revision = "unknown-v1".into(),
+            6 => policy.gap_revision = "unknown-v1".into(),
+            7 => policy.quality_revision = "unknown-v1".into(),
+            _ => strategy.invalidation_revision = "unknown-v1".into(),
+        }
+        if let Ok(bytes) = changed.canonical_bytes() {
+            assert!(Selection::decode(&bytes).is_err());
+        }
+    }
+    let profile = selected.profile("scope");
+    let refusal = selected.refused(
+        edgeagent_contracts::research::ResearchRequest {
+            scope: "scope".into(),
+            request_id: "denied".into(),
+            implementation: profile.implementation,
+            configuration: profile.configuration,
+            lookback_sessions: 1,
+            decision_at_ms: 100,
+            instruments: vec!["00000000000000000000000000000001".into()],
+        },
+        edgeagent_research_application::worker::LoadError::Denied,
+    )?;
+    assert!(
+        matches!(refusal.record(),edgeagent_contracts::research::ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::MissingEntitlement)
+    );
+    Ok(())
+}

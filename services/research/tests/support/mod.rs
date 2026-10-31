@@ -7,6 +7,39 @@ use edgeagent_contracts::{
 use std::sync::atomic::{AtomicUsize, Ordering};
 pub type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub fn event(id: &str) -> Result<(MessageEnvelope, Vec<u8>)> {
+    event_with_configuration(id, "03".repeat(32))
+}
+pub fn governed_event(id: &str) -> Result<(MessageEnvelope, Vec<u8>)> {
+    event_with_configuration(id, execution()?.digest()?)
+}
+pub fn execution() -> Result<edgeagent_contracts::strategy::ExecutionConfiguration> {
+    let mut value = edgeagent_contracts::strategy::ExecutionConfiguration::decode(include_bytes!(
+        "../../../../crates/contracts/fixtures/strategy/execution-v1.json"
+    ))?;
+    let edgeagent_contracts::strategy::ExecutionConfiguration::V1 {
+        bundle,
+        context_max_age_ms,
+        ..
+    } = &mut value;
+    let edgeagent_contracts::strategy::Configuration::V1 {
+        strategy, policy, ..
+    } = bundle;
+    strategy.expiry_ms = 60_000;
+    policy.instruments = vec!["11111111111111111111111111111111".into()];
+    strategy.benchmark = policy.instruments[0].clone();
+    policy.max_age_ms = 1_209_600_000;
+    *context_max_age_ms = 1_209_600_000;
+    Ok(value)
+}
+pub fn governance_profile() -> Result<edgeagent_contracts::strategy_governance::Profile> {
+    Ok(
+        edgeagent_research_application::execution::Selection::decode(
+            &execution()?.canonical_bytes()?,
+        )?
+        .profile("operator"),
+    )
+}
+fn event_with_configuration(id: &str, configuration: String) -> Result<(MessageEnvelope, Vec<u8>)> {
     let mut value: serde_json::Value = serde_json::from_slice(include_bytes!(
         "../../../../crates/contracts/fixtures/evidence-v1/daily.json"
     ))?;
@@ -77,7 +110,7 @@ pub fn event(id: &str) -> Result<(MessageEnvelope, Vec<u8>)> {
         scope: "operator".into(),
         request_id: id.into(),
         implementation: "02".repeat(32),
-        configuration: "03".repeat(32),
+        configuration,
         decision_at_ms: artifact.data().captured_at.seconds * 1000 + 1,
         lookback_sessions: 1,
         instruments: vec![artifact.data().scope.instrument.as_str().into()],
@@ -131,10 +164,20 @@ impl Profile {
         std::fs::create_dir(&root)?;
         let artifact = root.join("artifact.json");
         std::fs::write(&artifact, bytes)?;
+        std::fs::write(root.join("execution.json"), execution()?.canonical_bytes()?)?;
+        std::fs::write(
+            root.join("policy.py"),
+            include_str!("../fixtures/owner-policy.py"),
+        )?;
         let owner = root.join("owner");
         std::fs::write(
             &owner,
-            format!("#!/bin/sh\n/bin/cat '{}'\n", artifact.display()),
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = offline-research-policy-read ]; then exec /usr/bin/python3 '{}' '{}'; fi\nexec /bin/cat '{}'\n",
+                root.join("policy.py").display(),
+                artifact.display(),
+                artifact.display()
+            ),
         )?;
         std::fs::set_permissions(&owner, std::fs::Permissions::from_mode(0o700))?;
         Ok(Self {
@@ -164,7 +207,16 @@ impl Profile {
                 "11111111111111111111111111111111",
             )
             .env("EDGEAGENT_RESEARCH_IMPLEMENTATION", "02".repeat(32))
-            .env("EDGEAGENT_RESEARCH_CONFIGURATION", "03".repeat(32))
+            .env(
+                "EDGEAGENT_RESEARCH_CONFIGURATION",
+                execution()
+                    .and_then(|v| Ok(v.digest()?))
+                    .unwrap_or_default(),
+            )
+            .env(
+                "EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION",
+                self.root.join("execution.json"),
+            )
             .env("EDGEAGENT_RESEARCH_MAX_AGE_MS", "1209600000")
             .env("EDGEAGENT_RESEARCH_TTL_MS", "60000");
         command
@@ -179,7 +231,25 @@ impl Drop for Profile {
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
+pub async fn approve(schema: &str) -> Result {
+    let url = std::env::var("EDGEAGENT_POSTGRES_URL")?;
+    let options: sqlx::postgres::PgConnectOptions = url.parse()?;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.options([("search_path", schema)]))
+        .await?;
+    let store = edgeagent_research_postgres::PostgresResearchStore::new(pool.clone());
+    let binding = governance_profile()?;
+    let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM edgeagent_research_approvals WHERE caller_scope=$1 AND configuration=$2)").bind(&binding.scope).bind(&binding.configuration).fetch_one(&pool).await?;
+    if !exists {
+        store.govern(&binding, 1).await?;
+        store.govern(&binding, 2).await?;
+    }
+    pool.close().await;
+    Ok(())
+}
 pub async fn run(profile: &Profile, schema: &str, input: &[u8]) -> Result<std::process::Output> {
+    approve(schema).await?;
     use tokio::io::AsyncWriteExt as _;
     let mut command = tokio::process::Command::from(profile.command(schema, "offline-once"));
     let mut child = command
