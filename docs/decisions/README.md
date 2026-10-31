@@ -211,3 +211,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0097](0097-enforce-volatility-and-opening-gap-limits.md) | Accepted | Enforce volatility and opening gap limits. |
 | [ADR-0098](0098-enforce-independent-research-context.md) | Accepted | Enforce independent Research context. |
 | [ADR-0099](0099-reconcile-independent-research-proposals.md) | Accepted | Reconcile independent Research proposals. |
+| [ADR-0100](0100-project-versioned-research-decision-provenance.md) | Accepted | Project versioned Research decision provenance. |

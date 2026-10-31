@@ -236,3 +236,129 @@ fn lifecycle_replay_duplicates_gaps_and_checkpoint_versions_preserve_original_by
     );
     Ok(())
 }
+
+#[test]
+fn decision_provenance_replays_with_gaps_conflicts_and_legacy_checkpoint_compatibility() -> Result {
+    use edgeagent_contracts::research_decision::DecisionProvenance;
+    let provenance = DecisionProvenance::decode(include_bytes!(
+        "../../contracts/fixtures/research/decision-v1.json"
+    ))?;
+    let record = artifact()?;
+    let req = request(&record)?;
+    let mut view = ResearchProjection::new(req.clone())?;
+    let pending = view.checkpoint()?;
+    assert_eq!(view.apply_provenance(provenance.clone()), Err(Error::Gap));
+    assert_eq!(view.checkpoint()?, pending);
+    assert!(view.provenance_bytes().is_none());
+    view.apply(record.clone())?;
+    let legacy = view.checkpoint()?;
+    assert!(
+        ResearchProjection::restore(req.clone(), &legacy)?
+            .provenance_bytes()
+            .is_none()
+    );
+    let mut legacy_bytes = format!(
+        "{{\"version\":\"EARP1\",\"request\":{},\"outcome\":{}}}",
+        serde_json::to_string(&String::from_utf8(
+            ResearchRecord::Request(req.clone()).canonical_bytes()?
+        )?)?,
+        serde_json::to_string(&String::from_utf8(record.canonical_bytes()?)?)?
+    )
+    .into_bytes();
+    legacy_bytes.extend(Sha256::digest(&legacy_bytes));
+    assert_eq!(legacy, legacy_bytes);
+    let outcome = view.outcome_bytes().ok_or("outcome")?.to_vec();
+    assert_eq!(
+        view.apply_provenance(provenance.clone())?,
+        ReplayOutcome::Applied
+    );
+    assert_eq!(view.status(), ResearchStatus::Artifact);
+    assert_eq!(view.revision(), 2);
+    assert_eq!(view.outcome_bytes(), Some(outcome.as_slice()));
+    let expected = provenance.canonical_bytes()?;
+    assert_eq!(view.provenance_bytes(), Some(expected.as_slice()));
+    let retained = view.checkpoint()?;
+    assert_eq!(
+        view.apply_provenance(provenance.clone())?,
+        ReplayOutcome::Duplicate
+    );
+    for field in 0..5 {
+        let mut changed = provenance.clone();
+        match field {
+            0 => changed.request.scope = "foreign".into(),
+            1 => changed.request.configuration = "09".repeat(32),
+            2 => changed.outcome = "09".repeat(32),
+            3 => changed.policy = "09".repeat(32),
+            _ => changed.validator = "other-v1".into(),
+        }
+        assert_eq!(
+            view.apply_provenance(changed),
+            Err(if field == 0 {
+                Error::Scope
+            } else {
+                Error::Conflict
+            })
+        );
+        assert_eq!(view.checkpoint()?, retained);
+    }
+    let mut restored = ResearchProjection::restore(req.clone(), &retained)?;
+    assert_eq!(restored.checkpoint()?, retained);
+    assert_eq!(
+        restored.apply_provenance(provenance.clone())?,
+        ReplayOutcome::Duplicate
+    );
+    // Lifecycle and provenance can arrive in either order after their shared outcome.
+    let change = lifecycle(&record, 1)?;
+    restored.apply(change.clone())?;
+    view.apply(change.clone())?;
+    let mut reordered = ResearchProjection::new(req.clone())?;
+    reordered.apply(record)?;
+    reordered.apply(change)?;
+    let old_lifecycle = reordered.checkpoint()?;
+    assert!(
+        ResearchProjection::restore(req.clone(), &old_lifecycle)?
+            .provenance_bytes()
+            .is_none()
+    );
+    reordered.apply_provenance(provenance)?;
+    assert_eq!(view.checkpoint()?, reordered.checkpoint()?);
+    assert_eq!(view.checkpoint()?, restored.checkpoint()?);
+    assert_eq!(view.revision(), 3);
+    assert_eq!(view.status(), ResearchStatus::Expired);
+    let bytes = view.checkpoint()?;
+    let abstention =
+        ResearchRecord::Abstention(edgeagent_contracts::research::ResearchAbstention {
+            request: req.clone(),
+            reason: AbstentionReason::StaleEvidence,
+        });
+    let mut denied = DecisionProvenance::decode(include_bytes!(
+        "../../contracts/fixtures/research/decision-v1.json"
+    ))?;
+    denied.outcome = abstention.digest()?;
+    denied.assessment = edgeagent_contracts::research_decision::Assessment::NotEvaluated {
+        reason: AbstentionReason::StaleEvidence,
+    };
+    let mut abstained = ResearchProjection::new(req.clone())?;
+    abstained.apply(abstention)?;
+    abstained.apply_provenance(denied)?;
+    let resumed = ResearchProjection::restore(req.clone(), &abstained.checkpoint()?)?;
+    assert_eq!(resumed.status(), ResearchStatus::Abstained);
+    assert_eq!(resumed.provenance_bytes(), abstained.provenance_bytes());
+    let original: serde_json::Value = serde_json::from_slice(&bytes[..bytes.len() - 32])?;
+    for field in 0..4 {
+        let mut value = original.clone();
+        match field {
+            0 => value["version"] = "EARP2".into(),
+            1 => value["provenance"] = serde_json::Value::Null,
+            2 => {
+                let mut p: serde_json::Value =
+                    serde_json::from_str(value["provenance"].as_str().ok_or("provenance")?)?;
+                p["data"]["outcome"] = "09".repeat(32).into();
+                value["provenance"] = (serde_json::to_string(&p)? + "\n").into();
+            }
+            _ => value["unknown"] = true.into(),
+        }
+        assert!(ResearchProjection::restore(req.clone(), &checkpoint(&value)?).is_err());
+    }
+    Ok(())
+}

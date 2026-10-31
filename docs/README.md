@@ -122,6 +122,8 @@ For M05 event/regime/quality controls, read [Research context policy](developmen
 
 For M05 artifact reconciliation, read [Research validation](development/research-validation.md).
 
+For M05 decision observations, read [decision provenance](development/decision-provenance.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

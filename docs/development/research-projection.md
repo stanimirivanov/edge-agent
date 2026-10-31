@@ -32,7 +32,7 @@ The adapter keeps unresolved input visible while backfilling predecessors.
 `checkpoint` retains EARP1 for empty histories and uses EARP2 for lifecycle histories,
 including up to two canonical lifecycle records and the original outcome, followed
 by a 32-byte SHA-256 corruption checksum. Its total limit
-is `4 * MAX_RESEARCH_BYTES + 1024` bytes, including JSON escaping/framing. Restore
+is `5 * MAX_RESEARCH_BYTES + 1024` bytes, including JSON escaping/framing. Restore
 checks size before parsing, checksum, version, exact canonical framing, all embedded
 contracts and the independently provided original request. Restored state derives
 status/revision from validated facts rather than trusting separate cached flags.
@@ -49,3 +49,8 @@ focused suite and its exact named discovery. No external service is required.
 The [projector runtime](projector-runtime.md) adds persistence/consumer/internal queries; [Gateway queries](gateway-queries.md) expose observations and [lifecycle state](research-lifecycle.md). No schema migration, server, broker provisioning,
 provider access or artifact mutation is introduced here. Disposable views can be
 removed on rollback and rebuilt from authenticated retained owner facts.
+
+[Decision provenance](decision-provenance.md) adds separately authenticated companion
+observations and EARP3 checkpoints. Legacy histories keep their exact encoding;
+local revision also counts a retained provenance fact. Lifecycle owner revisions
+remain independent of that local count. Runtime publication/query wiring follows in PR12.
