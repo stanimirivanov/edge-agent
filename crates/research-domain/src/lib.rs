@@ -10,7 +10,8 @@ pub mod policy;
 pub mod ranking;
 pub mod strategy;
 
-use edgeagent_market_data_domain::{InstrumentId, ListingId, SessionDate, UsdPrice};
+pub use edgeagent_market_data_domain::InstrumentId;
+use edgeagent_market_data_domain::{ListingId, SessionDate, UsdPrice};
 
 /// Structural upper bound matching the research request universe ceiling.
 pub const MAX_INSTRUMENTS: usize = 64;

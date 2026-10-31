@@ -29,8 +29,8 @@ a broker offset. Both inputs are capped at 262144 bytes before decoding.
 
 `offline-worker` also requires loopback `EDGEAGENT_NATS_URL`, explicit
 `EDGEAGENT_PROJECTOR_STREAM`, `EDGEAGENT_PROJECTOR_CONSUMER` and
-`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with all three
-Research PUBLISHED, ABSTAINED and lifecycle CHANGED subjects, no broad single filter, explicit ACK,
+`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with all four
+Research PUBLISHED, ABSTAINED, lifecycle CHANGED and decision DECISION subjects, no broad single filter, explicit ACK,
 at least 60-second ACK wait, three maximum deliveries and 1–32 pending ACKs. The
 consumer validates actual subject against payload route before projection. SIGINT/
 SIGTERM stop intake; each operation is bounded. No topology or deployment is created.
@@ -45,7 +45,7 @@ writers; READ COMMITTED, five-second lock and fifteen-second statement timeouts 
 Checkpoint, inbox and successful applied-delivery key commit together. Duplicate
 inbox deliveries commit no new domain/progress writes, including process/response
 loss recovery. The key is opaque per-delivery evidence, not global consumer position
-or an inferred stream high-water mark. Local view revision is zero/one before lifecycle, then one plus owner lifecycle revision.
+or an inferred stream high-water mark. Local view revision is zero/one before lifecycle, then one plus owner lifecycle count and any observed decision companion.
 
 Conflicting authenticated owner data or source/ID envelope reuse commits one bounded
 unresolved envelope/key while preserving the checkpoint/applied marker. The first
@@ -105,3 +105,11 @@ rewrite authoritative data, skip unresolved input or assume checksum equals stor
 authentication. Rollback stops serving/intake and preserves disposable state until a
 coordinated rebuild. [Gateway queries](gateway-queries.md) expose these observations
 and [lifecycle transitions](research-lifecycle.md).
+
+## M05 mandatory execution
+
+[Validated publication](validated-publication.md) supersedes the staged activation
+boundary: new completions require complete canonical configuration, sealed validation,
+current exact approval and atomic companion retention/publication. Historical receipts
+keep explicit legacy absence. Upgrade projector/Gateway metadata readers and add the
+decision consumer subject before activation; retained outcomes remain byte-identical.

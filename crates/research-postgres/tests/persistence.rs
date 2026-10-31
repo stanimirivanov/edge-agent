@@ -14,11 +14,16 @@ use support::*;
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn duplicate_requests_return_first_outcome_and_conflicting_intent_rolls_back() -> Result {
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
         let first = prepared("scope", "request-1", "delivery-1", 110, 3)?;
-        assert!(store.recover(first.delivery()).await?.is_none());
+        assert!(
+            PostgresResearchStore::governed(h.pool.clone(), execution(3)?.profile("scope"))
+                .recover(first.delivery())
+                .await?
+                .is_none()
+        );
         assert_eq!(h.counts().await?, (0, 0, 0));
         let receipt = store.commit(&first).await?;
         let different = prepared("scope", "request-1", "delivery-2", 120, 3)?;
@@ -67,7 +72,7 @@ async fn duplicate_requests_return_first_outcome_and_conflicting_intent_rolls_ba
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn concurrent_completion_and_client_restart_recover_exact_original_receipt() -> Result {
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
         let a = prepared("scope", "request-1", "delivery-1", 110, 3)?;
@@ -100,7 +105,7 @@ async fn concurrent_completion_and_client_restart_recover_exact_original_receipt
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn statement_and_deferred_commit_failures_rollback_completion_inbox_and_outbox() -> Result {
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result=AssertUnwindSafe(async {
         let store=PostgresResearchStore::new(h.pool.clone());let p=prepared("scope","request-1","delivery-1",110,3)?;
         sqlx::raw_sql("CREATE FUNCTION test_refuse_research() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private-test-sentinel'; END; $$").execute(&h.pool).await?;
@@ -108,7 +113,7 @@ async fn statement_and_deferred_commit_failures_rollback_completion_inbox_and_ou
             sqlx::raw_sql(trigger).execute(&h.pool).await?;
             let error=store.commit(&p).await.err().ok_or("expected rollback")?;
             assert_eq!(error.kind(),Kind::Storage);assert!(!format!("{error:?} {error}").contains("private-test-sentinel"));
-            assert_eq!(h.counts().await?,(0,0,0));assert!(store.recover(p.delivery()).await?.is_none());
+            assert_eq!(h.counts().await?,(0,0,0));assert!(store.recover_existing(p.delivery()).await?.is_none());
             sqlx::raw_sql("DROP TRIGGER test_refuse ON edgeagent_message_outbox").execute(&h.pool).await?;
         }
         store.commit(&p).await?;assert_eq!(h.counts().await?,(1,1,1));Ok(())
@@ -118,7 +123,7 @@ async fn statement_and_deferred_commit_failures_rollback_completion_inbox_and_ou
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn cancelled_transaction_leaves_no_completion_or_publication_intent() -> Result {
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result=AssertUnwindSafe(async {
         let mut barrier=h.pool.acquire().await?;
         sqlx::query("SELECT pg_advisory_lock($1)").bind(h.key).execute(&mut *barrier).await?;
@@ -140,7 +145,7 @@ async fn cancelled_transaction_leaves_no_completion_or_publication_intent() -> R
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn immutable_completion_and_corrupt_retained_outbox_fail_closed() -> Result {
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
         let p = prepared("scope", "request-1", "delivery-1", 110, 3)?;
@@ -216,7 +221,7 @@ fn life(
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn lifecycle_commands_are_ordered_idempotent_and_corrections_cannot_cycle() -> Result {
     use edgeagent_contracts::research::LifecycleChange;
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
         let a = store
@@ -401,7 +406,7 @@ async fn lifecycle_commands_are_ordered_idempotent_and_corrections_cannot_cycle(
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn lifecycle_statement_and_deferred_commit_failures_leave_no_revision_or_outbox() -> Result {
     use edgeagent_contracts::research::LifecycleChange;
-    let h = Harness::new().await?;
+    let h = Harness::approved().await?;
     let result=AssertUnwindSafe(async {
         let store=PostgresResearchStore::new(h.pool.clone());
         let receipt=store.commit(&prepared("scope","original","a",110,3)?).await?;
@@ -419,24 +424,15 @@ async fn lifecycle_statement_and_deferred_commit_failures_leave_no_revision_or_o
     h.finish(result).await
 }
 
-fn governance_profile() -> edgeagent_contracts::strategy_governance::Profile {
-    edgeagent_contracts::strategy_governance::Profile {
-        scope: "scope".into(),
-        implementation: "02".repeat(32),
-        configuration: "03".repeat(32),
-        lookback_sessions: 1,
-        max_age_ms: 10,
-        ttl_ms: 1,
-        formula: "raw-usd-roc-ppm-half-even-v1".into(),
-        renderer: "research-ranking-raw-v1".into(),
-    }
+fn governance_profile() -> Result<edgeagent_contracts::strategy_governance::Profile> {
+    Ok(execution(3)?.profile("scope"))
 }
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
 async fn governed_profiles_require_approval_preserve_receipts_and_retire_permanently() -> Result {
     let h = Harness::new().await?;
     let result = AssertUnwindSafe(async {
-        let p = governance_profile();
+        let p = governance_profile()?;
         let store = PostgresResearchStore::governed(h.pool.clone(), p.clone());
         let first = prepared("scope", "governed-1", "governed-delivery-1", 110, 3)?;
         assert!(store.recover(first.delivery()).await.is_err());
@@ -501,7 +497,7 @@ async fn governed_profiles_require_approval_preserve_receipts_and_retire_permane
 async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Result {
     let h = Harness::new().await?;
     let result = AssertUnwindSafe(async {
-        let p = governance_profile();
+        let p = governance_profile()?;
         let store = PostgresResearchStore::governed(h.pool.clone(), p.clone());
         store.govern(&p, 1).await?;
         store.govern(&p, 2).await?;
@@ -584,5 +580,86 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
     })
     .catch_unwind()
     .await;
+    h.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn validated_companions_are_atomic_immutable_and_required_for_fresh_completion() -> Result {
+    let h = Harness::approved().await?;
+    let result=AssertUnwindSafe(async {
+        let store=PostgresResearchStore::new(h.pool.clone());
+        let prepared=prepared("scope","decision","delivery",110,3)?;
+        let legacy=edgeagent_research_application::publication::PreparedCompletion::new(
+            prepared.delivery().clone(),&edgeagent_research_application::abstain(prepared.request().clone(),edgeagent_contracts::research::AbstentionReason::InvalidEvidence)?,TIME)?;
+        assert_eq!(store.commit(&legacy).await.err().ok_or("bypass")?.kind(),Kind::Invalid);
+        let companion=prepared.decision_publication().ok_or("companion")?;
+        let subject=edgeagent_research_application::publication::DECISION.subject()?;
+        sqlx::query("INSERT INTO edgeagent_message_outbox(message_source,message_id,message_type,transport_subject,envelope) VALUES($1,$2,$3,$4,$5)")
+            .bind(companion.source()).bind(companion.id()).bind(companion.message_type()).bind(subject).bind(vec![1_u8]).execute(&h.pool).await?;
+        assert_eq!(store.commit(&prepared).await.err().ok_or("orphan conflict")?.kind(),Kind::Conflict);
+        assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM edgeagent_research_decisions").fetch_one(&h.pool).await?,0);
+        assert_eq!(h.counts().await?,(0,0,0));
+        sqlx::query("DELETE FROM edgeagent_message_outbox").execute(&h.pool).await?;
+        for trigger in ["CREATE TRIGGER decision_fault BEFORE INSERT ON edgeagent_research_decisions FOR EACH ROW EXECUTE FUNCTION decision_fault()",
+            "CREATE CONSTRAINT TRIGGER decision_fault AFTER INSERT ON edgeagent_research_decisions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION decision_fault()"] {
+            sqlx::raw_sql("CREATE OR REPLACE FUNCTION decision_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic decision failure'; END $$").execute(&h.pool).await?;
+            sqlx::raw_sql(trigger).execute(&h.pool).await?;
+            assert_eq!(store.commit(&prepared).await.err().ok_or("fault")?.kind(),Kind::Storage);
+            let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM edgeagent_research_completions),(SELECT count(*) FROM edgeagent_research_decisions),(SELECT count(*) FROM edgeagent_message_inbox),(SELECT count(*) FROM edgeagent_message_outbox)").fetch_one(&h.pool).await?;
+            assert_eq!(counts,(0,0,0,0));
+            sqlx::raw_sql("DROP TRIGGER decision_fault ON edgeagent_research_decisions").execute(&h.pool).await?;
+        }
+        let receipt=store.commit(&prepared).await?;
+        let envelope=receipt.decision().ok_or("missing decision")?;
+        let mut noncanonical=envelope.to_json()?;noncanonical.push(b' ');
+        assert!(edgeagent_research_application::publication::CommittedOutcome::decode(receipt.bytes(),&receipt.publication().to_json()?)?.with_decision(&noncanonical).is_err());
+        let decision=edgeagent_research_application::publication::decode_decision(envelope)?;
+        decision.bind(receipt.record())?;
+        assert_eq!(decision.approval_revision,2);
+        assert_eq!(store.recover(prepared.delivery()).await?.ok_or("receipt")?.decision().ok_or("decision")?.to_json()?,envelope.to_json()?);
+        let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM edgeagent_research_completions),(SELECT count(*) FROM edgeagent_research_decisions),(SELECT count(*) FROM edgeagent_message_inbox),(SELECT count(*) FROM edgeagent_message_outbox)").fetch_one(&h.pool).await?;
+        assert_eq!(counts,(1,1,1,2));
+        assert!(sqlx::query("DELETE FROM edgeagent_research_decisions").execute(&h.pool).await.is_err());
+        // A fully evaluated policy denial retains its actual decision, not a fabricated missing-evidence result.
+        let denied=policy_denied("scope","policy-denied","denial")?;
+        let selected=edgeagent_research_application::execution::Selection::decode(denied.execution_bytes().ok_or("configuration")?)?;
+        let binding=selected.profile("scope");store.govern(&binding,1).await?;store.govern(&binding,2).await?;
+        let denied=store.commit(&denied).await?;
+        assert!(matches!(denied.record(),edgeagent_contracts::research::ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::NoEligibleCandidate));
+        let provenance=edgeagent_research_application::publication::decode_decision(denied.decision().ok_or("denial decision")?)?;
+        assert!(matches!(provenance.assessment,edgeagent_contracts::research_decision::Assessment::Evaluated{status:edgeagent_contracts::research_decision::Status::Abstained,reasons,..} if reasons==[edgeagent_contracts::research_decision::Reason::LiquidityBelowMinimum]));
+        // Removing only the companion proof must invalidate recovery even with an intact terminal event.
+        sqlx::query("DELETE FROM edgeagent_message_outbox WHERE message_type='com.edgeagent.research.decision-recorded.v1'").execute(&h.pool).await?;
+        assert_eq!(store.recover(prepared.delivery()).await.err().ok_or("missing proof")?.kind(),Kind::Invalid);
+        Ok(())
+    }).catch_unwind().await;
+    h.finish(result).await
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn historical_absence_recovers_but_database_refuses_unaccompanied_new_inserts() -> Result {
+    let h = Harness::new().await?;
+    let result=AssertUnwindSafe(async {
+        let candidate=prepared("scope","historical","legacy",110,3)?;
+        let publication=candidate.publication().to_json()?;
+        // Simulate the exact pre-migration snapshot. Only the isolated schema owner may seed it.
+        let mut tx=h.pool.begin().await?;
+        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions DISABLE TRIGGER edgeagent_research_require_decision").execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO edgeagent_research_completions(caller_scope,request_id,request,outcome,publication,requires_decision) VALUES($1,$2,$3,$4,$5,FALSE)")
+            .bind(candidate.request().scope.as_str()).bind(candidate.request().request_id.as_str()).bind(candidate.request_bytes()).bind(candidate.outcome_bytes()).bind(publication).execute(&mut *tx).await?;
+        edgeagent_outbox_postgres::PostgresOutbox.enqueue(&mut tx,candidate.definition(),candidate.publication()).await?;
+        sqlx::raw_sql("ALTER TABLE edgeagent_research_completions ENABLE TRIGGER edgeagent_research_require_decision").execute(&mut *tx).await?;
+        tx.commit().await?;
+        let store=PostgresResearchStore::new(h.pool.clone());
+        let old=store.recover(candidate.delivery()).await?.ok_or("legacy receipt")?;
+        assert_eq!(old.bytes(),candidate.outcome_bytes());assert!(old.decision().is_none());
+        let mut tx=h.pool.begin().await?;
+        let fresh=prepared("scope","unaccompanied","fresh",110,3)?;
+        sqlx::query("INSERT INTO edgeagent_research_completions(caller_scope,request_id,request,outcome,publication) VALUES($1,$2,$3,$4,$5)").bind(fresh.request().scope.as_str()).bind(fresh.request().request_id.as_str()).bind(fresh.request_bytes()).bind(fresh.outcome_bytes()).bind(fresh.publication().to_json()?).execute(&mut *tx).await?;
+        assert!(tx.commit().await.is_err());
+        assert_eq!(h.counts().await?,(1,1,1));
+        Ok(())
+    }).catch_unwind().await;
     h.finish(result).await
 }

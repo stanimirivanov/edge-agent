@@ -1,14 +1,9 @@
 //! Receipt-first orchestration; owner I/O occurs before the completion transaction.
-use crate::{
-    abstain, evaluate,
-    publication::{
-        self, CommittedOutcome, PreparedCompletion, PublicationError as Error,
-        PublicationErrorKind as Kind, ResearchPublication,
-    },
+use crate::publication::{
+    self, CommittedOutcome, PreparedCompletion, PublicationError as Error,
+    PublicationErrorKind as Kind, ResearchPublication,
 };
-use edgeagent_contracts::{
-    MessageEnvelope, research::AbstentionReason, research_acquisition::ResearchEvidence,
-};
+use edgeagent_contracts::MessageEnvelope;
 use edgeagent_research_domain::{EvidencePolicy, FrozenSeries};
 /// Authenticated owner inputs under one explicitly selected immutable research policy.
 pub struct LoadedEvidence {
@@ -28,6 +23,8 @@ pub enum LoadError {
     Invalid,
     /// Operator policy does not support this request.
     Unsupported,
+    /// Owner retained fewer sessions than the exact requested lookback.
+    InsufficientHistory,
     /// Transient owner/storage/process unavailability; retry without completing.
     Unavailable,
 }
@@ -45,9 +42,9 @@ pub trait EvidenceLoader: Sync {
         delivery: &MessageEnvelope,
     ) -> impl std::future::Future<Output = Result<LoadedEvidence, LoadError>> + Send;
 }
-/// Recover before evidence reads; evaluate and atomically retain exactly one outcome.
+/// Compatibility receipt recovery only. Fresh execution must use process_execution.
 /// # Errors
-/// Invalid ingress/policy, conflicting intent or unavailable storage/read rejects completion.
+/// Invalid ingress, missing receipts, conflicting intent or storage failures refuse recovery.
 pub async fn process(
     store: &impl ResearchPublication,
     loader: &impl EvidenceLoader,
@@ -58,33 +55,73 @@ pub async fn process(
     if let Some(receipt) = store.recover(delivery).await? {
         return Ok(receipt);
     }
-    let outcome = if delivery.message_type() == publication::EVALUATE.message_type() {
-        // Legacy ingress has no owner-authorized evidence descriptor; drain safely.
-        abstain(request, AbstentionReason::MissingEntitlement)
-    } else {
-        match ResearchEvidence::from_envelope(delivery).map_err(|_| Error::new(Kind::Invalid))? {
-            ResearchEvidence::Abstained { reason, .. } => abstain(request, reason),
-            ResearchEvidence::Ready { .. } => match loader.load(delivery).await {
-                Ok(loaded) => evaluate(
-                    request,
-                    &loaded.policy,
-                    &loaded.series,
-                    loaded.expires_at_ms,
-                ),
-                Err(LoadError::Unavailable) => return Err(Error::new(Kind::Storage)),
-                Err(error) => abstain(
-                    request,
-                    match error {
-                        LoadError::Denied => AbstentionReason::MissingEntitlement,
-                        LoadError::Unsupported => AbstentionReason::UnsupportedUniverse,
-                        _ => AbstentionReason::InvalidEvidence,
-                    },
-                ),
-            },
-        }
+    let _ = (request, loader, time);
+    Err(Error::new(Kind::Invalid))
+}
+/// Complete authorized owner inputs for the exact configured execution.
+pub struct ExecutionEvidence {
+    /// Authorized base policy and close series.
+    pub loaded: LoadedEvidence,
+    /// Authorized complete selected volumes.
+    pub volumes: Vec<edgeagent_research_domain::liquidity::Input>,
+    /// Authorized complete selected opens/actions.
+    pub opens: Vec<edgeagent_research_domain::market_constraints::Input>,
+    /// Authorized owner context census.
+    pub context: Vec<edgeagent_research_domain::context_policy::Input>,
+}
+/// Separate capability: a close-only loader cannot silently satisfy full M05 evidence.
+pub trait ExecutionLoader: Sync {
+    /// Load the complete companion through the owner boundary.
+    fn load_execution(
+        &self,
+        delivery: &MessageEnvelope,
+    ) -> impl std::future::Future<Output = Result<ExecutionEvidence, LoadError>> + Send;
+}
+/// Recover first, then read authorized inputs outside the transaction, reconcile, and commit.
+pub async fn process_execution(
+    store: &impl ResearchPublication,
+    loader: &impl ExecutionLoader,
+    selection: crate::execution::Selection,
+    delivery: &MessageEnvelope,
+    time: &str,
+) -> Result<CommittedOutcome, Error> {
+    let request = publication::evaluation_request(delivery)?;
+    if let Some(receipt) = store.recover(delivery).await? {
+        return Ok(receipt);
     }
-    .map_err(|_| Error::new(Kind::Invalid))?;
+    let outcome = if delivery.message_type() == publication::EVALUATE.message_type() {
+        selection.refused(request, LoadError::Denied)?
+    } else if let edgeagent_contracts::research_acquisition::ResearchEvidence::Abstained {
+        reason,
+        ..
+    } =
+        edgeagent_contracts::research_acquisition::ResearchEvidence::from_envelope(delivery)
+            .map_err(|e| Error::with_source(Kind::Invalid, e))?
+    {
+        selection.negative(request, reason)?
+    } else {
+        match loader.load_execution(delivery).await {
+            Ok(loaded) => selection.validate(
+                request,
+                &loaded.loaded.policy,
+                &loaded.loaded.series,
+                loaded.loaded.expires_at_ms,
+                crate::governed::ContextInputs {
+                    constraints: crate::governed::ConstraintInputs {
+                        volumes: &loaded.volumes,
+                        opens: &loaded.opens,
+                    },
+                    context: &loaded.context,
+                },
+            )?,
+            Err(error) => selection.refused(request, error)?,
+        }
+    };
     store
-        .commit(&PreparedCompletion::new(delivery.clone(), &outcome, time)?)
+        .commit(&PreparedCompletion::from_execution(
+            delivery.clone(),
+            &outcome,
+            time,
+        )?)
         .await
 }

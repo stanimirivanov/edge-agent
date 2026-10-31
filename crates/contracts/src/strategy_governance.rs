@@ -59,3 +59,14 @@ impl Profile {
         Ok(value)
     }
 }
+
+impl Profile {
+    /// Integrity identity of exact approved profile bytes; not authorization.
+    pub fn digest(&self) -> Result<String, crate::strategy::ConfigurationError> {
+        use sha2::{Digest, Sha256};
+        Ok(Sha256::digest(self.bytes()?)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect())
+    }
+}

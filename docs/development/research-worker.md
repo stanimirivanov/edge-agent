@@ -110,3 +110,11 @@ Stop intake/relay before rollback; preserve existing Research state for compatib
 readers and retain owner receipts while active. No schema deletion, topology/cloud
 operation, provider/model activation or live execution is introduced. Projector,
 query and artifact lifecycle changes remain later milestone slices.
+
+## M05 mandatory execution
+
+[Validated publication](validated-publication.md) supersedes the staged activation
+boundary: new completions require complete canonical configuration, sealed validation,
+current exact approval and atomic companion retention/publication. Historical receipts
+keep explicit legacy absence. Upgrade projector/Gateway metadata readers and add the
+decision consumer subject before activation; retained outcomes remain byte-identical.

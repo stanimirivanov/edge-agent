@@ -25,3 +25,7 @@ schema = ["dep:schemars"]
 [[example]]
 name = "research_acquisition_schema"
 required-features = ["schema"]
+
+[[example]]
+name = "research_decision_schema"
+required-features = ["schema"]

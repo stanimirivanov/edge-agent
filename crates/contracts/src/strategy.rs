@@ -198,3 +198,67 @@ impl Configuration {
             .collect())
     }
 }
+
+/// Explicit canonical order for independently selected endpoint regimes.
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
+#[serde(rename_all = "snake_case")]
+pub enum Regime {
+    Falling,
+    Flat,
+    Rising,
+}
+/// Complete execution selection, additive to the frozen declaration-only bundle.
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(tag = "kind", content = "data", deny_unknown_fields)]
+pub enum ExecutionConfiguration {
+    #[serde(rename = "research.execution.v1")]
+    V1 {
+        bundle: Configuration,
+        event_revision: String,
+        context_max_age_ms: u32,
+        allowed_regimes: Vec<Regime>,
+    },
+}
+impl ExecutionConfiguration {
+    /// Validate explicit bounded selections; resolve compiled revisions in the application.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, ConfigurationError> {
+        let Self::V1 {
+            bundle,
+            event_revision,
+            context_max_age_ms,
+            allowed_regimes,
+        } = self;
+        bundle.canonical_bytes()?;
+        if !token(event_revision)
+            || !(1..=2_678_400_000).contains(context_max_age_ms)
+            || allowed_regimes.is_empty()
+            || allowed_regimes.len() > 3
+            || !allowed_regimes.windows(2).all(|w| w[0] < w[1])
+        {
+            return Err(ConfigurationError);
+        }
+        let mut bytes =
+            crate::messaging::canonical_json::to_vec(self).map_err(|_| ConfigurationError)?;
+        bytes.push(b'\n');
+        if bytes.len() > MAX_BUNDLE_BYTES {
+            return Err(ConfigurationError);
+        }
+        Ok(bytes)
+    }
+    pub fn decode(bytes: &[u8]) -> Result<Self, ConfigurationError> {
+        if bytes.len() > MAX_BUNDLE_BYTES {
+            return Err(ConfigurationError);
+        }
+        let value: Self = serde_json::from_slice(bytes).map_err(|_| ConfigurationError)?;
+        if value.canonical_bytes()? != bytes {
+            return Err(ConfigurationError);
+        }
+        Ok(value)
+    }
+    pub fn digest(&self) -> Result<String, ConfigurationError> {
+        Ok(Sha256::digest(self.canonical_bytes()?)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect())
+    }
+}

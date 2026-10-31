@@ -117,3 +117,14 @@ pub fn validate(proposal: &[u8], inputs: Inputs<'_>) -> Result<ValidatedOutcome,
     }
     Ok(ValidatedOutcome { governed: rebuilt })
 }
+
+/// Validate the deterministic terminal rendering of a separately trusted negative owner fact.
+/// No numeric/evidence success is asserted, and no caller-supplied positive proposal is accepted.
+pub(crate) fn refused(
+    request: ResearchRequest,
+    reason: edgeagent_contracts::research::AbstentionReason,
+) -> Result<ValidatedOutcome, Error> {
+    let governed = governed::refused(request, reason).map_err(Error::Evaluation)?;
+    ResearchRecord::decode(governed.outcome().bytes()).map_err(Error::Proposal)?;
+    Ok(ValidatedOutcome { governed })
+}

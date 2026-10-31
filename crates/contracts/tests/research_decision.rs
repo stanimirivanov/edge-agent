@@ -141,3 +141,13 @@ fn assessments_bind_exact_terminal_kind_universe_and_reason_semantics() -> Resul
     assert!(fixture()?.bind(&changed).is_err());
     Ok(())
 }
+
+#[test]
+#[cfg(feature = "schema")]
+fn published_decision_schema_matches_frozen_inventory() -> Result {
+    assert_eq!(
+        edgeagent_contracts::research_decision::schema()?,
+        include_str!("../fixtures/research/decision-v1.schema.json")
+    );
+    Ok(())
+}

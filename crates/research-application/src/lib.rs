@@ -2,6 +2,7 @@
 //! The caller must authenticate owner/audience assertions and verify retained bytes.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+pub mod execution;
 pub mod experiment;
 pub mod governed;
 pub mod lifecycle;

@@ -38,11 +38,19 @@ rollback fencing. Readers must support EARP3 before producers activate. Old read
 refuse it; stop intake/serving and rebuild disposable projections with a compatible
 reader on rollback, preserving authoritative owner facts.
 
-This slice adds no publication, SQL migration, message route or HTTP field. PR12
-must retain/publish provenance with validated completion and current owner checks,
-and wire authenticated persistence/query adapters. Existing runtime queries expose
-no new approval assertion. No dependency or external service is needed here.
+[Validated publication](validated-publication.md) now retains and publishes the companion
+atomically with validated completion/current approval and wires authenticated projector
+persistence and internal queries. Existing v1 outcomes remain exact. No dependency or
+external service is needed for the pure contract/reducer proofs below.
 
 Run `cargo test --locked -p edgeagent-contracts --test research_decision` and
 `cargo xtask verify --check research-projection-contracts --python python3`.
 The full default gate also exercises canonical bytes with `serde_json/preserve_order`.
+
+## M05 mandatory execution
+
+[Validated publication](validated-publication.md) supersedes the staged activation
+boundary: new completions require complete canonical configuration, sealed validation,
+current exact approval and atomic companion retention/publication. Historical receipts
+keep explicit legacy absence. Upgrade projector/Gateway metadata readers and add the
+decision consumer subject before activation; retained outcomes remain byte-identical.

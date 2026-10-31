@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_research_decisions(caller_scope,request_id,configuration,decision,publication) VALUES($1,$2,$3,$4,$5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f21cfc6493a296c88fd55c30f1fc9549655698e76de3b0f574ca9bb1e96d1247"
+}

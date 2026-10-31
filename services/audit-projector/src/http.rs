@@ -19,6 +19,10 @@ pub fn router(store: Arc<ProjectionStore>) -> Router {
             "/internal/v1/research-requests/{scope}/{id}/outcome",
             get(outcome),
         )
+        .route(
+            "/internal/v1/research-requests/{scope}/{id}/decision",
+            get(decision),
+        )
         .with_state(store)
 }
 fn allowed(headers: &HeaderMap) -> bool {
@@ -99,6 +103,31 @@ async fn outcome(
             )
                 .into_response(),
             None => error(StatusCode::ACCEPTED, "pending"),
+        },
+        Ok(Ok(None)) => error(StatusCode::NOT_FOUND, "not_observed"),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => error(StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
+    }
+}
+
+async fn decision(
+    State(store): State<Arc<ProjectionStore>>,
+    Path((scope, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    if !allowed(&headers) {
+        return error(StatusCode::FORBIDDEN, "forbidden");
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), store.get(&scope, &id)).await {
+        Ok(Ok(Some(view))) if view.status == "gap" => error(StatusCode::CONFLICT, "gap"),
+        Ok(Ok(Some(view))) => match view.provenance_bytes() {
+            Some(bytes) => (
+                StatusCode::OK,
+                [("content-type", "application/json")],
+                bytes.to_vec(),
+            )
+                .into_response(),
+            None => error(StatusCode::NOT_FOUND, "not_observed"),
         },
         Ok(Ok(None)) => error(StatusCode::NOT_FOUND, "not_observed"),
         Ok(Err(e)) => failure(&e),

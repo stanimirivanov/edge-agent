@@ -39,12 +39,10 @@ and retains existing exact delivery/request/route checks. Ordinary records and e
 results cannot enter that typed constructor. Validator revision is
 `reconcile-governed-research-exact-v1`, for later provenance binding.
 
-The legacy constructor and existing workers remain during the agreed staged rollout.
-This slice supplies a usable independent validation/preparation path; it does not claim
-every current publication requires it. PR12 must activate mandatory persisted enforcement
-and mutable approval/control fences; PR11 adds provenance. Validation does not grant current
-entitlement, strategy approval or account-risk permission. No LLM adapter is added.
-See [ADR-0099](../decisions/0099-reconcile-independent-research-proposals.md).
+The legacy constructor remains for compatibility/receipt handling but cannot prepare
+a fresh store commit. [Validated publication](validated-publication.md) requires the
+complete selected configuration, sealed ValidatedExecution, mandatory decision retention
+and current owner approval. Experimental output still cannot enter that typed path.
 
 ## Verification and rollback
 
@@ -55,3 +53,11 @@ cover narrowed outcomes, real evidence abstentions, missing selected inputs, saf
 causes, exact bytes/digest and foreign-delivery refusal. A compile-fail doctest protects
 the typed constructor. No dependency, schema, store, provider or runtime deployment changes;
 rollback removes the additive API without modifying retained records.
+
+## M05 mandatory execution
+
+[Validated publication](validated-publication.md) supersedes the staged activation
+boundary: new completions require complete canonical configuration, sealed validation,
+current exact approval and atomic companion retention/publication. Historical receipts
+keep explicit legacy absence. Upgrade projector/Gateway metadata readers and add the
+decision consumer subject before activation; retained outcomes remain byte-identical.

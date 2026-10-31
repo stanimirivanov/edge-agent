@@ -7,10 +7,7 @@ use edgeagent_contracts::{
     research::{ResearchRecord, ResearchRequest},
 };
 use edgeagent_market_data_domain::{InstrumentId, ListingId, SessionDate, UsdPrice};
-use edgeagent_research_application::{
-    evaluate,
-    publication::{EVALUATE, PreparedCompletion},
-};
+use edgeagent_research_application::publication::{EVALUATE, PreparedCompletion};
 use edgeagent_research_domain::*;
 use sqlx::{
     PgPool,
@@ -29,10 +26,13 @@ pub fn prepared(
     last: i128,
     config: u8,
 ) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, last, config, true)
+    build(scope, id, delivery, last, config, true, false)
 }
 pub fn abstained(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, 100, 3, false)
+    build(scope, id, delivery, 100, 3, false, false)
+}
+pub fn policy_denied(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
+    build(scope, id, delivery, 110, 3, true, true)
 }
 fn build(
     scope: &str,
@@ -41,6 +41,7 @@ fn build(
     last: i128,
     config: u8,
     with_evidence: bool,
+    deny_liquidity: bool,
 ) -> Result<PreparedCompletion> {
     let selected = SelectedInstrument {
         instrument: InstrumentId::new(1)?,
@@ -51,11 +52,22 @@ fn build(
         SessionDate::new(2026, 10, 1)?,
         SessionDate::new(2026, 10, 2)?,
     ];
+    let base = execution(config)?;
+    let selection = if deny_liquidity {
+        let mut wire = edgeagent_contracts::strategy::ExecutionConfiguration::decode(base.bytes())?;
+        let edgeagent_contracts::strategy::ExecutionConfiguration::V1 { bundle, .. } = &mut wire;
+        let edgeagent_contracts::strategy::Configuration::V1 { policy, .. } = bundle;
+        policy.min_daily_turnover_cents = u64::MAX;
+        edgeagent_research_application::execution::Selection::decode(&wire.canonical_bytes()?)?
+    } else {
+        base
+    };
+    let profile = selection.profile(scope);
     let request = ResearchRequest {
         scope: scope.into(),
         request_id: id.into(),
         implementation: "02".repeat(32),
-        configuration: format!("{config:02x}").repeat(32),
+        configuration: profile.configuration.clone(),
         decision_at_ms: 100,
         lookback_sessions: 1,
         instruments: vec![format!("{:032x}", 1)],
@@ -65,7 +77,7 @@ fn build(
             decision_at_ms: 100,
             max_age_ms: 10,
             implementation: [2; 32],
-            configuration: [config; 32],
+            configuration: decode_digest(&profile.configuration)?,
             calendar: [4; 32],
         },
         vec![selected],
@@ -76,7 +88,7 @@ fn build(
         selected,
         evidence: [5; 32],
         implementation: [2; 32],
-        configuration: [config; 32],
+        configuration: decode_digest(&profile.configuration)?,
         calendar: [4; 32],
         known_at_ms: 90,
         rights_until_ms: 101,
@@ -116,17 +128,80 @@ fn build(
         },
         &record,
     )?;
-    Ok(PreparedCompletion::new(
-        command,
-        &evaluate(
-            request,
-            &policy,
-            if with_evidence { &data } else { &[] },
-            101,
-        )?,
-        TIME,
-    )?)
+    let instrument = selected.instrument;
+    let evidence = [5; 32];
+    let volumes = [edgeagent_research_domain::liquidity::Input {
+        instrument,
+        evidence,
+        rows: data[0]
+            .closes
+            .iter()
+            .map(|c| {
+                Ok(edgeagent_research_domain::liquidity::Volume {
+                    session: c.session,
+                    shares: edgeagent_market_data_domain::ShareVolume::new(1, 0)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+    }];
+    let opens = [edgeagent_research_domain::market_constraints::Input {
+        instrument,
+        evidence,
+        rows: data[0]
+            .closes
+            .iter()
+            .map(|c| {
+                Ok(edgeagent_research_domain::market_constraints::Open {
+                    session: c.session,
+                    price: UsdPrice::new(100, 0)?,
+                    action: false,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+    }];
+    let context = [edgeagent_research_domain::context_policy::Input {
+        instrument,
+        evidence,
+        coverage: edgeagent_research_domain::context_policy::Coverage::Complete {
+            source: [7; 32],
+            known_at_ms: 90,
+            interval: [0, 101],
+            events: vec![],
+        },
+    }];
+    let outcome = selection.validate(
+        request,
+        &policy,
+        if with_evidence { &data } else { &[] },
+        101,
+        edgeagent_research_application::governed::ContextInputs {
+            constraints: edgeagent_research_application::governed::ConstraintInputs {
+                volumes: &volumes,
+                opens: &opens,
+            },
+            context: &context,
+        },
+    )?;
+    Ok(PreparedCompletion::from_execution(command, &outcome, TIME)?)
 }
+pub fn execution(config: u8) -> Result<edgeagent_research_application::execution::Selection> {
+    let mut value: edgeagent_contracts::strategy::ExecutionConfiguration =
+        edgeagent_contracts::strategy::ExecutionConfiguration::decode(include_bytes!(
+            "../../../contracts/fixtures/strategy/execution-v1.json"
+        ))?;
+    let edgeagent_contracts::strategy::ExecutionConfiguration::V1 { bundle, .. } = &mut value;
+    let edgeagent_contracts::strategy::Configuration::V1 { policy, .. } = bundle;
+    policy.max_horizon_sessions = u16::from(config);
+    Ok(edgeagent_research_application::execution::Selection::decode(&value.canonical_bytes()?)?)
+}
+fn decode_digest(text: &str) -> Result<[u8; 32]> {
+    let mut result = [0; 32];
+    for (i, b) in result.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16)?;
+    }
+    Ok(result)
+}
+
 pub struct Harness {
     pub pool: PgPool,
     root: PgPool,
@@ -135,6 +210,18 @@ pub struct Harness {
     schema: String,
 }
 impl Harness {
+    pub async fn approved() -> Result<Self> {
+        let h = Self::new().await?;
+        let store = edgeagent_research_postgres::PostgresResearchStore::new(h.pool.clone());
+        for scope in ["scope", "another-scope", "foreign"] {
+            for config in [3, 9] {
+                let profile = execution(config)?.profile(scope);
+                store.govern(&profile, 1).await?;
+                store.govern(&profile, 2).await?;
+            }
+        }
+        Ok(h)
+    }
     pub async fn new() -> Result<Self> {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let options = PgConnectOptions::from_str(&std::env::var("EDGEAGENT_POSTGRES_URL")?)?;
@@ -167,6 +254,7 @@ impl Harness {
                 edgeagent_research_postgres::MIGRATION,
                 edgeagent_research_postgres::lifecycle::MIGRATION,
                 edgeagent_research_postgres::governance::MIGRATION,
+                edgeagent_research_postgres::DECISION_MIGRATION,
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
@@ -185,6 +273,7 @@ impl Harness {
             .connect_with(self.options.clone())
             .await?)
     }
+    // Original terminal/lifecycle publication census; companion proofs inspect all four tables explicitly.
     pub async fn counts(&self) -> Result<(i64, i64, i64)> {
         Ok((
             sqlx::query_scalar("SELECT count(*) FROM edgeagent_research_completions")
@@ -193,7 +282,7 @@ impl Harness {
             sqlx::query_scalar("SELECT count(*) FROM edgeagent_message_inbox")
                 .fetch_one(&self.pool)
                 .await?,
-            sqlx::query_scalar("SELECT count(*) FROM edgeagent_message_outbox")
+            sqlx::query_scalar("SELECT count(*) FROM edgeagent_message_outbox WHERE message_type<>'com.edgeagent.research.decision-recorded.v1'")
                 .fetch_one(&self.pool)
                 .await?,
         ))

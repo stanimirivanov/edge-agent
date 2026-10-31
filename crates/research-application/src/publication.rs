@@ -28,7 +28,16 @@ pub const ABSTAINED: MessageDefinition = MessageDefinition::event(
     "research-request",
     EventRetention::Workflow,
 );
-const DEFINITIONS: [MessageDefinition; 5] = [
+/// Companion provenance publication, independently replayable after the terminal outcome.
+pub const DECISION: MessageDefinition = MessageDefinition::event(
+    "com.edgeagent.research.decision-recorded.v1",
+    "urn:edgeagent:schema:research:decision:v1",
+    Component::Research,
+    "research-request",
+    EventRetention::Workflow,
+);
+const DEFINITIONS: [MessageDefinition; 6] = [
+    DECISION,
     EVALUATE,
     crate::lifecycle::CHANGED,
     PUBLISHED,
@@ -165,11 +174,13 @@ pub struct PreparedCompletion {
     publication: MessageEnvelope,
     request: ResearchRequest,
     definition: MessageDefinition,
+    execution: Option<Vec<u8>>,
+    decision: Option<MessageEnvelope>,
 }
 impl PreparedCompletion {
     /// Prepare an independently reconciled terminal result for the original delivery.
-    /// This staged typed path retains existing ingress/identity checks; owner approval
-    /// and transaction fencing remain persistence obligations.
+    /// This low-level candidate retains ingress/identity checks. Fresh persistence requires
+    /// from_execution, which also seals the complete configuration and provenance.
     /// # Errors
     /// Rejects mismatched delivery/request identity and existing publication contract failures.
     pub fn from_validated(
@@ -182,6 +193,7 @@ impl PreparedCompletion {
 
     /// Bind the exact evaluation command, rendered outcome and explicit occurrence time.
     /// The outer adapter authenticates Gateway/MarketData and verifies evidence authority.
+    /// Retained for compatibility/receipt recovery; fresh stores reject this legacy candidate.
     /// # Errors
     /// Rejects mismatched request content, identity/partition, producer or terminal payload.
     pub fn new(
@@ -234,7 +246,67 @@ impl PreparedCompletion {
             publication,
             request: req.clone(),
             definition: def,
+            execution: None,
+            decision: None,
         })
+    }
+    /// Only sealed complete execution may prepare a fresh governed publication.
+    /// ```compile_fail
+    /// use edgeagent_contracts::MessageEnvelope;
+    /// use edgeagent_research_application::{RenderedOutcome,publication::PreparedCompletion};
+    /// fn bypass(delivery:MessageEnvelope,proposal:&RenderedOutcome) {
+    ///     let _=PreparedCompletion::from_execution(delivery,proposal,"2026-10-31T00:00:00Z");
+    /// }
+    /// ```
+    pub fn from_execution(
+        delivery: MessageEnvelope,
+        result: &crate::execution::ValidatedExecution,
+        time: &str,
+    ) -> Result<Self, PublicationError> {
+        let mut prepared = Self::from_validated(delivery, &result.outcome, time)?;
+        let provenance = result.provenance()?;
+        provenance.bind(result.record()).map_err(|_| invalid())?;
+        let mut metadata: MessageMetadata = MessageMetadata {
+            id: provenance.digest().map_err(|_| invalid())?,
+            source: Component::Research.source_uri().into(),
+            message_type: DECISION.message_type().into(),
+            subject: partition(prepared.request()),
+            time: time.into(),
+            data_schema: DECISION.data_schema().into(),
+            correlation_id: prepared
+                .delivery
+                .extension("correlationid")
+                .ok_or_else(invalid)?
+                .into(),
+            causation_id: prepared.publication.id().into(),
+            idempotency_key: provenance.digest().map_err(|_| invalid())?,
+            partition_key: partition(prepared.request()),
+            trace_parent: prepared
+                .delivery
+                .extension("traceparent")
+                .ok_or_else(invalid)?
+                .into(),
+            trace_state: prepared.delivery.extension("tracestate").map(str::to_owned),
+        };
+        // Identity covers the companion; causation binds the immutable terminal result.
+        metadata.causation_id = provenance.outcome.clone();
+        prepared.decision = Some(
+            MessageEnvelope::from_payload(
+                metadata,
+                &edgeagent_contracts::research_decision::DecisionRecord::V1(provenance),
+            )
+            .map_err(|_| invalid())?,
+        );
+        prepared.execution = Some(result.selection.bytes().to_vec());
+        Ok(prepared)
+    }
+    /// Exact complete execution bytes, absent on legacy preparations.
+    pub fn execution_bytes(&self) -> Option<&[u8]> {
+        self.execution.as_deref()
+    }
+    /// Immutable companion publication candidate.
+    pub fn decision_publication(&self) -> Option<&MessageEnvelope> {
+        self.decision.as_ref()
     }
     /// Exact authenticated command candidate; authentication itself is an outer obligation.
     #[must_use]
@@ -272,6 +344,7 @@ pub struct CommittedOutcome {
     record: ResearchRecord,
     bytes: Vec<u8>,
     publication: MessageEnvelope,
+    decision: Option<MessageEnvelope>,
 }
 impl CommittedOutcome {
     /// Verify canonical terminal bytes, content/event identity and request binding.
@@ -302,7 +375,28 @@ impl CommittedOutcome {
             record,
             bytes: bytes.to_vec(),
             publication: envelope,
+            decision: None,
         })
+    }
+    /// Attach an intact independently published companion to the historical receipt.
+    pub fn with_decision(mut self, bytes: &[u8]) -> Result<Self, PublicationError> {
+        let envelope = MessageEnvelope::from_json(bytes).map_err(|_| invalid())?;
+        if envelope.to_json().map_err(|_| invalid())? != bytes {
+            return Err(invalid());
+        }
+        let provenance = decode_decision(&envelope)?;
+        provenance.bind(&self.record).map_err(|_| invalid())?;
+        if envelope.extension("causationid") != Some(self.publication.id())
+            || envelope.extension("correlationid") != self.publication.extension("correlationid")
+        {
+            return Err(invalid());
+        }
+        self.decision = Some(envelope);
+        Ok(self)
+    }
+    /// Exact retained provenance event, absent for pre-upgrade receipts.
+    pub fn decision(&self) -> Option<&MessageEnvelope> {
+        self.decision.as_ref()
     }
     /// Exact original immutable outcome, including after retries/restarts.
     #[must_use]
@@ -319,6 +413,28 @@ impl CommittedOutcome {
     pub const fn record(&self) -> &ResearchRecord {
         &self.record
     }
+}
+/// Validate owner route and companion identity; caller authenticates the transport source.
+pub fn decode_decision(
+    envelope: &MessageEnvelope,
+) -> Result<edgeagent_contracts::research_decision::DecisionProvenance, PublicationError> {
+    DECISION
+        .validate_envelope(envelope)
+        .map_err(|_| invalid())?;
+    let edgeagent_contracts::research_decision::DecisionRecord::V1(record): edgeagent_contracts::research_decision::DecisionRecord =
+        envelope.payload().map_err(|_| invalid())?;
+    record.canonical_bytes().map_err(|_| invalid())?;
+    let partition = partition(&record.request);
+    let hash = record.digest().map_err(|_| invalid())?;
+    if envelope.id() != hash
+        || envelope.extension("idempotencykey") != Some(hash.as_str())
+        || envelope.subject() != Some(partition.as_str())
+        || envelope.partition_key() != Some(partition.as_str())
+        || envelope.extension("causationid") != Some(record.outcome.as_str())
+    {
+        return Err(invalid());
+    }
+    Ok(record)
 }
 /// Atomic research-owned completion/inbox/outbox port; implementation performs no broker I/O.
 pub trait ResearchPublication: Sync {

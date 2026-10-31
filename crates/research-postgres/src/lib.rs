@@ -13,6 +13,7 @@ use edgeagent_research_application::publication::{
     PublicationErrorKind as Kind, ResearchPublication,
 };
 /// Additive service-owned migration; apply inbox/outbox migrations in the same private schema.
+pub const DECISION_MIGRATION: &str = include_str!("../migrations/0004_research_decisions.sql");
 pub const MIGRATION: &str = include_str!("../migrations/0001_research_completions.sql");
 /// Caller supplies a pool scoped to the Research-owned schema.
 pub struct PostgresResearchStore {
@@ -28,7 +29,7 @@ impl PostgresResearchStore {
             governed: None,
         }
     }
-    /// Explicit staged governed path; legacy callers remain unchanged until M05-PR12.
+    /// Bind the exact configured profile for pre-read approval and commit-time fencing.
     pub fn governed(
         pool: sqlx::PgPool,
         profile: edgeagent_contracts::strategy_governance::Profile,
@@ -52,8 +53,25 @@ impl PostgresResearchStore {
                 return Err(Error::new(Kind::Invalid));
             }
             governance::check(tx, p).await?;
+        } else {
+            return Err(Error::new(Kind::Invalid));
         }
         Ok(())
+    }
+    /// Recover only an existing receipt before startup configuration/owner loading.
+    /// None grants no execution permission; fresh processing still uses governed recover.
+    pub async fn recover_existing(
+        &self,
+        delivery: &MessageEnvelope,
+    ) -> Result<Option<CommittedOutcome>, Error> {
+        let request = publication::evaluation_request(delivery)?;
+        let mut tx = transaction(&self.pool).await?;
+        let receipt = read(&mut tx, &request).await?;
+        if receipt.is_some() {
+            inbox(&mut tx, delivery).await?;
+        }
+        tx.commit().await.map_err(storage)?;
+        Ok(receipt)
     }
     /// Load an intact original completion/input for replay in a read-only transaction.
     /// Unlike recovery this never records a new inbox delivery.
@@ -94,7 +112,7 @@ async fn read(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     request: &ResearchRequest,
 ) -> Result<Option<CommittedOutcome>, Error> {
-    let row=sqlx::query!("SELECT request,outcome,publication FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
+    let row=sqlx::query!("SELECT request,outcome,publication,requires_decision FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -105,7 +123,45 @@ async fn read(
     {
         return Err(Error::new(Kind::Conflict));
     }
-    let receipt = CommittedOutcome::decode(&row.outcome, &row.publication)?;
+    let mut receipt = CommittedOutcome::decode(&row.outcome, &row.publication)?;
+    let companion=sqlx::query!("SELECT configuration,decision,publication FROM edgeagent_research_decisions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
+    if let Some(companion) = companion {
+        let selection =
+            edgeagent_research_application::execution::Selection::decode(&companion.configuration)?;
+        let profile = selection.profile(&request.scope);
+        if profile.configuration != request.configuration
+            || profile.implementation != request.implementation
+            || profile.lookback_sessions != request.lookback_sessions
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
+        receipt = receipt.with_decision(&companion.publication)?;
+        let envelope = receipt
+            .decision()
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let decision = publication::decode_decision(envelope)?;
+        if !row.requires_decision {
+            return Err(Error::new(Kind::Invalid));
+        }
+        selection.verify_provenance(&decision)?;
+        governance::historical(tx, &profile).await?;
+        if decision
+            .canonical_bytes()
+            .map_err(|_| Error::new(Kind::Invalid))?
+            != companion.decision
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
+        let subject = publication::DECISION
+            .subject()
+            .map_err(|_| Error::new(Kind::Invalid))?;
+        let intact=sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_message_outbox WHERE message_source=$1 AND message_id=$2 AND envelope=$3 AND message_type=$4 AND transport_subject=$5) AS "intact!""#,envelope.source(),envelope.id(),companion.publication,publication::DECISION.message_type(),subject).fetch_one(&mut **tx).await.map_err(storage)?;
+        if !intact {
+            return Err(Error::new(Kind::Invalid));
+        }
+    } else if row.requires_decision {
+        return Err(Error::new(Kind::Invalid));
+    }
     let retained = match receipt.record() {
         ResearchRecord::Artifact(a) => &a.request,
         ResearchRecord::Abstention(a) => &a.request,
@@ -182,9 +238,38 @@ impl ResearchPublication for PostgresResearchStore {
     }
     async fn commit(&self, p: &PreparedCompletion) -> Result<CommittedOutcome, Error> {
         let mut tx = transaction(&self.pool).await?;
-        if read(&mut tx, p.request()).await?.is_none() {
-            self.check_governance(&mut tx, p.request()).await?;
+        if let Some(receipt) = read(&mut tx, p.request()).await? {
+            inbox(&mut tx, p.delivery()).await?;
+            tx.commit().await.map_err(storage)?;
+            return Ok(receipt);
         }
+        let execution = p
+            .execution_bytes()
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let selection = edgeagent_research_application::execution::Selection::decode(execution)?;
+        let profile = selection.profile(&p.request().scope);
+        if profile.implementation != p.request().implementation
+            || profile.configuration != p.request().configuration
+            || profile.lookback_sessions != p.request().lookback_sessions
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
+        if let Some(expected) = &self.governed
+            && expected != &profile
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
+        governance::check(&mut tx, &profile).await?;
+        let decision_publication = p
+            .decision_publication()
+            .ok_or_else(|| Error::new(Kind::Invalid))?;
+        let decision = publication::decode_decision(decision_publication)?;
+        decision
+            .bind(
+                &ResearchRecord::decode(p.outcome_bytes())
+                    .map_err(|_| Error::new(Kind::Invalid))?,
+            )
+            .map_err(|_| Error::new(Kind::Invalid))?;
         let disposition = inbox(&mut tx, p.delivery()).await?;
         let publication = p
             .publication()
@@ -192,6 +277,13 @@ impl ResearchPublication for PostgresResearchStore {
             .map_err(|_| Error::new(Kind::Invalid))?;
         let inserted=sqlx::query!("INSERT INTO edgeagent_research_completions (caller_scope,request_id,request,outcome,publication) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (caller_scope,request_id) DO NOTHING",p.request().scope,p.request().request_id,p.request_bytes(),p.outcome_bytes(),publication).execute(&mut *tx).await.map_err(storage)?.rows_affected()==1;
         if inserted {
+            let decision_bytes = decision
+                .canonical_bytes()
+                .map_err(|_| Error::new(Kind::Invalid))?;
+            let decision_envelope = decision_publication
+                .to_json()
+                .map_err(|_| Error::new(Kind::Invalid))?;
+            sqlx::query!("INSERT INTO edgeagent_research_decisions(caller_scope,request_id,configuration,decision,publication) VALUES($1,$2,$3,$4,$5)",p.request().scope,p.request().request_id,execution,decision_bytes,decision_envelope).execute(&mut *tx).await.map_err(storage)?;
             if disposition == DeliveryDisposition::Duplicate {
                 return Err(Error::new(Kind::Invalid));
             }
@@ -205,6 +297,22 @@ impl ResearchPublication for PostgresResearchStore {
                         Kind::Storage
                     };
                     Error::with_source(kind, e)
+                })?;
+            if enqueued != EnqueueDisposition::Inserted {
+                return Err(Error::new(Kind::Invalid));
+            }
+            let enqueued = PostgresOutbox
+                .enqueue(&mut tx, publication::DECISION, decision_publication)
+                .await
+                .map_err(|e| {
+                    Error::with_source(
+                        if e.kind() == OutboxErrorKind::MessageIdentityConflict {
+                            Kind::Conflict
+                        } else {
+                            Kind::Storage
+                        },
+                        e,
+                    )
                 })?;
             if enqueued != EnqueueDisposition::Inserted {
                 return Err(Error::new(Kind::Invalid));

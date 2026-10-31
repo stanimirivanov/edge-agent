@@ -83,3 +83,11 @@ that gate as not run. Equivalent live macro compilation against a fresh disposab
 schema can verify/generate the Research queries, using `SQLX_OFFLINE=false`, an
 explicit `DATABASE_URL`, and `SQLX_OFFLINE_DIR` pointing to the workspace `.sqlx`.
 This evidence does not claim the full Compose regeneration workflow ran.
+
+## M05 mandatory execution
+
+[Validated publication](validated-publication.md) supersedes the staged activation
+boundary: new completions require complete canonical configuration, sealed validation,
+current exact approval and atomic companion retention/publication. Historical receipts
+keep explicit legacy absence. Upgrade projector/Gateway metadata readers and add the
+decision consumer subject before activation; retained outcomes remain byte-identical.

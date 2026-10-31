@@ -115,6 +115,8 @@ impl Journey {
                     .chain([
                         edgeagent_research_postgres::MIGRATION,
                         edgeagent_research_postgres::lifecycle::MIGRATION,
+                        edgeagent_research_postgres::governance::MIGRATION,
+                        edgeagent_research_postgres::DECISION_MIGRATION,
                     ])
                     .collect(),
             )
@@ -137,6 +139,7 @@ impl Journey {
                 PUBLISHED.subject()?,
                 ABSTAINED.subject()?,
                 CHANGED.subject()?,
+                edgeagent_research_application::publication::DECISION.subject()?,
             ];
             subjects.extend(
                 evidence::DEFINITIONS
@@ -169,6 +172,7 @@ impl Journey {
                         PUBLISHED.subject()?,
                         ABSTAINED.subject()?,
                         CHANGED.subject()?,
+                        edgeagent_research_application::publication::DECISION.subject()?,
                     ],
                 ),
             ] {
@@ -187,6 +191,19 @@ impl Journey {
                 }
                 actual.create_consumer(config).await?;
             }
+            let store =
+                edgeagent_research_postgres::PostgresResearchStore::new(research.pool.clone());
+            for lookback in [5, 6] {
+                let bytes = execution(lookback)?.canonical_bytes()?;
+                let p = edgeagent_research_application::execution::Selection::decode(&bytes)?
+                    .profile("operator");
+                store.govern(&p, 1).await?;
+                store.govern(&p, 2).await?;
+            }
+            std::fs::write(
+                root.with_extension("execution.json"),
+                execution(5)?.canonical_bytes()?,
+            )?;
             Ok(Self {
                 gateway,
                 research,
@@ -281,7 +298,17 @@ impl Journey {
                 format!("{:032x}", 1),
             )
             .env("EDGEAGENT_RESEARCH_IMPLEMENTATION", "02".repeat(32))
-            .env("EDGEAGENT_RESEARCH_CONFIGURATION", "03".repeat(32))
+            .env(
+                "EDGEAGENT_RESEARCH_CONFIGURATION",
+                edgeagent_contracts::strategy::ExecutionConfiguration::decode(&std::fs::read(
+                    self.root.with_extension("execution.json"),
+                )?)?
+                .digest()?,
+            )
+            .env(
+                "EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION",
+                self.root.with_extension("execution.json"),
+            )
             .env("EDGEAGENT_RESEARCH_MAX_AGE_MS", "1209600000")
             .env("EDGEAGENT_RESEARCH_TTL_MS", "60000")
             .env("EDGEAGENT_PROJECTOR_SCHEMA", &self.projector.name)
@@ -386,6 +413,7 @@ impl Journey {
                     PUBLISHED.subject()?,
                     ABSTAINED.subject()?,
                     CHANGED.subject()?,
+                    edgeagent_research_application::publication::DECISION.subject()?,
                 ],
                 ack_policy: async_nats::jetstream::consumer::AckPolicy::Explicit,
                 ack_wait: Duration::from_secs(60),
@@ -447,7 +475,7 @@ impl Journey {
             .run(
                 "market",
                 "offline-seed",
-                &[&format!("{:032x}", 1), "history-v1"],
+                &[&format!("{:032x}", 1), "policy-history-v1"],
             )
             .await?;
         let payload: AcquireEvidence = serde_json::from_slice(&bytes)?;
@@ -478,11 +506,16 @@ impl Journey {
         Ok(())
     }
     pub fn intent(&self, lookback: u16) -> Result<ResearchRequest> {
+        let config = execution(lookback)?;
+        std::fs::write(
+            self.root.with_extension("execution.json"),
+            config.canonical_bytes()?,
+        )?;
         Ok(ResearchRequest {
             scope: "operator".into(),
             request_id: "qualification".into(),
             implementation: "02".repeat(32),
-            configuration: "03".repeat(32),
+            configuration: config.digest()?,
             decision_at_ms: i64::try_from(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)?
@@ -512,6 +545,7 @@ impl Journey {
         }
         self.context.delete_stream(&self.stream).await?;
         self.client.drain().await?;
+        std::fs::remove_file(self.root.with_extension("execution.json"))?;
         self.gateway.pool.close().await;
         self.research.pool.close().await;
         self.projector.pool.close().await;
@@ -534,4 +568,23 @@ impl Journey {
             Err(p) => std::panic::resume_unwind(p),
         }
     }
+}
+
+fn execution(lookback: u16) -> Result<edgeagent_contracts::strategy::ExecutionConfiguration> {
+    let mut value = edgeagent_contracts::strategy::ExecutionConfiguration::decode(include_bytes!(
+        "../../../../crates/contracts/fixtures/strategy/execution-v1.json"
+    ))?;
+    let edgeagent_contracts::strategy::ExecutionConfiguration::V1 {
+        bundle,
+        context_max_age_ms,
+        ..
+    } = &mut value;
+    let edgeagent_contracts::strategy::Configuration::V1 {
+        strategy, policy, ..
+    } = bundle;
+    strategy.expiry_ms = 60_000;
+    strategy.lookback_sessions = lookback;
+    policy.max_age_ms = 1_209_600_000;
+    *context_max_age_ms = 1_209_600_000;
+    Ok(value)
 }

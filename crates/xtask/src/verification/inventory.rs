@@ -1733,6 +1733,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "volatility_and_gap_limits_are_inclusive_and_cannot_hide_unsafe_or_missing_evidence",
                         "context_gates_use_exact_regimes_closed_windows_and_critical_freshness",
                         "independent_validation_reconciles_proposals_and_seals_typed_preparation",
+                        "complete_execution_has_no_legacy_or_unknown_revision_defaults",
                     ],
                     ignored: false,
                 });

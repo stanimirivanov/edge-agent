@@ -59,9 +59,32 @@ pub(super) async fn check(
     profile: &Profile,
 ) -> Result<(), Error> {
     let bytes = profile.bytes().map_err(|_| invalid())?;
+    // Scope-wide shared advisory fencing pairs with administration's exclusive lock.
+    // Queueing cannot overtake retirement when the immutable row itself is unchanged.
+    sqlx::query!(
+        "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))",
+        profile.scope
+    )
+    .execute(&mut **tx)
+    .await
+    .map_err(storage)?;
     let retained=sqlx::query_scalar!("SELECT profile FROM edgeagent_research_profiles WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 FOR SHARE",profile.scope,profile.implementation,profile.configuration).fetch_optional(&mut **tx).await.map_err(storage)?.ok_or_else(invalid)?;
     let action=sqlx::query_scalar!("SELECT action FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",profile.scope,profile.implementation,profile.configuration).fetch_optional(&mut **tx).await.map_err(storage)?;
     if retained != bytes || action.as_deref() != Some("approved") {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// Verify retained immutable approval evidence without requiring that it is still current.
+pub(super) async fn historical(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    profile: &Profile,
+) -> Result<(), Error> {
+    let bytes = profile.bytes().map_err(|_| invalid())?;
+    let retained=sqlx::query_scalar!("SELECT profile FROM edgeagent_research_profiles WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3",profile.scope,profile.implementation,profile.configuration).fetch_optional(&mut **tx).await.map_err(storage)?;
+    let approved=sqlx::query_scalar!(r#"SELECT EXISTS(SELECT 1 FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 AND revision=2 AND action='approved') AS "approved!""#,profile.scope,profile.implementation,profile.configuration).fetch_one(&mut **tx).await.map_err(storage)?;
+    if retained.as_deref() != Some(bytes.as_slice()) || !approved {
         return Err(invalid());
     }
     Ok(())

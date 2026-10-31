@@ -85,7 +85,7 @@ impl OwnerLoader {
             ttl_ms,
         })
     }
-    /// Bind the exact legacy environment profile for governed execution.
+    /// Bind exact environment settings; complete execution must match its canonical selection.
     pub fn governance_profile(
         &self,
         lookback_sessions: u16,
@@ -312,7 +312,7 @@ pub fn convert(
     }
     let n = usize::from(request.lookback_sessions) + 1;
     if data.bars.len() < n {
-        return Err(E::Invalid);
+        return Err(E::InsufficientHistory);
     }
     let references = |kind| {
         data.references
@@ -526,4 +526,28 @@ pub fn policy_context(
         evidence: digest(daily.digest().as_str())?,
         coverage,
     })
+}
+
+impl edgeagent_research_application::worker::ExecutionLoader for OwnerLoader {
+    async fn load_execution(
+        &self,
+        delivery: &MessageEnvelope,
+    ) -> Result<edgeagent_research_application::worker::ExecutionEvidence, E> {
+        let companion = self.load_policy(delivery).await?;
+        let edgeagent_contracts::policy_evidence::PolicyEvidence::V1 { daily, .. } = &companion;
+        let loaded = convert(
+            delivery,
+            daily.bytes(),
+            self.implementation,
+            self.configuration,
+            self.max_age_ms,
+            self.ttl_ms,
+        )?;
+        Ok(edgeagent_research_application::worker::ExecutionEvidence {
+            loaded,
+            volumes: vec![policy_volumes(&companion)?],
+            opens: vec![policy_opens(&companion)?],
+            context: vec![policy_context(&companion)?],
+        })
+    }
 }

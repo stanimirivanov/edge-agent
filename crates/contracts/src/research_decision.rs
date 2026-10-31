@@ -17,6 +17,7 @@ use DecisionContractError as Error;
 pub const MAX_DECISION_BYTES: usize = 16_384;
 /// Explicit intent, separate from historical lookback and artifact expiry.
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
     Long,
@@ -24,6 +25,7 @@ pub enum Direction {
 }
 /// Stable eligibility reason order, matching the deterministic policy revision.
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum Reason {
     InstrumentNotAllowed,
@@ -37,6 +39,7 @@ pub enum Reason {
 }
 /// Eligibility only, never strategy approval or account-risk authorization.
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     Approved,
@@ -45,6 +48,7 @@ pub enum Status {
 }
 /// Critical evidence failures must not manufacture an evaluated policy decision.
 #[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "assessment", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Assessment {
     Evaluated {
@@ -58,6 +62,7 @@ pub enum Assessment {
 }
 /// Required fields have no inferred legacy defaults. No payload-bearing Debug.
 #[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct DecisionProvenance {
     pub request: ResearchRequest,
@@ -74,8 +79,10 @@ pub struct DecisionProvenance {
     pub assessment: Assessment,
 }
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", content = "data", deny_unknown_fields)]
-enum Versioned<T> {
+/// Versioned envelope for authenticated message payload decoding. Validate the inner DTO.
+pub enum DecisionRecord<T = DecisionProvenance> {
     #[serde(rename = "research.decision.v1")]
     V1(T),
 }
@@ -134,8 +141,8 @@ impl DecisionProvenance {
         {
             return Err(Error);
         }
-        let mut bytes =
-            crate::messaging::canonical_json::to_vec(&Versioned::V1(self)).map_err(|_| Error)?;
+        let mut bytes = crate::messaging::canonical_json::to_vec(&DecisionRecord::V1(self))
+            .map_err(|_| Error)?;
         bytes.push(b'\n');
         if bytes.len() > MAX_DECISION_BYTES {
             return Err(Error);
@@ -147,7 +154,7 @@ impl DecisionProvenance {
         if bytes.len() > MAX_DECISION_BYTES {
             return Err(Error);
         }
-        let Versioned::V1(value): Versioned<Self> =
+        let DecisionRecord::V1(value): DecisionRecord<Self> =
             serde_json::from_slice(bytes).map_err(|_| Error)?;
         if value.canonical_bytes()? != bytes {
             return Err(Error);
@@ -195,4 +202,17 @@ impl DecisionProvenance {
         };
         if valid { Ok(()) } else { Err(Error) }
     }
+}
+
+/// Local structural schema; exact canonical/semantic validation remains mandatory.
+#[cfg(feature = "schema")]
+pub fn schema() -> Result<String, DecisionContractError> {
+    let schema = schemars::generate::SchemaSettings::draft2020_12()
+        .into_generator()
+        .into_root_schema_for::<DecisionRecord>();
+    let mut value = serde_json::to_value(schema).map_err(|_| Error)?;
+    value["$id"] = "urn:edgeagent:schema:research:decision:v1".into();
+    let bytes = crate::messaging::canonical_json::to_vec(&value).map_err(|_| Error)?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| Error)?;
+    Ok(serde_json::to_string_pretty(&value).map_err(|_| Error)? + "\n")
 }
