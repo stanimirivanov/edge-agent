@@ -66,6 +66,14 @@ pub fn validate(base: &ResearchArtifact, history: &[ResearchLifecycle]) -> Resul
 /// # Errors
 /// Rejects invalid contract/time or envelope construction.
 pub fn publication(event: &ResearchLifecycle, time: &str) -> Result<MessageEnvelope, Error> {
+    publication_with_cause(event, time, None)
+}
+/// Retain the exact owner decision event as causation for a configured invalidation.
+pub fn publication_with_cause(
+    event: &ResearchLifecycle,
+    time: &str,
+    cause: Option<&str>,
+) -> Result<MessageEnvelope, Error> {
     let record = ResearchRecord::Lifecycle(event.clone());
     let digest = record
         .digest()
@@ -80,7 +88,7 @@ pub fn publication(event: &ResearchLifecycle, time: &str) -> Result<MessageEnvel
             time: time.into(),
             data_schema: CHANGED.data_schema().into(),
             correlation_id: event.artifact.clone(),
-            causation_id: format!("owner-{digest}"),
+            causation_id: cause.map_or_else(|| format!("owner-{digest}"), str::to_owned),
             idempotency_key: digest.clone(),
             partition_key: partition,
             trace_parent: format!("00-1{}-1{}-01", &digest[..31], &digest[32..47]),
@@ -117,4 +125,45 @@ pub fn decode(envelope: &MessageEnvelope) -> Result<ResearchLifecycle, Error> {
         return Err(invalid());
     }
     Ok(event)
+}
+
+/// Evaluate a configured check over an intact original and optional retained validated decision.
+/// Caller authenticates retention and selected configuration; this pure function grants no authority.
+pub fn configured_change(
+    base: &ResearchArtifact,
+    effective_at_ms: i64,
+    reassessment: Option<&edgeagent_contracts::research_decision::DecisionProvenance>,
+) -> Result<Option<LifecycleChange>, Error> {
+    if effective_at_ms < base.request.decision_at_ms {
+        return Err(invalid());
+    }
+    if effective_at_ms >= base.expires_at_ms {
+        return Ok(Some(LifecycleChange::Expired));
+    }
+    let next = reassessment.ok_or_else(invalid)?;
+    next.canonical_bytes()
+        .map_err(|e| Error::with_source(Kind::Invalid, e))?;
+    let a = &base.request;
+    let b = &next.request;
+    if a.scope != b.scope
+        || a.implementation != b.implementation
+        || a.configuration != b.configuration
+        || a.instruments != b.instruments
+        || a.lookback_sessions != b.lookback_sessions
+        || a.request_id == b.request_id
+        || b.decision_at_ms <= a.decision_at_ms
+        || b.decision_at_ms > effective_at_ms
+    {
+        return Err(invalid());
+    }
+    let edgeagent_contracts::research_decision::Assessment::Evaluated { eligible, .. } =
+        &next.assessment
+    else {
+        return Err(invalid());
+    };
+    Ok(base
+        .ranking
+        .iter()
+        .any(|c| !eligible.contains(&c.instrument))
+        .then_some(LifecycleChange::Invalidated))
 }

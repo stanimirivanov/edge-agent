@@ -214,3 +214,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0100](0100-project-versioned-research-decision-provenance.md) | Accepted | Project versioned Research decision provenance. |
 | [ADR-0101](0101-commit-validated-research-decisions-with-publication.md) | Accepted | Commit validated Research decisions with publication. |
 | [ADR-0102](0102-fence-fresh-research-with-audited-kill-switches.md) | Accepted | Fence fresh Research with audited kill switches. |
+| [ADR-0103](0103-apply-configured-retained-decision-invalidation.md) | Accepted | Apply configured retained-decision invalidation. |

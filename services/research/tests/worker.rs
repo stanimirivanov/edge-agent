@@ -306,3 +306,102 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
     .await;
     db.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn configured_expiry_cli_recovers_exact_event_after_restart_without_owner_or_configuration()
+-> Result {
+    let db = Database::new().await?;
+    let result = std::panic::AssertUnwindSafe(async {
+        let mut wire = execution()?;
+        let edgeagent_contracts::strategy::ExecutionConfiguration::V1 { bundle, .. } = &mut wire;
+        let edgeagent_contracts::strategy::Configuration::V1 { strategy, .. } = bundle;
+        strategy.invalidation_revision =
+            edgeagent_research_application::execution::CONFIGURED_INVALIDATION_REVISION.into();
+        let selection =
+            edgeagent_research_application::execution::Selection::decode(&wire.canonical_bytes()?)?;
+        let binding = selection.profile("operator");
+        let (delivery, bytes) =
+            event_with_configuration("configured-expiry", binding.configuration.clone())?;
+        let profile = Profile::new(&bytes)?;
+        std::fs::write(profile.root.join("execution.json"), wire.canonical_bytes()?)?;
+        let store = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
+        store.govern(&binding, 1).await?;
+        store.govern(&binding, 2).await?;
+        async fn invoke(
+            mut command: std::process::Command,
+            input: &[u8],
+        ) -> Result<std::process::Output> {
+            use tokio::io::AsyncWriteExt as _;
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            let mut child = tokio::process::Command::from(command)
+                .kill_on_drop(true)
+                .spawn()?;
+            child.stdin.take().ok_or("stdin")?.write_all(input).await?;
+            Ok(
+                tokio::time::timeout(std::time::Duration::from_secs(30), child.wait_with_output())
+                    .await??,
+            )
+        }
+        let mut command = profile.command(&db.schema, "offline-once");
+        command.env("EDGEAGENT_RESEARCH_CONFIGURATION", &binding.configuration);
+        let first = invoke(command, &delivery.to_json()?).await?;
+        assert!(
+            first.status.success(),
+            "{}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        let ResearchRecord::Artifact(base) = ResearchRecord::decode(&first.stdout)? else {
+            return Err("artifact".into());
+        };
+        let check = edgeagent_contracts::research_invalidation::Command::V1 {
+            original: base.request,
+            effective_at_ms: base.expires_at_ms,
+            reassessment: None,
+        };
+        // Configuration and evidence adapters are not needed for a retained owner check.
+        std::fs::remove_file(profile.root.join("execution.json"))?;
+        profile.unavailable()?;
+        let mut previous = None;
+        for _ in 0..2 {
+            let output = invoke(
+                profile.command(&db.schema, "offline-invalidation-check"),
+                &check.bytes()?,
+            )
+            .await?;
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let envelope = edgeagent_contracts::MessageEnvelope::from_json(&output.stdout)?;
+            assert!(matches!(
+                edgeagent_research_application::lifecycle::decode(&envelope)?.change,
+                edgeagent_contracts::research::LifecycleChange::Expired
+            ));
+            if let Some(old) = previous {
+                assert_eq!(output.stdout, old);
+            }
+            previous = Some(output.stdout);
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_research_lifecycle")
+                .fetch_one(&db.pool)
+                .await?,
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_outbox")
+                .fetch_one(&db.pool)
+                .await?,
+            3
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    db.finish(result).await
+}

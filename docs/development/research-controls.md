@@ -83,7 +83,7 @@ not rewrite historical status or bypass entitlement and current approval checks.
 
 Rollback stops intake and preserves control history, snapshots and constraints for a
 compatible binary. Never erase disables or remove the database guard to downgrade.
-Automatic invalidation remains PR14; no public HTTP or broker control surface is added.
+Configured invalidation uses separate [retained-decision checks](research-invalidation.md); no public HTTP or broker control surface is added.
 
 ## Verification
 

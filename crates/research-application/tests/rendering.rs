@@ -1255,3 +1255,84 @@ fn complete_execution_has_no_legacy_or_unknown_revision_defaults() -> Result {
     );
     Ok(())
 }
+
+#[test]
+fn configured_invalidation_requires_complete_compatible_later_decisions() -> Result {
+    use edgeagent_contracts::{research::LifecycleChange, research_decision as d};
+    use edgeagent_research_application::lifecycle::configured_change;
+    let ResearchRecord::Artifact(mut base) =
+        ResearchRecord::decode(include_bytes!("fixtures/artifact-v1.json"))?
+    else {
+        return Err("artifact".into());
+    };
+    base.expires_at_ms = 200;
+    let mut request = base.request.clone();
+    request.request_id = "later".into();
+    request.decision_at_ms = 150;
+    let mut next = d::DecisionProvenance {
+        request,
+        outcome: "01".repeat(32),
+        policy: "02".repeat(32),
+        direction: d::Direction::Long,
+        horizon_sessions: 1,
+        approval_profile: "03".repeat(32),
+        approval_revision: 2,
+        validator: "qualified-v1".into(),
+        assessment: d::Assessment::Evaluated {
+            status: d::Status::Approved,
+            eligible: base.request.instruments.clone(),
+            reasons: vec![],
+        },
+    };
+    assert!(configured_change(&base, 150, Some(&next))?.is_none());
+    next.assessment = d::Assessment::Evaluated {
+        status: d::Status::Narrowed,
+        eligible: base.request.instruments[1..].to_vec(),
+        reasons: vec![d::Reason::RegimeNotAllowed],
+    };
+    assert!(matches!(
+        configured_change(&base, 150, Some(&next))?,
+        Some(LifecycleChange::Invalidated)
+    ));
+    next.assessment = d::Assessment::Evaluated {
+        status: d::Status::Abstained,
+        eligible: vec![],
+        reasons: vec![d::Reason::EventExcluded],
+    };
+    assert!(matches!(
+        configured_change(&base, 150, Some(&next))?,
+        Some(LifecycleChange::Invalidated)
+    ));
+    let good = next.clone();
+    for field in 0..8 {
+        let mut bad = good.clone();
+        match field {
+            0 => bad.request.scope = "foreign".into(),
+            1 => bad.request.implementation = "04".repeat(32),
+            2 => bad.request.configuration = "04".repeat(32),
+            3 => {
+                bad.request.instruments.pop().ok_or("universe")?;
+            }
+            4 => bad.request.lookback_sessions += 1,
+            5 => bad.request.request_id = base.request.request_id.clone(),
+            6 => bad.request.decision_at_ms = 100,
+            _ => bad.request.decision_at_ms = 151,
+        }
+        assert!(configured_change(&base, 150, Some(&bad)).is_err());
+    }
+    next.assessment = d::Assessment::NotEvaluated {
+        reason: AbstentionReason::InvalidEvidence,
+    };
+    assert!(configured_change(&base, 150, Some(&next)).is_err());
+    assert!(configured_change(&base, 150, None).is_err());
+    assert!(configured_change(&base, 99, None).is_err());
+    assert!(matches!(
+        configured_change(&base, 200, None)?,
+        Some(LifecycleChange::Expired)
+    ));
+    assert!(matches!(
+        configured_change(&base, 201, Some(&next))?,
+        Some(LifecycleChange::Expired)
+    ));
+    Ok(())
+}
