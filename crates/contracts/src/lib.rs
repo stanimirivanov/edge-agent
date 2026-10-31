@@ -13,6 +13,7 @@ mod messaging;
 pub mod policy_evidence;
 pub mod research;
 pub mod research_acquisition;
+pub mod research_controls;
 pub mod research_decision;
 mod routing;
 pub mod settlement;

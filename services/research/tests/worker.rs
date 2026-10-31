@@ -217,6 +217,61 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
             "synthetic outcome: {}",
             String::from_utf8_lossy(&first.stdout)
         );
+        let original_owner = std::fs::read(&profile.owner)?;
+        profile.unavailable()?;
+        for (scope, expected) in [("foreign", false), ("operator", true)] {
+            let control = edgeagent_contracts::research_controls::Command::V1 {
+                scope: scope.into(),
+                target: edgeagent_contracts::research_controls::Target::Scope,
+                revision: 1,
+                enabled: false,
+                reason_code: "maintenance".into(),
+            }
+            .bytes()?;
+            assert_eq!(
+                command(&profile, &db.schema, "offline-control", &control)
+                    .await?
+                    .status
+                    .success(),
+                expected
+            );
+        }
+        let recovered = command(&profile, &db.schema, "offline-governed-once", &input).await?;
+        assert!(recovered.status.success());
+        assert_eq!(recovered.stdout, first.stdout);
+        let (blocked, _) = support::governed_event("kill-blocked")?;
+        assert!(
+            !command(
+                &profile,
+                &db.schema,
+                "offline-governed-once",
+                &blocked.to_json()?
+            )
+            .await?
+            .status
+            .success()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_research_completions")
+                .fetch_one(&db.pool)
+                .await?,
+            1
+        );
+        let resume = edgeagent_contracts::research_controls::Command::V1 {
+            scope: "operator".into(),
+            target: edgeagent_contracts::research_controls::Target::Scope,
+            revision: 2,
+            enabled: true,
+            reason_code: "reviewed-resume".into(),
+        }
+        .bytes()?;
+        assert!(
+            command(&profile, &db.schema, "offline-control", &resume)
+                .await?
+                .status
+                .success()
+        );
+        std::fs::write(&profile.owner, original_owner)?;
         assert!(
             command(&profile, &db.schema, "offline-governance-retire", &binding)
                 .await?

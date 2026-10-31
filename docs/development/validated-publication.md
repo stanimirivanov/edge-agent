@@ -100,6 +100,7 @@ claim that canonical gate passed. Regenerate the local decision schema using
 Stop intake, relay and serving before downgrade; preserve owner data and approval
 history for a compatible binary. Rebuild disposable views from retained authenticated
 facts only. Never strip companions or disable the database requirement to downgrade.
-Kill switches, automatic invalidation and full policy-decision replay remain PR13,
+[Audited kill switches](research-controls.md) now gate fresh completion and retain the
+checked control revisions. Automatic invalidation and full policy-decision replay remain
 PR14 and PR17 respectively; the current replay verifier does not claim to verify a
 policy-denied result by recomputing a bare strategy artifact.

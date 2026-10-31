@@ -126,6 +126,8 @@ For M05 decision observations, read [decision provenance](development/decision-p
 
 For M05 mandatory publication, read [validated publication](development/validated-publication.md).
 
+For M05 operator stops, read [Research kill switches](development/research-controls.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

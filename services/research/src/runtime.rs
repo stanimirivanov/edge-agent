@@ -59,6 +59,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-governance-install"
                 | "offline-governance-approve"
                 | "offline-governance-retire"
+                | "offline-control"
                 | "offline-once"
                 | "offline-worker"
                 | "offline-relay"
@@ -135,6 +136,14 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode=="offline-control" {
+            use std::io::Read as _;
+            let mut bytes=Vec::new();std::io::stdin().take((edgeagent_contracts::research_controls::MAX_CONTROL_BYTES+1) as u64).read_to_end(&mut bytes)?;
+            let command=edgeagent_contracts::research_controls::Command::decode(&bytes)?;
+            let edgeagent_contracts::research_controls::Command::V1{scope:requested,..}=&command;
+            if requested!=&scope {return Err("foreign control scope".into());}
+            store.control(&command).await?;return Ok(());
+        }
         if mode.starts_with("offline-governance-") {
             use std::io::Read as _;
             let mut bytes=Vec::new(); std::io::stdin().take(4097).read_to_end(&mut bytes)?;
@@ -231,17 +240,21 @@ pub async fn handle(
     let mut poison = !valid;
     let mut exhausted = false;
     let mut success = false;
+    let mut disabled = false;
     if valid {
         let envelope = envelope.as_ref().map_err(|_| "invalid delivery")?;
         match worker::process_execution(store, loader, execution_selection()?, envelope, &time()?)
             .await
         {
             Ok(_) => success = true,
+            Err(error) if error.kind() == Kind::Disabled => disabled = true,
             Err(error) if error.kind() != Kind::Storage => poison = true,
             Err(_) if delivery.metadata().delivery_attempt() >= 3 => {
-                match store.recover(envelope).await? {
-                    Some(_) => success = true,
-                    None => {
+                match store.recover(envelope).await {
+                    Ok(Some(_)) => success = true,
+                    Err(error) if error.kind() == Kind::Disabled => disabled = true,
+                    Err(error) => return Err(error.into()),
+                    Ok(None) => {
                         poison = true;
                         exhausted = true;
                     }
@@ -271,7 +284,11 @@ pub async fn handle(
         tx.commit().await?;
         DeliveryDisposition::Quarantined
     } else {
-        DeliveryDisposition::RetryAfter(RetryDelay::new(Duration::from_secs(1))?)
+        DeliveryDisposition::RetryAfter(RetryDelay::new(Duration::from_secs(if disabled {
+            15
+        } else {
+            1
+        }))?)
     };
     delivery.settle(disposition).await?;
     Ok(())

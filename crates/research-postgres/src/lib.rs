@@ -1,5 +1,6 @@
 //! Research-owned exact completion/inbox/outbox transaction; no external I/O.
 #![forbid(unsafe_code)]
+pub mod controls;
 pub mod governance;
 pub mod lifecycle;
 use edgeagent_contracts::{
@@ -112,7 +113,7 @@ async fn read(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     request: &ResearchRequest,
 ) -> Result<Option<CommittedOutcome>, Error> {
-    let row=sqlx::query!("SELECT request,outcome,publication,requires_decision FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
+    let row=sqlx::query!("SELECT request,outcome,publication,requires_decision,requires_controls FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
     let Some(row) = row else {
         return Ok(None);
     };
@@ -124,7 +125,7 @@ async fn read(
         return Err(Error::new(Kind::Conflict));
     }
     let mut receipt = CommittedOutcome::decode(&row.outcome, &row.publication)?;
-    let companion=sqlx::query!("SELECT configuration,decision,publication FROM edgeagent_research_decisions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
+    let companion=sqlx::query!("SELECT configuration,decision,publication,scope_control_revision,implementation_control_revision FROM edgeagent_research_decisions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
     if let Some(companion) = companion {
         let selection =
             edgeagent_research_application::execution::Selection::decode(&companion.configuration)?;
@@ -145,6 +146,26 @@ async fn read(
         }
         selection.verify_provenance(&decision)?;
         governance::historical(tx, &profile).await?;
+        if row.requires_controls {
+            controls::historical(
+                tx,
+                &request.scope,
+                &request.implementation,
+                controls::Snapshot {
+                    scope: companion
+                        .scope_control_revision
+                        .ok_or_else(|| Error::new(Kind::Invalid))?,
+                    implementation: companion
+                        .implementation_control_revision
+                        .ok_or_else(|| Error::new(Kind::Invalid))?,
+                },
+            )
+            .await?;
+        } else if companion.scope_control_revision.is_some()
+            || companion.implementation_control_revision.is_some()
+        {
+            return Err(Error::new(Kind::Invalid));
+        }
         if decision
             .canonical_bytes()
             .map_err(|_| Error::new(Kind::Invalid))?
@@ -159,7 +180,7 @@ async fn read(
         if !intact {
             return Err(Error::new(Kind::Invalid));
         }
-    } else if row.requires_decision {
+    } else if row.requires_decision || row.requires_controls {
         return Err(Error::new(Kind::Invalid));
     }
     let retained = match receipt.record() {
@@ -259,7 +280,7 @@ impl ResearchPublication for PostgresResearchStore {
         {
             return Err(Error::new(Kind::Invalid));
         }
-        governance::check(&mut tx, &profile).await?;
+        let controls = governance::check(&mut tx, &profile).await?;
         let decision_publication = p
             .decision_publication()
             .ok_or_else(|| Error::new(Kind::Invalid))?;
@@ -283,7 +304,7 @@ impl ResearchPublication for PostgresResearchStore {
             let decision_envelope = decision_publication
                 .to_json()
                 .map_err(|_| Error::new(Kind::Invalid))?;
-            sqlx::query!("INSERT INTO edgeagent_research_decisions(caller_scope,request_id,configuration,decision,publication) VALUES($1,$2,$3,$4,$5)",p.request().scope,p.request().request_id,execution,decision_bytes,decision_envelope).execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query!("INSERT INTO edgeagent_research_decisions(caller_scope,request_id,configuration,decision,publication,scope_control_revision,implementation_control_revision) VALUES($1,$2,$3,$4,$5,$6,$7)",p.request().scope,p.request().request_id,execution,decision_bytes,decision_envelope,controls.scope,controls.implementation).execute(&mut *tx).await.map_err(storage)?;
             if disposition == DeliveryDisposition::Duplicate {
                 return Err(Error::new(Kind::Invalid));
             }

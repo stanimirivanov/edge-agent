@@ -213,3 +213,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0099](0099-reconcile-independent-research-proposals.md) | Accepted | Reconcile independent Research proposals. |
 | [ADR-0100](0100-project-versioned-research-decision-provenance.md) | Accepted | Project versioned Research decision provenance. |
 | [ADR-0101](0101-commit-validated-research-decisions-with-publication.md) | Accepted | Commit validated Research decisions with publication. |
+| [ADR-0102](0102-fence-fresh-research-with-audited-kill-switches.md) | Accepted | Fence fresh Research with audited kill switches. |
