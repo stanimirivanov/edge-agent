@@ -1731,6 +1731,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "liquidity_is_required_and_narrows_without_rescoring_or_hiding_missing_rows",
                         "volatility_and_gap_limits_are_inclusive_and_cannot_hide_unsafe_or_missing_evidence",
                         "context_gates_use_exact_regimes_closed_windows_and_critical_freshness",
+                        "independent_validation_reconciles_proposals_and_seals_typed_preparation",
                     ],
                     ignored: false,
                 });

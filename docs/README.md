@@ -120,6 +120,8 @@ For M05 volatility/gaps, read [market constraints](development/market-constraint
 
 For M05 event/regime/quality controls, read [Research context policy](development/context-policy.md).
 
+For M05 artifact reconciliation, read [Research validation](development/research-validation.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object
