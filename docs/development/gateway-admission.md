@@ -31,6 +31,12 @@ POST `/v1/research-requests` with `Content-Type: application/json` and the exist
 [`ResearchRequest`](../../crates/contracts/src/research.rs) DTO (without a record
 wrapper). JSON whitespace/key order may vary; unknown/duplicate fields fail.
 The maximum body size is 131072 bytes. Scope must match the operator configuration.
+Scope and request ID must also be routable path segments. Embedded periods are
+accepted. Whole segments `.` and `..` are rejected at admission and query, and
+such configured scopes prevent startup. Check the configured scope and any
+retained dot identifiers before upgrading. Historical Research records still
+decode with their original identifiers and are never rewritten. Retained dot
+identifiers remain unavailable through the path-based Gateway query routes.
 Instrument IDs are sorted unique nonzero 32-character lowercase hexadecimal IDs;
 implementation/configuration are nonzero 64-character lowercase hex digests.
 The existing record contract validates cutoff, lookback and all remaining bounds.

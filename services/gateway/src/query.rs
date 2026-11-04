@@ -1,6 +1,6 @@
 //! Gateway-owned bounded adapter to the projector's versioned internal read API.
 use crate::{
-    admission::{Error, Kind, valid_scope},
+    admission::{Error, Kind, valid_path_segment},
     http::local_request,
 };
 use axum::{
@@ -282,11 +282,7 @@ async fn query(
     if !local_request(&headers) || scope != state.scope {
         return reply(StatusCode::FORBIDDEN, br#"{"status":"forbidden"}"#.to_vec());
     }
-    if !valid_scope(&scope)
-        || !valid_scope(&id)
-        || matches!(id.as_str(), "." | "..")
-        || matches!(scope.as_str(), "." | "..")
-    {
+    if !valid_path_segment(&scope) || !valid_path_segment(&id) {
         return reply(
             StatusCode::BAD_REQUEST,
             br#"{"status":"invalid_request"}"#.to_vec(),

@@ -42,6 +42,9 @@ impl Server {
         Ok(Self { address, task })
     }
     async fn get(&self, path: &str, headers: &str) -> Result<String> {
+        self.request("GET", path, headers, "").await
+    }
+    async fn request(&self, method: &str, path: &str, headers: &str, body: &str) -> Result<String> {
         tokio::time::timeout(Duration::from_secs(7), async {
             let mut socket = tokio::net::TcpStream::connect(self.address).await?;
             let host = if headers.lines().any(|line| line.starts_with("Host:")) {
@@ -51,8 +54,10 @@ impl Server {
             };
             socket
                 .write_all(
-                    format!("GET {path} HTTP/1.1\r\n{host}Connection: close\r\n{headers}\r\n")
-                        .as_bytes(),
+                    format!(
+                        "{method} {path} HTTP/1.1\r\n{host}Connection: close\r\n{headers}\r\n{body}"
+                    )
+                    .as_bytes(),
                 )
                 .await?;
             let mut result = String::new();
@@ -121,9 +126,9 @@ fn body(response: &str) -> Result<&str> {
         .map(|(_, body)| body)
         .ok_or_else(|| "missing HTTP body".into())
 }
-const PATH: &str = "/v1/research-requests/offline/request-1";
+const PATH: &str = "/v1/research-requests/offline/request.1";
 fn view(status: &str, revision: u64, key: serde_json::Value) -> Vec<u8> {
-    serde_json::json!({"scope":"offline","request_id":"request-1","projection_revision":revision,"status":status,"applied_delivery_key":key}).to_string().into_bytes()
+    serde_json::json!({"scope":"offline","request_id":"request.1","projection_revision":revision,"status":status,"applied_delivery_key":key}).to_string().into_bytes()
 }
 #[tokio::test]
 async fn query_scope_host_origin_and_invalid_ids_are_refused_before_upstream() -> Result {
@@ -136,7 +141,7 @@ async fn query_scope_host_origin_and_invalid_ids_are_refused_before_upstream() -
     .await?;
     for (path, headers, code) in [
         (
-            "/v1/research-requests/foreign/request-1",
+            "/v1/research-requests/foreign/request.1",
             "X-Forwarded-Scope: offline\r\n",
             403,
         ),
@@ -184,7 +189,7 @@ async fn queries_preserve_observations_and_exact_terminal_bytes_without_forwarde
         assert_eq!(calls.len(), 1);
         assert_eq!(
             calls[0].0,
-            "/internal/v1/research-requests/offline/request-1"
+            "/internal/v1/research-requests/offline/request.1"
         );
         assert!(!calls[0].1.contains_key("authorization"));
         assert!(!calls[0].1.contains_key("x-forwarded-host"));
@@ -218,7 +223,7 @@ async fn queries_preserve_observations_and_exact_terminal_bytes_without_forwarde
     ] {
         let mut metadata: serde_json::Value =
             serde_json::from_slice(&view(status, 2, "latest".into()))?;
-        metadata["lifecycle"] = serde_json::json!({"scope":"offline","request_id":"request-1","artifact":"02".repeat(32),"revision":1,"effective_at_ms":200,"change":change});
+        metadata["lifecycle"] = serde_json::json!({"scope":"offline","request_id":"request.1","artifact":"02".repeat(32),"revision":1,"effective_at_ms":200,"change":change});
         let (gateway, _owner, _) = setup(
             200,
             serde_json::to_vec(&metadata)?,
@@ -259,14 +264,26 @@ async fn queries_preserve_observations_and_exact_terminal_bytes_without_forwarde
         include_bytes!("../../../crates/contracts/fixtures/research/v1/artifact.json").as_slice(),
         include_bytes!("../../../crates/contracts/fixtures/research/v1/abstention.json").as_slice(),
     ] {
-        let mut record = ResearchRecord::decode(bytes)?;
-        match &mut record {
-            ResearchRecord::Artifact(a) => a.request.request_id = "request-1".into(),
-            ResearchRecord::Abstention(a) => a.request.request_id = "request-1".into(),
+        let fixture =
+            std::str::from_utf8(bytes)?.replace("AAA", "00000000000000000000000000000001");
+        let mut record = ResearchRecord::decode(fixture.as_bytes())?;
+        let request = match &mut record {
+            ResearchRecord::Artifact(a) => &mut a.request,
+            ResearchRecord::Abstention(a) => &mut a.request,
             _ => return Err("terminal".into()),
-        }
+        };
+        request.request_id = "request.1".into();
+        let intent = serde_json::to_string(request)?;
+        let headers = format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            intent.len()
+        );
         let bytes = record.canonical_bytes()?;
         let (gateway, _owner, state) = setup(200, bytes.clone(), "application/json", false).await?;
+        let accepted = gateway
+            .request("POST", "/v1/research-requests", &headers, &intent)
+            .await?;
+        assert!(accepted.starts_with("HTTP/1.1 202"), "{accepted}");
         let response = gateway.get(&format!("{PATH}/outcome"), "").await?;
         assert!(response.starts_with("HTTP/1.1 200"), "{response}");
         assert_eq!(body(&response)?.as_bytes(), bytes);

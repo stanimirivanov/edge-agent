@@ -41,12 +41,12 @@ pub trait AdmissionStore: Send + Sync + 'static {
         request: ResearchRequest,
     ) -> impl std::future::Future<Output = Result<Accepted, Error>> + Send;
 }
-/// Stable ASCII operator/request scope token.
+/// Stable ASCII token usable as a Gateway path segment.
 #[must_use]
-pub fn valid_scope(scope: &str) -> bool {
-    !scope.is_empty()
-        && scope.len() <= 64
-        && scope
+pub(crate) fn valid_path_segment(segment: &str) -> bool {
+    !matches!(segment, "" | "." | "..")
+        && segment.len() <= 64
+        && segment
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
@@ -56,7 +56,7 @@ pub fn valid_scope(scope: &str) -> bool {
 pub fn validate(request: &ResearchRequest, scope: &str) -> Result<(), Error> {
     let invalid = || Error::new(Kind::Invalid);
     if request.scope != scope
-        || !valid_scope(scope)
+        || !valid_path_segment(scope)
         || request.instruments.len() > 64
         || request.instruments.iter().any(|s| {
             s.len() != 32
@@ -69,8 +69,7 @@ pub fn validate(request: &ResearchRequest, scope: &str) -> Result<(), Error> {
         || request.configuration.len() != 64
         || request.implementation.bytes().all(|b| b == b'0')
         || request.configuration.bytes().all(|b| b == b'0')
-        || request.request_id.len() > 64
-        || request.scope.len() > 64
+        || !valid_path_segment(&request.request_id)
     {
         return Err(invalid());
     }
@@ -89,7 +88,7 @@ impl PostgresAdmission {
     /// # Errors
     /// Rejects malformed scope configuration.
     pub fn new(pool: sqlx::PgPool, scope: String) -> Result<Self, Error> {
-        if !valid_scope(&scope) {
+        if !valid_path_segment(&scope) {
             return Err(Error::new(Kind::Invalid));
         }
         Ok(Self { pool, scope })
