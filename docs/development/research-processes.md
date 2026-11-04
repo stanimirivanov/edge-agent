@@ -58,6 +58,31 @@ remain `UnsupportedUniverse`; malformed retained history remains `InvalidEvidenc
 Retained older abstention receipts remain immutable and keep their original reason.
 
 
+## M05 policy qualification
+
+The M05 scenario runs two isolated journeys against the same real service
+boundaries. One selects a policy that admits the instrument. The other sets a
+liquidity floor above the invented turnover and requires an evaluated
+`LiquidityBelowMinimum` decision with a `NoEligibleCandidate` terminal result.
+Both journeys use MarketData's retained owner evidence and exercise the Research
+ledger and promotion CLI with invented trial and report evidence.
+
+A fresh completion fails before approval and while the scope control is
+disabled. The test checks for zero completion, decision, inbox and outbox rows
+before enabling the scope. The broker worker then commits under the enabled
+control revision. The actual projector serves the exact canonical decision bytes
+and Gateway exposes the same decision digest in request metadata.
+
+Replay reproduces each terminal result after the driver replaces the active
+configuration with a different selection. The admitted journey then checks the
+configured expiry rule at the retained cutoff. An exact retry returns the same
+lifecycle event. Relay and projection advance Gateway's outcome to HTTP 410,
+while the original terminal bytes and projected decision stay available for audit.
+
+This qualifies the offline process path and the declared fixtures. The trial
+and report evidence exercise ledger and approval binding rather than establish
+statistical performance.
+
 ## Bounds and cleanup
 
 Each process command is bounded, as are HTTP readiness, SQL barrier observation and
@@ -70,5 +95,5 @@ No production credentials, vendor feeds, model calls or cloud resources are used
 A passing gate does not establish public authentication, current evidence rights,
 production deployment, latency/throughput, autonomous surveillance or live execution.
 The profile remains one trusted local operator with explicit owner authority.
-No schema migration or production runtime is introduced. Rollback removes the
-acceptance harness/CI wiring; authoritative service data is unaffected.
+This qualification extends the existing acceptance harness. Its private schemas
+and streams are disposable.

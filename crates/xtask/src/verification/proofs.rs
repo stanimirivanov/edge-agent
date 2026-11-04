@@ -166,6 +166,7 @@ const RESEARCH_PROCESSES: Target = Target {
     identities: &[
         "four_process_artifact_survives_death_redelivery_rebuild_and_lifecycle",
         "four_process_owner_history_shortfall_is_a_stable_abstention",
+        "four_process_m05_promotion_policy_replay_and_configured_expiry",
     ],
 };
 const RESEARCH_REPLAY: Target = Target {
@@ -1144,8 +1145,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 158);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 158);
+        assert_eq!(inventory.len(), 159);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 159);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")
