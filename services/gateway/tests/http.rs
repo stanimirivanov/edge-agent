@@ -76,6 +76,22 @@ async fn malformed_foreign_browser_and_oversized_inputs_never_reach_storage() ->
     invalid.instruments = vec!["zero".into()];
     let mut unknown = serde_json::to_value(request())?;
     unknown["extra"] = true.into();
+    for id in [".", ".."] {
+        let mut dot = request();
+        dot.request_id = id.into();
+        let record = edgeagent_contracts::research::ResearchRecord::Request(dot.clone());
+        let bytes = record.canonical_bytes()?;
+        assert_eq!(
+            edgeagent_contracts::research::ResearchRecord::decode(&bytes)?.canonical_bytes()?,
+            bytes
+        );
+        assert!(
+            server
+                .post(&serde_json::to_vec(&dot)?, JSON)
+                .await?
+                .starts_with("HTTP/1.1 400")
+        );
+    }
     let cases = vec![
         (
             good.clone(),
@@ -155,6 +171,8 @@ fn serving_requires_explicit_loopback_database_schema_and_scope() {
         ("EDGEAGENT_GATEWAY_PROJECTOR_URL", "http://example.org"),
         ("EDGEAGENT_GATEWAY_SCHEMA", "public"),
         ("EDGEAGENT_GATEWAY_SCOPE", ""),
+        ("EDGEAGENT_GATEWAY_SCOPE", "."),
+        ("EDGEAGENT_GATEWAY_SCOPE", ".."),
     ] {
         assert!(
             Config::parse(|k| if k == key {

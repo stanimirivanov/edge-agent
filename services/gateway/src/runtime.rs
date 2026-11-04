@@ -1,6 +1,6 @@
 //! Explicit loopback serving configuration; schema preparation is an operator action.
 use crate::{
-    admission::{PostgresAdmission, valid_scope},
+    admission::{PostgresAdmission, valid_path_segment},
     http,
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
@@ -48,7 +48,7 @@ impl Config {
             return Err("invalid gateway schema");
         }
         let scope = read("EDGEAGENT_GATEWAY_SCOPE").ok_or("missing caller scope")?;
-        if !valid_scope(&scope) {
+        if !valid_path_segment(&scope) {
             return Err("invalid caller scope");
         }
         let database = PgConnectOptions::from_str(&database)
