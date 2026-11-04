@@ -174,13 +174,13 @@ pub enum ResearchRecord {
     #[serde(rename = "research.lifecycle.v1")]
     Lifecycle(ResearchLifecycle),
 }
-fn token(s: &str) -> bool {
+pub(crate) fn token(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 64
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
-fn digest(s: &str) -> bool {
+pub(crate) fn digest(s: &str) -> bool {
     s.len() == 64
         && s.bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))

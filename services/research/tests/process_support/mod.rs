@@ -118,6 +118,7 @@ impl Journey {
                         edgeagent_research_postgres::governance::MIGRATION,
                         edgeagent_research_postgres::DECISION_MIGRATION,
                         edgeagent_research_postgres::controls::MIGRATION,
+                        edgeagent_research_postgres::experiments::MIGRATION,
                     ])
                     .collect(),
             )

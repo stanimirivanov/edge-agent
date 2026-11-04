@@ -405,3 +405,89 @@ async fn configured_expiry_cli_recovers_exact_event_after_restart_without_owner_
     .await;
     db.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn experiment_ledger_cli_seals_and_exports_the_declared_census() -> Result {
+    use edgeagent_contracts::research_experiment::{
+        Action, Command, ExperimentResult, Terminal, Trial,
+    };
+    use tokio::io::AsyncWriteExt as _;
+    let db = Database::new().await?;
+    let result = std::panic::AssertUnwindSafe(async {
+        let fixture =
+            include_bytes!("../../../crates/research-application/tests/fixtures/artifact-v1.json");
+        let ResearchRecord::Artifact(artifact) = ResearchRecord::decode(fixture)? else {
+            return Err("expected fixture artifact".into());
+        };
+        let mut bytes =
+            br#"{"kind":"research.experiment.v1","publication_eligible":false,"result":"#.to_vec();
+        bytes.extend_from_slice(fixture.strip_suffix(b"\n").ok_or("fixture newline")?);
+        bytes.extend_from_slice(b"}\n");
+        let result = ExperimentResult::decode(&bytes)?;
+        let trial = artifact.request.request_id.clone();
+        let scope = artifact.request.scope.clone();
+        let mut history = Vec::new();
+        for action in [
+            Action::Register {
+                protocol: "ab".repeat(32),
+                trials: vec![Trial {
+                    request: artifact.request,
+                    evidence: artifact.evidence,
+                }],
+            },
+            Action::Finish {
+                trial: trial.clone(),
+                outcome: Terminal::Result { result },
+            },
+            Action::Select { trial },
+            Action::Read,
+        ] {
+            let reading = matches!(action, Action::Read);
+            let input = Command::V1 {
+                scope: scope.clone(),
+                family: "cli-study".into(),
+                action,
+            }
+            .bytes()?;
+            let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_edgeagent-research"))
+                .arg("offline-experiment-ledger")
+                .env(
+                    "EDGEAGENT_POSTGRES_URL",
+                    std::env::var("EDGEAGENT_POSTGRES_URL")?,
+                )
+                .env("EDGEAGENT_RESEARCH_SCHEMA", &db.schema)
+                .env("EDGEAGENT_RESEARCH_SCOPE", &scope)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()?;
+            child.stdin.take().ok_or("stdin")?.write_all(&input).await?;
+            let output =
+                tokio::time::timeout(std::time::Duration::from_secs(30), child.wait_with_output())
+                    .await??;
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            if reading {
+                assert_eq!(output.stdout, history);
+            } else {
+                assert_eq!(output.stdout, input);
+                history.extend_from_slice(&input);
+            }
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_outbox")
+                .fetch_one(&db.pool)
+                .await?,
+            0
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    db.finish(result).await
+}

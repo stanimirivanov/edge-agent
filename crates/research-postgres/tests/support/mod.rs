@@ -272,6 +272,7 @@ impl Harness {
                 edgeagent_research_postgres::governance::MIGRATION,
                 edgeagent_research_postgres::DECISION_MIGRATION,
                 edgeagent_research_postgres::controls::MIGRATION,
+                edgeagent_research_postgres::experiments::MIGRATION,
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
