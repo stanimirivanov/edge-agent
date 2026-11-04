@@ -569,6 +569,9 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
                 let control=edgeagent_contracts::research_controls::Command::V1{scope:"scope".into(),target:edgeagent_contracts::research_controls::Target::Scope,revision:1,enabled:false,reason_code:"maintenance".into()};
                 assert_eq!(PostgresResearchStore::new(guest.clone()).control(&control).await.err().ok_or("nonowner control")?.kind(),Kind::Invalid);
 
+                let original=prepared("scope","nonowner","nonowner",110,3)?;
+                let command=edgeagent_contracts::research_invalidation::Command::V1 { original:original.request().clone(),effective_at_ms:110,reassessment:None };
+                assert_eq!(PostgresResearchStore::new(guest.clone()).check_invalidation("scope",&command,TIME).await.err().ok_or("nonowner invalidation")?.kind(),Kind::Invalid);
                 Result::Ok(())
             }).catch_unwind().await;
             guest.close().await;
@@ -669,3 +672,6 @@ async fn historical_absence_recovers_but_database_refuses_unaccompanied_new_inse
 
 #[path = "persistence/controls.rs"]
 mod controls;
+
+#[path = "persistence/invalidation.rs"]
+mod invalidation;

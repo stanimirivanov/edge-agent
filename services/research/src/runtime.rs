@@ -64,6 +64,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-worker"
                 | "offline-relay"
                 | "offline-lifecycle"
+                | "offline-invalidation-check"
                 | "offline-replay"
         )
     {
@@ -164,6 +165,16 @@ async fn execute(mode: &str) -> Result {
                 edgeagent_research_application::replay::verify(&loader,&delivery,&receipt,&renderer,&momentum).await.map_err(|e|Box::new(e) as Box<dyn std::error::Error+Send+Sync>)
             }).await??;
             std::io::stdout().write_all(result.bytes())?;return Ok(());
+        }
+        if mode=="offline-invalidation-check" {
+            use std::io::{Read as _,Write as _};
+            use edgeagent_contracts::research_invalidation::{Command,MAX_COMMAND_BYTES};
+            let mut bytes=Vec::new();std::io::stdin().take((MAX_COMMAND_BYTES+1) as u64).read_to_end(&mut bytes)?;
+            let command=Command::decode(&bytes)?;
+            if let Some(event)=tokio::time::timeout(Duration::from_secs(25),store.check_invalidation(&scope,&command,&time()?)).await?? {
+                std::io::stdout().write_all(&event.to_json()?)?;
+            }
+            return Ok(());
         }
         if mode=="offline-lifecycle" {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(131_073).read_to_end(&mut bytes)?;

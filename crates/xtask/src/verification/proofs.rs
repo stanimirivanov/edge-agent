@@ -181,6 +181,7 @@ const RESEARCH_WORKER: Target = Target {
     name: "worker",
     identities: &[
         "restart_and_lost_result_recover_before_owner_read_with_one_publication",
+        "configured_expiry_cli_recovers_exact_event_after_restart_without_owner_or_configuration",
         "corrupt_and_denied_reads_abstain_while_unavailable_reads_leave_no_completion",
         "governed_processes_require_owner_approval_and_retirement_preserves_original_receipt",
     ],
@@ -239,6 +240,8 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "historical_absence_recovers_but_database_refuses_unaccompanied_new_inserts",
         "controls::controls_compose_audit_revisions_and_preserve_recovery_and_lifecycle",
         "controls::control_races_and_failures_fence_completion_and_reject_unfenced_writers",
+        "invalidation::retained_reassessments_close_only_opted_in_artifacts_and_preserve_originals",
+        "invalidation::configured_expiry_and_invalidation_rollback_atomically_and_serialize_with_owner_commands",
     ],
 };
 const PUBLISH: Target = Target {
@@ -1136,8 +1139,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 150);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 150);
+        assert_eq!(inventory.len(), 153);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 153);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

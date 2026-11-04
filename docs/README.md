@@ -128,6 +128,8 @@ For M05 mandatory publication, read [validated publication](development/validate
 
 For M05 operator stops, read [Research kill switches](development/research-controls.md).
 
+For M05 configured artifact closure, read [Research invalidation](development/research-invalidation.md).
+
 ## Route by task
 
 For native daily quality, explicit owner observation lineage and accepted object

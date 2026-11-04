@@ -26,23 +26,28 @@ pub fn prepared(
     last: i128,
     config: u8,
 ) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, last, config, true, false)
+    build(scope, id, delivery, last, (config, 100), true, false)
 }
 pub fn abstained(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, 100, 3, false, false)
+    build(scope, id, delivery, 100, (3, 100), false, false)
 }
 pub fn policy_denied(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, 110, 3, true, true)
+    build(scope, id, delivery, 110, (3, 100), true, true)
+}
+pub fn configured(id: &str, at: i64, last: i128, evidence: bool) -> Result<PreparedCompletion> {
+    build("scope", id, id, last, (14, at), evidence, false)
 }
 fn build(
     scope: &str,
     id: &str,
     delivery: &str,
     last: i128,
-    config: u8,
+    binding: (u8, i64),
     with_evidence: bool,
     deny_liquidity: bool,
 ) -> Result<PreparedCompletion> {
+    let (config, at) = binding;
+    let expiry = at + if config == 14 { 10 } else { 1 };
     let selected = SelectedInstrument {
         instrument: InstrumentId::new(1)?,
         listing: ListingId::new(1)?,
@@ -68,13 +73,13 @@ fn build(
         request_id: id.into(),
         implementation: "02".repeat(32),
         configuration: profile.configuration.clone(),
-        decision_at_ms: 100,
+        decision_at_ms: at,
         lookback_sessions: 1,
         instruments: vec![format!("{:032x}", 1)],
     };
     let policy = EvidencePolicy::new(
         PolicyBinding {
-            decision_at_ms: 100,
+            decision_at_ms: at,
             max_age_ms: 10,
             implementation: [2; 32],
             configuration: decode_digest(&profile.configuration)?,
@@ -90,8 +95,8 @@ fn build(
         implementation: [2; 32],
         configuration: decode_digest(&profile.configuration)?,
         calendar: [4; 32],
-        known_at_ms: 90,
-        rights_until_ms: 101,
+        known_at_ms: at - 10,
+        rights_until_ms: expiry,
         entitled: true,
         quality_accepted: true,
         basis: AdjustmentBasis::Raw,
@@ -102,9 +107,9 @@ fn build(
                 Ok(FrozenClose {
                     session,
                     close: UsdPrice::new(if i == 0 { 100 } else { last }, 0)?,
-                    event_at_ms: 80 + i as i64 * 10,
-                    observed_at_ms: 90,
-                    available_at_ms: 100,
+                    event_at_ms: at - 20 + i as i64 * 10,
+                    observed_at_ms: at - 10,
+                    available_at_ms: at,
                 })
             })
             .collect::<Result<Vec<_>>>()?,
@@ -164,8 +169,8 @@ fn build(
         evidence,
         coverage: edgeagent_research_domain::context_policy::Coverage::Complete {
             source: [7; 32],
-            known_at_ms: 90,
-            interval: [0, 101],
+            known_at_ms: at - 10,
+            interval: [0, expiry],
             events: vec![],
         },
     }];
@@ -173,7 +178,7 @@ fn build(
         request,
         &policy,
         if with_evidence { &data } else { &[] },
-        101,
+        expiry,
         edgeagent_research_application::governed::ContextInputs {
             constraints: edgeagent_research_application::governed::ConstraintInputs {
                 volumes: &volumes,
@@ -189,6 +194,17 @@ pub fn execution(config: u8) -> Result<edgeagent_research_application::execution
         edgeagent_contracts::strategy::ExecutionConfiguration::decode(include_bytes!(
             "../../../contracts/fixtures/strategy/execution-v1.json"
         ))?;
+    let edgeagent_contracts::strategy::ExecutionConfiguration::V1 { bundle, .. } = &mut value;
+    let edgeagent_contracts::strategy::Configuration::V1 { strategy, .. } = bundle;
+    if config == 14 {
+        strategy.invalidation_revision =
+            edgeagent_research_application::execution::CONFIGURED_INVALIDATION_REVISION.into();
+        strategy.expiry_ms = 10;
+        let edgeagent_contracts::strategy::ExecutionConfiguration::V1 {
+            allowed_regimes, ..
+        } = &mut value;
+        *allowed_regimes = vec![edgeagent_contracts::strategy::Regime::Rising];
+    }
     let edgeagent_contracts::strategy::ExecutionConfiguration::V1 { bundle, .. } = &mut value;
     let edgeagent_contracts::strategy::Configuration::V1 { policy, .. } = bundle;
     policy.max_horizon_sessions = u16::from(config);

@@ -39,7 +39,10 @@ pub fn governance_profile() -> Result<edgeagent_contracts::strategy_governance::
         .profile("operator"),
     )
 }
-fn event_with_configuration(id: &str, configuration: String) -> Result<(MessageEnvelope, Vec<u8>)> {
+pub fn event_with_configuration(
+    id: &str,
+    configuration: String,
+) -> Result<(MessageEnvelope, Vec<u8>)> {
     let mut value: serde_json::Value = serde_json::from_slice(include_bytes!(
         "../../../../crates/contracts/fixtures/evidence-v1/daily.json"
     ))?;

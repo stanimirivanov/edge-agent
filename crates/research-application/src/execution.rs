@@ -20,8 +20,10 @@ fn invalid() -> Error {
 }
 /// Existing independent control composition and explicit owner-only lifecycle semantics.
 pub const ELIGIBILITY_REVISION: &str = "selected-independent-controls-v1";
-/// Current append-only owner lifecycle; automatic configured invalidation is deferred to PR14.
+/// Legacy explicit-only owner lifecycle.
 pub const INVALIDATION_REVISION: &str = "owner-lifecycle-v1";
+/// Opt-in retained-decision eligibility invalidation and explicit-cutoff expiry.
+pub const CONFIGURED_INVALIDATION_REVISION: &str = "retained-eligibility-expiry-v1";
 /// Validated compiled execution selection. No thresholds or allowed regimes are defaulted.
 pub struct Selection {
     configuration: ExecutionConfiguration,
@@ -66,7 +68,10 @@ impl Selection {
             || s.score_revision != edgeagent_research_domain::momentum::REVISION
             || s.eligibility_revision != ELIGIBILITY_REVISION
             || s.regime_revision != context::REGIME_REVISION
-            || s.invalidation_revision != INVALIDATION_REVISION
+            || !matches!(
+                s.invalidation_revision.as_str(),
+                INVALIDATION_REVISION | CONFIGURED_INVALIDATION_REVISION
+            )
         {
             return Err(invalid());
         }
@@ -129,6 +134,12 @@ impl Selection {
             policy: gate,
             intent,
         })
+    }
+    /// Whether this immutable configuration opts into owner retained-decision checks.
+    pub fn configured_invalidation(&self) -> bool {
+        let ExecutionConfiguration::V1 { bundle, .. } = &self.configuration;
+        let Configuration::V1 { strategy, .. } = bundle;
+        strategy.invalidation_revision == CONFIGURED_INVALIDATION_REVISION
     }
     /// Exact retained configuration bytes.
     pub fn bytes(&self) -> &[u8] {

@@ -7,6 +7,8 @@
 - Projector gaps remain visible until predecessors and the original delivery are retried.
 - Gateway metadata includes the latest lifecycle fact; closed outcomes return 410.
 
+Configured opt-in checks are documented in [Research invalidation](research-invalidation.md).
+
 ## Owner command and policy
 
 Prepare every Research migration, including
