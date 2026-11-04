@@ -30,18 +30,35 @@ this local authority boundary.
 
 Apply inbox/outbox, completion and lifecycle migrations followed by
 [`0003_strategy_governance.sql`](../../crates/research-postgres/migrations/0003_strategy_governance.sql)
-in the same prepared Research schema. Migration never automatically approves anything.
+in the same prepared Research schema. Apply subsequent Research migrations through
+0007 before enabling governance commands.
 With the existing loopback `EDGEAGENT_POSTGRES_URL`, `EDGEAGENT_RESEARCH_SCHEMA` and
 `EDGEAGENT_RESEARCH_SCOPE`, pass the reviewed exact canonical profile bytes on stdin
 to these Research binary commands:
 
 - `offline-governance-install`: append revision 1, installed but not approved.
-- `offline-governance-approve`: append revision 2 for the installed baseline.
+- `offline-governance-approve` takes the promotion evidence envelope described below.
 - `offline-governance-retire`: append terminal revision 3; reapproval is forbidden.
 
 Repeating the latest identical action with the same authenticated actor is an exact
 retry. Skipped transitions, stale actions and changed definitions reject atomically.
-No general promotion of another strategy is available; PR16 adds validation evidence.
+### Promotion evidence
+
+For a new approval, supply the canonical `research.promotion.v1` envelope on stdin.
+Use the contract's [Promotion::bytes encoder](../../crates/contracts/src/research_promotion.rs).
+The envelope contains `kind` and `data`. Its data contains the installed `profile`,
+the sealed ledger `family` and selected `trial`, the SHA-256 of the canonical
+selected artifact record in `result`, and the SHA-256 of the externally retained
+owner-reviewed holdout report in `report`. Declare its interval with
+`holdout_start_ms` and `holdout_end_ms`. The start must follow all declared trial
+decision times and precede the end. Use the [experiment ledger](strategy-experiments.md)
+to retain the family first.
+
+The gate checks the declared chronology and the exact selected artifact binding.
+The report's contents, actual run chronology, and statistical methodology remain
+the owner's review responsibility. Approval and evidence commit in one immutable
+row. An identical legacy profile input can recover an existing pre-migration
+approval retry. See [ADR-0105](../decisions/0105-require-reviewed-research-promotion-evidence.md).
 
 `offline-once` and `offline-governed-once` accept the existing evidence delivery on stdin.
 Fresh execution requires the complete canonical file selected by
@@ -62,9 +79,8 @@ entitlement, strategy performance validation, or an account-risk override.
 
 [Validated publication](validated-publication.md) now requires a complete canonical
 execution configuration and approval of its new digest for every fresh completion.
-Legacy modes no longer bypass approval/validation. The profile format and explicit
-administration remain unchanged; historical receipt recovery does not transfer
-approval to a new configuration. Apply migration 0004 and provision the companion
+Legacy modes no longer bypass approval/validation. The legacy profile format still identifies installed definitions. A new configuration
+requires its own approved promotion evidence. Apply migration 0004 and provision the companion
 route/reader upgrade before new publication.
 
 Retain definitions and retirement history on rollback. Reverting to a legacy binary

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_research_approvals (caller_scope,implementation,configuration,revision,action,actor,promotion) VALUES($1,$2,$3,$4,$5,$6,$7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int2",
+        "Varchar",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b7f09d18f24a27a3fcd57286364f76764624137f2c3715930e484a14213a297"
+}

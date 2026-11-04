@@ -119,6 +119,7 @@ impl Journey {
                         edgeagent_research_postgres::DECISION_MIGRATION,
                         edgeagent_research_postgres::controls::MIGRATION,
                         edgeagent_research_postgres::experiments::MIGRATION,
+                        edgeagent_research_postgres::governance::PROMOTION_MIGRATION,
                     ])
                     .collect(),
             )
@@ -200,7 +201,9 @@ impl Journey {
                 let p = edgeagent_research_application::execution::Selection::decode(&bytes)?
                     .profile("operator");
                 store.govern(&p, 1).await?;
-                store.govern(&p, 2).await?;
+                store
+                    .promote(&promotion_fixture::retain(&store, &p).await?)
+                    .await?;
             }
             std::fs::write(
                 root.with_extension("execution.json"),
@@ -590,3 +593,6 @@ fn execution(lookback: u16) -> Result<edgeagent_contracts::strategy::ExecutionCo
     *context_max_age_ms = 1_209_600_000;
     Ok(value)
 }
+
+#[path = "../../../../crates/research-postgres/tests/support/promotion_fixture.rs"]
+pub mod promotion_fixture;

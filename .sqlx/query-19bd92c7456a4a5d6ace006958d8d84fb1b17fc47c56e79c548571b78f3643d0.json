@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT revision,action,actor FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",
+  "query": "SELECT revision,action,actor,promotion FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "actor"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "promotion",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_approvals",
+            "name": "promotion"
+          }
+        }
       }
     ],
     "parameters": {
@@ -47,8 +58,9 @@
     "nullable": [
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "1a119a167d8997fcd8de5d7c592a0d202fe33d77b41a408dd6a20ff626b2ff7d"
+  "hash": "19bd92c7456a4a5d6ace006958d8d84fb1b17fc47c56e79c548571b78f3643d0"
 }

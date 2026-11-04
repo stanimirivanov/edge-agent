@@ -17,6 +17,7 @@ pub mod research_controls;
 pub mod research_decision;
 pub mod research_experiment;
 pub mod research_invalidation;
+pub mod research_promotion;
 mod routing;
 pub mod settlement;
 pub mod simulation;

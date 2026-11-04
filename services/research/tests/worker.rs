@@ -202,10 +202,23 @@ async fn governed_processes_require_owner_approval_and_retirement_preserves_orig
                 .success()
         );
         assert!(
-            command(&profile, &db.schema, "offline-governance-approve", &binding)
+            !command(&profile, &db.schema, "offline-governance-approve", &binding)
                 .await?
                 .status
                 .success()
+        );
+        let store = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
+        let promotion = promotion_fixture::retain(&store, &support::governance_profile()?).await?;
+        assert!(
+            command(
+                &profile,
+                &db.schema,
+                "offline-governance-approve",
+                &promotion.bytes()?
+            )
+            .await?
+            .status
+            .success()
         );
         let first = command(&profile, &db.schema, "offline-governed-once", &input).await?;
         assert!(first.status.success());
@@ -327,7 +340,9 @@ async fn configured_expiry_cli_recovers_exact_event_after_restart_without_owner_
         std::fs::write(profile.root.join("execution.json"), wire.canonical_bytes()?)?;
         let store = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
         store.govern(&binding, 1).await?;
-        store.govern(&binding, 2).await?;
+        store
+            .promote(&promotion_fixture::retain(&store, &binding).await?)
+            .await?;
         async fn invoke(
             mut command: std::process::Command,
             input: &[u8],

@@ -1,18 +1,39 @@
 //! Owner-authorized append-only exact-profile governance. No caller-supplied actor identity.
 use super::{PostgresResearchStore, storage, transaction};
-use edgeagent_contracts::strategy_governance::Profile;
+use edgeagent_contracts::{research_promotion::Promotion, strategy_governance::Profile};
 use edgeagent_research_application::publication::{
     PublicationError as Error, PublicationErrorKind as Kind,
 };
 /// Apply after the completion migration, in the same private schema.
 pub const MIGRATION: &str = include_str!("../migrations/0003_strategy_governance.sql");
+/// Require reviewed evidence on newly inserted approvals.
+pub const PROMOTION_MIGRATION: &str = include_str!("../migrations/0007_research_promotion.sql");
 fn invalid() -> Error {
     Error::new(Kind::Invalid)
 }
 impl PostgresResearchStore {
-    /// Append installed (1), approved (2), or terminal retired (3), or recover an exact retry.
+    /// Install, retire, or recover an exact legacy approval retry.
     /// Schema ownership of the authenticated PostgreSQL session is local operator authority.
     pub async fn govern(&self, profile: &Profile, revision: i16) -> Result<(), Error> {
+        self.apply_governance(profile, revision, None).await
+    }
+
+    /// Approve an installed profile with its owner-reviewed promotion evidence.
+    pub async fn promote(&self, evidence: &Promotion) -> Result<(), Error> {
+        self.apply_governance(&evidence.profile, 2, Some(evidence))
+            .await
+    }
+
+    async fn apply_governance(
+        &self,
+        profile: &Profile,
+        revision: i16,
+        evidence: Option<&Promotion>,
+    ) -> Result<(), Error> {
+        let promotion = evidence
+            .map(Promotion::bytes)
+            .transpose()
+            .map_err(|e| Error::with_source(Kind::Invalid, e))?;
         let bytes = profile.bytes().map_err(|_| invalid())?;
         let action = match revision {
             1 => "installed",
@@ -37,9 +58,13 @@ impl PostgresResearchStore {
         if retained != bytes {
             return Err(Error::new(Kind::Conflict));
         }
-        let last=sqlx::query!("SELECT revision,action,actor FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",profile.scope,profile.implementation,profile.configuration).fetch_optional(&mut *tx).await.map_err(storage)?;
+        let last=sqlx::query!("SELECT revision,action,actor,promotion FROM edgeagent_research_approvals WHERE caller_scope=$1 AND implementation=$2 AND configuration=$3 ORDER BY revision DESC LIMIT 1",profile.scope,profile.implementation,profile.configuration).fetch_optional(&mut *tx).await.map_err(storage)?;
         if let Some(last) = last {
-            if last.revision == revision && last.action == action && last.actor == actor {
+            if last.revision == revision
+                && last.action == action
+                && last.actor == actor
+                && last.promotion == promotion
+            {
                 tx.commit().await.map_err(storage)?;
                 return Ok(());
             }
@@ -49,7 +74,18 @@ impl PostgresResearchStore {
         } else if revision != 1 {
             return Err(invalid());
         }
-        sqlx::query!("INSERT INTO edgeagent_research_approvals (caller_scope,implementation,configuration,revision,action,actor) VALUES ($1,$2,$3,$4,$5,$6)",profile.scope,profile.implementation,profile.configuration,revision,action,actor).execute(&mut *tx).await.map_err(storage)?;
+        if revision == 2 {
+            let evidence = evidence.ok_or_else(invalid)?;
+            // A sealed family has no further append slots. Its validated snapshot
+            // remains stable after this read while the scope lock fences approval.
+            let ledger =
+                super::experiments::retained(&mut tx, &profile.scope, &evidence.family).await?;
+            edgeagent_research_application::experiment_ledger::validate_promotion(
+                &ledger, evidence,
+            )
+            .map_err(|e| Error::with_source(Kind::Invalid, e))?;
+        }
+        sqlx::query!("INSERT INTO edgeagent_research_approvals (caller_scope,implementation,configuration,revision,action,actor,promotion) VALUES($1,$2,$3,$4,$5,$6,$7)",profile.scope,profile.implementation,profile.configuration,revision,action,actor,promotion.as_deref()).execute(&mut *tx).await.map_err(storage)?;
         tx.commit().await.map_err(storage)
     }
 }

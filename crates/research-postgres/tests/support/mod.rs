@@ -233,12 +233,17 @@ impl Harness {
             for config in [3, 9] {
                 let profile = execution(config)?.profile(scope);
                 store.govern(&profile, 1).await?;
-                store.govern(&profile, 2).await?;
+                store
+                    .promote(&promotion_fixture::retain(&store, &profile).await?)
+                    .await?;
             }
         }
         Ok(h)
     }
     pub async fn new() -> Result<Self> {
+        Self::with_promotion_migration(true).await
+    }
+    pub async fn with_promotion_migration(apply_promotion: bool) -> Result<Self> {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let options = PgConnectOptions::from_str(&std::env::var("EDGEAGENT_POSTGRES_URL")?)?;
         if options.get_host() != "localhost"
@@ -276,6 +281,11 @@ impl Harness {
             ])
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
+        }
+        if apply_promotion {
+            sqlx::raw_sql(edgeagent_research_postgres::governance::PROMOTION_MIGRATION)
+                .execute(&pool)
+                .await?;
         }
         Ok(Self {
             pool,
@@ -323,3 +333,5 @@ impl Harness {
         }
     }
 }
+
+pub mod promotion_fixture;
