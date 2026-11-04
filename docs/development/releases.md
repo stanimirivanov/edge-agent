@@ -24,7 +24,12 @@ manifests require a later reproducibility and runtime-conformance increment.
 
 The `Release OCI images` workflow runs only for pushed tags matching
 `v*.*.*`; the planner then applies strict SemVer validation before a registry
-write occurs. For each deployable it:
+write occurs. Before publishing, GitHub Actions must complete the repository
+quality workflow and the six-workspace dependency audit successfully. Both
+local workflow calls resolve from the release commit and check out the release
+event's source, with read-only repository access. Failed, skipped or cancelled
+prerequisites block every publish job. Use a tag on a revision containing this
+gate. For each deployable the publish job:
 
 1. builds the tagged source with digest-pinned build inputs;
 2. publishes version and commit-SHA tags under

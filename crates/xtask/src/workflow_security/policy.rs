@@ -34,7 +34,7 @@ pub(super) fn check(name: &str, root: &Yaml) -> Vec<String> {
         ],
         "m08-durable-execution.yml" => &["architecture", "proof"],
         "dependency-audit.yml" => &["architecture", "audit"],
-        "release-images.yml" => &["plan", "publish"],
+        "release-images.yml" => &["plan", "quality", "dependency-audit", "publish"],
         _ => return vec!["workflow needs an explicit security policy".to_owned()],
     };
     let Some(jobs) = field(root, "jobs") else {
@@ -86,6 +86,8 @@ fn triggers(name: &str, node: Option<&Yaml>) -> bool {
     let release = name == "release-images.yml";
     let expected = if release {
         &["push"][..]
+    } else if name == "repository-quality.yml" {
+        &["push", "pull_request", "workflow_call"][..]
     } else {
         &["push", "pull_request"][..]
     };
@@ -105,14 +107,37 @@ fn triggers(name: &str, node: Option<&Yaml>) -> bool {
     {
         return false;
     }
+    if name == "repository-quality.yml" && !empty_trigger(node, "workflow_call") {
+        return false;
+    }
     release
         || field(node, "pull_request").is_some_and(|value| {
             value.is_null() || value.as_hash().is_some_and(|map| map.is_empty())
         })
 }
 
+pub(super) fn empty_trigger(node: &Yaml, key: &str) -> bool {
+    field(node, key)
+        .is_some_and(|value| value.is_null() || value.as_hash().is_some_and(|map| map.is_empty()))
+}
+
 fn check_job(name: &str, job_id: &str, job: &Yaml, problems: &mut Vec<String>) {
     let location = format!("jobs.{job_id}");
+    // Local workflow calls resolve in the caller's commit and inherit contents: read.
+    if let Some(target) = match (name, job_id) {
+        ("release-images.yml", "quality") => Some("./.github/workflows/repository-quality.yml"),
+        ("release-images.yml", "dependency-audit") => {
+            Some("./.github/workflows/dependency-audit.yml")
+        }
+        _ => None,
+    } {
+        if keys(job) != Some(["uses"].into_iter().collect()) || text(job, "uses") != Some(target) {
+            problems.push(format!(
+                "{location}: must call the reviewed same-commit workflow without overrides"
+            ));
+        }
+        return;
+    }
     allowed_keys(
         job,
         &[
@@ -223,7 +248,7 @@ fn check_needs(name: &str, id: &str, job: &Yaml, problems: &mut Vec<String>) {
         | ("m08-durable-execution.yml", "proof")
         | ("dependency-audit.yml", "audit") => &["architecture"],
         ("repository-quality.yml", _) => &["architecture", "security"],
-        ("release-images.yml", "publish") => &["plan"],
+        ("release-images.yml", "publish") => &["plan", "quality", "dependency-audit"],
         _ => &[],
     };
     let valid = if expected.is_empty() {
