@@ -369,9 +369,26 @@ impl Journey {
         Ok(())
     }
     pub async fn request(&self, method: &str, path: &str, body: &[u8]) -> Result<(u16, Vec<u8>)> {
+        Self::request_at(self.gateway_address, method, path, body).await
+    }
+    pub async fn projected_decision(&self) -> Result<(u16, Vec<u8>)> {
+        Self::request_at(
+            self.projector_address,
+            "GET",
+            "/internal/v1/research-requests/operator/qualification/decision",
+            &[],
+        )
+        .await
+    }
+    async fn request_at(
+        address: std::net::SocketAddr,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<(u16, Vec<u8>)> {
         tokio::time::timeout(Duration::from_secs(25),async{
-            let mut socket=tokio::net::TcpStream::connect(self.gateway_address).await?;
-            socket.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",self.gateway_address,body.len()).as_bytes()).await?;socket.write_all(body).await?;
+            let mut socket=tokio::net::TcpStream::connect(address).await?;
+            socket.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",address,body.len()).as_bytes()).await?;socket.write_all(body).await?;
             let mut result=Vec::new();socket.take(262_145).read_to_end(&mut result).await?;
             let split=result.windows(4).position(|w|w==b"\r\n\r\n").ok_or("HTTP framing")?;
             let status=std::str::from_utf8(&result[..split])?.split_whitespace().nth(1).ok_or("HTTP status")?.parse()?;Ok((status,result[split+4..].to_vec()))
@@ -511,7 +528,13 @@ impl Journey {
         Ok(())
     }
     pub fn intent(&self, lookback: u16) -> Result<ResearchRequest> {
-        let config = execution(lookback)?;
+        self.intent_with(lookback, &execution(lookback)?)
+    }
+    pub fn intent_with(
+        &self,
+        lookback: u16,
+        config: &edgeagent_contracts::strategy::ExecutionConfiguration,
+    ) -> Result<ResearchRequest> {
         std::fs::write(
             self.root.with_extension("execution.json"),
             config.canonical_bytes()?,
@@ -575,7 +598,7 @@ impl Journey {
     }
 }
 
-fn execution(lookback: u16) -> Result<edgeagent_contracts::strategy::ExecutionConfiguration> {
+pub fn execution(lookback: u16) -> Result<edgeagent_contracts::strategy::ExecutionConfiguration> {
     let mut value = edgeagent_contracts::strategy::ExecutionConfiguration::decode(include_bytes!(
         "../../../../crates/contracts/fixtures/strategy/execution-v1.json"
     ))?;
