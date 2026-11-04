@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 103] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 104] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -536,6 +536,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 103] = [
         number: 103,
         path: "docs/decisions/0103-apply-configured-retained-decision-invalidation.md",
         title: "Apply configured retained-decision invalidation",
+    },
+    PublishedIdentity {
+        number: 104,
+        path: "docs/decisions/0104-retain-experiment-selection-evidence.md",
+        title: "Retain experiment selection evidence",
     },
 ];
 

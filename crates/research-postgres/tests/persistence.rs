@@ -551,7 +551,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         let role = format!("governance_guest_{}", h.key);
         let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&h.pool).await?;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls TO {role}"
+            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger TO {role}"
         ))).execute(&h.pool).await?;
         let guest_result = AssertUnwindSafe(async {
             let options: sqlx::postgres::PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
@@ -572,6 +572,27 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
                 let original=prepared("scope","nonowner","nonowner",110,3)?;
                 let command=edgeagent_contracts::research_invalidation::Command::V1 { original:original.request().clone(),effective_at_ms:110,reassessment:None };
                 assert_eq!(PostgresResearchStore::new(guest.clone()).check_invalidation("scope",&command,TIME).await.err().ok_or("nonowner invalidation")?.kind(),Kind::Invalid);
+                use edgeagent_contracts::research_experiment::{Action, Command, Trial};
+                let edgeagent_contracts::research::ResearchRecord::Artifact(artifact) =
+                    edgeagent_contracts::research::ResearchRecord::decode(include_bytes!(
+                        "../../research-application/tests/fixtures/artifact-v1.json"
+                    ))? else { return Err("expected artifact".into()); };
+                let command = |action| Command::V1 {
+                    scope: artifact.request.scope.clone(),
+                    family: "owner-only".into(),
+                    action,
+                };
+                let register = command(Action::Register {
+                    protocol: "ab".repeat(32),
+                    trials: vec![Trial { request: artifact.request.clone(), evidence: artifact.evidence }],
+                });
+                let owner = PostgresResearchStore::new(h.pool.clone());
+                let outsider = PostgresResearchStore::new(guest.clone());
+                let refusal = outsider.experiment_ledger(&register).await.err().ok_or("nonowner experiment registration")?;
+                assert_eq!(refusal.kind(), Kind::Invalid);
+                owner.experiment_ledger(&register).await?;
+                let refusal = outsider.experiment_ledger(&command(Action::Read)).await.err().ok_or("nonowner experiment read")?;
+                assert_eq!(refusal.kind(), Kind::Invalid);
                 Result::Ok(())
             }).catch_unwind().await;
             guest.close().await;
@@ -579,7 +600,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         }).catch_unwind().await;
         // Always revoke fixture grants and remove the login, even after failed assertions.
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
+            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
         ))).execute(&h.pool).await?;
         match guest_result { Ok(r) => r?, Err(panic) => std::panic::resume_unwind(panic) }
         Ok(())
@@ -673,5 +694,7 @@ async fn historical_absence_recovers_but_database_refuses_unaccompanied_new_inse
 #[path = "persistence/controls.rs"]
 mod controls;
 
+#[path = "persistence/experiments.rs"]
+mod experiments;
 #[path = "persistence/invalidation.rs"]
 mod invalidation;

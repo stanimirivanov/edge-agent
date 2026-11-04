@@ -37,9 +37,34 @@ Evidence-policy abstentions remain nested abstentions, never approvals.
 also fails ordinary ResearchRecord and message-envelope decoding. A caller can inspect
 or extract nested JSON for analysis; that does not grant publication authority. Keep
 the envelope when saving results so their non-approved status remains visible.
-No experiment identifier, ledger, promotion or durable trial registration is added;
-M05-PR15 supplies retained experiment/selection records. See
-[ADR-0093](../decisions/0093-isolate-experimental-research-results.md).
+## Experiment and selection ledger
+
+Apply migration 0006 after the existing Research migrations in the private schema.
+Run `edgeagent-research offline-experiment-ledger` with the loopback PostgreSQL URL,
+Research schema and scope. Use authenticated schema-owner credentials. Supply one
+canonical `research.experiment-ledger.v1` command on stdin, at most 262144 bytes.
+The `data` object contains `scope`, `family` and `action`. The action object has
+its own `action` discriminator. Use the contract's `Command::bytes` encoder for
+sorted keys and a final newline.
+
+| Action | Fields and result |
+|---|---|
+| `register` | `protocol` is the SHA-256 of the retained evaluation protocol. `trials` lists one to 64 attempts sorted by unique request ID. Each has the complete `request` and expected `evidence` census sorted by instrument and digest. |
+| `finish` | `trial` names the registered request ID. `outcome` is either `status: result` with the entire experimental envelope in `result`, or `status: failed` with a `reason` of `invalid_input`, `unavailable` or `cancelled`. |
+| `select` | `trial` names a retained artifact result after every declared attempt terminates. An abstention is terminal and cannot be selected. |
+| `read` | Returns the family's canonical records as JSON lines in commit order. |
+
+Writes echo the canonical record after commit. Retry the same bytes after losing a
+response. Use a new family for a changed protocol or attempt list. Each declared
+attempt has one terminal slot. Register separate IDs for separate runs, even when
+testing the same parameters. The selected trial points to its exact retained result
+within the sealed family.
+
+This census is scoped to declared attempts and imported records. The operator
+retains the protocol and accounts for trials performed outside the ledger.
+Database commit order establishes registration before import. Run chronology
+and statistical validation require separate evidence. See
+[ADR-0104](../decisions/0104-retain-experiment-selection-evidence.md).
 
 ## Verification and rollback
 
@@ -49,5 +74,5 @@ incompatible bindings/expiry and preserve evidence abstention. Actual command te
 use the existing invented owner-process fixture, with invalid Research database,
 schema and broker settings, and prove output separation and safe failure. They do
 not claim qualification of a live provider. A compile-fail doctest protects publication
-type separation. No database migration, new dependency or deployment change is needed;
-rollback removes the additive local command without affecting existing artifacts.
+type separation. Run the Research persistence and worker PostgreSQL gates for ledger concurrency,
+rollback and CLI export. Preserve retained rows when rolling back the ledger command.

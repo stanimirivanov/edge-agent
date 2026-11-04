@@ -4,6 +4,7 @@
 #![deny(missing_docs)]
 pub mod execution;
 pub mod experiment;
+pub mod experiment_ledger;
 pub mod governed;
 pub mod lifecycle;
 pub mod publication;

@@ -60,6 +60,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-governance-approve"
                 | "offline-governance-retire"
                 | "offline-control"
+                | "offline-experiment-ledger"
                 | "offline-once"
                 | "offline-worker"
                 | "offline-relay"
@@ -137,6 +138,25 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode == "offline-experiment-ledger" {
+            use std::io::{Read as _, Write as _};
+            use edgeagent_contracts::research_experiment::{Command, MAX_COMMAND_BYTES};
+            let mut bytes = Vec::new();
+            std::io::stdin()
+                .take((MAX_COMMAND_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)?;
+            let command = Command::decode(&bytes)?;
+            let Command::V1 { scope: requested, .. } = &command;
+            if requested != &scope {
+                return Err("foreign experiment scope".into());
+            }
+            let retained = tokio::time::timeout(
+                Duration::from_secs(25),
+                store.experiment_ledger(&command),
+            ).await??;
+            std::io::stdout().write_all(&retained)?;
+            return Ok(());
+        }
         if mode=="offline-control" {
             use std::io::Read as _;
             let mut bytes=Vec::new();std::io::stdin().take((edgeagent_contracts::research_controls::MAX_CONTROL_BYTES+1) as u64).read_to_end(&mut bytes)?;

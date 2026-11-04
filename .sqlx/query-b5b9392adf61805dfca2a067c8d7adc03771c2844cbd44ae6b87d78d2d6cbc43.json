@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ordinal,record FROM edgeagent_research_experiment_ledger WHERE caller_scope=$1 AND family=$2 ORDER BY ordinal LIMIT 67",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ordinal",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_experiment_ledger",
+            "name": "ordinal"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "record",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_research_experiment_ledger",
+            "name": "record"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b5b9392adf61805dfca2a067c8d7adc03771c2844cbd44ae6b87d78d2d6cbc43"
+}
