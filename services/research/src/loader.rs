@@ -50,16 +50,6 @@ impl OwnerLoader {
     /// # Errors
     /// Returns credential-free configuration failure.
     pub fn from_environment() -> Result<Self, &'static str> {
-        let binary = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_BINARY")?);
-        let root = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_ROOT")?);
-        if !binary.is_absolute() || !root.is_absolute() {
-            return Err("owner requires installed absolute paths");
-        }
-        let database = required("EDGEAGENT_RESEARCH_OWNER_DATABASE_URL")?;
-        crate::runtime::local(&database, &["postgres", "postgresql"])?;
-        let owner_id = required("EDGEAGENT_RESEARCH_OWNER_ACQUISITION")?;
-        EvidenceId::new(&owner_id).map_err(|_| "invalid owner acquisition")?;
-        let scope = required("EDGEAGENT_RESEARCH_SCOPE")?;
         let implementation = digest(&required("EDGEAGENT_RESEARCH_IMPLEMENTATION")?)
             .map_err(|_| "invalid research implementation")?;
         let configuration = digest(&required("EDGEAGENT_RESEARCH_CONFIGURATION")?)
@@ -70,6 +60,44 @@ impl OwnerLoader {
         let ttl_ms = required("EDGEAGENT_RESEARCH_TTL_MS")?
             .parse()
             .map_err(|_| "invalid expiry horizon")?;
+        Self::with_policy(implementation, configuration, max_age_ms, ttl_ms)
+    }
+
+    pub(crate) fn from_retained_profile(
+        profile: &edgeagent_contracts::strategy_governance::Profile,
+    ) -> Result<Self, &'static str> {
+        let implementation =
+            digest(&profile.implementation).map_err(|_| "invalid retained implementation")?;
+        let configuration =
+            digest(&profile.configuration).map_err(|_| "invalid retained configuration")?;
+        let loader = Self::with_policy(
+            implementation,
+            configuration,
+            profile.max_age_ms,
+            profile.ttl_ms,
+        )?;
+        if loader.scope != profile.scope {
+            return Err("foreign retained profile");
+        }
+        Ok(loader)
+    }
+
+    fn with_policy(
+        implementation: [u8; 32],
+        configuration: [u8; 32],
+        max_age_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<Self, &'static str> {
+        let binary = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_BINARY")?);
+        let root = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_ROOT")?);
+        if !binary.is_absolute() || !root.is_absolute() {
+            return Err("owner requires installed absolute paths");
+        }
+        let database = required("EDGEAGENT_RESEARCH_OWNER_DATABASE_URL")?;
+        crate::runtime::local(&database, &["postgres", "postgresql"])?;
+        let owner_id = required("EDGEAGENT_RESEARCH_OWNER_ACQUISITION")?;
+        EvidenceId::new(&owner_id).map_err(|_| "invalid owner acquisition")?;
+        let scope = required("EDGEAGENT_RESEARCH_SCOPE")?;
         if !(1..=2_678_400_000_i64).contains(&max_age_ms) || !(1..=300_000).contains(&ttl_ms) {
             return Err("research policy bounds exceeded");
         }

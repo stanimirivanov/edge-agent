@@ -173,7 +173,8 @@ const RESEARCH_REPLAY: Target = Target {
     name: "replay_process",
     identities: &[
         "replay_restart_and_refusals_preserve_all_retained_rows",
-        "declared_abstention_replay_checks_profile_without_reading_evidence",
+        "pinned_policy_abstention_replays_without_active_configuration",
+        "declared_abstention_replay_uses_retained_profile_without_evidence_reads",
     ],
 };
 const RESEARCH_WORKER: Target = Target {
@@ -1143,8 +1144,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 157);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 157);
+        assert_eq!(inventory.len(), 158);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 158);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

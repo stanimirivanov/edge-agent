@@ -185,13 +185,21 @@ async fn execute(mode: &str) -> Result {
             let delivery=MessageEnvelope::from_json(&bytes)?;
             if publication::evaluation_request(&delivery)?.scope!=scope {return Err("foreign replay scope".into());}
             let renderer=required("EDGEAGENT_RESEARCH_REPLAY_RENDERER")?;let momentum=required("EDGEAGENT_RESEARCH_REPLAY_MOMENTUM")?;
-            let loader=OwnerLoader::from_environment()?;
-            loader.validate_request(&publication::evaluation_request(&delivery)?)?;
             let result=tokio::time::timeout(Duration::from_secs(25),async {
-                let receipt=store.retained_for_replay(&delivery).await?.ok_or("replay completion not retained")?;
-                edgeagent_research_application::replay::verify(&loader,&delivery,&receipt,&renderer,&momentum).await.map_err(|e|Box::new(e) as Box<dyn std::error::Error+Send+Sync>)
+                use edgeagent_research_application::replay;
+                let request=publication::evaluation_request(&delivery)?;
+                let snapshot=store.retained_for_replay(&delivery).await?.ok_or("replay completion not retained")?;
+                let bytes=if let Some(selection)=snapshot.selection {
+                    let loader=OwnerLoader::from_retained_profile(&selection.profile(&request.scope))?;
+                    replay::verify_execution(&loader,&delivery,&snapshot.receipt,selection,&renderer,&momentum).await?
+                } else {
+                    let loader=OwnerLoader::from_environment()?;
+                    loader.validate_request(&request)?;
+                    replay::verify(&loader,&delivery,&snapshot.receipt,&renderer,&momentum).await?.bytes().to_vec()
+                };
+                Result::<Vec<u8>>::Ok(bytes)
             }).await??;
-            std::io::stdout().write_all(result.bytes())?;return Ok(());
+            std::io::stdout().write_all(&result)?;return Ok(());
         }
         if mode=="offline-invalidation-check" {
             use std::io::{Read as _,Write as _};

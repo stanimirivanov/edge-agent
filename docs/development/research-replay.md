@@ -4,7 +4,7 @@
 
 - `offline-replay` recalculates an existing completion and compares exact original bytes.
 - Verify the original input/inbox, completion and outbox before owner evidence reads.
-- Pin compiled code names and the existing reviewed implementation/configuration profile.
+- Validated replay uses the retained configuration and compares the full policy decision.
 - Never publish, add inbox receipts, bypass owner rights or turn read failure into success.
 
 ## Activation and retained inputs
@@ -44,14 +44,21 @@ descriptor and converts them through the existing frozen-evidence boundary. It t
 reruns deterministic eligibility, momentum, ranking and rendering and requires
 exact byte equality with the independently retained owner completion.
 
-The active owner profile must match request implementation/configuration digests.
-Those digests remain the existing trusted operator-reviewed mapping to executable
-and policy artifacts, including max-age and expiry-horizon settings. This command
-does not measure executable hashes, recover historical binaries or invent a new
-configuration format. Use the original reviewed profile; do not relabel changed
-code/configuration with an old digest. Explicit algorithm pins and byte comparison
-add checks but do not replace that provenance authority. Expiry is recalculated
-from original decision/horizon/retained rights, never current wall time.
+For a validated completion, the read-only lookup returns the same retained
+configuration it checked against the decision, historical approval and control
+snapshots. The CLI uses that configuration's implementation, age and expiry
+settings for the complete owner policy evidence read. The active worker
+configuration file and its policy environment settings are unnecessary. The
+operator still supplies the owner connection, scope and compiled revision pins.
+
+The selected validator recomputes eligibility, liquidity, volatility, gap, event,
+regime and evidence-quality policy, as well as the terminal result. Replay
+requires exact canonical equality for both the terminal bytes and the decision,
+including its eligibility set and reason codes. Stdout remains the original
+terminal record. Expiry is recalculated from decision time, horizon and retained
+rights. For receipts predating decision companions, use the legacy active owner
+profile settings and close-only verifier. See
+[ADR-0106](../decisions/0106-replay-retained-research-policy-decisions.md).
 
 Input ordering is not output identity: the pure evidence boundary orders closes
 and the renderer orders candidates/lineage. Outer envelope JSON formatting may
@@ -83,12 +90,9 @@ With an isolated loopback `EDGEAGENT_POSTGRES_URL`, run
 `cargo xtask verify --check research-replay-postgres --python python3` for actual
 independent replay processes, revision/input/corruption/read refusals and full
 completion/lifecycle/inbox/outbox row snapshots. The process proof uses an invented
-owner executable double; actual MarketData read authorization has its separate
+owner executable double, including a reason drift case with the same terminal
+abstention. Actual MarketData read authorization has its separate
 existing owner-read gate. Default acceptance protects both test inventories.
 
-Checked SQL metadata is generated against a disposable schema and compiled offline;
-the canonical SQLx gate remains required when its pinned CLI is available. Report
-unavailable tools as not run. Rollback stops replay processes and restores the prior
-binary; no replay-owned persisted state or migrations need undoing. General
-backtesting, parameter search and complete four-process qualification remain out of
-scope; the latter belongs to M04-PR15.
+Rollback stops replay processes and restores the prior binary. The schema and
+checked query statements are shared with normal Research receipt recovery.
