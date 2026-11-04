@@ -34,34 +34,22 @@ impl PostgresResearchStore {
         .execute(&mut *tx)
         .await
         .map_err(storage)?;
-        let rows = sqlx::query!("SELECT ordinal,record FROM edgeagent_research_experiment_ledger WHERE caller_scope=$1 AND family=$2 ORDER BY ordinal LIMIT 67", scope, family)
-            .fetch_all(&mut *tx).await.map_err(storage)?;
-        let mut ledger = Ledger::default();
-        for (ordinal, row) in rows.iter().enumerate() {
-            let retained =
-                Command::decode(&row.record).map_err(|e| Error::with_source(Kind::Invalid, e))?;
-            let Command::V1 {
-                scope: retained_scope,
-                family: retained_family,
-                ..
-            } = &retained;
-            if usize::try_from(row.ordinal).ok() != Some(ordinal)
-                || scope != retained_scope
-                || family != retained_family
-                || !ledger
-                    .apply(&retained)
-                    .map_err(|e| Error::with_source(Kind::Invalid, e))?
-            {
-                return Err(invalid());
-            }
-        }
+        let mut ledger = retained(&mut tx, scope, family).await?;
         let response = if matches!(action, Action::Read) {
-            if rows.is_empty() {
+            if ledger.entries().is_empty() {
                 return Err(invalid());
             }
-            rows.into_iter().flat_map(|row| row.record).collect()
+            let mut history = Vec::new();
+            for entry in ledger.entries() {
+                history.extend(
+                    entry
+                        .bytes()
+                        .map_err(|e| Error::with_source(Kind::Invalid, e))?,
+                );
+            }
+            history
         } else {
-            let ordinal = i32::try_from(rows.len()).map_err(|_| invalid())?;
+            let ordinal = i32::try_from(ledger.entries().len()).map_err(|_| invalid())?;
             if ledger
                 .apply(command)
                 .map_err(|e| Error::with_source(Kind::Invalid, e))?
@@ -74,4 +62,35 @@ impl PostgresResearchStore {
         tx.commit().await.map_err(storage)?;
         Ok(response)
     }
+}
+
+/// Reconstruct a bounded family from a single statement snapshot.
+pub(super) async fn retained(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    scope: &str,
+    family: &str,
+) -> Result<Ledger, Error> {
+    let invalid = || Error::new(Kind::Invalid);
+    let rows = sqlx::query!("SELECT ordinal,record FROM edgeagent_research_experiment_ledger WHERE caller_scope=$1 AND family=$2 ORDER BY ordinal LIMIT 67", scope, family)
+            .fetch_all(&mut **tx).await.map_err(storage)?;
+    let mut ledger = Ledger::default();
+    for (ordinal, row) in rows.iter().enumerate() {
+        let retained =
+            Command::decode(&row.record).map_err(|e| Error::with_source(Kind::Invalid, e))?;
+        let Command::V1 {
+            scope: retained_scope,
+            family: retained_family,
+            ..
+        } = &retained;
+        if usize::try_from(row.ordinal).ok() != Some(ordinal)
+            || scope != retained_scope
+            || family != retained_family
+            || !ledger
+                .apply(&retained)
+                .map_err(|e| Error::with_source(Kind::Invalid, e))?
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(ledger)
 }

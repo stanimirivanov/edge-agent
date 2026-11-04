@@ -88,3 +88,56 @@ fn same_slot(a: &Action, b: &Action) -> bool {
         _ => false,
     }
 }
+
+/// Check the exact selected artifact and the declared chronology against a retained family.
+pub fn validate_promotion(
+    ledger: &Ledger,
+    evidence: &edgeagent_contracts::research_promotion::Promotion,
+) -> Result<(), edgeagent_contracts::research_promotion::InvalidPromotion> {
+    use edgeagent_contracts::research_promotion::InvalidPromotion;
+    evidence.bytes()?;
+    let entries = ledger.entries();
+    let Some(Command::V1 {
+        scope,
+        family,
+        action: Action::Register { trials, .. },
+    }) = entries.first()
+    else {
+        return Err(InvalidPromotion);
+    };
+    let Some(Command::V1 {
+        action: Action::Select { trial },
+        ..
+    }) = entries.last()
+    else {
+        return Err(InvalidPromotion);
+    };
+    if scope != &evidence.profile.scope
+        || family != &evidence.family
+        || trial != &evidence.trial
+        || trials
+            .iter()
+            .any(|t| t.request.decision_at_ms >= evidence.holdout_start_ms)
+    {
+        return Err(InvalidPromotion);
+    }
+    for Command::V1 { action, .. } in entries {
+        if let Action::Finish {
+            trial: id,
+            outcome: Terminal::Result { result },
+        } = action
+            && id == trial
+            && let ResearchRecord::Artifact(artifact) = result.record()
+        {
+            let request = &artifact.request;
+            if request.implementation == evidence.profile.implementation
+                && request.configuration == evidence.profile.configuration
+                && request.lookback_sessions == evidence.profile.lookback_sessions
+                && result.record().digest().map_err(|_| InvalidPromotion)? == evidence.result
+            {
+                return Ok(());
+            }
+        }
+    }
+    Err(InvalidPromotion)
+}

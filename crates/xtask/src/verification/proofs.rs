@@ -243,6 +243,8 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "experiments::experiment_ledger_fences_concurrent_retries_and_recovers_an_immutable_census",
         "controls::control_races_and_failures_fence_completion_and_reject_unfenced_writers",
         "invalidation::retained_reassessments_close_only_opted_in_artifacts_and_preserve_originals",
+        "promotion::promotion_requires_sealed_matching_evidence_and_commits_atomically",
+        "promotion::promotion_migration_preserves_existing_approvals_and_recovery",
         "invalidation::configured_expiry_and_invalidation_rollback_atomically_and_serialize_with_owner_commands",
     ],
 };
@@ -1141,8 +1143,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 155);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 155);
+        assert_eq!(inventory.len(), 157);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 157);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

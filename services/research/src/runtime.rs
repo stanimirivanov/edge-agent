@@ -168,6 +168,13 @@ async fn execute(mode: &str) -> Result {
         if mode.starts_with("offline-governance-") {
             use std::io::Read as _;
             let mut bytes=Vec::new(); std::io::stdin().take(4097).read_to_end(&mut bytes)?;
+            if mode == "offline-governance-approve"
+                && let Ok(evidence) = edgeagent_contracts::research_promotion::Promotion::decode(&bytes)
+            {
+                if evidence.profile.scope != scope { return Err("foreign governance scope".into()); }
+                store.promote(&evidence).await?;
+                return Ok(());
+            }
             let profile=edgeagent_contracts::strategy_governance::Profile::decode(&bytes)?;
             if profile.scope!=scope {return Err("foreign governance scope".into());}
             let revision=match mode {"offline-governance-install"=>1,"offline-governance-approve"=>2,_=>3};

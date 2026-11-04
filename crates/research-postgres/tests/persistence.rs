@@ -444,8 +444,12 @@ async fn governed_profiles_require_approval_preserve_receipts_and_retire_permane
         changed.ttl_ms = 2;
         assert!(store.govern(&changed, 1).await.is_err());
         assert!(store.govern(&p, 3).await.is_err());
-        store.govern(&p, 2).await?;
-        store.govern(&p, 2).await?;
+        store
+            .promote(&promotion_fixture::retain(&store, &p).await?)
+            .await?;
+        store
+            .promote(&promotion_fixture::retain(&store, &p).await?)
+            .await?;
         assert!(store.recover(first.delivery()).await?.is_none());
         let receipt = store.commit(&first).await?;
         let restarted = PostgresResearchStore::governed(h.reconnect().await?, p.clone());
@@ -500,7 +504,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         let p = governance_profile()?;
         let store = PostgresResearchStore::governed(h.pool.clone(), p.clone());
         store.govern(&p, 1).await?;
-        store.govern(&p, 2).await?;
+        store.promote(&promotion_fixture::retain(&store, &p).await?).await?;
         // Hold the same definition lock retirement acquires; queue retirement before completion.
         let mut barrier = h.pool.begin().await?;
         sqlx::query("SELECT profile FROM edgeagent_research_profiles FOR UPDATE")
@@ -651,7 +655,7 @@ async fn validated_companions_are_atomic_immutable_and_required_for_fresh_comple
         // A fully evaluated policy denial retains its actual decision, not a fabricated missing-evidence result.
         let denied=policy_denied("scope","policy-denied","denial")?;
         let selected=edgeagent_research_application::execution::Selection::decode(denied.execution_bytes().ok_or("configuration")?)?;
-        let binding=selected.profile("scope");store.govern(&binding,1).await?;store.govern(&binding,2).await?;
+        let binding=selected.profile("scope");store.govern(&binding,1).await?;store.promote(&promotion_fixture::retain(&store, &binding).await?).await?;
         let denied=store.commit(&denied).await?;
         assert!(matches!(denied.record(),edgeagent_contracts::research::ResearchRecord::Abstention(a) if a.reason==edgeagent_contracts::research::AbstentionReason::NoEligibleCandidate));
         let provenance=edgeagent_research_application::publication::decode_decision(denied.decision().ok_or("denial decision")?)?;
@@ -698,3 +702,6 @@ mod controls;
 mod experiments;
 #[path = "persistence/invalidation.rs"]
 mod invalidation;
+
+#[path = "persistence/promotion.rs"]
+mod promotion;

@@ -246,7 +246,9 @@ pub async fn approve(schema: &str) -> Result {
     let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM edgeagent_research_approvals WHERE caller_scope=$1 AND configuration=$2)").bind(&binding.scope).bind(&binding.configuration).fetch_one(&pool).await?;
     if !exists {
         store.govern(&binding, 1).await?;
-        store.govern(&binding, 2).await?;
+        store
+            .promote(&promotion_fixture::retain(&store, &binding).await?)
+            .await?;
     }
     pool.close().await;
     Ok(())
@@ -267,3 +269,6 @@ pub async fn run(profile: &Profile, schema: &str, input: &[u8]) -> Result<std::p
             .await??,
     )
 }
+
+#[path = "../../../../crates/research-postgres/tests/support/promotion_fixture.rs"]
+pub mod promotion_fixture;

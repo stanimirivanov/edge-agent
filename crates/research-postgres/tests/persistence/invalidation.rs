@@ -21,7 +21,7 @@ async fn retained_reassessments_close_only_opted_in_artifacts_and_preserve_origi
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
         let profile = execution(14)?.profile("scope");
-        store.govern(&profile,1).await?; store.govern(&profile,2).await?;
+        store.govern(&profile,1).await?; store.promote(&promotion_fixture::retain(&store, &profile).await?).await?;
         let base = configured("original",100,110,true)?;
         let same = configured("same",102,110,true)?;
         let denied = configured("denied",105,90,true)?;
@@ -69,7 +69,7 @@ async fn configured_expiry_and_invalidation_rollback_atomically_and_serialize_wi
     let h = Harness::approved().await?;
     let result = AssertUnwindSafe(async {
         let store = PostgresResearchStore::new(h.pool.clone());
-        let profile=execution(14)?.profile("scope"); store.govern(&profile,1).await?;store.govern(&profile,2).await?;
+        let profile=execution(14)?.profile("scope"); store.govern(&profile,1).await?;store.promote(&promotion_fixture::retain(&store, &profile).await?).await?;
         let base=configured("expiry",100,110,true)?;store.commit(&base).await?;
         let command=check(&base,110,None);
         let before=h.counts().await?;
