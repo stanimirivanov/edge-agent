@@ -217,3 +217,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0103](0103-apply-configured-retained-decision-invalidation.md) | Accepted | Apply configured retained-decision invalidation. |
 | [ADR-0104](0104-retain-experiment-selection-evidence.md) | Accepted | Retain experiment selection evidence. |
 | [ADR-0105](0105-require-reviewed-research-promotion-evidence.md) | Accepted | Require reviewed Research promotion evidence. |
+| [ADR-0106](0106-replay-retained-research-policy-decisions.md) | Accepted | Replay retained Research policy decisions. |

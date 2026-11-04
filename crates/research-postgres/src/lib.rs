@@ -10,6 +10,7 @@ use edgeagent_contracts::{
 };
 use edgeagent_inbox_postgres::{DeliveryDisposition, InboxErrorKind, PostgresInbox};
 use edgeagent_outbox_postgres::{EnqueueDisposition, OutboxErrorKind, PostgresOutbox};
+use edgeagent_research_application::execution::Selection;
 use edgeagent_research_application::publication::{
     self, CommittedOutcome, PreparedCompletion, PublicationError as Error,
     PublicationErrorKind as Kind, ResearchPublication,
@@ -22,6 +23,14 @@ pub struct PostgresResearchStore {
     pool: sqlx::PgPool,
     governed: Option<edgeagent_contracts::strategy_governance::Profile>,
 }
+/// Intact historical completion and the selection checked with its provenance.
+pub struct ReplaySnapshot {
+    /// Original terminal result and its authenticated companion, if present.
+    pub receipt: CommittedOutcome,
+    /// Exact retained execution selection, absent on legacy receipts.
+    pub selection: Option<Selection>,
+}
+
 impl PostgresResearchStore {
     /// Bind the service-owned database pool; does not migrate or access the database.
     #[must_use]
@@ -82,15 +91,15 @@ impl PostgresResearchStore {
     pub async fn retained_for_replay(
         &self,
         delivery: &MessageEnvelope,
-    ) -> Result<Option<CommittedOutcome>, Error> {
+    ) -> Result<Option<ReplaySnapshot>, Error> {
         let request = publication::evaluation_request(delivery)?;
         let mut tx = transaction(&self.pool).await?;
         sqlx::query!("SET TRANSACTION READ ONLY")
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        let receipt = read(&mut tx, &request).await?;
-        if let Some(receipt) = &receipt {
+        let snapshot = read_snapshot(&mut tx, &request).await?;
+        if let Some(ReplaySnapshot { receipt, .. }) = &snapshot {
             let bytes = delivery
                 .to_json()
                 .map_err(|e| Error::with_source(Kind::Invalid, e))?;
@@ -104,7 +113,7 @@ impl PostgresResearchStore {
             }
         }
         tx.commit().await.map_err(storage)?;
-        Ok(receipt)
+        Ok(snapshot)
     }
 }
 fn storage(error: sqlx::Error) -> Error {
@@ -114,6 +123,14 @@ async fn read(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     request: &ResearchRequest,
 ) -> Result<Option<CommittedOutcome>, Error> {
+    Ok(read_snapshot(tx, request)
+        .await?
+        .map(|snapshot| snapshot.receipt))
+}
+async fn read_snapshot(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request: &ResearchRequest,
+) -> Result<Option<ReplaySnapshot>, Error> {
     let row=sqlx::query!("SELECT request,outcome,publication,requires_decision,requires_controls FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
     let Some(row) = row else {
         return Ok(None);
@@ -127,9 +144,8 @@ async fn read(
     }
     let mut receipt = CommittedOutcome::decode(&row.outcome, &row.publication)?;
     let companion=sqlx::query!("SELECT configuration,decision,publication,scope_control_revision,implementation_control_revision FROM edgeagent_research_decisions WHERE caller_scope=$1 AND request_id=$2",request.scope,request.request_id).fetch_optional(&mut **tx).await.map_err(storage)?;
-    if let Some(companion) = companion {
-        let selection =
-            edgeagent_research_application::execution::Selection::decode(&companion.configuration)?;
+    let selection = if let Some(companion) = companion {
+        let selection = Selection::decode(&companion.configuration)?;
         let profile = selection.profile(&request.scope);
         if profile.configuration != request.configuration
             || profile.implementation != request.implementation
@@ -181,9 +197,13 @@ async fn read(
         if !intact {
             return Err(Error::new(Kind::Invalid));
         }
-    } else if row.requires_decision || row.requires_controls {
-        return Err(Error::new(Kind::Invalid));
-    }
+        Some(selection)
+    } else {
+        if row.requires_decision || row.requires_controls {
+            return Err(Error::new(Kind::Invalid));
+        }
+        None
+    };
     let retained = match receipt.record() {
         ResearchRecord::Artifact(a) => &a.request,
         ResearchRecord::Abstention(a) => &a.request,
@@ -203,7 +223,7 @@ async fn read(
     if !intact {
         return Err(Error::new(Kind::Invalid));
     }
-    Ok(Some(receipt))
+    Ok(Some(ReplaySnapshot { receipt, selection }))
 }
 async fn transaction(pool: &sqlx::PgPool) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, Error> {
     let mut tx = pool.begin().await.map_err(storage)?;
