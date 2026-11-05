@@ -1,0 +1,27 @@
+Mozilla CA certificate data
+==========================
+
+The runtime trust bundle is copied unchanged from /etc/ssl/certs/ca-certificates.crt
+in the Rust builder image pinned by deploy/images.toml and Dockerfile.
+
+The inspected builder ships Alpine ca-certificates-bundle 20260909-r0.
+Its package metadata declares MPL-2.0 AND MIT. The certificate data is from
+Mozilla's root program. The bundled MPL-2.0 text accompanies this notice.
+
+Corresponding package source (including copyright and license notices):
+https://gitlab.alpinelinux.org/alpine/aports/-/tree/19b56f610f4f0055f155e99e1666cddcd000d01c/main/ca-certificates
+
+Mozilla root program:
+https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/
+
+Certificate data is distributed unchanged. No CA update tool or executable
+from the Alpine package is copied into the scratch runtime. Review this notice
+and the source package whenever the builder digest changes.
+
+The corresponding Mozilla certdata.txt carries this notice:
+"This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at http://mozilla.org/MPL/2.0/."
+
+Source archive:
+https://gitlab.alpinelinux.org/alpine/ca-certificates/-/archive/20260909/ca-certificates-20260909.tar.bz2

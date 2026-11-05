@@ -1383,6 +1383,7 @@ pub(super) fn checks() -> Vec<Check> {
                         "tests::cancellation_original_deadlines_and_dropped_attempts_do_not_restart_work",
                         "tests::statuses_retry_after_encodings_and_public_diagnostics_are_explicit",
                         "tests::tls_handshake_failure_never_downgrades_or_exposes_request_secrets",
+                        "tests::image_tls::native_roots_and_isolated_tls_peers",
                         "alpaca_iex::tests::iex_protocol_requires_exact_handshake_and_subscription",
                         "alpaca_iex::tests::iex_exact_trades_and_minute_bars_preserve_scope_time_and_values",
                         "alpaca_iex::tests::iex_batches_reject_ambiguity_corrections_and_partial_success",

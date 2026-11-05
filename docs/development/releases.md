@@ -104,3 +104,27 @@ remain part of repository administration.
 - Only Linux AMD64 images are produced.
 - The attached runtime SBOM complements rather than replaces the Cargo dependency SBOM retained by repository-quality CI.
 - Admission control and cloud-profile promotion enforcement belong to M09.
+
+## Native TLS roots
+
+The common scratch runtime includes the unmodified Mozilla CA bundle from the
+digest-pinned Rust/Alpine builder at `/etc/ssl/certs/ca-certificates.crt`.
+Its MPL license and source notice are installed under
+`/usr/share/licenses/ca-certificates/`. The bundle is updated by reviewing
+the builder digest, source package and notices together. Cargo dependency license
+policy applies to Rust packages; the certificate data has its own redistribution
+notice in `supply-chain/licenses/`.
+
+`cargo xtask verify image-smoke --python python3` builds a test-only derivative
+of the actual MarketData image. It adds the HTTP adapter's Rust test executable,
+runs as the runtime's non-root user with a read-only root filesystem, and grants
+only a bounded temporary filesystem. Docker networking is disabled. Loopback TLS
+peers and fresh child processes qualify the shipped native store, a generated
+trusted root, an untrusted peer, hostname mismatch and missing-store refusal.
+The generated roots exist only in the temporary test filesystem.
+
+The shipped store is loaded before test roots are injected. The trusted local
+handshake uses an explicit generated test root, while the untrusted case uses
+the shipped store. This qualifies adapter behavior and packaging without a
+public-CA endpoint, vendor request or a new production diagnostic command.
+The test executable is absent from released images.
