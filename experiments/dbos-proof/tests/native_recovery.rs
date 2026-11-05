@@ -2,11 +2,9 @@
 
 use std::{error::Error, time::Duration};
 
-use testcontainers::{
-    GenericImage,
-    core::{IntoContainerPort, WaitFor},
-    runners::AsyncRunner,
-};
+#[path = "../../support/docker.rs"]
+mod docker;
+
 use tokio::{process::Command, time::timeout};
 use tokio_postgres::NoTls;
 
@@ -17,15 +15,16 @@ const DBOS_POSTGRES_TAG_AND_DIGEST: &str =
 #[tokio::test]
 async fn completed_step_is_not_reexecuted_after_worker_process_exit() -> Result<(), Box<dyn Error>>
 {
-    let postgres = GenericImage::new(DBOS_POSTGRES_IMAGE, DBOS_POSTGRES_TAG_AND_DIGEST)
-        .with_exposed_port(5432.tcp())
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ))
-        .start()
-        .await?;
-    let host = postgres.get_host().await?.to_string();
-    let port = postgres.get_host_port_ipv4(5432.tcp()).await?;
+    let postgres = docker::Container::start(
+        &format!("{DBOS_POSTGRES_IMAGE}:{DBOS_POSTGRES_TAG_AND_DIGEST}"),
+        5432,
+        &[],
+        &[],
+        "database system is ready to accept connections",
+    )
+    .await?;
+    let host = "127.0.0.1";
+    let port = postgres.port;
     let url = format!("postgresql://postgres:postgres@{host}:{port}/dbos_test_1");
     let (client, connection) = tokio_postgres::connect(&url, NoTls).await?;
     let connection_task = tokio::spawn(connection);

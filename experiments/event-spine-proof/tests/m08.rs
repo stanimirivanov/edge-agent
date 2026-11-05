@@ -10,11 +10,9 @@ use edgeagent_messaging_nats::JetStreamPublisher;
 use serde_json::json;
 use sqlx::{Connection, PgConnection, Row};
 use std::{error::Error, io, process::Stdio, time::Duration};
-use testcontainers::{
-    GenericImage, ImageExt,
-    core::{IntoContainerPort, WaitFor},
-    runners::AsyncRunner,
-};
+#[path = "../../support/docker.rs"]
+mod docker;
+
 use tokio::process::Command;
 
 const COMMAND: MessageDefinition = MessageDefinition::command(
@@ -32,33 +30,29 @@ type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[tokio::test]
 async fn m08_event_spine_alone_does_not_resume_post_ack_step_b() -> TestResult {
-    let postgres = GenericImage::new("postgres", POSTGRES_IMAGE)
-        .with_exposed_port(5432.tcp())
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ))
-        .with_env_var("POSTGRES_DB", "m08")
-        .with_env_var("POSTGRES_USER", "m08")
-        .with_env_var("POSTGRES_PASSWORD", "m08")
-        .start()
-        .await?;
-    let nats = GenericImage::new("nats", NATS_IMAGE)
-        .with_exposed_port(4222.tcp())
-        .with_wait_for(WaitFor::message_on_stderr("Server is ready"))
-        .with_cmd(["--jetstream"])
-        .start()
-        .await?;
+    let postgres = docker::Container::start(
+        &format!("postgres:{POSTGRES_IMAGE}"),
+        5432,
+        &[
+            ("POSTGRES_DB", "m08"),
+            ("POSTGRES_USER", "m08"),
+            ("POSTGRES_PASSWORD", "m08"),
+        ],
+        &[],
+        "database system is ready to accept connections",
+    )
+    .await?;
+    let nats = docker::Container::start(
+        &format!("nats:{NATS_IMAGE}"),
+        4222,
+        &[],
+        &["--jetstream"],
+        "Server is ready",
+    )
+    .await?;
 
-    let postgres_url = format!(
-        "postgresql://m08:m08@{}:{}/m08",
-        postgres.get_host().await?,
-        postgres.get_host_port_ipv4(5432).await?
-    );
-    let nats_url = format!(
-        "nats://{}:{}",
-        nats.get_host().await?,
-        nats.get_host_port_ipv4(4222).await?
-    );
+    let postgres_url = format!("postgresql://m08:m08@{}:{}/m08", "127.0.0.1", postgres.port);
+    let nats_url = format!("nats://{}:{}", "127.0.0.1", nats.port);
     let mut database = PgConnection::connect(&postgres_url).await?;
     for migration in PostgresInbox::MIGRATIONS {
         sqlx::raw_sql(migration).execute(&mut database).await?;
