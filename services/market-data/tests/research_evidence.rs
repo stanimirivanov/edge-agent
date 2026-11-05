@@ -38,10 +38,12 @@ async fn pending_research_restarts_and_reordered_duplicates_reuse_one_acquisitio
             .write(true)
             .open(h.root.join("offline.lock"))?;
         owner_lock.try_lock()?;
+        // Exceed pipe capacity so an early lock refusal deterministically closes stdin.
+        let busy_input = vec![b' '; 1_048_576];
         let busy = h
             .run(
                 &["offline-research-read", "00000000000000000000000000000001"],
-                Some(&one.to_json()?),
+                Some(&busy_input),
             )
             .await?;
         assert_eq!(busy.status.code(), Some(75));

@@ -14,3 +14,9 @@
 !crates/**
 !services/
 !services/**
+!supply-chain/
+supply-chain/*
+!supply-chain/licenses/
+supply-chain/licenses/*
+!supply-chain/licenses/MPL-2.0.txt
+!supply-chain/licenses/ca-certificates-NOTICE.txt

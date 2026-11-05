@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 
 
@@ -251,6 +252,20 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
 
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
     problems.extend(check_sqlx_build_inputs(dockerfile))
+    runtime_lines: set[str] = set()
+    in_runtime = False
+    for line in dockerfile.splitlines():
+        line = line.strip()
+        if line.startswith("FROM "):
+            in_runtime = line == "FROM scratch AS runtime"
+        elif in_runtime:
+            runtime_lines.add(line)
+    for instruction, label in [
+        ("COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt", "native CA bundle"),
+        ("COPY supply-chain/licenses/ /usr/share/licenses/ca-certificates/", "CA redistribution notices"),
+    ]:
+        if instruction not in runtime_lines:
+            problems.append(Problem("Dockerfile", f"missing runtime {label}"))
     if contract is not None:
         required_fragments = {
             f"# syntax={contract.dockerfile_frontend}": "pinned Dockerfile frontend",
@@ -353,6 +368,51 @@ def _run(command: list[str], *, root: Path, capture: bool = False) -> subprocess
     )
 
 
+def smoke_native_tls(root: Path) -> list[Problem]:
+    """Run the real HTTP adapter in the shipped MarketData filesystem."""
+    compiler = "edgeagent-ci/tls-builder:test"
+    proof = "edgeagent-ci/tls-proof:test"
+    recipe = r"""FROM edgeagent-ci/tls-builder:test AS compiler
+RUN cargo test --locked --release -p edgeagent-market-data-http --lib --no-run \
+    && find target/release/deps -maxdepth 1 -type f -name 'edgeagent_market_data_http-*' -perm -111 -exec cp {} /tls-proof \;
+FROM edgeagent-ci/market-data:test
+COPY --from=compiler /tls-proof /tls-proof
+ENTRYPOINT ["/tls-proof"]
+"""
+    try:
+        commands = [
+            ["docker", "build", "--target", "builder", "--build-arg", "SERVICE=market-data", "--tag", compiler, "."],
+        ]
+        with tempfile.TemporaryDirectory(prefix="edgeagent-image-tls-") as temporary:
+            dockerfile = Path(temporary) / "Dockerfile"
+            dockerfile.write_text(recipe, encoding="utf-8")
+            commands.extend([
+                ["docker", "build", "--file", str(dockerfile), "--tag", proof, "."],
+                ["docker", "run", "--rm", "--network=none", "--read-only",
+                 "--tmpfs", "/tmp:rw,nosuid,nodev,size=4m,mode=1777",
+                 "--cap-drop=ALL", "--security-opt=no-new-privileges=true",
+                 proof, "--exact", "tests::image_tls::native_roots_and_isolated_tls_peers",
+                 "--nocapture"],
+            ])
+            for command in commands:
+                is_probe = command[1] == "run"
+                result = subprocess.run(
+                    command, cwd=root, check=False, timeout=60 if is_probe else 1800,
+                    capture_output=is_probe, text=True,
+                )
+                if is_probe:
+                    print(result.stdout)
+                    print(result.stderr, file=sys.stderr)
+                    if "1 passed; 0 failed" not in result.stdout:
+                        return [Problem("market-data", "native TLS test was not executed")]
+                if result.returncode != 0:
+                    return [Problem("market-data", "native TLS image qualification failed")]
+        return []
+    finally:
+        for tag in [proof, compiler]:
+            _run(["docker", "image", "rm", "--force", tag], root=root, capture=True)
+
+
 def smoke_images(
     root: Path,
     contract: BuildContract,
@@ -433,6 +493,9 @@ def smoke_images(
                 problems.append(Problem(spec.service, "locked-down descriptor smoke test failed"))
             else:
                 problems.extend(check_descriptor(spec, run.stdout))
+
+        if not problems:
+            problems.extend(smoke_native_tls(root))
 
         invalid = _run(
             [

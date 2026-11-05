@@ -21,7 +21,7 @@ class VerifyImagesTests(unittest.TestCase):
     def fixture(self, directory: str) -> Path:
         source = Path(__file__).parents[1]
         root = Path(directory)
-        paths = ["Dockerfile", ".dockerignore", "rust-toolchain.toml", "deploy/images.toml"]
+        paths = ["Dockerfile", ".dockerignore", "rust-toolchain.toml", "deploy/images.toml", "supply-chain/licenses/MPL-2.0.txt", "supply-chain/licenses/ca-certificates-NOTICE.txt"]
         paths.extend(f"services/{service}/Cargo.toml" for service in verify_images.EXPECTED_SERVICES)
         for relative in paths:
             target = root / relative
@@ -47,6 +47,19 @@ class VerifyImagesTests(unittest.TestCase):
                     path.write_text(changed, encoding="utf-8")
                     _, _, problems = verify_images.verify(root)
                     self.assertTrue(any(reason in problem.message for problem in problems), problems)
+
+    def test_runtime_requires_native_ca_bundle_and_notices(self) -> None:
+        for instruction, label in [
+            ("COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt", "native CA bundle"),
+            ("COPY supply-chain/licenses/ /usr/share/licenses/ca-certificates/", "CA redistribution notices"),
+        ]:
+            for replacement in ["", f"# {instruction}", f"FROM scratch AS unrelated\\n{instruction}"]:
+                with self.subTest(label=label, replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                    root = self.fixture(directory)
+                    path = root / "Dockerfile"
+                    path.write_text(path.read_text(encoding="utf-8").replace(instruction, replacement), encoding="utf-8")
+                    _, _, problems = verify_images.verify(root)
+                    self.assertTrue(any(label in p.message for p in problems), problems)
 
     def test_sqlx_context_inputs_cannot_be_excluded(self) -> None:
         for pattern in ["!.cargo/", ".cargo/*", "!.cargo/config.toml", "!.sqlx/", ".sqlx/*", "!.sqlx/query-*.json"]:

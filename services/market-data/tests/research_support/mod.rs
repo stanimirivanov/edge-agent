@@ -133,12 +133,24 @@ async fn run(
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
-    if let Some(bytes) = input {
-        child.stdin.take().ok_or("stdin")?.write_all(bytes).await?;
-    }
-    // Closing stdin makes a one-record read finite even with no input.
-    drop(child.stdin.take());
-    Ok(tokio::time::timeout(Duration::from_secs(60), child.wait_with_output()).await??)
+    tokio::time::timeout(Duration::from_secs(60), async move {
+        let written = if let Some(bytes) = input {
+            child.stdin.take().ok_or("stdin")?.write_all(bytes).await
+        } else {
+            Ok(())
+        };
+        // A lock/authority refusal may exit before consuming input. Collect its
+        // actual status, but never accept a successful child after a partial write.
+        drop(child.stdin.take());
+        let output = child.wait_with_output().await?;
+        if let Err(error) = written
+            && (error.kind() != std::io::ErrorKind::BrokenPipe || output.status.success())
+        {
+            return Err(error.into());
+        }
+        Result::Ok(output)
+    })
+    .await?
 }
 pub fn delivery(request: &ResearchRequest, id: &str) -> Result<MessageEnvelope> {
     let (key, partition) = research_acquisition::binding(request)?;

@@ -32,7 +32,7 @@ url.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
-tokio = { workspace = true, features = ["net", "io-util", "sync", "test-util"] }
+tokio = { workspace = true, features = ["net", "io-util", "sync", "test-util", "process"] }
 
 [lints]
 workspace = true

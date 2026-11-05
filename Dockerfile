@@ -36,6 +36,10 @@ LABEL org.opencontainers.image.title="edgeagent-${SERVICE}" \
 
 COPY --from=builder --chown=65532:65532 /out/edgeagent-service /edgeagent-service
 
+# Mozilla roots from the same immutable builder; certificate data license travels with it.
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY supply-chain/licenses/ /usr/share/licenses/ca-certificates/
+
 USER 65532:65532
 ENTRYPOINT ["/edgeagent-service"]
 CMD ["help"]
