@@ -50,6 +50,35 @@ async fn worker(
     command.kill_on_drop(true);
     Ok(tokio::time::timeout(Duration::from_secs(40), command.output()).await??)
 }
+// Exercise the operator entry point without installing or changing approval.
+async fn recover(
+    profile: &Profile,
+    schema: &str,
+    bytes: &[u8],
+    scope: &str,
+) -> Result<std::process::Output> {
+    use tokio::io::AsyncWriteExt as _;
+    let mut command = profile.command(schema, "offline-once");
+    command.env("EDGEAGENT_RESEARCH_SCOPE", scope);
+    let mut child = tokio::process::Command::from(command)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    child.stdin.take().ok_or("stdin")?.write_all(bytes).await?;
+    Ok(tokio::time::timeout(Duration::from_secs(30), child.wait_with_output()).await??)
+}
+async fn recovery_state(db: &Database) -> Result<(i64, i64, i64, i64)> {
+    Ok(sqlx::query_as(
+        "SELECT (SELECT count(*) FROM edgeagent_research_completions),
+         (SELECT count(*) FROM edgeagent_research_decisions),
+         (SELECT count(*) FROM edgeagent_message_inbox),
+         (SELECT count(*) FROM edgeagent_message_outbox)",
+    )
+    .fetch_one(&db.pool)
+    .await?)
+}
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and NATS via EDGEAGENT_POSTGRES_URL and EDGEAGENT_NATS_URL"]
 async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_completion() -> Result {
@@ -177,8 +206,9 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             1
         );
         controls.control(&control(3, false)).await?;
-        let (blocked, _) = support::governed_event("disabled")?;
-        context
+        let before_delivery = consumer.info().await?.delivered.consumer_sequence;
+        let (blocked, owner_bytes) = support::governed_event("disabled")?;
+        let blocked_ack = context
             .publish(DECIDED.subject()?, blocked.to_json()?.into())
             .await?
             .await?;
@@ -204,12 +234,78 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             .fetch_one(&db.pool)
             .await?
         );
-        let retained = stream
-            .get_last_raw_message_by_subject(&DECIDED.subject()?)
-            .await?;
+        let retained = stream.get_raw_message(blocked_ack.sequence).await?;
         assert_eq!(
             MessageEnvelope::from_json(&retained.payload)?.to_json()?,
             blocked.to_json()?
+        );
+        assert_eq!(
+            consumer.info().await?.delivered.consumer_sequence,
+            before_delivery + 3
+        );
+        let recovery_profile = Profile::new(&owner_bytes)?;
+        let before = recovery_state(&db).await?;
+        let bytes = retained.payload.to_vec();
+        assert!(
+            !recover(&recovery_profile, &db.schema, &bytes, "operator")
+                .await?
+                .status
+                .success()
+        );
+        assert_eq!(recovery_state(&db).await?, before);
+        // Missing sequence refuses, without falling back to the latest subject message.
+        assert!(
+            stream
+                .get_raw_message(blocked_ack.sequence + 1000)
+                .await
+                .is_err()
+        );
+        assert_eq!(recovery_state(&db).await?, before);
+        controls.control(&control(4, true)).await?;
+        assert!(
+            !recover(&recovery_profile, &db.schema, &bytes, "foreign")
+                .await?
+                .status
+                .success()
+        );
+        assert_eq!(recovery_state(&db).await?, before);
+        let recovered = recover(&recovery_profile, &db.schema, &bytes, "operator").await?;
+        assert!(
+            recovered.status.success(),
+            "{}",
+            String::from_utf8_lossy(&recovered.stderr)
+        );
+        assert!(matches!(
+            edgeagent_contracts::research::ResearchRecord::decode(&recovered.stdout)?,
+            edgeagent_contracts::research::ResearchRecord::Artifact(_)
+        ));
+        assert_eq!(
+            recovery_state(&db).await?,
+            (before.0 + 1, before.1 + 1, before.2 + 1, before.3 + 2)
+        );
+        let inbox: Vec<u8> =
+            sqlx::query_scalar("SELECT envelope FROM edgeagent_message_inbox WHERE message_id=$1")
+                .bind(blocked.id())
+                .fetch_one(&db.pool)
+                .await?;
+        assert_eq!(inbox, bytes);
+        let after = recovery_state(&db).await?;
+        recovery_profile.unavailable()?;
+        let retry = recover(&recovery_profile, &db.schema, &bytes, "operator").await?;
+        assert!(retry.status.success());
+        assert_eq!(retry.stdout, recovered.stdout);
+        assert_eq!(recovery_state(&db).await?, after);
+        assert_eq!(
+            consumer.info().await?.delivered.consumer_sequence,
+            before_delivery + 3
+        );
+        assert_eq!(
+            stream
+                .get_raw_message(blocked_ack.sequence)
+                .await?
+                .payload
+                .as_ref(),
+            bytes
         );
         Ok(())
     })

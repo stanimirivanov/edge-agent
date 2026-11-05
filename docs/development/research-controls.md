@@ -72,8 +72,8 @@ Disabled is an administrative refusal, not an evidence abstention or malformed m
 The broker worker retries after 15 seconds and does not acknowledge, record successful
 inbox/progress or quarantine the valid delivery merely because a switch is disabled.
 At the configured three-delivery ceiling it remains unresolved in the retained stream.
-After an audited resume, use the reviewed consumer-reset/replay procedure if the delivery
-budget was exhausted. Resume does not automatically reset consumers or change IDs.
+Use the single-message recovery procedure below when the delivery budget is exhausted.
+Resume does not automatically reset consumers or change IDs.
 
 Previously committed outbox events still drain, preserving the atomic publication promise.
 Exact receipts recover while disabled without new owner reads or permission for new
@@ -84,6 +84,61 @@ not rewrite historical status or bypass entitlement and current approval checks.
 Rollback stops intake and preserves control history, snapshots and constraints for a
 compatible binary. Never erase disables or remove the database guard to downgrade.
 Configured invalidation uses separate [retained-decision checks](research-invalidation.md); no public HTTP or broker control surface is added.
+
+## Recover one exhausted delivery
+
+This procedure applies to the trusted local operator profile. It uses the existing
+`offline-once` entry point and keeps the exhausted consumer intact. The broker proof
+uses an invented owner process, actual PostgreSQL/JetStream and the actual Research
+binary. It qualifies processing and retained identity, with current production owner
+rights still checked by the installed owner adapter.
+
+1. Stop Research intake for the affected scope and identify the exact broker account,
+   stream, consumer and exhausted **stream sequence** from retained delivery/advisory
+   evidence. Record a private recovery ticket with the scope, request ID, message
+   source/ID and the independently verified reason for resumption. Consumer sequence
+   is a different counter. Never select the latest message on the subject.
+2. With a read-authorized operator identity, request the exact message through
+   JetStream `$JS.API.STREAM.MSG.GET.<stream>` with JSON `{"seq":<sequence>}`.
+   The existing Rust client exposes this as `stream.get_raw_message(sequence)`.
+   Use a finite timeout and cap the encoded API response at 400000 bytes.
+   After base64 decoding, enforce the existing 262144-byte envelope ceiling. Authenticate the account/stream separately. Confirm the returned
+   sequence and subject, then decode the response's base64 data into a private file.
+   Preserve the exact envelope bytes, including all correlation and causation fields.
+   Missing, retired, mismatched or unverifiable evidence stops recovery.
+3. Validate the envelope and its Research request against the recovery ticket. Keep
+   evidence files and broker responses outside Git and logs under the applicable
+   licensed retention policy. Grant only exact-stream message-read and reply access
+   for retrieval. This local profile still trusts the operator administering files.
+4. Apply the reviewed consecutive enabling revision using `offline-control` and the
+   existing schema-owner authority. Inspect both scope and implementation switches,
+   the approved exact profile and the configured owner read authority. Enabling one
+   switch does not override another disable. The command below independently checks
+   the same current publication fences at commit.
+5. In the existing configured Research environment, submit the private envelope file:
+
+   ```sh
+   edgeagent-research offline-once < retained-envelope.json > recovered-outcome.json
+   ```
+
+   Closed stdin is required. The command bounds input and processing. Require a
+   successful exit and inspect the canonical outcome, including an explicit
+   abstention if owner evidence is no longer eligible. A disabled switch, foreign
+   scope or unavailable dependency is a refusal, with no new successful completion.
+6. Preserve the canonical receipt and audited enable revision in the private ticket.
+   After a lost response, retry the exact same bytes. An existing receipt recovers
+   before a new owner read. Drain committed publication through the existing bounded
+   `offline-relay` configuration and verify the projected outcome.
+7. Resume intake after verification. The original stream entry and exhausted durable
+   remain retained. Manual processing does not ACK, delete, reset or replenish that
+   durable. If it is redelivered by a separately authorized future broker action,
+   normal receipt-first processing deduplicates it. Close the operational incident
+   using the receipt, not a claim that the broker's pending count was cleared.
+
+A scope or profile change during recovery can refuse processing. Retain the same
+input and diagnose before retrying. Never change IDs, republish to bypass limits,
+erase control history or substitute newer market evidence. Restoring an absent
+message requires a separately approved retained-evidence recovery procedure.
 
 ## Verification
 
