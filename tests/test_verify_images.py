@@ -61,6 +61,17 @@ class VerifyImagesTests(unittest.TestCase):
                     _, _, problems = verify_images.verify(root)
                     self.assertTrue(any(label in p.message for p in problems), problems)
 
+    def test_research_owner_binary_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory)
+            path = root / "Dockerfile"
+            path.write_text("\n".join(
+                line for line in path.read_text(encoding="utf-8").splitlines()
+                if "edgeagent-owner" not in line
+            ) + "\n", encoding="utf-8")
+            _, _, problems = verify_images.verify(root)
+            self.assertTrue(any("packaged owner" in p.message for p in problems), problems)
+
     def test_sqlx_context_inputs_cannot_be_excluded(self) -> None:
         for pattern in ["!.cargo/", ".cargo/*", "!.cargo/config.toml", "!.sqlx/", ".sqlx/*", "!.sqlx/query-*.json"]:
             with self.subTest(pattern=pattern), tempfile.TemporaryDirectory() as directory:
