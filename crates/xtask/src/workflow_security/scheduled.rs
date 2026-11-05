@@ -8,8 +8,10 @@ pub(super) fn triggers(node: &Yaml) -> bool {
     let Some(actual) = keys(node) else {
         return false;
     };
-    let scheduled = ["schedule"].into_iter().collect();
-    let manual = ["schedule", "workflow_dispatch"].into_iter().collect();
+    let scheduled = ["schedule", "workflow_call"].into_iter().collect();
+    let manual = ["schedule", "workflow_call", "workflow_dispatch"]
+        .into_iter()
+        .collect();
     if actual != scheduled && actual != manual {
         return false;
     }
@@ -23,6 +25,7 @@ pub(super) fn triggers(node: &Yaml) -> bool {
                 })
         });
     schedule_valid
+        && super::policy::empty_trigger(node, "workflow_call")
         && field(node, "workflow_dispatch").is_none_or(|dispatch| {
             dispatch.is_null() || dispatch.as_hash().is_some_and(|map| map.is_empty())
         })

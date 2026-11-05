@@ -51,8 +51,11 @@ runtime proofs, SBOMs, credentials, or write permissions. Other workflows keep
 their existing PR/main or release-tag triggers. Checkout disables
 credential persistence and cannot override its token, repository, ref, SSH,
 or PR protection. The scanner checkout uses `fetch-depth: 0`; a shallow
-history cannot satisfy the historical scan. Unreviewed workflows, privileged
-triggers, additional schedules/manual triggers, reusable workflows, runners,
+history cannot satisfy the historical scan. The release workflow may call exactly the repository quality and dependency
+audit workflows from its own commit, with no inputs or secret inheritance.
+Publication requires both calls and the release planner to succeed.
+Unreviewed workflows, privileged
+triggers, additional schedules/manual triggers, other reusable calls, runners,
 credentials, and optional validation
 steps require an explicit policy change, not a convenient bypass.
 

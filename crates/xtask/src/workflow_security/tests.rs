@@ -911,3 +911,44 @@ fn missing_and_additional_workflows_cannot_escape_inventory()
     );
     Ok(())
 }
+
+#[test]
+fn release_publication_rejects_a_plan_only_dependency() {
+    let name = "release-images.yml";
+    let detached = source(name).replace("needs: [plan, quality, dependency-audit]", "needs: plan");
+    assert!(
+        check_source(name, &detached)
+            .iter()
+            .any(|problem| problem.contains("jobs.publish.needs")),
+        "publication must depend on both verification workflows"
+    );
+}
+
+#[test]
+fn release_calls_cannot_be_redirected_skipped_or_granted_secrets() {
+    let name = "release-images.yml";
+    for path in ["repository-quality.yml", "dependency-audit.yml"] {
+        let call = format!("    uses: ./.github/workflows/{path}");
+        for replacement in [
+            format!("{call}@main"),
+            format!("{call}\n    if: false"),
+            format!("{call}\n    secrets: inherit"),
+            format!("{call}\n    with:\n      ref: main"),
+            format!("{call}\n    permissions: write-all"),
+        ] {
+            reject(name, &call, &replacement, "reviewed same-commit workflow");
+        }
+        reject(
+            path,
+            "  workflow_call:\n",
+            "  workflow_call:\n    inputs:\n      ref:\n        type: string\n",
+            "workflow.on",
+        );
+    }
+    reject(
+        name,
+        "    needs: [plan, quality, dependency-audit]",
+        "    needs: [plan, quality, dependency-audit]\n    if: always()",
+        "unreviewed keys",
+    );
+}

@@ -47,9 +47,15 @@ jobs:
           --registry "${RELEASE_REGISTRY}"
           --github-output "$GITHUB_OUTPUT"
 
+  quality:
+    uses: ./.github/workflows/repository-quality.yml
+
+  dependency-audit:
+    uses: ./.github/workflows/dependency-audit.yml
+
   publish:
     name: Publish ${{ matrix.service }}
-    needs: plan
+    needs: [plan, quality, dependency-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
