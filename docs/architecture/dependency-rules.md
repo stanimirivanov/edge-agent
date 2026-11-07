@@ -80,9 +80,9 @@ dependencies between workspace packages:
 | `edgeagent-messaging-nats` | `edgeagent-contracts`, `edgeagent-messaging` |
 | `edgeagent-service-runtime` | `edgeagent-contracts` |
 | `edgeagent-market-data` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-market-data-replay`, `edgeagent-market-data-postgres`, `edgeagent-market-data-object-store`, `edgeagent-market-data-http`, `edgeagent-simulation-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
-| `edgeagent-gateway` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-outbox-postgres`, `edgeagent-research-application` |
+| `edgeagent-gateway` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-outbox-postgres`, `edgeagent-research-application`, `edgeagent-telemetry` |
 | `edgeagent-research` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-research-application`, `edgeagent-research-domain`, `edgeagent-research-postgres`, `edgeagent-market-data-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-telemetry` |
-| `edgeagent-audit-projector` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-audit-domain`, `edgeagent-research-application`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
+| `edgeagent-audit-projector` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-audit-domain`, `edgeagent-research-application`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-telemetry` |
 | Other service composition roots | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |
 

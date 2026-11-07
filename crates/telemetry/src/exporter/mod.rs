@@ -12,7 +12,7 @@ use opentelemetry_sdk::{
     metrics::{PeriodicReader, SdkMeterProvider, Stream, Temporality},
     trace::{BatchConfigBuilder, BatchSpanProcessor, Sampler, SdkTracerProvider},
 };
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tracing_subscriber::prelude::*;
 
 type ExportError = Box<dyn std::error::Error + Send + Sync>;
@@ -78,7 +78,17 @@ impl Telemetry {
             return Err("ambient OTEL configuration rejected".into());
         }
         // Construct blocking HTTP transport outside the application's Tokio runtime.
+        // Reqwest may initialize TLS even for the loopback HTTP endpoint.
+        // Supply the pinned provider locally without process-wide TLS state.
+        let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()?
+        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_no_client_auth();
         let client = reqwest::blocking::Client::builder()
+            .tls_backend_preconfigured(tls)
+            .tls_sslkeylogfile(false)
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())

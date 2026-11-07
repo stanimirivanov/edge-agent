@@ -24,6 +24,97 @@ async fn research_exports_bounded_signals_and_survives_stalled_collector() -> Re
     h.finish(tested).await
 }
 
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL/NATS and the Research process gate"]
+async fn gateway_and_projector_export_without_depending_on_collector_success() -> Result {
+    for accepted in [true, false] {
+        let mut h = Journey::new().await?;
+        let tested = AssertUnwindSafe(qualify_handoff(&mut h, accepted))
+            .catch_unwind()
+            .await;
+        h.finish(tested).await?;
+    }
+    Ok(())
+}
+
+async fn qualify_handoff(h: &mut Journey, accepted: bool) -> Result {
+    let mut gateway = Receiver::start().await?;
+    let mut projector = Receiver::start().await?;
+    gateway.mode(u8::from(!accepted));
+    projector.mode(u8::from(!accepted));
+    h.seed_history().await?;
+    h.start_servers_with_gateway_otlp(Some(&gateway.endpoint))
+        .await?;
+    submit(h, 5).await?;
+    h.run("research", "offline-worker", &[]).await?;
+    h.run("research", "offline-relay", &[]).await?;
+    for _ in 0..2 {
+        let mut command = h.command("projector", "offline-worker")?;
+        let output = tokio::time::timeout(
+            Duration::from_secs(12),
+            command
+                .env("EDGEAGENT_PROJECTOR_OTLP_ENDPOINT", &projector.endpoint)
+                .output(),
+        )
+        .await??;
+        assert!(
+            output.status.success(),
+            "projector failed with {}",
+            output.status
+        );
+    }
+    let stream = h.context.get_stream(&h.stream).await?;
+    let consumer: async_nats::jetstream::consumer::PullConsumer =
+        stream.get_consumer("projector").await?;
+    assert_eq!(consumer.cached_info().num_ack_pending, 0);
+    assert_eq!(consumer.cached_info().delivered.consumer_sequence, 2);
+    let retained: Vec<u8> =
+        sqlx::query_scalar("SELECT outcome FROM edgeagent_research_completions")
+            .fetch_one(&h.research.pool)
+            .await?;
+    assert_eq!(
+        h.request(
+            "GET",
+            "/v1/research-requests/operator/qualification/outcome",
+            &[]
+        )
+        .await?,
+        (200, retained),
+    );
+    // Gateway is still serving. Wait for the background reader and trace batch.
+    tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            {
+                let records = gateway.records()?;
+                if records.iter().any(|r| matches!(r.wire, Wire::Traces(_)))
+                    && records.iter().any(|r| matches!(r.wire, Wire::Metrics(_)))
+                {
+                    return Ok::<_, TestError>(());
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .map_err(|_| "Gateway did not emit both signal types")??;
+    assert_wire(
+        &gateway.records()?,
+        "edgeagent.gateway",
+        "serve",
+        &["persistence"],
+        accepted,
+    )?;
+    assert_wire(
+        &projector.records()?,
+        "edgeagent.audit-projector",
+        "offline-worker",
+        &["acknowledgement", "handling"],
+        accepted,
+    )?;
+    gateway.close().await?;
+    projector.close().await
+}
+
 async fn qualify(h: &mut Journey) -> Result {
     h.seed_history().await?;
     h.start_servers().await?;
@@ -61,7 +152,13 @@ async fn qualify(h: &mut Journey) -> Result {
         .await?;
     // A fresh process recovers the receipt and resumes healthy export.
     run(h, "offline-worker", &collector, true).await?;
-    assert_wire(&collector.records()?[rejected..])?;
+    assert_wire(
+        &collector.records()?[rejected..],
+        "edgeagent.research",
+        "offline-worker",
+        &["acknowledgement", "handling"],
+        true,
+    )?;
 
     let stream = h.context.get_stream(&h.stream).await?;
     let consumer: async_nats::jetstream::consumer::PullConsumer =
@@ -84,15 +181,6 @@ async fn qualify(h: &mut Journey) -> Result {
 
 async fn run(h: &Journey, mode: &str, collector: &Receiver, enabled: bool) -> Result {
     let mut child = h.command("research", mode)?;
-    for (key, _) in std::env::vars_os() {
-        if key
-            .as_encoded_bytes()
-            .get(..5)
-            .is_some_and(|p| p.eq_ignore_ascii_case(b"OTEL_"))
-        {
-            child.env_remove(key);
-        }
-    }
     child.env_remove(ENDPOINT);
     if enabled {
         child.env(ENDPOINT, &collector.endpoint);
@@ -123,11 +211,27 @@ fn value<'a>(attrs: &'a [KeyValue], key: &str) -> Option<&'a str> {
     }
 }
 
-fn assert_wire(records: &[Record]) -> Result {
+fn assert_wire(
+    records: &[Record],
+    service: &str,
+    role: &str,
+    expected_stages: &[&str],
+    accepted: bool,
+) -> Result {
+    let research = service == "edgeagent.research";
+    let valid_outcome = |outcome| {
+        outcome == Some("succeeded")
+            || (service == "edgeagent.gateway" && outcome == Some("duplicate"))
+    };
     let mut stages = BTreeSet::new();
     let mut instruments = BTreeSet::new();
     for record in records {
-        assert!(record.accepted);
+        assert_eq!(record.accepted, accepted);
+        if !research {
+            for private in [b"operator".as_slice(), b"qualification"] {
+                assert!(!record.bytes.windows(private.len()).any(|w| w == private));
+            }
+        }
         for private in [
             b"\"request_id\"".as_slice(),
             b"\"lookback_sessions\"",
@@ -144,11 +248,8 @@ fn assert_wire(records: &[Record]) -> Result {
                         .ok_or("missing trace resource")?
                         .attributes;
                     assert_eq!(attrs.len(), 2);
-                    assert_eq!(value(attrs, "service.name"), Some("edgeagent.research"));
-                    assert_eq!(
-                        value(attrs, "edgeagent.worker.role"),
-                        Some("offline-worker")
-                    );
+                    assert_eq!(value(attrs, "service.name"), Some(service));
+                    assert_eq!(value(attrs, "edgeagent.worker.role"), Some(role));
                     for span in group.scope_spans.iter().flat_map(|s| &s.spans) {
                         assert_eq!(span.name, "edgeagent.event_spine.operation");
                         assert!(span.attributes.iter().all(|a| matches!(
@@ -165,7 +266,11 @@ fn assert_wire(records: &[Record]) -> Result {
                                 | "causation_id"
                                 | "transport_message_key"
                         )));
-                        assert_eq!(value(&span.attributes, "event_outcome"), Some("succeeded"));
+                        if !research {
+                            assert_eq!(span.attributes.len(), 5);
+                            assert!(span.links.is_empty());
+                        }
+                        assert!(valid_outcome(value(&span.attributes, "event_outcome")));
                         stages
                             .insert(value(&span.attributes, "event_stage").ok_or("missing stage")?);
                     }
@@ -179,11 +284,8 @@ fn assert_wire(records: &[Record]) -> Result {
                         .ok_or("missing metric resource")?
                         .attributes;
                     assert_eq!(attrs.len(), 2);
-                    assert_eq!(value(attrs, "service.name"), Some("edgeagent.research"));
-                    assert_eq!(
-                        value(attrs, "edgeagent.worker.role"),
-                        Some("offline-worker")
-                    );
+                    assert_eq!(value(attrs, "service.name"), Some(service));
+                    assert_eq!(value(attrs, "edgeagent.worker.role"), Some(role));
                     for metric in group.scope_metrics.iter().flat_map(|s| &s.metrics) {
                         instruments.insert(metric.name.as_str());
                         let attributes: Vec<_> = match metric.data.as_ref() {
@@ -200,18 +302,18 @@ fn assert_wire(records: &[Record]) -> Result {
                         assert!(!attributes.is_empty());
                         for labels in attributes {
                             assert_eq!(labels.len(), 2);
-                            assert!(matches!(
-                                value(labels, "stage"),
-                                Some("handling" | "acknowledgement")
-                            ));
-                            assert_eq!(value(labels, "outcome"), Some("succeeded"));
+                            assert!(
+                                value(labels, "stage")
+                                    .is_some_and(|stage| expected_stages.contains(&stage))
+                            );
+                            assert!(valid_outcome(value(labels, "outcome")));
                         }
                     }
                 }
             }
         }
     }
-    assert_eq!(stages, BTreeSet::from(["acknowledgement", "handling"]));
+    assert_eq!(stages, expected_stages.iter().copied().collect());
     assert_eq!(
         instruments,
         BTreeSet::from([

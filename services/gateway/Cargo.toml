@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-service-runtime.workspace = true
+edgeagent-telemetry = { workspace = true, features = ["otlp"] }
 
 axum.workspace = true
 reqwest = { workspace = true, features = ["rustls-no-provider"] }
