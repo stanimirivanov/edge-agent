@@ -1,8 +1,6 @@
 use super::*;
+use crate::{EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation};
 use edgeagent_contracts::MessageEnvelope;
-use edgeagent_telemetry::{
-    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
-};
 use opentelemetry::propagation::Extractor;
 use std::sync::{
     Arc, Mutex,
@@ -62,9 +60,10 @@ fn proof_endpoint_rejects_remote_or_ambiguous_egress() {
 
 #[test]
 fn facade_projection_preserves_w3c_state_and_all_twenty_bounded_classifications()
--> Result<(), WorkerError> {
-    let mut value: serde_json::Value =
-        serde_json::from_slice(include_bytes!("../../../fixtures/v1/apply-probe.json"))?;
+-> Result<(), ExportError> {
+    let mut value: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../event-spine-conformance/fixtures/v1/apply-probe.json"
+    ))?;
     value["tracestate"] = "edgeagent=synthetic".into();
     let envelope = MessageEnvelope::from_json(&serde_json::to_vec(&value)?)?;
     let context = EventSpineContext::from_envelope(&envelope);
@@ -108,7 +107,7 @@ impl std::fmt::Debug for SensitiveDebug {
 
 #[test]
 fn unknown_debug_fields_and_invalid_classifications_never_become_exportable()
--> Result<(), WorkerError> {
+-> Result<(), ExportError> {
     let capture = Capture::default();
     let formatted = Arc::new(AtomicBool::new(false));
     let sensitive = SensitiveDebug(formatted.clone());

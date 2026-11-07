@@ -711,19 +711,14 @@ dependencies = [
  "edgeagent-telemetry",
  "futures-util",
  "jsonschema",
- "opentelemetry",
- "opentelemetry-otlp",
  "opentelemetry-proto",
- "opentelemetry_sdk",
  "prost",
- "reqwest",
  "schemars",
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -945,6 +940,7 @@ name = "edgeagent-research"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "axum",
  "chrono",
  "edgeagent-contracts",
  "edgeagent-inbox-postgres",
@@ -957,7 +953,10 @@ dependencies = [
  "edgeagent-research-domain",
  "edgeagent-research-postgres",
  "edgeagent-service-runtime",
+ "edgeagent-telemetry",
  "futures-util",
+ "opentelemetry-proto",
+ "prost",
  "serde_json",
  "sqlx",
  "tokio",
@@ -1035,8 +1034,13 @@ dependencies = [
  "edgeagent-contracts",
  "edgeagent-messaging",
  "metrics",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "reqwest",
  "serde_json",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

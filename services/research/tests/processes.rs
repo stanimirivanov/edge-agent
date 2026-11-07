@@ -4,6 +4,8 @@
     reason = "Owned schema inspection, observed lock barrier and disposable projection rebuild."
 )]
 mod process_support;
+#[path = "process_telemetry/mod.rs"]
+mod telemetry;
 use edgeagent_contracts::{
     MessageEnvelope,
     research::{AbstentionReason, LifecycleChange, ResearchLifecycle, ResearchRecord},

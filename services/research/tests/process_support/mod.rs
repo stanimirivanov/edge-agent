@@ -258,6 +258,7 @@ impl Journey {
         let mut command = tokio::process::Command::new(binary(key)?);
         command
             .arg(mode)
+            .env_remove("EDGEAGENT_RESEARCH_OTLP_ENDPOINT")
             .env("EDGEAGENT_POSTGRES_URL", &self.pg)
             .env("EDGEAGENT_NATS_URL", &self.nats)
             .env("EDGEAGENT_GATEWAY_SCHEMA", &self.gateway.name)

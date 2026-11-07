@@ -18,6 +18,8 @@
   Inspect decoded requests from actual independent workers; collector readiness
   is not evidence of exported observations.
 
+[ADR-0107](0107-enable-bounded-otlp-in-research.md) extends this exporter to the Research process.
+
 ## Context
 
 The relay and handler already classify publication, persistence, handling and

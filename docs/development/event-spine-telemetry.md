@@ -91,8 +91,8 @@ The final handling observation therefore describes the caller-visible
 ## Conformance exporter configuration and lifecycle
 
 [ADR-0029](../decisions/0029-export-bounded-correlated-event-spine-observations.md)
-records the boundary and dependency review. Only the tooling worker installs the
-OpenTelemetry SDK. Its allowlisted subscriber projects the existing classified
+records the original boundary and dependency review. [ADR-0107](../decisions/0107-enable-bounded-otlp-in-research.md)
+extends it to Research. The shared allowlisted subscriber projects each classified
 operation event into one completed-stage span, counter increment and duration
 sample. It is not a general tracing-log exporter or metrics-facade bridge; no
 second recorder double-counts those events. The facade and application crates
@@ -100,7 +100,10 @@ remain independent of exporters.
 
 By default no export occurs. A proof parent may set
 `EDGEAGENT_PROOF_OTLP_ENDPOINT=http://127.0.0.1:<owned-port>` in its child-only
-environment. Only that explicit IPv4 loopback origin is accepted: no DNS,
+environment. Research can opt in for `offline-worker` and `offline-relay` with
+`EDGEAGENT_RESEARCH_OTLP_ENDPOINT=http://127.0.0.1:<owned-port>`. Other Research
+commands ignore that setting. Invalid opt-in settings fail startup with a
+category-only diagnostic. Only that explicit IPv4 loopback origin is accepted: no DNS,
 credentials, paths, query, fragment or remote host. When enabled, ambient
 `OTEL_*` settings are rejected. Worker environment clearing, disabled proxies,
 redirects and retries prevent unrelated configuration from redirecting evidence.
@@ -168,7 +171,14 @@ decoding; decoded models add overhead. Cleanup releases held handlers and bounds
 owned task shutdown. Default verification compiles/discovers T3 proofs, not their
 service-backed outcomes.
 
-No OpenTelemetry SDK or exporter is installed in product service binaries.
+The Research process gate starts a local receiver and verifies that a stalled
+collector leaves a fresh commit and confirmed ACK intact. A restarted Research
+worker recovers the same receipt on redelivery and exports decoded handling and
+acknowledgement observations when the receiver is healthy. A relay with actual
+outbox work exercises disabled export with only ambient OTEL configuration.
+Run `cargo xtask verify --check research-processes --python python3` with the
+isolated PostgreSQL and JetStream profile in [Research processes](research-processes.md).
+
 The proof does not instrument replay-control-plane details or expose
 queue-depth gauges, consumer lag, outbox backlog, or quarantine depth because
 those require a long-running service lifecycle and bounded polling policy.

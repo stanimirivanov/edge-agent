@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-service-runtime.workspace = true
+edgeagent-telemetry = { workspace = true, features = ["otlp"] }
 
 edgeagent-research-application.workspace = true
 edgeagent-research-domain.workspace = true
@@ -28,6 +29,9 @@ tokio = { workspace = true, features = ["process", "io-util", "signal", "time"] 
 url.workspace = true
 
 [dev-dependencies]
+axum.workspace = true
+opentelemetry-proto.workspace = true
+prost.workspace = true
 futures-util.workspace = true
 
 [lints]

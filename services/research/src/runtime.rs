@@ -8,7 +8,10 @@ use edgeagent_research_application::{
     worker::{self, EvidenceLoader},
 };
 use edgeagent_research_postgres::PostgresResearchStore;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use edgeagent_telemetry::{
+    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
+};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 /// Loopback-only URL with no query/fragment routing overrides.
 /// # Errors
@@ -277,6 +280,7 @@ pub async fn handle(
     delivery: MessageDelivery,
     scope: &str,
 ) -> Result {
+    let handling = Instant::now();
     let envelope = MessageEnvelope::from_json(delivery.payload());
     let valid = envelope
         .as_ref()
@@ -336,7 +340,37 @@ pub async fn handle(
             1
         }))?)
     };
-    delivery.settle(disposition).await?;
+    let outcome = match disposition {
+        DeliveryDisposition::Acknowledge => EventSpineOutcome::Succeeded,
+        DeliveryDisposition::Quarantined => EventSpineOutcome::Quarantined,
+        DeliveryDisposition::RetryAfter(_) => EventSpineOutcome::RetryScheduled,
+    };
+    let context = match &envelope {
+        Ok(envelope) => EventSpineContext::from_envelope(envelope),
+        Err(_) => EventSpineContext::from_delivery(delivery.metadata()),
+    };
+    let attempt = delivery.metadata().delivery_attempt();
+    record_event_spine_operation(
+        &context,
+        EventSpineStage::Handling,
+        outcome,
+        attempt,
+        handling.elapsed(),
+    );
+    let settling = Instant::now();
+    let settled = delivery.settle(disposition).await;
+    record_event_spine_operation(
+        &context,
+        EventSpineStage::Acknowledgement,
+        if settled.is_ok() {
+            outcome
+        } else {
+            EventSpineOutcome::Failed
+        },
+        attempt,
+        settling.elapsed(),
+    );
+    settled?;
     Ok(())
 }
 async fn stop() {
