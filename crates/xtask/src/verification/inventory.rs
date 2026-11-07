@@ -13,6 +13,7 @@ pub(super) const PROFILES: &[&str] = &[
     "local-platform",
     "m02-qualification",
     "image-smoke",
+    "research-image-owner",
     "supply-chain",
     "dependency-audit",
     "sqlx-metadata",
@@ -2151,7 +2152,7 @@ pub(super) fn validate(checks: &[Check]) -> Result<(), String> {
                 }
                 // This owned wrapper builds the four binaries, then forwards the exact
                 // protected Cargo argv unchanged. No arbitrary script gains this exception.
-                let wrapped = check.id == "research-processes"
+                let wrapped = matches!(check.id, "research-processes" | "research-image-owner")
                     && check.command.program == Program::Python
                     && check.command.args.first() == Some(&"scripts/verify_research_processes.py")
                     && check.command.args.get(1..) == Some(expected_command.as_slice());

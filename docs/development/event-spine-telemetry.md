@@ -21,9 +21,8 @@
 The event spine needs consistent signals across storage and transport adapters
 without importing a cloud monitoring SDK into application or domain code.
 `edgeagent-telemetry` centralizes stable metric names, dimensions, outcome
-tokens, and diagnostic fields. The crate depends only on application contracts,
-the portable messaging port, and exporter-neutral `metrics` and `tracing`
-facades.
+tokens, and diagnostic fields. The signal facade uses application contracts, the portable messaging port, and
+`metrics` and `tracing`. Process roots can enable the optional OTLP lifecycle.
 
 The outbox relay emits broker publication results and the following durable
 outbox transition. The transactional inbox handler emits classified
@@ -88,11 +87,12 @@ Acknowledgement is observed only after the broker settlement future returns.
 The final handling observation therefore describes the caller-visible
 `HandlingOutcome` or `HandlerError`, not an intermediate intention.
 
-## Conformance exporter configuration and lifecycle
+## Exporter configuration and lifecycle
 
 [ADR-0029](../decisions/0029-export-bounded-correlated-event-spine-observations.md)
-records the boundary and dependency review. Only the tooling worker installs the
-OpenTelemetry SDK. Its allowlisted subscriber projects the existing classified
+records the original boundary and dependency review. [ADR-0107](../decisions/0107-enable-bounded-otlp-in-research.md)
+extends it to Research. [ADR-0108](../decisions/0108-enable-bounded-otlp-in-gateway-and-projector.md)
+extends it to Gateway and the audit projector. The shared subscriber projects each classified
 operation event into one completed-stage span, counter increment and duration
 sample. It is not a general tracing-log exporter or metrics-facade bridge; no
 second recorder double-counts those events. The facade and application crates
@@ -100,7 +100,16 @@ remain independent of exporters.
 
 By default no export occurs. A proof parent may set
 `EDGEAGENT_PROOF_OTLP_ENDPOINT=http://127.0.0.1:<owned-port>` in its child-only
-environment. Only that explicit IPv4 loopback origin is accepted: no DNS,
+environment. Research can opt in for `offline-worker` and `offline-relay` with
+`EDGEAGENT_RESEARCH_OTLP_ENDPOINT=http://127.0.0.1:<owned-port>`. Other Research
+commands ignore that setting. Gateway `serve` uses `EDGEAGENT_GATEWAY_OTLP_ENDPOINT`
+and projector `offline-worker` uses `EDGEAGENT_PROJECTOR_OTLP_ENDPOINT`. Both
+accept the same loopback origin. Gateway records fresh and duplicate admission
+after commit. The projector records classified handling and confirmed settlement.
+Those two processes emit bounded observations with an empty identity context,
+so caller scope and envelope identifiers are absent from their spans and metrics.
+Invalid opt-in settings fail startup with a
+category-only diagnostic. Only that explicit IPv4 loopback origin is accepted: no DNS,
 credentials, paths, query, fragment or remote host. When enabled, ambient
 `OTEL_*` settings are rejected. Worker environment clearing, disabled proxies,
 redirects and retries prevent unrelated configuration from redirecting evidence.
@@ -168,7 +177,18 @@ decoding; decoded models add overhead. Cleanup releases held handlers and bounds
 owned task shutdown. Default verification compiles/discovers T3 proofs, not their
 service-backed outcomes.
 
-No OpenTelemetry SDK or exporter is installed in product service binaries.
+The Research process gate also decodes Gateway and projector traces and metrics
+from real processes. An HTTP 503 receiver exercises durable admission,
+projection, confirmed settlement and exact query results during export failure.
+
+The Research process gate starts a local receiver and verifies that a stalled
+collector leaves a fresh commit and confirmed ACK intact. A restarted Research
+worker recovers the same receipt on redelivery and exports decoded handling and
+acknowledgement observations when the receiver is healthy. A relay with actual
+outbox work exercises disabled export with only ambient OTEL configuration.
+Run `cargo xtask verify --check research-processes --python python3` with the
+isolated PostgreSQL and JetStream profile in [Research processes](research-processes.md).
+
 The proof does not instrument replay-control-plane details or expose
 queue-depth gauges, consumer lag, outbox backlog, or quarantine depth because
 those require a long-running service lifecycle and bounded polling policy.

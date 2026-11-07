@@ -1,11 +1,10 @@
-//! Finite proof exporter wiring. SDK types never enter the signal facade.
+//! Bounded loopback OTLP lifecycle for synchronous process entry points.
 
 mod signals;
 #[cfg(test)]
 mod tests;
 
-use super::WorkerError;
-use edgeagent_telemetry::{EVENT_SPINE_OPERATION_DURATION_SECONDS, EVENT_SPINE_OPERATIONS_TOTAL};
+use crate::{EVENT_SPINE_OPERATION_DURATION_SECONDS, EVENT_SPINE_OPERATIONS_TOTAL};
 use opentelemetry::{KeyValue, metrics::MeterProvider, trace::TracerProvider};
 use opentelemetry_otlp::{Protocol, RetryPolicy, WithExportConfig, WithHttpConfig};
 use opentelemetry_sdk::{
@@ -13,10 +12,10 @@ use opentelemetry_sdk::{
     metrics::{PeriodicReader, SdkMeterProvider, Stream, Temporality},
     trace::{BatchConfigBuilder, BatchSpanProcessor, Sampler, SdkTracerProvider},
 };
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tracing_subscriber::prelude::*;
 
-pub(crate) const ENDPOINT: &str = "EDGEAGENT_PROOF_OTLP_ENDPOINT";
+type ExportError = Box<dyn std::error::Error + Send + Sync>;
 const EXPORT_TIMEOUT: Duration = Duration::from_millis(250);
 const QUEUE: usize = 64;
 const BATCH: usize = 8;
@@ -24,7 +23,9 @@ const CARDINALITY: usize = 20; // Four stages times five outcomes, never IDs.
 const BODY_LIMIT: usize = 262_144;
 const BOUNDARIES: [f64; 6] = [0.001, 0.01, 0.1, 1.0, 5.0, 30.0];
 
-pub(crate) struct Telemetry {
+/// Providers owned by the process root until application work finishes.
+#[must_use]
+pub struct Telemetry {
     traces: SdkTracerProvider,
     metrics: SdkMeterProvider,
 }
@@ -44,33 +45,50 @@ fn is_otel_setting(key: &std::ffi::OsStr) -> bool {
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"OTEL_"))
 }
 
-pub(crate) fn endpoint(value: &str) -> Result<&str, WorkerError> {
+fn endpoint(value: &str) -> Result<&str, ExportError> {
     // No DNS, credentials, query, fragment, path, proxy or remote egress.
     let socket: SocketAddr = value
         .strip_prefix("http://")
-        .ok_or("invalid proof exporter")?
+        .ok_or("invalid OTLP endpoint")?
         .parse()?;
     if socket.ip() != std::net::Ipv4Addr::LOCALHOST || socket.port() == 0 {
-        return Err("proof exporter must use an explicit IPv4 loopback port".into());
+        return Err("OTLP endpoint must use an explicit IPv4 loopback port".into());
     }
     Ok(value)
 }
 
 impl Telemetry {
-    pub(crate) fn start(
+    /// Install the allowlisted subscriber before entering the application runtime.
+    /// Returns `None` when the process-specific setting is absent.
+    ///
+    /// # Errors
+    /// Rejects invalid settings, ambient OTEL overrides or a conflicting subscriber.
+    pub fn start(
+        setting: &str,
+        instrumentation_scope: &'static str,
         role: &'static str,
         component: &'static str,
-    ) -> Result<Option<Self>, WorkerError> {
-        let Some(value) = std::env::var_os(ENDPOINT) else {
+    ) -> Result<Option<Self>, ExportError> {
+        let Some(value) = std::env::var_os(setting) else {
             return Ok(None);
         };
         let value = value.to_str().ok_or("invalid exporter configuration")?;
         let endpoint = endpoint(value)?;
         if std::env::vars_os().any(|(key, _)| is_otel_setting(&key)) {
-            return Err("ambient OTEL configuration is not accepted by proof workers".into());
+            return Err("ambient OTEL configuration rejected".into());
         }
         // Construct blocking HTTP transport outside the application's Tokio runtime.
+        // Reqwest may initialize TLS even for the loopback HTTP endpoint.
+        // Supply the pinned provider locally without process-wide TLS state.
+        let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()?
+        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_no_client_auth();
         let client = reqwest::blocking::Client::builder()
+            .tls_backend_preconfigured(tls)
+            .tls_sslkeylogfile(false)
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())
@@ -126,7 +144,7 @@ impl Telemetry {
         // Stream is not Clone and its SDK builder returns a non-Send error.
         // Preflight these fixed controls, then create the same view per instrument.
         if metric_stream().is_none() {
-            return Err("proof metric view configuration rejected".into());
+            return Err("OTLP metric view configuration rejected".into());
         }
         let metrics = SdkMeterProvider::builder()
             .with_resource(resource)
@@ -137,9 +155,9 @@ impl Telemetry {
             )
             .with_view(|_| metric_stream())
             .build();
-        let meter = metrics.meter("edgeagent.conformance.event-spine");
+        let meter = metrics.meter(instrumentation_scope);
         let subscriber = tracing_subscriber::registry().with(signals::Signals {
-            tracer: traces.tracer("edgeagent.conformance.event-spine"),
+            tracer: traces.tracer(instrumentation_scope),
             operations: meter.u64_counter(EVENT_SPINE_OPERATIONS_TOTAL).build(),
             duration: meter
                 .f64_histogram(EVENT_SPINE_OPERATION_DURATION_SECONDS)
@@ -150,19 +168,20 @@ impl Telemetry {
         let telemetry = Self { traces, metrics };
         if tracing::subscriber::set_global_default(subscriber).is_err() {
             telemetry.shutdown();
-            return Err("proof telemetry subscriber already installed".into());
+            return Err("telemetry subscriber already installed".into());
         }
         Ok(Some(telemetry))
     }
 
-    pub(crate) fn shutdown(self) {
+    /// Flush best-effort diagnostics after the application runtime has stopped.
+    pub fn shutdown(self) {
         // SDK 0.33's meter provider ignores its public timeout argument and its
         // reader uses a five-second control deadline. Bound actual HTTP I/O too;
         // install no observable callbacks. Trace shutdown adds at most one second.
         let traces = self.traces.shutdown_with_timeout(Duration::from_secs(1));
         let metrics = self.metrics.shutdown();
         if traces.is_err() || metrics.is_err() {
-            eprintln!("conformance telemetry flush incomplete; durable result unchanged");
+            eprintln!("event-spine telemetry flush incomplete");
         }
     }
 }

@@ -7,10 +7,26 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:reqwest",
+    "dep:rustls",
+    "dep:tracing-subscriber",
+]
+
 [dependencies]
 edgeagent-contracts.workspace = true
 edgeagent-messaging.workspace = true
 metrics.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["blocking", "rustls-no-provider"] }
+rustls = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 tracing.workspace = true
 
 [dev-dependencies]

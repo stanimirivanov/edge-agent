@@ -670,6 +670,7 @@ dependencies = [
  "edgeagent-messaging-nats",
  "edgeagent-research-application",
  "edgeagent-service-runtime",
+ "edgeagent-telemetry",
  "futures-util",
  "serde",
  "serde_json",
@@ -711,19 +712,14 @@ dependencies = [
  "edgeagent-telemetry",
  "futures-util",
  "jsonschema",
- "opentelemetry",
- "opentelemetry-otlp",
  "opentelemetry-proto",
- "opentelemetry_sdk",
  "prost",
- "reqwest",
  "schemars",
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -743,6 +739,7 @@ dependencies = [
  "edgeagent-outbox-postgres",
  "edgeagent-research-application",
  "edgeagent-service-runtime",
+ "edgeagent-telemetry",
  "futures-util",
  "reqwest",
  "rustls",
@@ -945,6 +942,7 @@ name = "edgeagent-research"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "axum",
  "chrono",
  "edgeagent-contracts",
  "edgeagent-inbox-postgres",
@@ -957,7 +955,10 @@ dependencies = [
  "edgeagent-research-domain",
  "edgeagent-research-postgres",
  "edgeagent-service-runtime",
+ "edgeagent-telemetry",
  "futures-util",
+ "opentelemetry-proto",
+ "prost",
  "serde_json",
  "sqlx",
  "tokio",
@@ -1035,8 +1036,14 @@ dependencies = [
  "edgeagent-contracts",
  "edgeagent-messaging",
  "metrics",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "reqwest",
+ "rustls",
  "serde_json",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1847,9 +1854,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.34"
+version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "matchit"

@@ -256,8 +256,20 @@ impl Journey {
             _ => "EDGEAGENT_PROCESS_PROJECTOR",
         };
         let mut command = tokio::process::Command::new(binary(key)?);
+        for (key, _) in std::env::vars_os() {
+            if key
+                .as_encoded_bytes()
+                .get(..5)
+                .is_some_and(|p| p.eq_ignore_ascii_case(b"OTEL_"))
+            {
+                command.env_remove(key);
+            }
+        }
         command
             .arg(mode)
+            .env_remove("EDGEAGENT_RESEARCH_OTLP_ENDPOINT")
+            .env_remove("EDGEAGENT_GATEWAY_OTLP_ENDPOINT")
+            .env_remove("EDGEAGENT_PROJECTOR_OTLP_ENDPOINT")
             .env("EDGEAGENT_POSTGRES_URL", &self.pg)
             .env("EDGEAGENT_NATS_URL", &self.nats)
             .env("EDGEAGENT_GATEWAY_SCHEMA", &self.gateway.name)
@@ -347,14 +359,20 @@ impl Journey {
         Ok(output.stdout)
     }
     pub async fn start_servers(&mut self) -> Result {
+        self.start_servers_with_gateway_otlp(None).await
+    }
+    pub async fn start_servers_with_gateway_otlp(&mut self, endpoint: Option<&str>) -> Result {
         for (service, address) in [
             ("projector", self.projector_address),
             ("gateway", self.gateway_address),
         ] {
-            let child = self
-                .command(service, "serve")?
-                .stdout(Stdio::null())
-                .spawn()?;
+            let mut command = self.command(service, "serve")?;
+            if service == "gateway"
+                && let Some(endpoint) = endpoint
+            {
+                command.env("EDGEAGENT_GATEWAY_OTLP_ENDPOINT", endpoint);
+            }
+            let child = command.stdout(Stdio::null()).spawn()?;
             self.servers.push(child);
             tokio::time::timeout(Duration::from_secs(10), async {
                 loop {

@@ -263,6 +263,8 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
     for instruction, label in [
         ("COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt", "native CA bundle"),
         ("COPY supply-chain/licenses/ /usr/share/licenses/ca-certificates/", "CA redistribution notices"),
+        ("COPY --from=builder --chown=65532:65532 /out/owners/ /edgeagent-owner/", "packaged owner"),
+
     ]:
         if instruction not in runtime_lines:
             problems.append(Problem("Dockerfile", f"missing runtime {label}"))
@@ -496,6 +498,12 @@ def smoke_images(
 
         if not problems:
             problems.extend(smoke_native_tls(root))
+            owner = subprocess.run(
+                [sys.executable, "scripts/verify_research_image.py"], cwd=root,
+                check=False, timeout=420,
+            )
+            if owner.returncode != 0:
+                problems.append(Problem("research", "packaged owner qualification failed"))
 
         invalid = _run(
             [

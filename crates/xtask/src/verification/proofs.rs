@@ -160,6 +160,11 @@ const PROJECTOR_BROKER: Target = Target {
     name: "broker",
     identities: &["broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_progress"],
 };
+const RESEARCH_IMAGE_OWNER: Target = Target {
+    package: "edgeagent-research",
+    name: "image_owner",
+    identities: &["packaged_owner_read_completes_and_foreign_evidence_fails_closed"],
+};
 const RESEARCH_PROCESSES: Target = Target {
     package: "edgeagent-research",
     name: "processes",
@@ -167,6 +172,8 @@ const RESEARCH_PROCESSES: Target = Target {
         "four_process_artifact_survives_death_redelivery_rebuild_and_lifecycle",
         "four_process_owner_history_shortfall_is_a_stable_abstention",
         "four_process_m05_promotion_policy_replay_and_configured_expiry",
+        "telemetry::research_exports_bounded_signals_and_survives_stalled_collector",
+        "telemetry::gateway_and_projector_export_without_depending_on_collector_success",
     ],
 };
 const RESEARCH_REPLAY: Target = Target {
@@ -397,7 +404,15 @@ const SPINE: Target = Target {
 };
 
 pub(super) fn checks() -> Vec<Check> {
+    let mut image = suite(
+        "research-image-owner",
+        &RESEARCH_IMAGE_OWNER,
+        EVENT_SPINE,
+        "Packaged Research owner executable, actual retained evidence and bounded refusal/recovery; local Docker profile only.",
+    );
+    image.profiles = &["research-image-owner"];
     vec![
+        image,
         suite(
             "projector-postgres",
             &PROJECTOR_POSTGRES,
@@ -771,7 +786,7 @@ fn suite(
         } else {
             &["local-platform"]
         },
-        command: if id == "research-processes" {
+        command: if matches!(id, "research-processes" | "research-image-owner") {
             CommandSpec {
                 program: Program::Python,
                 args: std::iter::once("scripts/verify_research_processes.py")
@@ -804,6 +819,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         RESEARCH_WORKER,
         RESEARCH_REPLAY,
         RESEARCH_PROCESSES,
+        RESEARCH_IMAGE_OWNER,
         RESEARCH_WORKER_BROKER,
         RESEARCH_EVIDENCE_BROKER,
         RESEARCH_EVIDENCE_PROCESSES,
@@ -1129,7 +1145,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 50);
+        assert_eq!(checks.len(), 51);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -1145,8 +1161,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 159);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 159);
+        assert_eq!(inventory.len(), 162);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 162);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

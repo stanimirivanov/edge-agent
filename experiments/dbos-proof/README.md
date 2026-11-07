@@ -2,9 +2,9 @@
 
 This standalone Rust package runs two separate DBOS proofs against disposable,
 pre-migrated [DBOS-maintained PostgreSQL test images][dbos-image] through
-`testcontainers-rs`. No local database, migration CLI, credentials, or manual
+the shared [Docker CLI helper](../support/docker.rs). No local database, migration CLI, credentials, or manual
 container startup is required; an available Docker-compatible daemon is the
-testcontainers prerequisite.
+container prerequisite.
 
 The SQL atomicity test checks one narrow capability: a Rust SQL client
 can insert service-owned data and invoke the official `dbos.enqueue_workflow`

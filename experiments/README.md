@@ -8,7 +8,11 @@ members. From the repository root, run
 contract; `cargo xtask checks` lists its commands and prerequisites. Tests
 start their own temporary database, broker, or local workflow server; no
 service URL, credential, CLI installation, or manually started container is
-required. Container-backed tests require a running Docker-compatible daemon.
+required. Container-backed tests use the Docker CLI with a local daemon and loopback-only
+published ports. The shared `support/docker.rs` helper retains digest-pinned
+images, bounded startup, readiness checks, and per-test container/volume cleanup;
+it replaces `testcontainers` to remove the unmaintained `astral-tokio-tar`
+dependency (RUSTSEC-2026-0440) without an advisory exception.
 Cold dependencies and container images require network access; the Temporal and
 Flawless tests fetch digest-checked server binaries on each run.
 

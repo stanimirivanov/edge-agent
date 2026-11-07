@@ -97,3 +97,40 @@ production deployment, latency/throughput, autonomous surveillance or live execu
 The profile remains one trusted local operator with explicit owner authority.
 This qualification extends the existing acceptance harness. Its private schemas
 and streams are disposable.
+
+## Packaged owner read
+
+`cargo xtask verify image-smoke --python python3` also qualifies the Research
+image's `offline-once` command against real retained MarketData evidence.
+The Research build copies the matching MarketData executable from the same
+builder output to `/edgeagent-owner/edgeagent-market-data`. Set
+`EDGEAGENT_RESEARCH_OWNER_BINARY` to that absolute path. Other service images
+have an empty owner directory.
+
+The image gate owns isolated PostgreSQL and JetStream containers using the
+local stack's pinned versions, random loopback ports and disposable storage.
+The existing process fixture supplies Gateway admission, MarketData acquisition,
+approved Research configuration and private schemas. It mounts only the invented
+owner profile directory and canonical execution configuration into Research,
+at their original absolute paths. The profile mount is writable for its existing
+owner lock; the configuration mount is read-only. No host executable is mounted.
+
+This Linux-only proof uses Docker host networking so the existing loopback URL
+checks retain their meaning. It overrides the image's default non-root numeric
+identity with the invoking non-root user's UID/GID to access the owned bind mounts.
+Production identity, remote owner transport and container-network deployment
+require their own profile. The Research root filesystem remains read-only,
+capabilities are dropped, and privilege escalation is disabled.
+
+The packaged owner produces the expected 40502 ppm artifact and exact retained
+outcome. Missing executable input leaves no completion. A foreign acquisition
+reference can refuse or produce an explicit owner-denial abstention, never an
+artifact. Repeating completed input with an unavailable owner returns the same
+receipt without a second completion/publication.
+
+The protected `research-image-owner` check can also run against an explicitly
+built `EDGEAGENT_RESEARCH_IMAGE`, isolated `EDGEAGENT_POSTGRES_URL` and
+`EDGEAGENT_NATS_URL`. The wrapper supplies fresh host binary paths and numeric
+identity, and the test owns only its schemas, streams and named Research containers.
+The image-smoke supervisor removes its dependency containers and volumes on failure.
+This packaged proof is separate from the original four-process crash/rebuild gate.

@@ -2,6 +2,10 @@
 
 #![forbid(unsafe_code)]
 
+/// Opt-in exporter lifecycle for process composition roots.
+#[cfg(feature = "otlp")]
+pub mod exporter;
+
 use edgeagent_contracts::MessageEnvelope;
 use edgeagent_messaging::DeliveryMetadata;
 use std::time::Duration;
