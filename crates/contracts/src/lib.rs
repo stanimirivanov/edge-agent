@@ -8,6 +8,7 @@ use std::fmt::{Display, Formatter};
 pub mod audit;
 pub mod evidence;
 pub mod execution;
+pub mod explanation;
 mod message_type;
 mod messaging;
 pub mod policy_evidence;

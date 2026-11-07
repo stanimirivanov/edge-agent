@@ -1009,6 +1009,24 @@ pub(super) fn checks() -> Vec<Check> {
             "Research v1 canonical fixtures, structural schema freshness and fail-closed validation; no runtime activation.",
         ),
         check(
+            "explanation-contracts",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-contracts",
+                "--test",
+                "explanation",
+                "--features",
+                "schema,serde_json/preserve_order",
+                "--",
+            ],
+            "Explanation v1 canonical fixtures, strict binding and structural schema freshness.",
+        ),
+        check(
             "message-schema-contracts",
             "T2",
             &["verify", "test"],
@@ -1780,6 +1798,21 @@ pub(super) fn checks() -> Vec<Check> {
                     expected: vec![
                         "request_and_outcome_reject_wrong_owner_route_scope_and_correlation",
                         "correlated_evidence_schema_matches_frozen_inventory",
+                    ],
+                    ignored: false,
+                });
+            }
+            "explanation-contracts" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec![
+                        "binds_coverage_and_preserves_legacy_bytes",
+                        "frozen_wire_identities",
+                        "schemas_match_frozen_v1_inventory",
+                        "strict_bounded_proposals",
+                        "terminal_variants_and_identities_are_distinct",
                     ],
                     ignored: false,
                 });

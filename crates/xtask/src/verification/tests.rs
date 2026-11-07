@@ -868,6 +868,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "research-evidence",
             "research-acquisition-contracts",
             "research-contracts",
+            "explanation-contracts",
             "message-schema-contracts",
             "simulation-schema-contracts",
         ]
