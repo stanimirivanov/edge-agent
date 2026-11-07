@@ -9,6 +9,11 @@ use edgeagent_research_application::publication::{self, EVALUATE};
 pub use edgeagent_research_application::publication::{
     PublicationError as Error, PublicationErrorKind as Kind,
 };
+use edgeagent_telemetry::{
+    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
+};
+use std::time::Instant;
+
 /// Apply explicitly with the outbox migrations in a private Gateway schema.
 pub const MIGRATION: &str = include_str!("../migrations/0001_gateway_requests.sql");
 /// HTTP acknowledgement; produced by the store only after commit.
@@ -134,6 +139,7 @@ impl AdmissionStore for PostgresAdmission {
         let bytes = ResearchRecord::Request(request.clone())
             .canonical_bytes()
             .map_err(|_| Error::new(Kind::Invalid))?;
+        let started = Instant::now();
         let mut tx = self.pool.begin().await.map_err(storage)?;
         sqlx::query!("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
             .execute(&mut *tx)
@@ -187,6 +193,17 @@ impl AdmissionStore for PostgresAdmission {
             return Err(invariant());
         }
         tx.commit().await.map_err(storage)?;
+        record_event_spine_operation(
+            &EventSpineContext::without_identity(),
+            EventSpineStage::Persistence,
+            if inserted {
+                EventSpineOutcome::Succeeded
+            } else {
+                EventSpineOutcome::Duplicate
+            },
+            1,
+            started.elapsed(),
+        );
         Ok(Accepted::committed(&request))
     }
 }

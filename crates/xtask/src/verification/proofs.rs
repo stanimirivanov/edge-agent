@@ -173,6 +173,7 @@ const RESEARCH_PROCESSES: Target = Target {
         "four_process_owner_history_shortfall_is_a_stable_abstention",
         "four_process_m05_promotion_policy_replay_and_configured_expiry",
         "telemetry::research_exports_bounded_signals_and_survives_stalled_collector",
+        "telemetry::gateway_and_projector_export_without_depending_on_collector_success",
     ],
 };
 const RESEARCH_REPLAY: Target = Target {
@@ -1160,8 +1161,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 161);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 161);
+        assert_eq!(inventory.len(), 162);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 162);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

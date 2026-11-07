@@ -86,7 +86,7 @@ OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(
 )
 TELEMETRY_DEPENDENCIES = frozenset({
     CONTRACTS, MESSAGING, "metrics", "tracing",
-    "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest", "tracing-subscriber",
+    "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest", "rustls", "tracing-subscriber",
 })
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
@@ -211,7 +211,7 @@ PACKAGE_RULES = {
     ),
     "services/audit-projector": PackageRule(
         "edgeagent-audit-projector", "bin",
-        frozenset({"edgeagent-contracts","edgeagent-service-runtime","edgeagent-audit-domain","edgeagent-research-application","edgeagent-inbox-postgres","edgeagent-messaging","edgeagent-messaging-nats","axum","async-nats","serde","serde_json","sqlx","tokio","url"}),
+        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-audit-domain","edgeagent-research-application","edgeagent-inbox-postgres","edgeagent-messaging","edgeagent-messaging-nats","axum","async-nats","serde","serde_json","sqlx","tokio","url"}),
         frozenset({"futures-util"}),
     ),
     "services/execution-simulator": PackageRule(
@@ -223,7 +223,7 @@ PACKAGE_RULES = {
         "edgeagent-gateway",
         "bin",
         SERVICE_DEPENDENCIES | frozenset({
-            "edgeagent-outbox-postgres", "edgeagent-research-application",
+            "edgeagent-outbox-postgres", "edgeagent-research-application", TELEMETRY,
             "axum", "reqwest", "rustls", "serde", "serde_json", "sqlx", "tokio", "url",
         }),
         frozenset({"futures-util"}),

@@ -4,10 +4,18 @@ use crate::{
     http,
     store::{ProjectionStore, token},
 };
+use edgeagent_audit_domain::ReplayOutcome;
 use edgeagent_contracts::{MessageEnvelope, research::ResearchRecord};
 use edgeagent_messaging::{DeliveryDisposition, MessageConsumer, RetryDelay};
 use edgeagent_research_application::publication::{ABSTAINED, PUBLISHED};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use edgeagent_telemetry::{
+    EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
+};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 fn required(name: &str) -> Result<String> {
     std::env::var(name)
@@ -116,12 +124,14 @@ async fn execute(mode: &str) -> Result {
         let mut consumer=edgeagent_messaging_nats::JetStreamConsumer::new(consumer).await?;
         for _ in 0..maximum {
             let delivery=tokio::select! {_=stop()=>break,result=tokio::time::timeout(Duration::from_secs(30),consumer.receive())=>result??};
+            let started=Instant::now();
             let envelope=MessageEnvelope::from_json(delivery.payload());
             let valid=envelope.as_ref().is_ok_and(|e| {
                 let def=if e.message_type()==PUBLISHED.message_type() {PUBLISHED} else if e.message_type()==ABSTAINED.message_type() {ABSTAINED} else if e.message_type()==edgeagent_research_application::publication::DECISION.message_type() {edgeagent_research_application::publication::DECISION} else {edgeagent_research_application::lifecycle::CHANGED};
                 def.subject().is_ok_and(|s|s==delivery.metadata().subject())
             });
             let result=if valid {Some(tokio::time::timeout(Duration::from_secs(25),store.project(envelope.as_ref().map_err(|_|"invalid envelope")?,delivery.metadata().message_key())).await?)} else {None};
+            let duplicate=matches!(&result,Some(Ok(ReplayOutcome::Duplicate)));
             let disposition=match result {
                 Some(Ok(_))=>DeliveryDisposition::Acknowledge,
                 Some(Err(e)) if matches!(e.kind(),Kind::Gap|Kind::Storage|Kind::Corrupt)=>DeliveryDisposition::RetryAfter(RetryDelay::new(Duration::from_secs(15))?),
@@ -130,13 +140,54 @@ async fn execute(mode: &str) -> Result {
                     let mut tx=pool.begin().await?;edgeagent_inbox_postgres::PostgresInbox.quarantine_delivery(&mut tx,"research-projector",evidence).await?;tx.commit().await?;DeliveryDisposition::Quarantined
                 },
             };
-            delivery.settle(disposition).await?;
+            settle(delivery, disposition, duplicate, started).await?;
         }
         tokio::time::timeout(Duration::from_secs(5),client.drain()).await??;Ok(())
     }.await;
     tokio::time::timeout(Duration::from_secs(5), pool.close()).await?;
     result
 }
+async fn settle(
+    delivery: edgeagent_messaging::MessageDelivery,
+    disposition: DeliveryDisposition,
+    duplicate: bool,
+    started: Instant,
+) -> Result {
+    let outcome = match disposition {
+        DeliveryDisposition::Acknowledge => EventSpineOutcome::Succeeded,
+        DeliveryDisposition::RetryAfter(_) => EventSpineOutcome::RetryScheduled,
+        DeliveryDisposition::Quarantined => EventSpineOutcome::Quarantined,
+    };
+    let context = EventSpineContext::without_identity();
+    let attempt = delivery.metadata().delivery_attempt();
+    record_event_spine_operation(
+        &context,
+        EventSpineStage::Handling,
+        if duplicate {
+            EventSpineOutcome::Duplicate
+        } else {
+            outcome
+        },
+        attempt,
+        started.elapsed(),
+    );
+    let settling = Instant::now();
+    let settled = delivery.settle(disposition).await;
+    record_event_spine_operation(
+        &context,
+        EventSpineStage::Acknowledgement,
+        if settled.is_ok() {
+            outcome
+        } else {
+            EventSpineOutcome::Failed
+        },
+        attempt,
+        settling.elapsed(),
+    );
+    settled?;
+    Ok(())
+}
+
 async fn stop() {
     let Ok(mut term) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
     else {
