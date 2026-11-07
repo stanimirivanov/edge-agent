@@ -3,11 +3,9 @@
 
 use std::error::Error;
 
-use testcontainers::{
-    GenericImage,
-    core::{IntoContainerPort, WaitFor},
-    runners::AsyncRunner,
-};
+#[path = "../../support/docker.rs"]
+mod docker;
+
 use tokio_postgres::{NoTls, error::SqlState};
 
 // DBOS-maintained PostgreSQL 16 test image with its system schema at migration 108.
@@ -19,19 +17,19 @@ const DBOS_POSTGRES_TAG_AND_DIGEST: &str =
 #[tokio::test]
 async fn application_row_and_dbos_enqueue_commit_or_rollback_together() -> Result<(), Box<dyn Error>>
 {
-    let postgres = GenericImage::new(DBOS_POSTGRES_IMAGE, DBOS_POSTGRES_TAG_AND_DIGEST)
-        .with_exposed_port(5432.tcp())
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ))
-        .start()
-        .await?;
-
-    let host = postgres.get_host().await?.to_string();
-    let port = postgres.get_host_port_ipv4(5432.tcp()).await?;
+    let postgres = docker::Container::start(
+        &format!("{DBOS_POSTGRES_IMAGE}:{DBOS_POSTGRES_TAG_AND_DIGEST}"),
+        5432,
+        &[],
+        &[],
+        "database system is ready to accept connections",
+    )
+    .await?;
+    let host = "127.0.0.1";
+    let port = postgres.port;
     let mut config = tokio_postgres::Config::new();
     config
-        .host(&host)
+        .host(host)
         .port(port)
         .user("postgres")
         .password("postgres")

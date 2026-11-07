@@ -20,8 +20,11 @@ RUN case "${SERVICE}" in \
         audit-projector|execution-simulator|gateway|market-data|research) ;; \
         *) echo "unsupported EdgeAgent service: ${SERVICE}" >&2; exit 64 ;; \
     esac \
-    && mkdir -p /out \
-    && cp "/workspace/target/release/edgeagent-${SERVICE}" /out/edgeagent-service
+    && mkdir -p /out/owners \
+    && cp "/workspace/target/release/edgeagent-${SERVICE}" /out/edgeagent-service \
+    && if [ "${SERVICE}" = research ]; then \
+        cp /workspace/target/release/edgeagent-market-data /out/owners/edgeagent-market-data; \
+    fi
 
 FROM scratch AS runtime
 
@@ -35,6 +38,7 @@ LABEL org.opencontainers.image.title="edgeagent-${SERVICE}" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --from=builder --chown=65532:65532 /out/edgeagent-service /edgeagent-service
+COPY --from=builder --chown=65532:65532 /out/owners/ /edgeagent-owner/
 
 # Mozilla roots from the same immutable builder; certificate data license travels with it.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt

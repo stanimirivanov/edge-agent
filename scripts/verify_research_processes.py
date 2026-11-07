@@ -42,7 +42,15 @@ def main() -> int:
         print("build did not return every required service executable", file=sys.stderr)
         return 1
     test_args = sys.argv[1:]
-    if test_args[:6] != ["test", "--locked", "-p", "edgeagent-research", "--test", "processes"]:
+    if len(test_args) > 5 and test_args[5] == "image_owner":
+        if not os.environ.get("EDGEAGENT_RESEARCH_IMAGE"):
+            print("required process prerequisite unavailable: EDGEAGENT_RESEARCH_IMAGE", file=sys.stderr)
+            return 1
+        environment["EDGEAGENT_IMAGE_UID"] = str(os.getuid())
+        environment["EDGEAGENT_IMAGE_GID"] = str(os.getgid())
+    if test_args[:5] != ["test", "--locked", "-p", "edgeagent-research", "--test"] or (
+        len(test_args) < 6 or test_args[5] not in {"processes", "image_owner"}
+    ):
         print("expected the protected Research process test command", file=sys.stderr)
         return 1
     process = subprocess.Popen(["cargo", *test_args], cwd=root, env=environment, start_new_session=True)
