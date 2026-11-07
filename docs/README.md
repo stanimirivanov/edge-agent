@@ -76,6 +76,10 @@ Read the rows that match the work. Do not bulk-read every guide or decision.
 Always consult the product and architecture sources when a change affects
 observable behavior, evidence meaning, ownership, or a dependency boundary.
 
+For M06 explanation authority, compatibility, and model qualification, read
+[ADR-0109](decisions/0109-bound-evidence-grounded-explanations.md) and the
+[frozen explanation protocol](development/explanations.md).
+
 For M04 versioned research payloads, read [research contracts](development/research-contracts.md).
 
 For M04 frozen evidence eligibility, read [research evidence](development/research-evidence.md).
