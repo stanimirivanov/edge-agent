@@ -99,3 +99,31 @@ suite, baseline, and verified deployment identities with the case results,
 reviewer ratings, and disposition. A failed or incomplete result keeps
 generation disabled. Synthetic adapter tests can establish integration
 behavior. Real-model qualification supplies the evidence for activation.
+
+## Versioned records
+
+The [explanation wire fixtures](../../crates/contracts/fixtures/explanation/proposal-v1.json)
+use key-sorted JSON with one final LF and a 16 KiB per-record limit.
+The proposal accepts up to 73 unique typed selections. Each selection names
+a claim, a citation entry digest, and a presentation variant. The model
+request binds the proposal to its inputs outside the proposal body.
+Claims contain no market values, narrative, or authority fields.
+
+The companion binds the artifact, decision, scope, evidence allowlist and
+explanation profile by identity. Renderable outcomes require all ranked
+instruments in artifact order, all retained policy reasons in decision order,
+and the research-only disclosure last. A fallback uses standard variants.
+A refused outcome carries only its reason and binding. Wire binding verifies
+the required claim sequence. Research still checks citation membership,
+claim support, variant approval, and current authorization before publication.
+
+The job ID is SHA-256 of the canonical job bytes. The job binds scope,
+artifact and decision. A different explanation profile does not mint another
+job for the same input. The companion ID is SHA-256 of its own canonical
+bytes and serves as the publication event and idempotency identity for an
+authorized renderable outcome. The route is
+`com.edgeagent.research.explanation-recorded.v1` on the Research request
+partition. Refusals stay owner-local. The contracts do not provision the route.
+
+Run `cargo xtask verify --check explanation-contracts --python python3` for
+the frozen bytes, structural schemas, and strict binding checks.
