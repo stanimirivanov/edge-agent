@@ -5,6 +5,7 @@
 pub mod execution;
 pub mod experiment;
 pub mod experiment_ledger;
+pub mod explanation;
 pub mod governed;
 pub mod lifecycle;
 pub mod publication;

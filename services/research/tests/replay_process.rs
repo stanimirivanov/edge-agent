@@ -49,6 +49,20 @@ async fn replay(
     invoke(command, input).await
 }
 
+async fn explain(profile: &Profile, schema: &str, input: &[u8]) -> Result<std::process::Output> {
+    let mut command = profile.command(schema, "offline-explain");
+    command
+        .env(
+            "EDGEAGENT_RESEARCH_REPLAY_RENDERER",
+            edgeagent_research_application::RENDERER_REVISION,
+        )
+        .env(
+            "EDGEAGENT_RESEARCH_REPLAY_MOMENTUM",
+            edgeagent_research_domain::momentum::REVISION,
+        );
+    invoke(command, input).await
+}
+
 async fn invoke(command: std::process::Command, input: &[u8]) -> Result<std::process::Output> {
     use tokio::io::AsyncWriteExt as _;
     let mut child = tokio::process::Command::from(command)
@@ -71,6 +85,18 @@ async fn replay_restart_and_refusals_preserve_all_retained_rows() -> Result {
         let (event,bytes)=event("replay")?;let profile=Profile::new(&bytes)?;
         let input=event.to_json()?;
         let original=run(&profile,&db.schema,&input).await?;assert!(original.status.success());
+        let before_trace = snapshot(&db).await?;
+        let trace = explain(&profile, &db.schema, &input).await?;
+        assert!(trace.status.success(), "{}", String::from_utf8_lossy(&trace.stderr));
+        let text = std::str::from_utf8(&trace.stdout)?;
+        assert!(text.contains("score_ppm=") && text.contains("evidence="));
+        assert!(text.ends_with("Research only. This explanation confers no trading authority.\n"));
+        assert_eq!(explain(&profile, &db.schema, &input).await?.stdout, trace.stdout);
+        assert_eq!(snapshot(&db).await?, before_trace);
+        let (foreign, _) = support::governed_event("foreign-trace")?;
+        let refused = explain(&profile, &db.schema, &foreign.to_json()?).await?;
+        assert!(!refused.status.success() && refused.stdout.is_empty());
+
         sqlx::query("UPDATE edgeagent_message_inbox SET message_type='synthetic-corrupt-type'").execute(&db.pool).await?;
         let damaged=snapshot(&db).await?;
         assert!(!replay(&profile,&db.schema,&input,None).await?.status.success());
@@ -100,6 +126,8 @@ async fn replay_restart_and_refusals_preserve_all_retained_rows() -> Result {
             std::fs::write(&profile.owner,format!("#!/bin/sh\nexit {exit}\n"))?;
             let output=replay(&profile,&db.schema,&input,None).await?;
             assert!(!output.status.success());assert!(output.stdout.is_empty());
+            let refused = explain(&profile, &db.schema, &input).await?;
+            assert!(!refused.status.success() && refused.stdout.is_empty());
         }
         std::fs::write(&profile.owner,format!("#!/bin/sh\n/bin/cat '{}'\n",profile.artifact.display()))?;
         std::fs::write(&profile.artifact,b"corrupt invented evidence")?;
