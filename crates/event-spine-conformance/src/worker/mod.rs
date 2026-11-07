@@ -2,7 +2,7 @@ mod faults;
 mod ordering;
 mod persistence;
 mod replay;
-mod telemetry;
+use edgeagent_telemetry::exporter::Telemetry;
 
 use std::{error::Error, io::Write, time::Duration};
 
@@ -364,8 +364,9 @@ pub(super) async fn run() -> Result<(), WorkerError> {
     Ok(())
 }
 
-pub(super) fn start_telemetry() -> Result<Option<telemetry::Telemetry>, WorkerError> {
-    if std::env::var_os(telemetry::ENDPOINT).is_none() {
+pub(super) fn start_telemetry() -> Result<Option<Telemetry>, WorkerError> {
+    const ENDPOINT: &str = "EDGEAGENT_PROOF_OTLP_ENDPOINT";
+    if std::env::var_os(ENDPOINT).is_none() {
         return Ok(None);
     }
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
@@ -373,7 +374,12 @@ pub(super) fn start_telemetry() -> Result<Option<telemetry::Telemetry>, WorkerEr
         return Err("expected one role".into());
     };
     let role = Role::parse(role)?;
-    telemetry::Telemetry::start(role.as_str(), role.component()?.as_str())
+    Telemetry::start(
+        ENDPOINT,
+        "edgeagent.conformance.event-spine",
+        role.as_str(),
+        role.component()?.as_str(),
+    )
 }
 
 fn metadata(fact: bool) -> MessageMetadata {

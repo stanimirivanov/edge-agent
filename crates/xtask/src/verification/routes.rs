@@ -132,6 +132,18 @@ const ROUTES: &[Route] = &[
         checks: &["research-processes"],
     },
     Route {
+        matcher: Matcher::Prefix("services/research/tests/process_telemetry/"),
+        guides: &["docs/development/event-spine-telemetry.md"],
+        checks: &["research-processes"],
+    },
+    Route {
+        matcher: Matcher::Exact(
+            "crates/event-spine-conformance/tests/process/telemetry/receiver.rs",
+        ),
+        guides: &["docs/development/event-spine-telemetry.md"],
+        checks: &["research-processes"],
+    },
+    Route {
         matcher: Matcher::Prefix("services/research/tests/process_support/"),
         guides: &["docs/development/research-processes.md"],
         checks: &["research-processes"],
@@ -1450,6 +1462,7 @@ const ROUTES: &[Route] = &[
             "event-spine-client",
             "relay-observation-contracts",
             "event-spine-processes",
+            "research-processes",
         ],
     },
     Route {

@@ -31,7 +31,7 @@
 | `edgeagent-simulation-domain` | Domain | Frozen runs, virtual time, reproducible continuation, simulated-account risk policy and event-applied dry-run orders; no effects or storage |
 | `edgeagent-event-spine-conformance` | Tooling | Synthetic contracts, schema tooling and finite process-proof composition; not a deployable |
 | `edgeagent-messaging` | Port | Application-facing messaging, relay-storage, and atomic inbound-store ports plus settlement semantics |
-| `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements and correlated diagnostic facts |
+| `edgeagent-telemetry` | Observability | Exporter-neutral event-spine measurements, with an opt-in OTLP lifecycle for process roots |
 | `edgeagent-inbox-handler` | Application | Persistence-neutral policy for validation, atomic processing, retry, quarantine, and settlement |
 | `edgeagent-outbox-relay` | Application | Persistence-neutral publication, lease, retry, and terminal-quarantine policy |
 | `edgeagent-inbox-postgres` | Adapter | PostgreSQL transactions and durable inbox, quarantine, and replay evidence |
@@ -81,7 +81,7 @@ dependencies between workspace packages:
 | `edgeagent-service-runtime` | `edgeagent-contracts` |
 | `edgeagent-market-data` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-market-data-replay`, `edgeagent-market-data-postgres`, `edgeagent-market-data-object-store`, `edgeagent-market-data-http`, `edgeagent-simulation-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
 | `edgeagent-gateway` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-outbox-postgres`, `edgeagent-research-application` |
-| `edgeagent-research` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-research-application`, `edgeagent-research-domain`, `edgeagent-research-postgres`, `edgeagent-market-data-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
+| `edgeagent-research` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-research-application`, `edgeagent-research-domain`, `edgeagent-research-postgres`, `edgeagent-market-data-domain`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres`, `edgeagent-outbox-relay`, `edgeagent-messaging`, `edgeagent-messaging-nats`, `edgeagent-telemetry` |
 | `edgeagent-audit-projector` | `edgeagent-contracts`, `edgeagent-service-runtime`, `edgeagent-audit-domain`, `edgeagent-research-application`, `edgeagent-inbox-postgres`, `edgeagent-messaging`, `edgeagent-messaging-nats` |
 | Other service composition roots | `edgeagent-contracts`, `edgeagent-service-runtime` |
 | `edgeagent-xtask` | None |

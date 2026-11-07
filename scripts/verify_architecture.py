@@ -84,7 +84,10 @@ OUTBOX_RELAY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, TELEMETRY})
 OUTBOX_RELAY_DEV_DEPENDENCIES = frozenset(
     {OUTBOX_POSTGRES, "serde_json", "sqlx", "tokio", "tracing"}
 )
-TELEMETRY_DEPENDENCIES = frozenset({CONTRACTS, MESSAGING, "metrics", "tracing"})
+TELEMETRY_DEPENDENCIES = frozenset({
+    CONTRACTS, MESSAGING, "metrics", "tracing",
+    "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest", "tracing-subscriber",
+})
 TELEMETRY_DEV_DEPENDENCIES = frozenset({"serde_json"})
 SERVICE_DEPENDENCIES = frozenset({CONTRACTS, SERVICE_RUNTIME})
 XTASK_DEPENDENCIES = frozenset(
@@ -136,8 +139,7 @@ PACKAGE_RULES = {
         frozenset({
             CONTRACTS, INBOX_HANDLER, INBOX_POSTGRES, MESSAGING, MESSAGING_NATS,
             OUTBOX_POSTGRES, OUTBOX_RELAY, TELEMETRY, "async-nats", "jsonschema", "schemars",
-            "serde", "serde_json", "sqlx", "tokio", "tracing", "tracing-subscriber",
-            "opentelemetry", "opentelemetry-otlp", "opentelemetry_sdk", "reqwest",
+            "serde", "serde_json", "sqlx", "tokio", "tracing",
             "edgeagent-market-data-domain", "edgeagent-simulation-domain", "edgeagent-simulation-postgres", "edgeagent-audit-domain",
         }),
         frozenset({"futures-util", "axum", "opentelemetry-proto", "prost"}),
@@ -242,8 +244,8 @@ PACKAGE_RULES = {
     ),
     "services/research": PackageRule(
         "edgeagent-research", "bin",
-        frozenset({"edgeagent-contracts","edgeagent-service-runtime","edgeagent-research-application","edgeagent-research-domain","edgeagent-research-postgres","edgeagent-market-data-domain","edgeagent-inbox-postgres","edgeagent-outbox-postgres","edgeagent-outbox-relay","edgeagent-messaging","edgeagent-messaging-nats","async-nats","chrono","serde_json","sqlx","tokio","url"}),
-        frozenset({"futures-util"}),
+        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-research-application","edgeagent-research-domain","edgeagent-research-postgres","edgeagent-market-data-domain","edgeagent-inbox-postgres","edgeagent-outbox-postgres","edgeagent-outbox-relay","edgeagent-messaging","edgeagent-messaging-nats","async-nats","chrono","serde_json","sqlx","tokio","url"}),
+        frozenset({"futures-util", "axum", "opentelemetry-proto", "prost"}),
     ),
 }
 
