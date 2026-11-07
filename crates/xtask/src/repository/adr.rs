@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 108] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 109] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -561,6 +561,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 108] = [
         number: 108,
         path: "docs/decisions/0108-enable-bounded-otlp-in-gateway-and-projector.md",
         title: "Enable bounded loopback OTLP in Gateway and the audit projector",
+    },
+    PublishedIdentity {
+        number: 109,
+        path: "docs/decisions/0109-bound-evidence-grounded-explanations.md",
+        title: "Bound evidence-grounded explanations",
     },
 ];
 

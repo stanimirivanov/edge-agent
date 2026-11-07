@@ -220,3 +220,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0106](0106-replay-retained-research-policy-decisions.md) | Accepted | Replay retained Research policy decisions. |
 | [ADR-0107](0107-enable-bounded-otlp-in-research.md) | Accepted | Enable bounded loopback OTLP export in Research. |
 | [ADR-0108](0108-enable-bounded-otlp-in-gateway-and-projector.md) | Accepted | Enable bounded loopback OTLP in Gateway and the audit projector. |
+| [ADR-0109](0109-bound-evidence-grounded-explanations.md) | Accepted | Bound evidence-grounded explanations. |
