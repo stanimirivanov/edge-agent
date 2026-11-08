@@ -235,3 +235,30 @@ independently validated.
 The port distinguishes unavailable service, timeout, refusal, exhausted
 budget, deployment mismatch, and invalid response. Runtime verification,
 transport, and activation are later slices.
+
+## Local model HTTP adapter
+
+The Research adapter sends a single nonstreaming request to
+`http://127.0.0.1:<port>/v1/chat/completions`. It uses the weights digest as
+the configured model alias, sends the pinned system prompt separately from
+UTF-8 input data, and supplies the frozen proposal schema. The reviewed
+deployment must expose that alias. See the
+[llama.cpp chat protocol](https://github.com/ggml-org/llama.cpp/blob/b12188/tools/server/README.md#post-v1chatcompletions-openai-compatible-chat-completions-api).
+
+Before disclosure the adapter checks the exact prompt digest and obtains
+a lease from a trusted deployment verifier. The lease binds the listener,
+runtime manifest, and weights through response collection. Loopback and
+server-reported model names alone cannot verify identity. A launcher must
+independently verify and reserve the listener for this interface.
+
+The profile deadline covers identity verification, HTTP, and body reads.
+The adapter permits one in-flight request, with a 64 KiB HTTP response
+limit and the existing 16 KiB proposal limit. It disables redirects,
+proxies, retries, connection reuse, and decompression. Dropping the request
+releases the local lease and concurrency slot. Remote inference may already
+have begun, so cancellation does not justify a replacement attempt.
+
+Only one stopped assistant text choice is accepted. The adapter rejects
+tool messages and normalizes typed proposal JSON before handing it to the
+independent Research validator. Model startup, a production deployment
+verifier, and real-model qualification belong to later integration.
