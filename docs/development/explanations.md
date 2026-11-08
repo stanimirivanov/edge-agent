@@ -177,3 +177,34 @@ the response with the allowlist and checks disclosure authority separately.
 Run `cargo test --locked -p edgeagent-research-application --test explanation_validation`
 for acceptance and adversarial cases. The default workspace gate also runs
 these tests.
+
+## Disclosure and reviewed context
+
+The explanation boundary checks current evidence-owner rights and Research
+grants for the exact artifact, decision, scope, audience, and purpose.
+Research use, model disclosure, and explanation serving are separate purposes.
+For an individual excerpt the grant must also name its reviewed digest.
+Unknown, unavailable, revoked, and expired permissions deny the operation.
+The validity start is inclusive and expiry is exclusive.
+
+Artifact-level planning allows deterministic fallback when model disclosure
+is unavailable and serving is independently allowed. Serving denial refuses
+output. This decision is a snapshot. The calling process must authenticate
+both sources, use the artifact's verified decision cutoff, and recheck
+current permission before dispatch and at serving time.
+
+A reviewed excerpt is a canonical `research.explanation.document.v1`
+record with an opaque source label, scope, availability time, and UTF-8
+text. The 16 KiB wire limit applies before parsing and text is capped at
+4 KiB. The reviewed SHA-256 covers the entire canonical record. Evidence
+available after the decision cutoff is refused. The document-specific
+boundary admits excerpts for Research use or model disclosure.
+
+An admitted excerpt remains untrusted text. Future adapters must put it in
+a data field and keep it separate from instructions, tools, and the market
+fact allowlist. A source label is never resolved as a path or URL. The
+consumer-owned authority port has no storage or network implementation in
+this slice.
+
+Run `cargo test --locked -p edgeagent-research-application --test explanation_context`
+for permission, digest, timestamp, bound, and injection cases.
