@@ -69,6 +69,9 @@ fn facade_projection_preserves_w3c_state_and_all_twenty_bounded_classifications(
     let context = EventSpineContext::from_envelope(&envelope);
     assert_eq!(context.trace_state(), Some("edgeagent=synthetic"));
     let capture = Capture::default();
+    let _facade = crate::FACADE_TEST_LOCK
+        .lock()
+        .map_err(|_| "facade test lock poisoned")?;
     tracing::subscriber::with_default(tracing_subscriber::registry().with(capture.clone()), || {
         for stage in [
             EventSpineStage::Publication,

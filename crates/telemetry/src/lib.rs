@@ -204,6 +204,12 @@ impl EventSpineContext {
     }
 }
 
+// The metrics and exporter tests share the facade's tracing callsite. First
+// registration from the metrics thread can cache disabled interest while the
+// exporter thread is using a scoped subscriber.
+#[cfg(test)]
+static FACADE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Emit one completed event-spine stage without affecting domain behavior.
 ///
 /// Metrics contain only the bounded `stage` and `outcome` dimensions. Message
@@ -402,6 +408,9 @@ mod tests {
         let recorder = CapturingRecorder::default();
         let context = EventSpineContext::from_envelope(&envelope()?);
 
+        let _facade = super::FACADE_TEST_LOCK
+            .lock()
+            .map_err(|_| io::Error::other("facade test lock was poisoned"))?;
         metrics::with_local_recorder(&recorder, || {
             record_event_spine_operation(
                 &context,
