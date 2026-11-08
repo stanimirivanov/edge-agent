@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT profile,evidence,input_digest,audience,grant_revision,reserved_at_ms,deadline_ms,fallback FROM edgeagent_explanation_attempts WHERE job_id=$1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "profile"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "evidence",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "evidence"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "input_digest",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "input_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "audience",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "audience"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "grant_revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "grant_revision"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "reserved_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "reserved_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "deadline_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "deadline_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "fallback",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_attempts",
+            "name": "fallback"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0a87ddb4c4b65fe491afd7fe5b25ccfb29e1795fbde721d38a0150b8f029f7c7"
+}
