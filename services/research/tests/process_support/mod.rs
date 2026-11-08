@@ -130,9 +130,14 @@ impl Journey {
                 format!("projector_{suffix}"),
                 inbox
                     .into_iter()
-                    .chain([include_str!(
-                        "../../../audit-projector/migrations/0001_research_projection.sql"
-                    )])
+                    .chain([
+                        include_str!(
+                            "../../../audit-projector/migrations/0001_research_projection.sql"
+                        ),
+                        include_str!(
+                            "../../../audit-projector/migrations/0002_explanation_checkpoint.sql"
+                        ),
+                    ])
                     .collect(),
             )
             .await?;
@@ -143,6 +148,7 @@ impl Journey {
                 ABSTAINED.subject()?,
                 CHANGED.subject()?,
                 edgeagent_research_application::publication::DECISION.subject()?,
+                edgeagent_contracts::explanation::RECORDED.subject()?,
             ];
             subjects.extend(
                 evidence::DEFINITIONS
@@ -176,6 +182,7 @@ impl Journey {
                         ABSTAINED.subject()?,
                         CHANGED.subject()?,
                         edgeagent_research_application::publication::DECISION.subject()?,
+                        edgeagent_contracts::explanation::RECORDED.subject()?,
                     ],
                 ),
             ] {
@@ -454,6 +461,7 @@ impl Journey {
                     ABSTAINED.subject()?,
                     CHANGED.subject()?,
                     edgeagent_research_application::publication::DECISION.subject()?,
+                    edgeagent_contracts::explanation::RECORDED.subject()?,
                 ],
                 ack_policy: async_nats::jetstream::consumer::AckPolicy::Explicit,
                 ack_wait: Duration::from_secs(60),

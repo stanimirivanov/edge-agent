@@ -55,6 +55,59 @@ pub fn event(record: &ResearchRecord) -> Result<MessageEnvelope> {
         record,
     )?)
 }
+pub fn decision_event(
+    record: &ResearchRecord,
+    terminal: &MessageEnvelope,
+) -> Result<(
+    edgeagent_contracts::research_decision::DecisionProvenance,
+    MessageEnvelope,
+)> {
+    use edgeagent_contracts::research_decision::{DecisionProvenance, DecisionRecord};
+    use edgeagent_research_application::publication::DECISION;
+    let req = request(record)?;
+    let mut companion = DecisionProvenance::decode(include_bytes!(
+        "../../../../crates/contracts/fixtures/research/decision-v1.json"
+    ))?;
+    companion.request = req.clone();
+    companion.outcome = record.digest()?;
+    let id = companion.digest()?;
+    let partition = format!("research-request/{}/{}", req.scope, req.request_id);
+    let envelope = MessageEnvelope::from_payload(
+        MessageMetadata {
+            id: id.clone(),
+            source: Component::Research.source_uri().into(),
+            message_type: DECISION.message_type().into(),
+            subject: partition.clone(),
+            time: "2026-10-31T00:00:00Z".into(),
+            data_schema: DECISION.data_schema().into(),
+            correlation_id: terminal
+                .extension("correlationid")
+                .ok_or("correlation")?
+                .into(),
+            causation_id: record.digest()?,
+            idempotency_key: id.clone(),
+            partition_key: partition,
+            trace_parent: terminal.extension("traceparent").ok_or("trace")?.into(),
+            trace_state: None,
+        },
+        &DecisionRecord::V1(companion.clone()),
+    )?;
+    Ok((companion, envelope))
+}
+
+pub fn explanation_event(
+    record: &ResearchRecord,
+    terminal: &MessageEnvelope,
+    decision: &MessageEnvelope,
+) -> Result<MessageEnvelope> {
+    let mut explanation = edgeagent_contracts::explanation::Companion::decode(include_bytes!(
+        "../../../../crates/contracts/fixtures/explanation/companion-v1.json"
+    ))?;
+    explanation.binding.anchor.artifact = record.digest()?;
+    explanation.binding.anchor.decision = decision.id().into();
+    Ok(explanation.publication(terminal, "2026-10-31T00:00:00Z")?)
+}
+
 pub struct Server {
     pub address: std::net::SocketAddr,
     task: tokio::task::JoinHandle<()>,

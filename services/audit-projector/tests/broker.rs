@@ -57,6 +57,7 @@ async fn broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_p
                     b.clone(),
                     edgeagent_research_application::lifecycle::CHANGED.subject()?,
                     edgeagent_research_application::publication::DECISION.subject()?,
+                    edgeagent_contracts::explanation::RECORDED.subject()?,
                 ],
                 max_messages: 32,
                 max_bytes: 16_777_216,
@@ -74,6 +75,7 @@ async fn broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_p
                     b.clone(),
                     edgeagent_research_application::lifecycle::CHANGED.subject()?,
                     edgeagent_research_application::publication::DECISION.subject()?,
+                    edgeagent_contracts::explanation::RECORDED.subject()?,
                 ],
                 ack_policy: async_nats::jetstream::consumer::AckPolicy::Explicit,
                 ack_wait: Duration::from_secs(60),
@@ -158,8 +160,13 @@ async fn broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_p
                 .status,
             "expired"
         );
-        let poison = event(&support::record("wrong-route", false)?)?;
-        context.publish(b, poison.to_json()?.into()).await?.await?;
+        let closed_terminal = event(&closed)?;
+        let (_, decision) = decision_event(&closed, &closed_terminal)?;
+        let explanation = explanation_event(&closed, &closed_terminal, &decision)?;
+        context
+            .publish(b, explanation.to_json()?.into())
+            .await?
+            .await?;
         worker(&db, &broker, &name).await?;
         assert_eq!(consumer.info().await?.num_ack_pending, 0);
         assert_eq!(
@@ -169,6 +176,26 @@ async fn broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_p
             1
         );
         assert_eq!(db.counts().await?, (3, 4));
+        context
+            .publish(
+                edgeagent_research_application::publication::DECISION.subject()?,
+                decision.to_json()?.into(),
+            )
+            .await?
+            .await?;
+        worker(&db, &broker, &name).await?;
+        context
+            .publish(
+                edgeagent_contracts::explanation::RECORDED.subject()?,
+                explanation.to_json()?.into(),
+            )
+            .await?
+            .await?;
+        worker(&db, &broker, &name).await?;
+        assert_eq!(consumer.info().await?.num_ack_pending, 0);
+        let closed = store.get("offline", "closed").await?.ok_or("view")?;
+        assert_eq!((closed.status, closed.projection_revision), ("expired", 4));
+        assert_eq!(db.counts().await?, (3, 6));
         let mut changed = record;
         if let ResearchRecord::Artifact(v) = &mut changed {
             v.expires_at_ms += 1;
@@ -182,7 +209,7 @@ async fn broker_restart_duplicates_route_poison_and_conflicts_preserve_applied_p
         let blocked = store.get("offline", "request-1").await?.ok_or("gap")?;
         assert_eq!(blocked.status, "gap");
         assert_eq!(blocked.applied_delivery_key, first.applied_delivery_key);
-        assert_eq!(db.counts().await?, (3, 4));
+        assert_eq!(db.counts().await?, (3, 6));
         Ok(())
     })
     .catch_unwind()
