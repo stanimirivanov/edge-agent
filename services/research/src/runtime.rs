@@ -63,6 +63,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-governance-approve"
                 | "offline-governance-retire"
                 | "offline-control"
+                | "offline-explanation-grant"
                 | "offline-experiment-ledger"
                 | "offline-once"
                 | "offline-worker"
@@ -159,6 +160,40 @@ async fn execute(mode: &str) -> Result {
                 store.experiment_ledger(&command),
             ).await??;
             std::io::stdout().write_all(&retained)?;
+            return Ok(());
+        }
+        if mode == "offline-explanation-grant" {
+            use std::io::Read as _;
+            use edgeagent_research_application::explanation_context::{Grant, Purpose, Request};
+            #[derive(serde::Deserialize)]
+            #[serde(tag = "kind", deny_unknown_fields)]
+            enum Command {
+                #[serde(rename = "research.explanation.grant.v1")]
+                V1 {
+                    anchor: edgeagent_contracts::explanation::Anchor,
+                    audience: String,
+                    purpose: String,
+                    document: Option<String>,
+                    revision: i64,
+                    valid_from_ms: i64,
+                    expires_at_ms: i64,
+                    revoked: bool,
+                },
+            }
+            let mut bytes = Vec::new();
+            std::io::stdin().take(4097).read_to_end(&mut bytes)?;
+            if bytes.len() > 4096 { return Err("oversized grant command".into()); }
+            let Command::V1 { anchor, audience, purpose, document, revision, valid_from_ms, expires_at_ms, revoked } =
+                serde_json::from_slice(&bytes).map_err(|_| "invalid grant command")?;
+            if anchor.scope != scope { return Err("foreign grant scope".into()); }
+            let purpose = match purpose.as_str() {
+                "research_use" => Purpose::ResearchUse,
+                "model_disclosure" => Purpose::ModelDisclosure,
+                "explanation_serving" => Purpose::ExplanationServing,
+                _ => return Err("invalid grant purpose".into()),
+            };
+            let grant = Grant { request: Request { anchor, audience, purpose, document }, valid_from_ms, expires_at_ms, revoked };
+            store.set_explanation_grant(&grant, revision).await?;
             return Ok(());
         }
         if mode=="offline-control" {

@@ -248,6 +248,7 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "retirement_fences_new_completion_and_nonowner_cannot_administer",
         "validated_companions_are_atomic_immutable_and_required_for_fresh_completion",
         "historical_absence_recovers_but_database_refuses_unaccompanied_new_inserts",
+        "explanation_grants::explanation_grants_are_current_purpose_bound_and_transaction_fenced",
         "controls::controls_compose_audit_revisions_and_preserve_recovery_and_lifecycle",
         "experiments::experiment_ledger_fences_concurrent_retries_and_recovers_an_immutable_census",
         "controls::control_races_and_failures_fence_completion_and_reject_unfenced_writers",
@@ -1161,8 +1162,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 162);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 162);
+        assert_eq!(inventory.len(), 163);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 163);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

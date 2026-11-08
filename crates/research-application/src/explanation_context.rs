@@ -12,6 +12,17 @@ pub enum Purpose {
     ExplanationServing,
 }
 
+impl Purpose {
+    /// Stable code for owner grant storage and commands.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::ResearchUse => "research_use",
+            Self::ModelDisclosure => "model_disclosure",
+            Self::ExplanationServing => "explanation_serving",
+        }
+    }
+}
+
 /// Exact authorization subject. All fields come from the authenticated
 /// operation and its reviewed inputs.
 #[derive(Clone, Eq, PartialEq)]
@@ -27,7 +38,8 @@ pub struct Request {
 }
 
 impl Request {
-    fn valid(&self) -> bool {
+    /// Check the operation identity without consulting any authority.
+    pub fn is_valid(&self) -> bool {
         self.anchor.is_valid()
             && (1..=64).contains(&self.audience.len())
             && self
@@ -80,7 +92,7 @@ pub struct Permissions {
 impl Permissions {
     /// Require both authorities to allow this exact operation at the check time.
     pub fn allows(&self, request: &Request, now_ms: i64) -> bool {
-        request.valid()
+        request.is_valid()
             && [&self.owner, &self.research].into_iter().all(|grant| {
                 grant
                     .as_ref()
