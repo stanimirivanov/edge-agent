@@ -208,3 +208,30 @@ this slice.
 
 Run `cargo test --locked -p edgeagent-research-application --test explanation_context`
 for permission, digest, timestamp, bound, and injection cases.
+
+## Explanation profiles and inference port
+
+A `research.explanation.profile.v1` record is canonical, key-sorted JSON
+with one final LF and a 2 KiB input limit. Its SHA-256 identifies the exact
+profile used in the companion binding. The profile pins the reviewed runtime
+deployment manifest, model weights, prompt bundle, validator revision, and
+renderer templates by lowercase nonzero SHA-256 digest. Tools must be
+explicitly set to `none`.
+
+Settings are explicit integers. The seed is an unsigned 32-bit value,
+temperature is in thousandths from 0 through 2000, the output budget is
+1 through 2048 tokens, and the timeout is 1 through 30000 milliseconds.
+Adapters must honor these settings and any additional runtime defaults must
+be fixed by the reviewed deployment manifest.
+
+Research owns the inference port. It accepts prepared, authorized data up to
+64 KiB and binds it to the exact artifact, decision, evidence, and profile.
+The adapter independently establishes which deployment will handle the
+request before disclosure and supplies that observation with the reply.
+Model-reported labels cannot establish deployment identity. Proposal output
+is bounded by the existing 16 KiB wire limit and remains untrusted until
+independently validated.
+
+The port distinguishes unavailable service, timeout, refusal, exhausted
+budget, deployment mismatch, and invalid response. Runtime verification,
+transport, and activation are later slices.
