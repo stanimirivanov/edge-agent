@@ -1,11 +1,12 @@
 //! Deterministic explanation preview for independently verified Research inputs.
 use edgeagent_contracts::{
+    explanation::{Anchor, Claim, Disclosure, Proposal, Selection, Variant},
     research::{EvidenceRef, RankedCandidate, ResearchRecord},
     research_decision::{Assessment, DecisionProvenance, Reason},
 };
 use std::fmt::{self, Write as _};
 
-/// Payload-safe refusal to explain inconsistent or incomplete inputs.
+/// Payload-safe refusal of inconsistent inputs or an unsupported proposal.
 #[derive(Debug)]
 pub struct Error;
 
@@ -23,8 +24,7 @@ struct Rank<'a> {
 
 /// Closed set of facts eligible for the local deterministic preview.
 pub struct Allowlist<'a> {
-    artifact: String,
-    decision: String,
+    anchor: Anchor,
     ranks: Vec<Rank<'a>>,
     reasons: &'a [Reason],
 }
@@ -62,10 +62,64 @@ impl<'a> Allowlist<'a> {
             });
         }
         Ok(Self {
-            artifact: decision.outcome.clone(),
-            decision: decision.digest().map_err(|_| Error)?,
+            anchor: Anchor {
+                scope: artifact.request.scope.clone(),
+                artifact: decision.outcome.clone(),
+                decision: decision.digest().map_err(|_| Error)?,
+            },
             ranks,
             reasons,
+        })
+    }
+
+    /// Decode an untrusted proposal, verify all claims, and render a sealed result.
+    ///
+    /// The caller associates the model response with this allowlist. This checks
+    /// factual support and presentation choices. Current disclosure authority is
+    /// the responsibility of the calling boundary.
+    ///
+    /// # Errors
+    /// Refuses invalid wire input, missing or reordered claims, unsupported
+    /// citations, and variants outside the approved templates.
+    pub fn validate(&self, bytes: &[u8]) -> Result<ValidatedExplanation, Error> {
+        let proposal = Proposal::decode(bytes).map_err(|_| Error)?;
+        let (ranks, tail) = proposal
+            .claims
+            .split_at_checked(self.ranks.len())
+            .ok_or(Error)?;
+        let (reasons, tail) = tail.split_at_checked(self.reasons.len()).ok_or(Error)?;
+        let [disclosure] = tail else {
+            return Err(Error);
+        };
+        let ranks_match = self.ranks.iter().zip(ranks).all(|(rank, selection)| {
+            matches!(&selection.claim, Claim::Ranked { instrument }
+                if instrument == &rank.candidate.instrument)
+                && rank
+                    .evidence
+                    .iter()
+                    .any(|reference| reference.digest == selection.citation)
+        });
+        let reasons_match = self.reasons.iter().zip(reasons).all(|(reason, selection)| {
+            matches!(selection.claim, Claim::PolicyReason { reason: actual } if actual == *reason)
+                && selection.citation == self.anchor.decision
+                && selection.variant == Variant::Standard
+        });
+        if !ranks_match
+            || !reasons_match
+            || disclosure.claim
+                != (Claim::Disclosure {
+                    disclosure: Disclosure::ResearchOnly,
+                })
+            || disclosure.citation != self.anchor.artifact
+            || disclosure.variant != Variant::Standard
+        {
+            return Err(Error);
+        }
+        let rendered = self.render_ranks(ranks).map_err(|_| Error)?;
+        Ok(ValidatedExplanation {
+            anchor: self.anchor.clone(),
+            proposal,
+            rendered,
         })
     }
 
@@ -74,20 +128,36 @@ impl<'a> Allowlist<'a> {
     /// # Errors
     /// Returns a formatting error if the output cannot be constructed.
     pub fn render(&self) -> Result<String, fmt::Error> {
+        self.render_ranks(&[])
+    }
+
+    fn render_ranks(&self, selections: &[Selection]) -> Result<String, fmt::Error> {
         let mut text = String::new();
         writeln!(
             text,
             "research-explanation-trace.v1 artifact={} decision={}",
-            self.artifact, self.decision
+            self.anchor.artifact, self.anchor.decision
         )?;
         for (index, rank) in self.ranks.iter().enumerate() {
-            write!(
-                text,
-                "rank={} instrument={} score_ppm={}",
-                index + 1,
-                rank.candidate.instrument,
-                rank.candidate.score_ppm
-            )?;
+            match selections
+                .get(index)
+                .map_or(Variant::Standard, |value| value.variant)
+            {
+                Variant::PlainLanguage => write!(
+                    text,
+                    "Rank {}: {} scored {} parts per million.",
+                    index + 1,
+                    rank.candidate.instrument,
+                    rank.candidate.score_ppm
+                )?,
+                Variant::Standard => write!(
+                    text,
+                    "rank={} instrument={} score_ppm={}",
+                    index + 1,
+                    rank.candidate.instrument,
+                    rank.candidate.score_ppm
+                )?,
+            }
             for evidence in &rank.evidence {
                 write!(
                     text,
@@ -102,11 +172,35 @@ impl<'a> Allowlist<'a> {
                 text,
                 "policy_reason={} decision={}",
                 reason_code(*reason),
-                self.decision
+                self.anchor.decision
             )?;
         }
         text.push_str("Research only. This explanation confers no trading authority.\n");
         Ok(text)
+    }
+}
+
+/// Validated proposal and deterministic rendering bound to exact Research inputs.
+pub struct ValidatedExplanation {
+    anchor: Anchor,
+    proposal: Proposal,
+    rendered: String,
+}
+
+impl ValidatedExplanation {
+    /// Exact artifact, decision and scope validated by the allowlist.
+    pub const fn anchor(&self) -> &Anchor {
+        &self.anchor
+    }
+
+    /// Accepted typed choices, retained for deterministic replay.
+    pub const fn proposal(&self) -> &Proposal {
+        &self.proposal
+    }
+
+    /// Presentation built exclusively from allowlisted facts and fixed templates.
+    pub fn rendered(&self) -> &str {
+        &self.rendered
     }
 }
 
