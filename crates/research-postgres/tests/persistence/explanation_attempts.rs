@@ -11,6 +11,7 @@ async fn explanation_attempts_spend_once_and_fence_ambiguous_recovery() -> Resul
         for migration in [
             edgeagent_research_postgres::explanation_grants::MIGRATION,
             edgeagent_research_postgres::explanation_attempts::MIGRATION,
+            edgeagent_research_postgres::explanation_completion::MIGRATION,
         ] {
             sqlx::raw_sql(migration).execute(&h.pool).await?;
         }

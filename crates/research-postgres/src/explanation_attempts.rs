@@ -66,6 +66,7 @@ impl Reservation {
 /// Recovery result. No variant permits another model call.
 pub enum Recovery {
     Missing,
+    Terminal,
     Pending { deadline_ms: i64 },
     Fallback(Spent),
 }
@@ -106,6 +107,25 @@ async fn locked(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<Option<R
         .fetch_optional(&mut **tx).await.map_err(storage)
 }
 
+pub(super) async fn check_terminal_binding(
+    tx: &mut Transaction<'_, Postgres>,
+    id: &str,
+    binding: &Binding,
+    requires_fallback: bool,
+) -> Result<(), Error> {
+    match locked(tx, id).await? {
+        Some(row)
+            if row.profile == binding.profile
+                && row.evidence == binding.evidence
+                && (!requires_fallback || row.fallback) =>
+        {
+            Ok(())
+        }
+        None if !requires_fallback => Ok(()),
+        _ => Err(Error::new(Kind::Conflict)),
+    }
+}
+
 impl PostgresResearchStore {
     /// Spend the one attempt before any model I/O. The caller authenticates
     /// the job and the evidence-owner permissions separately.
@@ -143,6 +163,10 @@ impl PostgresResearchStore {
             tx.commit().await.map_err(storage)?;
             return Ok(ReservationOutcome::AlreadySpent);
         }
+        if super::explanation_completion::exists(&mut tx, &id).await? {
+            tx.commit().await.map_err(storage)?;
+            return Ok(ReservationOutcome::AlreadySpent);
+        }
         let now_ms = clock_ms();
         if now_ms < 0
             || !intent
@@ -175,6 +199,17 @@ impl PostgresResearchStore {
     ) -> Result<Recovery, Error> {
         let id = job_id(job)?;
         let mut tx = transaction(&self.pool).await?;
+        sqlx::query!(
+            "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))",
+            job.anchor.scope
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if super::explanation_completion::exists(&mut tx, &id).await? {
+            tx.commit().await.map_err(storage)?;
+            return Ok(Recovery::Terminal);
+        }
         let result = match locked(&mut tx, &id).await? {
             None => Recovery::Missing,
             Some(row) => {
@@ -227,6 +262,7 @@ impl PostgresResearchStore {
             .ok_or_else(|| Error::new(Kind::Invalid))?;
         let now_ms = clock_ms();
         if row.fallback
+            || super::explanation_completion::exists(tx, &id).await?
             || row.grant_revision != permit.grant_revision()
             || !(row.reserved_at_ms..row.deadline_ms).contains(&now_ms)
         {

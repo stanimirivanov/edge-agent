@@ -123,6 +123,36 @@ impl<'a> Allowlist<'a> {
         })
     }
 
+    /// Build and validate the fixed standard selections for deterministic fallback.
+    ///
+    /// # Errors
+    /// Refuses an allowlist whose facts cannot form a valid cited proposal.
+    pub fn standard(&self) -> Result<ValidatedExplanation, Error> {
+        let mut claims = Vec::new();
+        for rank in &self.ranks {
+            claims.push(Selection {
+                claim: Claim::Ranked {
+                    instrument: rank.candidate.instrument.clone(),
+                },
+                citation: rank.evidence.first().ok_or(Error)?.digest.clone(),
+                variant: Variant::Standard,
+            });
+        }
+        claims.extend(self.reasons.iter().map(|reason| Selection {
+            claim: Claim::PolicyReason { reason: *reason },
+            citation: self.anchor.decision.clone(),
+            variant: Variant::Standard,
+        }));
+        claims.push(Selection {
+            claim: Claim::Disclosure {
+                disclosure: Disclosure::ResearchOnly,
+            },
+            citation: self.anchor.artifact.clone(),
+            variant: Variant::Standard,
+        });
+        self.validate(&Proposal { claims }.canonical_bytes().map_err(|_| Error)?)
+    }
+
     /// Render the preview in artifact rank order and retained policy reason order.
     ///
     /// # Errors
