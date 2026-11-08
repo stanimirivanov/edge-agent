@@ -362,3 +362,162 @@ fn decision_provenance_replays_with_gaps_conflicts_and_legacy_checkpoint_compati
     }
     Ok(())
 }
+
+fn explanation() -> Result<edgeagent_contracts::explanation::Companion> {
+    Ok(edgeagent_contracts::explanation::Companion::decode(
+        include_bytes!("../../contracts/fixtures/explanation/companion-v1.json"),
+    )?)
+}
+
+fn decision() -> Result<edgeagent_contracts::research_decision::DecisionProvenance> {
+    Ok(
+        edgeagent_contracts::research_decision::DecisionProvenance::decode(include_bytes!(
+            "../../contracts/fixtures/research/decision-v1.json"
+        ))?,
+    )
+}
+
+#[test]
+fn explanation_gaps_duplicates_and_conflicts_do_not_advance_the_view() -> Result {
+    use edgeagent_contracts::explanation::{Outcome, Refusal};
+    let record = artifact()?;
+    let req = request(&record)?;
+    let mut view = ResearchProjection::new(req.clone())?;
+    for predecessor in [None, Some(record.clone())] {
+        if let Some(predecessor) = predecessor {
+            view.apply(predecessor)?;
+        }
+        let before = view.checkpoint()?;
+        assert_eq!(view.apply_explanation(explanation()?), Err(Error::Gap));
+        let mut foreign = explanation()?;
+        foreign.binding.anchor.scope = "foreign".into();
+        assert_eq!(view.apply_explanation(foreign), Err(Error::Scope));
+        assert_eq!(view.checkpoint()?, before);
+    }
+    let mut wrong_artifact = explanation()?;
+    wrong_artifact.binding.anchor.artifact = "ff".repeat(32);
+    assert_eq!(view.apply_explanation(wrong_artifact), Err(Error::Conflict));
+    let provenance = decision()?;
+    view.apply_provenance(provenance.clone())?;
+    let prior = view.checkpoint()?;
+    let legacy_body = format!(
+        "{{\"version\":\"EARP3\",\"request\":{},\"outcome\":{},\"provenance\":{}}}",
+        serde_json::to_string(&String::from_utf8(
+            ResearchRecord::Request(req.clone()).canonical_bytes()?
+        )?)?,
+        serde_json::to_string(&String::from_utf8(record.canonical_bytes()?)?)?,
+        serde_json::to_string(&String::from_utf8(provenance.canonical_bytes()?)?)?,
+    );
+    assert_eq!(&prior[..prior.len() - 32], legacy_body.as_bytes());
+    let mut wrong_decision = explanation()?;
+    wrong_decision.binding.anchor.decision = "ff".repeat(32);
+    assert_eq!(view.apply_explanation(wrong_decision), Err(Error::Conflict));
+    let mut refused = explanation()?;
+    refused.outcome = Outcome::Refused {
+        reason: Refusal::DisclosureDenied,
+    };
+    assert_eq!(view.apply_explanation(refused), Err(Error::Invalid));
+    let mut incomplete = explanation()?;
+    let Outcome::Generated { proposal } = &mut incomplete.outcome else {
+        return Err("expected generated companion".into());
+    };
+    proposal.claims.pop();
+    assert_eq!(view.apply_explanation(incomplete), Err(Error::Conflict));
+    let mut abstained = ResearchProjection::new(req.clone())?;
+    abstained.apply(ResearchRecord::Abstention(
+        edgeagent_contracts::research::ResearchAbstention {
+            request: req.clone(),
+            reason: AbstentionReason::StaleEvidence,
+        },
+    ))?;
+    assert_eq!(
+        abstained.apply_explanation(explanation()?),
+        Err(Error::Conflict)
+    );
+    assert_eq!(view.checkpoint()?, prior);
+
+    let companion = explanation()?;
+    assert_eq!(view.apply_explanation(companion)?, ReplayOutcome::Applied);
+    let bytes = explanation()?.canonical_bytes()?;
+    assert_eq!(view.explanation_bytes(), Some(bytes.as_slice()));
+    assert_eq!(
+        view.outcome_bytes(),
+        Some(record.canonical_bytes()?.as_slice())
+    );
+    assert_eq!(view.revision(), 3);
+    let retained = view.checkpoint()?;
+    assert_eq!(
+        view.apply_explanation(explanation()?)?,
+        ReplayOutcome::Duplicate
+    );
+    let mut competing = explanation()?;
+    competing.binding.profile = "ff".repeat(32);
+    assert_eq!(view.apply_explanation(competing), Err(Error::Conflict));
+    assert_eq!(view.checkpoint()?, retained);
+    assert!(
+        ResearchProjection::restore(req, &prior)?
+            .explanation_bytes()
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
+fn explanation_checkpoint_restores_and_commutes_with_lifecycle() -> Result {
+    use edgeagent_contracts::explanation::{Fallback, Outcome};
+    let fallback = || -> Result<_> {
+        let mut companion = explanation()?;
+        let Outcome::Generated { proposal } = companion.outcome else {
+            return Err("expected generated fixture".into());
+        };
+        companion.outcome = Outcome::Fallback {
+            reason: Fallback::Timeout,
+            proposal,
+        };
+        Ok(companion)
+    };
+    let record = artifact()?;
+    let req = request(&record)?;
+    let change = lifecycle(&record, 1)?;
+    let mut first = ResearchProjection::new(req.clone())?;
+    first.apply(record.clone())?;
+    first.apply_provenance(decision()?)?;
+    first.apply_explanation(fallback()?)?;
+    first.apply(change.clone())?;
+    let mut rebuilt = ResearchProjection::new(req.clone())?;
+    rebuilt.apply(record)?;
+    rebuilt.apply(change)?;
+    rebuilt.apply_provenance(decision()?)?;
+    rebuilt.apply_explanation(fallback()?)?;
+    let bytes = first.checkpoint()?;
+    assert_eq!(rebuilt.checkpoint()?, bytes);
+    let mut resumed = ResearchProjection::restore(req.clone(), &bytes)?;
+    assert_eq!(resumed.status(), ResearchStatus::Expired);
+    assert_eq!(resumed.revision(), 4);
+    assert_eq!(resumed.checkpoint()?, bytes);
+    assert_eq!(
+        resumed.apply_explanation(fallback()?)?,
+        ReplayOutcome::Duplicate
+    );
+
+    let mut corrupted = bytes.clone();
+    corrupted[0] ^= 1;
+    assert!(ResearchProjection::restore(req.clone(), &corrupted).is_err());
+    let original: serde_json::Value = serde_json::from_slice(&bytes[..bytes.len() - 32])?;
+    assert_eq!(original["version"], "EARP4");
+    for field in 0..4 {
+        let mut changed = original.clone();
+        match field {
+            0 => changed["version"] = "EARP3".into(),
+            1 => changed["explanation"] = serde_json::Value::Null,
+            2 => changed["provenance"] = serde_json::Value::Null,
+            _ => {
+                let mut companion = explanation()?;
+                companion.binding.anchor.decision = "ff".repeat(32);
+                changed["explanation"] = String::from_utf8(companion.canonical_bytes()?)?.into();
+            }
+        }
+        assert!(ResearchProjection::restore(req.clone(), &checkpoint(&changed)?).is_err());
+    }
+    Ok(())
+}

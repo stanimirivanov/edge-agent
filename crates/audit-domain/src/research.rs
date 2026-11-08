@@ -2,12 +2,14 @@
 //! Lifecycle facts append explicit-time owner revisions without changing outcome bytes;
 //! callers must not advance consumption progress after a rejected/gapped input.
 use crate::{ReplayError as Error, ReplayOutcome};
+use edgeagent_contracts::explanation::{Companion, MAX_BYTES as MAX_EXPLANATION_BYTES, Outcome};
 use edgeagent_contracts::research::{MAX_RESEARCH_BYTES, ResearchRecord, ResearchRequest};
 use edgeagent_contracts::research_decision::DecisionProvenance;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-/// Bounded checkpoint, including escaped canonical request/outcome and checksum.
-pub const MAX_CHECKPOINT_BYTES: usize = 5 * MAX_RESEARCH_BYTES + 1024;
+const LEGACY_MAX_CHECKPOINT_BYTES: usize = 5 * MAX_RESEARCH_BYTES + 1024;
+/// Bounded checkpoint including escaped canonical facts and checksum.
+pub const MAX_CHECKPOINT_BYTES: usize = LEGACY_MAX_CHECKPOINT_BYTES + 2 * MAX_EXPLANATION_BYTES;
 /// Observed owner outcome, not freshness, license permission or authoritative rejection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResearchStatus {
@@ -34,6 +36,7 @@ pub struct ResearchProjection {
     status: ResearchStatus,
     lifecycle: Vec<Vec<u8>>,
     provenance: Option<Vec<u8>>,
+    explanation: Option<Vec<u8>>,
 }
 impl std::fmt::Debug for ResearchProjection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,6 +62,7 @@ impl ResearchProjection {
             status: ResearchStatus::Pending,
             lifecycle: Vec::new(),
             provenance: None,
+            explanation: None,
         })
     }
     /// Immutable caller/request/policy anchor; it confers no owner authenticity.
@@ -71,13 +75,15 @@ impl ResearchProjection {
     pub const fn status(&self) -> ResearchStatus {
         self.status
     }
-    /// Local revision: zero pending, one terminal, then one per owner lifecycle fact and observed provenance.
+    /// Local revision: zero pending, then one per terminal, lifecycle, provenance and explanation fact.
     #[must_use]
     pub const fn revision(&self) -> u64 {
         if matches!(self.status, ResearchStatus::Pending) {
             0
         } else {
-            1 + self.lifecycle.len() as u64 + self.provenance.is_some() as u64
+            1 + self.lifecycle.len() as u64
+                + self.provenance.is_some() as u64
+                + self.explanation.is_some() as u64
         }
     }
     /// Exact canonical immutable terminal bytes, without a new freshness/entitlement claim.
@@ -109,6 +115,56 @@ impl ResearchProjection {
         self.provenance = Some(bytes);
         Ok(ReplayOutcome::Applied)
     }
+    /// Exact historical explanation bytes. Serving requires separate authorization.
+    #[must_use]
+    pub fn explanation_bytes(&self) -> Option<&[u8]> {
+        self.explanation.as_deref()
+    }
+
+    /// Apply an independently authenticated renderable companion.
+    ///
+    /// # Errors
+    /// Missing predecessors return Gap. Foreign scope, inconsistent bindings
+    /// and owner-local refusals are rejected without mutating the view.
+    pub fn apply_explanation(&mut self, companion: Companion) -> Result<ReplayOutcome, Error> {
+        let bytes = companion.canonical_bytes().map_err(|_| Error::Invalid)?;
+        if companion.binding.anchor.scope != self.request.scope {
+            return Err(Error::Scope);
+        }
+        if matches!(companion.outcome, Outcome::Refused { .. }) {
+            return Err(Error::Invalid);
+        }
+        let outcome = self.outcome.as_ref().ok_or(Error::Gap)?;
+        let outcome = ResearchRecord::decode(outcome).map_err(|_| Error::Invalid)?;
+        if !matches!(outcome, ResearchRecord::Artifact(_)) {
+            return Err(Error::Conflict);
+        }
+        let Some(provenance) = &self.provenance else {
+            return Err(
+                if outcome.digest().map_err(|_| Error::Invalid)?
+                    == companion.binding.anchor.artifact
+                {
+                    Error::Gap
+                } else {
+                    Error::Conflict
+                },
+            );
+        };
+        let decision = DecisionProvenance::decode(provenance).map_err(|_| Error::Invalid)?;
+        companion
+            .bind(&outcome, &decision)
+            .map_err(|_| Error::Conflict)?;
+        if let Some(prior) = &self.explanation {
+            return if prior == &bytes {
+                Ok(ReplayOutcome::Duplicate)
+            } else {
+                Err(Error::Conflict)
+            };
+        }
+        self.explanation = Some(bytes);
+        Ok(ReplayOutcome::Applied)
+    }
+
     fn bind(&self, request: &ResearchRequest) -> Result<(), Error> {
         if (request.scope.as_str(), request.request_id.as_str())
             != (
@@ -248,7 +304,9 @@ impl ResearchProjection {
     /// Rejects encoding/capacity failures.
     pub fn checkpoint(&self) -> Result<Vec<u8>, Error> {
         let checkpoint = Checkpoint {
-            version: if self.provenance.is_some() {
+            version: if self.explanation.is_some() {
+                "EARP4"
+            } else if self.provenance.is_some() {
                 "EARP3"
             } else if self.lifecycle.is_empty() {
                 "EARP1"
@@ -267,6 +325,12 @@ impl ResearchProjection {
                 .map(|v| String::from_utf8(v.clone()))
                 .transpose()
                 .map_err(|_| Error::Invalid)?,
+            explanation: self
+                .explanation
+                .as_ref()
+                .map(|v| String::from_utf8(v.clone()))
+                .transpose()
+                .map_err(|_| Error::Invalid)?,
             request: String::from_utf8(self.request_bytes.clone()).map_err(|_| Error::Invalid)?,
             outcome: self
                 .outcome
@@ -277,7 +341,12 @@ impl ResearchProjection {
         };
         let mut bytes = serde_json::to_vec(&checkpoint).map_err(|_| Error::Invalid)?;
         bytes.extend(Sha256::digest(&bytes));
-        if bytes.len() > MAX_CHECKPOINT_BYTES {
+        let limit = if self.explanation.is_some() {
+            MAX_CHECKPOINT_BYTES
+        } else {
+            LEGACY_MAX_CHECKPOINT_BYTES
+        };
+        if bytes.len() > limit {
             return Err(Error::Capacity);
         }
         Ok(bytes)
@@ -298,8 +367,14 @@ impl ResearchProjection {
             return Err(Error::Invalid);
         }
         let checkpoint: Checkpoint = serde_json::from_slice(body).map_err(|_| Error::Invalid)?;
-        if !matches!(checkpoint.version.as_str(), "EARP1" | "EARP2" | "EARP3") {
+        if !matches!(
+            checkpoint.version.as_str(),
+            "EARP1" | "EARP2" | "EARP3" | "EARP4"
+        ) {
             return Err(Error::Invalid);
+        }
+        if checkpoint.version != "EARP4" && bytes.len() > LEGACY_MAX_CHECKPOINT_BYTES {
+            return Err(Error::Capacity);
         }
         let mut view = Self::new(request)?;
         if checkpoint.request.as_bytes() != view.request_bytes {
@@ -326,6 +401,11 @@ impl ResearchProjection {
                 DecisionProvenance::decode(provenance.as_bytes()).map_err(|_| Error::Invalid)?,
             )?;
         }
+        if let Some(explanation) = checkpoint.explanation {
+            view.apply_explanation(
+                Companion::decode(explanation.as_bytes()).map_err(|_| Error::Invalid)?,
+            )?;
+        }
         if view.checkpoint() != Ok(bytes.to_vec()) {
             return Err(Error::Invalid);
         }
@@ -342,4 +422,6 @@ struct Checkpoint {
     lifecycle: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     provenance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    explanation: Option<String>,
 }
