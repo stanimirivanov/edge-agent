@@ -13,6 +13,9 @@ pub const MAX_BYTES: usize = 16_384;
 /// At most 64 ranks, eight policy reasons and one required disclosure.
 pub const MAX_CLAIMS: usize = 73;
 
+/// Maximum UTF-8 bytes in a single reviewed excerpt.
+pub const MAX_DOCUMENT_TEXT_BYTES: usize = 4096;
+
 /// Route definition for authorized, renderable companions. Refusals stay owner-local.
 pub const RECORDED: MessageDefinition = MessageDefinition::event(
     "com.edgeagent.research.explanation-recorded.v1",
@@ -46,7 +49,8 @@ pub struct Anchor {
     pub decision: String,
 }
 impl Anchor {
-    fn valid(&self) -> bool {
+    /// Check the shape of all three identity fields.
+    pub fn is_valid(&self) -> bool {
         token(&self.scope) && digest(&self.artifact) && digest(&self.decision)
     }
 
@@ -194,6 +198,37 @@ pub struct Companion {
     pub outcome: Outcome,
 }
 
+/// An explicitly supplied excerpt. Its source is an opaque label, and its
+/// text is untrusted data even after its identity and rights are checked.
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct DocumentExcerpt {
+    pub source: String,
+    pub scope: String,
+    pub available_at_ms: i64,
+    pub text: String,
+}
+
+impl DocumentExcerpt {
+    fn valid(&self) -> bool {
+        token(&self.source)
+            && !matches!(self.source.as_str(), "." | "..")
+            && token(&self.scope)
+            && self.available_at_ms >= 0
+            && (1..=MAX_DOCUMENT_TEXT_BYTES).contains(&self.text.len())
+            && !self
+                .text
+                .chars()
+                .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
+    }
+
+    /// Identity of the exact canonical source, scope, availability and text.
+    pub fn id(&self) -> Result<String, Error> {
+        Ok(identity(&self.canonical_bytes()?))
+    }
+}
+
 macro_rules! wire {
     ($type:ident, $wire:ident, $kind:literal, $schema:literal, $valid:expr) => {
         #[derive(Serialize, Deserialize)]
@@ -258,7 +293,7 @@ wire!(
     JobWire,
     "research.explanation.job.v1",
     "urn:edgeagent:schema:research:explanation:job:v1",
-    |v: &Job| v.anchor.valid()
+    |v: &Job| v.anchor.is_valid()
 );
 wire!(
     Companion,
@@ -266,6 +301,14 @@ wire!(
     "research.explanation.companion.v1",
     "urn:edgeagent:schema:research:explanation:companion:v1",
     Companion::valid
+);
+
+wire!(
+    DocumentExcerpt,
+    DocumentWire,
+    "research.explanation.document.v1",
+    "urn:edgeagent:schema:research:explanation:document:v1",
+    DocumentExcerpt::valid
 );
 
 fn identity(bytes: &[u8]) -> String {
@@ -294,7 +337,7 @@ impl Job {
 
 impl Companion {
     fn valid(&self) -> bool {
-        self.binding.anchor.valid()
+        self.binding.anchor.is_valid()
             && digest(&self.binding.profile)
             && digest(&self.binding.evidence)
             && match &self.outcome {
