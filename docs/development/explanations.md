@@ -262,3 +262,32 @@ Only one stopped assistant text choice is accepted. The adapter rejects
 tool messages and normalizes typed proposal JSON before handing it to the
 independent Research validator. Model startup, a production deployment
 verifier, and real-model qualification belong to later integration.
+
+## Research-owned grants
+
+Apply Research migration 0008 in the private schema before using
+`edgeagent-research offline-explanation-grant`. The command uses the existing
+local Research database and scope configuration. Submit one JSON object on
+stdin, up to 4 KiB, with kind `research.explanation.grant.v1`. Include an
+`anchor` with `scope`, `artifact`, and `decision`, plus `audience`,
+`purpose`, `revision`, `valid_from_ms`, `expires_at_ms`, and `revoked`.
+Use `document` for an exact excerpt digest when granting document access.
+Purpose is `research_use`, `model_disclosure`, or `explanation_serving`.
+
+The authenticated schema owner appends revision 1 for a new exact subject
+and increments by one for every change. An identical retry of the latest
+revision succeeds. To revoke, append the next revision with `revoked: true`.
+The latest revision supersedes older revisions immediately. A missing,
+revoked, future, or expired latest revision grants nothing. PostgreSQL
+records the authenticated actor and timestamp and rejects row mutation.
+
+Consumers read in a READ COMMITTED transaction using a trusted current
+clock. The read holds a shared scope lock until transaction end, so a
+future attempt reservation can record the observed revision before a
+revocation commits. The Research grant only narrows independently verified
+evidence-owner rights. Check current authority again at disclosure and
+serving boundaries.
+
+For rollback, disable the new consumers and retain the grant history.
+Run `cargo xtask verify --check research-persistence --python python3`
+against isolated PostgreSQL for the owner, expiry, and fencing proofs.

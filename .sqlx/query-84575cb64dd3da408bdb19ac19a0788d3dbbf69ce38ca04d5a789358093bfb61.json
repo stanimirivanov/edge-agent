@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_explanation_grants(caller_scope,artifact,decision,audience,purpose,document,revision,valid_from_ms,expires_at_ms,revoked,actor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84575cb64dd3da408bdb19ac19a0788d3dbbf69ce38ca04d5a789358093bfb61"
+}

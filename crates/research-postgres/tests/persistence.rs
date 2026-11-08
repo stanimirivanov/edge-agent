@@ -552,10 +552,11 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         assert_eq!(h.counts().await?, (0, 0, 0));
         // Give the distinct login real object access: refusal must be ownership policy,
         // not failed authentication, a wrong search_path or missing table privileges.
+        sqlx::raw_sql(edgeagent_research_postgres::explanation_grants::MIGRATION).execute(&h.pool).await?;
         let role = format!("governance_guest_{}", h.key);
         let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&h.pool).await?;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger TO {role}"
+            "CREATE ROLE {role} LOGIN PASSWORD 'governance-guest-test-only'; GRANT USAGE ON SCHEMA {schema} TO {role}; GRANT SELECT,INSERT,UPDATE ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger,edgeagent_explanation_grants TO {role}"
         ))).execute(&h.pool).await?;
         let guest_result = AssertUnwindSafe(async {
             let options: sqlx::postgres::PgConnectOptions = std::env::var("EDGEAGENT_POSTGRES_URL")?.parse()?;
@@ -573,6 +574,11 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
                 let control=edgeagent_contracts::research_controls::Command::V1{scope:"scope".into(),target:edgeagent_contracts::research_controls::Target::Scope,revision:1,enabled:false,reason_code:"maintenance".into()};
                 assert_eq!(PostgresResearchStore::new(guest.clone()).control(&control).await.err().ok_or("nonowner control")?.kind(),Kind::Invalid);
 
+                let grant=explanation_grants::grant(edgeagent_research_application::explanation_context::Purpose::ModelDisclosure);
+                assert_eq!(PostgresResearchStore::new(guest.clone()).set_explanation_grant(&grant,1).await.err().ok_or("nonowner grant")?.kind(),Kind::Invalid);
+                let direct=sqlx::query("INSERT INTO edgeagent_explanation_grants VALUES('scope',repeat('a',64),repeat('b',64),'local-review','model_disclosure','',1,100,200,false,'forged')")
+                    .execute(&guest).await.err().ok_or("nonowner direct grant")?;
+                assert_eq!(direct.as_database_error().and_then(sqlx::error::DatabaseError::code).as_deref(),Some("42501"));
                 let original=prepared("scope","nonowner","nonowner",110,3)?;
                 let command=edgeagent_contracts::research_invalidation::Command::V1 { original:original.request().clone(),effective_at_ms:110,reassessment:None };
                 assert_eq!(PostgresResearchStore::new(guest.clone()).check_invalidation("scope",&command,TIME).await.err().ok_or("nonowner invalidation")?.kind(),Kind::Invalid);
@@ -604,7 +610,7 @@ async fn retirement_fences_new_completion_and_nonowner_cannot_administer() -> Re
         }).catch_unwind().await;
         // Always revoke fixture grants and remove the login, even after failed assertions.
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
+            "REVOKE ALL ON edgeagent_research_profiles,edgeagent_research_approvals,edgeagent_research_controls,edgeagent_research_experiment_ledger,edgeagent_explanation_grants FROM {role}; REVOKE ALL ON SCHEMA {schema} FROM {role}; DROP ROLE {role}"
         ))).execute(&h.pool).await?;
         match guest_result { Ok(r) => r?, Err(panic) => std::panic::resume_unwind(panic) }
         Ok(())
@@ -705,3 +711,6 @@ mod invalidation;
 
 #[path = "persistence/promotion.rs"]
 mod promotion;
+
+#[path = "persistence/explanation_grants.rs"]
+mod explanation_grants;
