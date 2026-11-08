@@ -154,3 +154,26 @@ Run `cargo xtask verify --check research-replay-postgres --python python3`
 against isolated PostgreSQL to exercise the actual CLI and verify unchanged
 retained state. The exact rank, citation and reason order is also covered by
 the Research application unit tests in the default acceptance gate.
+
+## Proposal validation
+
+Research validates canonical proposal bytes against the verified allowlist
+before rendering. Each ranked claim must cite evidence for that instrument.
+A policy reason cites the retained decision digest. The research-only
+disclosure cites the artifact digest. Reusing a digest from a different
+claim does not establish support.
+
+A proposal must include the full rank sequence, then all retained policy
+reasons, then the disclosure. Ranked claims can select the standard or
+plain-language template. Reasons and the disclosure use fixed templates.
+Both rank templates use the same verified integer score and unit, and show
+all retained citations for that rank. Proposal text, numeric overrides, and
+instructions are rejected by the wire contract.
+
+The validator returns a sealed rendering with the accepted selections and
+the exact artifact, decision, and scope it checked. The caller associates
+the response with the allowlist and checks disclosure authority separately.
+
+Run `cargo test --locked -p edgeagent-research-application --test explanation_validation`
+for acceptance and adversarial cases. The default workspace gate also runs
+these tests.
