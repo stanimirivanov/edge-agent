@@ -79,6 +79,13 @@ pub struct Binding {
     pub evidence: String,
 }
 
+impl Binding {
+    /// Check the shape of the anchor and immutable input identities.
+    pub fn is_valid(&self) -> bool {
+        self.anchor.is_valid() && digest(&self.profile) && digest(&self.evidence)
+    }
+}
+
 /// One scheduling intent per published artifact and decision.
 /// Explanation profile changes do not create a second job identity.
 #[derive(Serialize, Deserialize)]
@@ -337,9 +344,7 @@ impl Job {
 
 impl Companion {
     fn valid(&self) -> bool {
-        self.binding.anchor.is_valid()
-            && digest(&self.binding.profile)
-            && digest(&self.binding.evidence)
+        self.binding.is_valid()
             && match &self.outcome {
                 Outcome::Generated { proposal } => proposal.valid(),
                 Outcome::Fallback { proposal, .. } => {

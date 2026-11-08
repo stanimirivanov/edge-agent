@@ -7,6 +7,7 @@ pub mod experiment;
 pub mod experiment_ledger;
 pub mod explanation;
 pub mod explanation_context;
+pub mod explanation_model;
 pub mod governed;
 pub mod lifecycle;
 pub mod publication;
