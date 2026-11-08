@@ -249,6 +249,7 @@ const RESEARCH_PERSISTENCE: Target = Target {
         "validated_companions_are_atomic_immutable_and_required_for_fresh_completion",
         "historical_absence_recovers_but_database_refuses_unaccompanied_new_inserts",
         "explanation_attempts::explanation_attempts_spend_once_and_fence_ambiguous_recovery",
+        "explanation_completion::explanation_completion_rolls_back_and_recovers_exact_first_terminal",
         "explanation_grants::explanation_grants_are_current_purpose_bound_and_transaction_fenced",
         "controls::controls_compose_audit_revisions_and_preserve_recovery_and_lifecycle",
         "experiments::experiment_ledger_fences_concurrent_retries_and_recovers_an_immutable_census",
@@ -1163,8 +1164,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 164);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 164);
+        assert_eq!(inventory.len(), 165);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 165);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

@@ -717,3 +717,6 @@ mod explanation_grants;
 
 #[path = "persistence/explanation_attempts.rs"]
 mod explanation_attempts;
+
+#[path = "persistence/explanation_completion.rs"]
+mod explanation_completion;

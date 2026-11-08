@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT companion,publication,event_time FROM edgeagent_explanation_completions WHERE job_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "companion",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_completions",
+            "name": "companion"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "publication",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_completions",
+            "name": "publication"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "event_time",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_completions",
+            "name": "event_time"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "71ceb3c6bac707cb002fc2163f508b2d8b5c9fc69ee8b139ca78986b498adab0"
+}

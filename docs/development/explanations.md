@@ -316,3 +316,25 @@ rights and rechecks current disclosure permission before sending.
 Reservation and result retention belong in separate transactions, with
 model I/O between them. Companion retention and publication are later
 slices. Rollback stops new model dispatch and preserves all spent attempts.
+
+## Atomic terminal companion
+
+Apply Research migration 0010 after the attempt ledger. Research binds
+sealed selections to the exact retained artifact and decision and checks
+both serving authorities for renderable output. Under the Research scope
+lock it writes one immutable terminal row per job. Generated output needs
+a live attempt permit. Uncertain-attempt fallback needs the ledger's
+recorded fallback transition. A terminal row prevents another reservation
+and takes precedence over attempt recovery.
+
+The transaction enqueues the renderable companion event with the terminal
+row. The event uses the companion digest for identity and idempotency and
+inherits the original artifact's partition and correlation. Refusals retain
+only an owner-local record. Exact retries recover the original bytes and
+event time. Changed terminal bytes conflict. Internal receipt recovery
+validates the retained Research binding and the exact outbox envelope.
+Serving remains a separate current authorization check.
+
+Deploy the additive schema ahead of consumers. Rollback stops the new
+consumers and retains the companion and outbox history. No broker worker
+uses this path until the later runtime integration is enabled.

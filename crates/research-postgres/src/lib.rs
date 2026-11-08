@@ -3,6 +3,7 @@
 pub mod controls;
 pub mod experiments;
 pub mod explanation_attempts;
+pub mod explanation_completion;
 pub mod explanation_grants;
 pub mod governance;
 pub mod lifecycle;

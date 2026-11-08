@@ -1,6 +1,6 @@
 //! Additive explanation wire contracts. Binding checks consistency, not authority.
 use crate::{
-    Component, EventRetention, MessageDefinition,
+    Component, EventRetention, MessageDefinition, MessageEnvelope, MessageMetadata,
     messaging::canonical_json,
     research::{ResearchRecord, digest as research_digest, token},
     research_decision::{Assessment, DecisionProvenance, Reason},
@@ -372,6 +372,40 @@ impl Companion {
     /// Stable terminal record identity. Use as the event ID only for renderable outcomes.
     pub fn id(&self) -> Result<String, Error> {
         Ok(identity(&self.canonical_bytes()?))
+    }
+
+    /// Construct the event for a renderable companion using the authenticated
+    /// original artifact event. Authorization is checked by Research.
+    pub fn publication(
+        &self,
+        original: &MessageEnvelope,
+        time: &str,
+    ) -> Result<MessageEnvelope, Error> {
+        if matches!(self.outcome, Outcome::Refused { .. })
+            || original.id() != self.binding.anchor.artifact
+        {
+            return Err(Error);
+        }
+        let id = self.id()?;
+        let partition = original.partition_key().ok_or(Error)?;
+        MessageEnvelope::from_payload(
+            MessageMetadata {
+                id: id.clone(),
+                source: Component::Research.source_uri().into(),
+                message_type: RECORDED.message_type().into(),
+                subject: partition.into(),
+                time: time.into(),
+                data_schema: RECORDED.data_schema().into(),
+                correlation_id: original.extension("correlationid").ok_or(Error)?.into(),
+                causation_id: original.id().into(),
+                idempotency_key: id,
+                partition_key: partition.into(),
+                trace_parent: original.extension("traceparent").ok_or(Error)?.into(),
+                trace_state: original.extension("tracestate").map(str::to_owned),
+            },
+            &CompanionWire::V1(self),
+        )
+        .map_err(|_| Error)
     }
 
     /// Recover the scheduling intent for this terminal record.
