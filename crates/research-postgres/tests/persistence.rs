@@ -714,3 +714,6 @@ mod promotion;
 
 #[path = "persistence/explanation_grants.rs"]
 mod explanation_grants;
+
+#[path = "persistence/explanation_attempts.rs"]
+mod explanation_attempts;

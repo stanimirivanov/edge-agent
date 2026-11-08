@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE edgeagent_explanation_attempts SET fallback=TRUE WHERE job_id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6fa168e6e35124f7fa750e56bea508f4c0289f1d6e7f48141022b72d785765d0"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_explanation_attempts(job_id,profile,evidence,input_digest,audience,grant_revision,reserved_at_ms,deadline_ms) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "23de5459eaf140a9f23ff5a0fc092bb918794d54abdb4ee4521764ccd3fae7a0"
+}

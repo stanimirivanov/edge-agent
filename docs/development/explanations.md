@@ -291,3 +291,28 @@ serving boundaries.
 For rollback, disable the new consumers and retain the grant history.
 Run `cargo xtask verify --check research-persistence --python python3`
 against isolated PostgreSQL for the owner, expiry, and fencing proofs.
+
+## Durable model attempts
+
+Apply Research migration 0009 after the disclosure-grant migration. The
+attempt ledger uses the canonical explanation job ID. Before model I/O,
+Research commits one reservation with the profile, evidence identity,
+prepared-input digest, model audience, grant revision, and deadline.
+The deadline must be within 30 seconds of reservation and within the
+observed grant. A retry with identical intent reports that the attempt is
+already spent. Changed input, profile, audience, evidence, or deadline
+conflicts with the original reservation.
+
+Recovery waits until the original deadline while the attempt may still be
+running. At the deadline it records deterministic fallback and returns the
+retained intent without a send permit. This applies equally to an
+interruption before dispatch and a lost response after dispatch. The
+result fence checks the deadline and locks the attempt row until the
+caller's transaction ends. Late results cannot pass once recovery has
+recorded fallback.
+
+The caller independently authenticates the artifact and evidence-owner
+rights and rechecks current disclosure permission before sending.
+Reservation and result retention belong in separate transactions, with
+model I/O between them. Companion retention and publication are later
+slices. Rollback stops new model dispatch and preserves all spent attempts.
