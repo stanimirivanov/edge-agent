@@ -243,3 +243,12 @@ must regenerate and review current artifacts without rewriting frozen history.
 - [ADR-0001: Use a Rust workspace with multiple deployables](../decisions/0001-use-a-rust-workspace-with-multiple-deployables.md)
 - [ADR-0006: Keep inbound coordination persistence-neutral](../decisions/0006-keep-inbound-coordination-persistence-neutral.md)
 - [ADR-0007: Enforce workspace capability dependencies](../decisions/0007-enforce-workspace-capability-dependencies.md)
+
+Research's local explanation adapter uses the existing Reqwest 0.13.5,
+Rustls 0.23.46, Serde 1.0.229, and SHA-2 0.11.1 pins. These direct edges
+add no package versions to the lockfile. Reqwest supplies bounded async
+HTTP, Rustls supplies the explicit local crypto provider required under
+feature unification, Serde checks response framing, and SHA-2 checks the
+prompt pin. All transport types stay inside the Research composition root.
+The model-neutral port and loopback protocol tests define the replacement
+boundary.

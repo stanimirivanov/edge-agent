@@ -142,6 +142,17 @@ pub struct Proposal {
     pub claims: Vec<Selection>,
 }
 impl Proposal {
+    /// Normalize a bounded model JSON response using the strict typed wire shape.
+    /// Semantic validation is still required against the verified allowlist.
+    pub fn from_model_json(bytes: &[u8]) -> Result<Vec<u8>, Error> {
+        if bytes.len() > MAX_BYTES {
+            return Err(Error);
+        }
+        let ProposalWire::V1(proposal): ProposalWire<Self> =
+            serde_json::from_slice(bytes).map_err(|_| Error)?;
+        proposal.canonical_bytes()
+    }
+
     fn valid(&self) -> bool {
         (1..=MAX_CLAIMS).contains(&self.claims.len())
             && self.claims.iter().enumerate().all(|(i, value)| {
