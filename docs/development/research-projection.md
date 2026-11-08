@@ -54,3 +54,26 @@ removed on rollback and rebuilt from authenticated retained owner facts.
 observations and EARP3 checkpoints. Legacy histories keep their exact encoding;
 local revision also counts a retained provenance fact. Lifecycle owner revisions
 remain independent of that local count. Runtime publication/query wiring follows in PR12.
+
+## Explanation companions
+
+A renderable explanation requires both its original artifact and exact
+decision provenance. A missing predecessor returns Gap. An explanation for
+an abstention, a wrong artifact or decision binding, a competing companion,
+or an owner-local refusal is rejected. Only the first valid companion
+advances local revision. An exact duplicate leaves the checkpoint intact.
+Lifecycle and explanation facts can be applied in either order once their
+predecessors exist. The view keeps explanation bytes for historical replay
+even when a lifecycle fact changes the artifact status.
+
+A checkpoint containing an explanation uses EARP4. The prior versions keep
+their exact encoding and size limit. EARP4 adds twice the maximum canonical
+explanation size to the reducer's limit for escaped JSON. Restore checks the
+companion by applying it after its predecessors and then compares the full
+canonical checkpoint. A reader that only understands EARP1–EARP3 will reject
+EARP4. Update readers and check the projector's storage bounds before enabling
+companion consumption. To roll back a reader after EARP4 activation, quiesce
+consumption and rebuild a compatible disposable view from retained owner facts.
+
+The reducer only projects authenticated historical records. Current disclosure
+authorization and persistence integration belong to the serving adapter.
