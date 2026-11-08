@@ -127,3 +127,30 @@ partition. Refusals stay owner-local. The contracts do not provision the route.
 
 Run `cargo xtask verify --check explanation-contracts --python python3` for
 the frozen bytes, structural schemas, and strict binding checks.
+
+## Local deterministic trace
+
+Run `edgeagent-research offline-explain` with the original Research
+evaluation delivery on standard input. Use the private Research schema,
+operator scope, owner reader, and renderer and momentum revision pins
+described in the [Research replay guide](research-replay.md). The command
+accepts one delivery of at most 256 KiB.
+
+Research reads the original completion in a read-only transaction. It
+verifies the exact retained delivery, artifact and decision, then replays
+them against evidence loaded through the owner boundary. A missing decision,
+abstention, changed delivery, or denied owner read exits unsuccessfully with
+empty standard output.
+
+The preview starts with the exact artifact and decision digests. It lists
+ranked instruments and integer scores in parts per million, citing each
+instrument's retained evidence digests and availability times. It then lists
+the retained policy reasons in decision order and ends with the research-only
+disclosure. Identical verified inputs produce identical bytes. The tracer
+uses the operator's local replay boundary. Companion publication and serving
+have separate authorization requirements.
+
+Run `cargo xtask verify --check research-replay-postgres --python python3`
+against isolated PostgreSQL to exercise the actual CLI and verify unchanged
+retained state. The exact rank, citation and reason order is also covered by
+the Research application unit tests in the default acceptance gate.
