@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT revision,decision,agreement,valid_from_ms,expires_at_ms,actor::text AS \"actor!\" FROM edgeagent_explanation_serving_reviews WHERE rights_scope=$1 AND audience=$2 ORDER BY revision DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_serving_reviews",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_serving_reviews",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "agreement",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_serving_reviews",
+            "name": "agreement"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "valid_from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_serving_reviews",
+            "name": "valid_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_serving_reviews",
+            "name": "expires_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "actor!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "90e7d6e5c417ce347b64fc2525351598a84a29930147e3f709cf589bca03f31b"
+}

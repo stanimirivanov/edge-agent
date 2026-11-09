@@ -19,6 +19,7 @@ pub(super) struct Config {
     pub database: String,
     pub root: std::path::PathBuf,
     pub request: Option<u128>,
+    pub serving_audience: Option<EvidenceId>,
     pub recipe: super::fixture::Recipe,
     pub broker: Option<String>,
     pub stream: Option<String>,
@@ -84,6 +85,7 @@ impl Config {
             .ok_or(ConfigError("missing offline command"))?
             .clone();
         let mut request = None;
+        let mut serving_audience = None;
         let mut recipe = super::fixture::Recipe::Single;
         let mut confirmed = BTreeSet::new();
         match command.as_str() {
@@ -92,11 +94,18 @@ impl Config {
                 let id = EvidenceId::new(&args[1]).map_err(|_| ConfigError("seed requires one canonical nonzero hexadecimal request identity"))?;
                 request = Some(u128::from_str_radix(id.as_str(), 16)?);
             }
-            "offline-research-once" | "offline-research-worker" | "offline-research-read" | "offline-research-policy-read" if args.len() == 2 => {
+            "offline-research-once" | "offline-research-worker" | "offline-research-read" | "offline-research-policy-read"
+            | "offline-explanation-review" | "offline-explanation-authorize"
+                if args.len() == if command == "offline-explanation-authorize" { 3 } else { 2 } => {
                 let id=EvidenceId::new(&args[1]).map_err(|_|ConfigError("research requires one owner-installed acquisition ID"))?;
                 request=Some(u128::from_str_radix(id.as_str(),16)?);
-                let scope=required("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?;
-                if scope.is_empty() || scope.len()>64 || !scope.bytes().all(|b|b.is_ascii_alphanumeric() || b"._-".contains(&b)) {return Err(ConfigError("invalid research operator scope").into());}
+                if command == "offline-explanation-authorize" {
+                    serving_audience = Some(EvidenceId::new(&args[2]).map_err(|_| ConfigError("invalid serving audience"))?);
+                }
+                if command != "offline-explanation-review" {
+                    let scope=required("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")?;
+                    if scope.is_empty() || scope.len()>64 || !scope.bytes().all(|b|b.is_ascii_alphanumeric() || b"._-".contains(&b)) {return Err(ConfigError("invalid research operator scope").into());}
+                }
             }
             "offline-maintain" if (3..=18).contains(&args.len()) && args.get(1).is_some_and(|v| v == "--owner-confirmed-quiescence") => {
                 for id in &args[2..] { confirmed.insert(EvidenceId::new(id)?); }
@@ -152,6 +161,7 @@ impl Config {
             database,
             root,
             request,
+            serving_audience,
             recipe,
             broker,
             stream,
@@ -174,7 +184,9 @@ impl Config {
             .map_err(|error| -> Box<dyn std::error::Error + Send + Sync> {
                 if matches!(
                     self.command.as_str(),
-                    "offline-research-read" | "offline-research-policy-read"
+                    "offline-research-read"
+                        | "offline-research-policy-read"
+                        | "offline-explanation-authorize"
                 ) {
                     BudgetError::with_source(BudgetErrorKind::Storage, error).into()
                 } else {
