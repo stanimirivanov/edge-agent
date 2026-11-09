@@ -907,6 +907,22 @@ pub(super) fn checks() -> Vec<Check> {
             "Read-only replay recalculation, exact/permuted bytes, pinned revisions, binding and read-failure refusal under map-order feature unification.",
         ),
         check(
+            "explanation-authority-http",
+            "T2",
+            &["verify", "test"],
+            Cargo,
+            &[
+                "test",
+                "--locked",
+                "-p",
+                "edgeagent-research",
+                "--test",
+                "explanation_authority",
+                "--",
+            ],
+            "Real loopback authorization HTTP scope, binding, current decision, and payload-free refusal behavior.",
+        ),
+        check(
             "research-worker-contracts",
             "T2",
             &["verify", "test"],
@@ -1722,6 +1738,15 @@ pub(super) fn checks() -> Vec<Check> {
                         "replay_read_failures_never_become_successful_abstentions",
                         "replay_owner_declared_abstention_is_verified_without_evidence_reads",
                     ],
+                    ignored: false,
+                });
+            }
+            "explanation-authority-http" => {
+                let mut args = entry.command.args.clone();
+                args.push("--list");
+                entry.discovery = Some(Discovery {
+                    args,
+                    expected: vec!["scope_binding_and_each_read_require_current_authority"],
                     ignored: false,
                 });
             }

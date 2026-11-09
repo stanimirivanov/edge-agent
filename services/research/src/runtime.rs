@@ -38,15 +38,19 @@ fn required(name: &str) -> Result<String> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "missing research configuration".into())
 }
-fn token(s: &str) -> bool {
+pub(crate) fn token(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 64
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
+pub(crate) fn clock_ms() -> Result<i64> {
+    Ok(i64::try_from(
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis(),
+    )?)
+}
 fn time() -> Result<String> {
-    let ms = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis())?;
-    Ok(chrono::DateTime::from_timestamp_millis(ms)
+    Ok(chrono::DateTime::from_timestamp_millis(clock_ms()?)
         .ok_or("invalid research clock")?
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
 }
@@ -64,6 +68,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-governance-retire"
                 | "offline-control"
                 | "offline-explanation-grant"
+                | "offline-explanation-authority"
                 | "offline-experiment-ledger"
                 | "offline-once"
                 | "offline-worker"
@@ -129,6 +134,23 @@ async fn execute(mode: &str) -> Result {
     if !token(&scope) {
         return Err("invalid research scope".into());
     }
+    let authority = if mode == "offline-explanation-authority" {
+        let address: std::net::SocketAddr =
+            required("EDGEAGENT_RESEARCH_EXPLANATION_LISTEN")?.parse()?;
+        if !address.ip().is_loopback() {
+            return Err("Research explanation authority requires a loopback listener".into());
+        }
+        let audience = edgeagent_contracts::evidence::EvidenceId::new(&required(
+            "EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE",
+        )?)?;
+        Some((
+            address,
+            audience,
+            crate::loader::OwnerEndpoint::from_environment()?,
+        ))
+    } else {
+        None
+    };
     let options: sqlx::postgres::PgConnectOptions = database.parse()?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(4)
@@ -143,6 +165,12 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if let Some((address, audience, owner)) = authority {
+            let listener = tokio::net::TcpListener::bind(address).await?;
+            let router = crate::explanation_authority::owner_router(scope, audience, store, owner);
+            axum::serve(listener, router).with_graceful_shutdown(stop()).await?;
+            return Ok(());
+        }
         if mode == "offline-experiment-ledger" {
             use std::io::{Read as _, Write as _};
             use edgeagent_contracts::research_experiment::{Command, MAX_COMMAND_BYTES};

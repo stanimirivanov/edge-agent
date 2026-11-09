@@ -26,27 +26,30 @@ pub fn prepared(
     last: i128,
     config: u8,
 ) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, last, (config, 100), true, false)
+    build(scope, id, delivery, last, (config, 100, false), true, false)
 }
 pub fn abstained(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, 100, (3, 100), false, false)
+    build(scope, id, delivery, 100, (3, 100, false), false, false)
 }
 pub fn policy_denied(scope: &str, id: &str, delivery: &str) -> Result<PreparedCompletion> {
-    build(scope, id, delivery, 110, (3, 100), true, true)
+    build(scope, id, delivery, 110, (3, 100, false), true, true)
 }
 pub fn configured(id: &str, at: i64, last: i128, evidence: bool) -> Result<PreparedCompletion> {
-    build("scope", id, id, last, (14, at), evidence, false)
+    build("scope", id, id, last, (14, at, false), evidence, false)
+}
+pub fn prepared_owner_input(id: &str) -> Result<PreparedCompletion> {
+    build("scope", id, id, 110, (3, 100, true), true, false)
 }
 fn build(
     scope: &str,
     id: &str,
     delivery: &str,
     last: i128,
-    binding: (u8, i64),
+    binding: (u8, i64, bool),
     with_evidence: bool,
     deny_liquidity: bool,
 ) -> Result<PreparedCompletion> {
-    let (config, at) = binding;
+    let (config, at, owner_input) = binding;
     let expiry = at + if config == 14 { 10 } else { 1 };
     let selected = SelectedInstrument {
         instrument: InstrumentId::new(1)?,
@@ -133,6 +136,43 @@ fn build(
         },
         &record,
     )?;
+    let command = if owner_input {
+        use edgeagent_contracts::{
+            evidence::{EvidenceDecision, EvidenceDigest, EvidenceOutcome},
+            research_acquisition::{self, DECIDED, ResearchEvidence},
+        };
+        let fixture = MessageEnvelope::from_json(include_bytes!(
+            "../../../contracts/fixtures/evidence-v1/ready.json"
+        ))?;
+        let mut decision = EvidenceDecision::from_envelope(&fixture)?.data().clone();
+        let EvidenceOutcome::Ready { object } = &mut decision.outcome else {
+            return Err("expected ready fixture".into());
+        };
+        object.sha256 = EvidenceDigest::new(&"05".repeat(32))?;
+        let (key, partition) = research_acquisition::binding(&request)?;
+        MessageEnvelope::from_payload(
+            MessageMetadata {
+                id: delivery.into(),
+                source: Component::MarketData.source_uri().into(),
+                message_type: DECIDED.message_type().into(),
+                subject: partition.clone(),
+                time: TIME.into(),
+                data_schema: DECIDED.data_schema().into(),
+                correlation_id: key.clone(),
+                causation_id: "owner-acquisition".into(),
+                idempotency_key: key,
+                partition_key: partition,
+                trace_parent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
+                trace_state: None,
+            },
+            &ResearchEvidence::Ready {
+                request: request.clone(),
+                decision: Box::new(decision),
+            },
+        )?
+    } else {
+        command
+    };
     let instrument = selected.instrument;
     let evidence = [5; 32];
     let volumes = [edgeagent_research_domain::liquidity::Input {

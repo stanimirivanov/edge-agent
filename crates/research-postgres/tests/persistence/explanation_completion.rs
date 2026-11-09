@@ -28,7 +28,7 @@ async fn explanation_completion_rolls_back_and_recovers_exact_first_terminal() -
             sqlx::raw_sql(migration).execute(&h.pool).await?;
         }
         let store = PostgresResearchStore::new(h.pool.clone());
-        let base = prepared("scope", "explanation", "explanation", 110, 3)?;
+        let base = prepared_owner_input("explanation")?;
         let original = store.commit(&base).await?;
         let decision = decode_decision(original.decision().ok_or("decision")?)?;
         let binding = Binding {
@@ -78,6 +78,25 @@ async fn explanation_completion_rolls_back_and_recovers_exact_first_terminal() -
         assert_eq!(receipt.publication(), retry.publication());
         assert_eq!(receipt.bytes(), retry.bytes());
         assert_eq!(Companion::decode(receipt.bytes())?.job().id()?, job.id()?);
+        let companion_id = Companion::decode(receipt.bytes())?.id()?;
+        assert!(store.current_explanation_read("scope", "explanation", &companion_id, &serving.request.audience, || 101).await?.is_none());
+        assert!(store.current_explanation_read("scope", "explanation", &"b".repeat(64), &serving.request.audience, || 100).await?.is_none());
+        assert!(store.current_explanation_read("scope", "explanation", &companion_id, "foreign", || 100).await?.is_none());
+        let allowed = store.current_explanation_read("scope", "explanation", &companion_id, &serving.request.audience, || 100).await?.ok_or("missing exact owner input")?;
+        assert_eq!(allowed.to_json()?, base.delivery().to_json()?);
+        let revoked = Grant { revoked: true, ..serving.clone() };
+        store.set_explanation_grant(&revoked, 2).await?;
+        assert!(store.current_explanation_read("scope", "explanation", &companion_id, &serving.request.audience, || 100).await?.is_none());
+        store.set_explanation_grant(&serving, 3).await?;
+        store.append_lifecycle("scope", edgeagent_contracts::research::ResearchLifecycle {
+            scope: "scope".into(),
+            request_id: "explanation".into(),
+            artifact: binding.anchor.artifact.clone(),
+            revision: 1,
+            effective_at_ms: 100,
+            change: edgeagent_contracts::research::LifecycleChange::Withdrawn,
+        }, TIME).await?;
+        assert!(store.current_explanation_read("scope", "explanation", &companion_id, &serving.request.audience, || 100).await?.is_none());
         let late = Completion::Generated { explanation: &validated, permit: &permit };
         assert_eq!(store.complete_explanation(base.request(), &binding, late, Some(&serving), || 149, TIME).await.err().ok_or("late result accepted")?.kind(), Kind::Conflict);
         assert_eq!(counts(&h).await?, (1, 1));

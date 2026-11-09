@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT envelope FROM edgeagent_message_inbox WHERE consumer_name='research-completion' AND message_source=$1 AND message_id=$2 AND message_type=$3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_message_inbox",
+            "name": "envelope"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b048c7388e2105ebe5d9cf7b2dd1050501ed329f2d52c9c185c24352ae1d961d"
+}

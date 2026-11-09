@@ -314,3 +314,106 @@ async fn qualify_m05(h: &mut Journey, deny: bool) -> Result {
     );
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL/NATS and four freshly built service binaries via research-processes gate"]
+async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() -> Result {
+    use edgeagent_contracts::explanation::{Anchor, Binding, Companion, Fallback};
+    use edgeagent_research_application::{
+        explanation::Allowlist,
+        explanation_context::{Grant, Purpose, Request},
+        publication::decode_decision,
+    };
+    use edgeagent_research_postgres::{PostgresResearchStore, explanation_completion::Completion};
+    const ACQUISITION: &str = "00000000000000000000000000000001";
+    const AUDIENCE: &str = "00000000000000000000000000000002";
+    let mut h = Journey::new().await?;
+    let tested = AssertUnwindSafe(async {
+        h.seed_history().await?;
+        h.start_servers().await?;
+        submit(&h, 5).await?;
+        h.run("research", "offline-worker", &[]).await?;
+        let outcome: Vec<u8> = sqlx::query_scalar("SELECT outcome FROM edgeagent_research_completions")
+            .fetch_one(&h.research.pool).await?;
+        let record = ResearchRecord::decode(&outcome)?;
+        let ResearchRecord::Artifact(artifact) = &record else {
+            return Err("expected a Research artifact".into());
+        };
+        let event: Vec<u8> = sqlx::query_scalar("SELECT publication FROM edgeagent_research_decisions")
+            .fetch_one(&h.research.pool).await?;
+        let decision = decode_decision(&MessageEnvelope::from_json(&event)?)?;
+        let anchor = Anchor {
+            scope: artifact.request.scope.clone(),
+            artifact: record.digest()?,
+            decision: decision.digest()?,
+        };
+        let grant = Grant {
+            request: Request { anchor: anchor.clone(), audience: AUDIENCE.into(), purpose: Purpose::ExplanationServing, document: None },
+            valid_from_ms: artifact.request.decision_at_ms,
+            expires_at_ms: artifact.expires_at_ms,
+            revoked: false,
+        };
+        let store = PostgresResearchStore::new(h.research.pool.clone());
+        store.set_explanation_grant(&grant, 1).await?;
+        let validated = Allowlist::from_verified(&record, &decision)?.standard()?;
+        let receipt = store.complete_explanation(
+            &artifact.request,
+            &Binding { anchor, profile: "a".repeat(64), evidence: "b".repeat(64) },
+            Completion::Fallback { explanation: &validated, reason: Fallback::Disabled },
+            Some(&grant),
+            || artifact.request.decision_at_ms,
+            "2026-10-30T00:00:00Z",
+        ).await?;
+        let companion = Companion::decode(receipt.bytes())?.id()?;
+        let invalid_listener = h.command("research", "offline-explanation-authority")?
+            .env("EDGEAGENT_RESEARCH_EXPLANATION_LISTEN", "0.0.0.0:0")
+            .env("EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE", AUDIENCE)
+            .output();
+        let invalid_listener = tokio::time::timeout(Duration::from_secs(5), invalid_listener).await??;
+        assert!(!invalid_listener.status.success());
+        assert!(invalid_listener.stdout.is_empty());
+        let address = address()?;
+        let mut server = h.command("research", "offline-explanation-authority")?
+            .env("EDGEAGENT_RESEARCH_EXPLANATION_LISTEN", address.to_string())
+            .env("EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE", AUDIENCE)
+            .spawn()?;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if tokio::net::TcpStream::connect(address).await.is_ok() {
+                    return Ok::<(), Box<dyn std::error::Error + Send + Sync>>(());
+                }
+                if server.try_wait()?.is_some() {
+                    return Err("authorization server exited before listening".into());
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        }).await??;
+        let query = serde_json::to_vec(&serde_json::json!({
+            "scope": "operator", "request_id": artifact.request.request_id, "audience": AUDIENCE, "companion": companion,
+        }))?;
+        let check = || Journey::request_at(address, "POST", "/internal/v1/explanation-authorizations", &query);
+        assert_eq!(check().await?, (403, Vec::new()));
+        let owner_review = |revision, decision: &str| serde_json::json!({
+            "audience": AUDIENCE, "agreement": ACQUISITION, "revision": revision, "decision": decision,
+            "valid_from_ms": grant.valid_from_ms, "expires_at_ms": grant.expires_at_ms,
+        }).to_string();
+        h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(1, "allow").as_bytes()).await?;
+        assert_eq!(check().await?, (204, Vec::new()));
+        let lock = std::fs::OpenOptions::new().read(true).write(true)
+            .open(h.root.join("offline.lock"))?;
+        lock.try_lock()?;
+        assert_eq!(check().await?, (503, Vec::new()));
+        drop(lock);
+
+        h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(2, "revoke").as_bytes()).await?;
+        assert_eq!(check().await?, (403, Vec::new()));
+        h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(3, "allow").as_bytes()).await?;
+        store.set_explanation_grant(&Grant { revoked: true, ..grant }, 2).await?;
+        assert_eq!(check().await?, (403, Vec::new()));
+        let pid = server.id().ok_or("authorization server already stopped")?.to_string();
+        assert!(tokio::process::Command::new("kill").args(["-TERM", &pid]).status().await?.success());
+        assert!(tokio::time::timeout(Duration::from_secs(5), server.wait()).await??.success());
+        Ok(())
+    }).catch_unwind().await;
+    h.finish(tested).await
+}

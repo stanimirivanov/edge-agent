@@ -338,3 +338,42 @@ Serving remains a separate current authorization check.
 Deploy the additive schema ahead of consumers. Rollback stops the new
 consumers and retains the companion and outbox history. No broker worker
 uses this path until the later runtime integration is enabled.
+
+## Current Research read authorization
+
+Run `edgeagent-research offline-explanation-authority` with the existing
+Research PostgreSQL URL, private schema and operator scope. Install Research
+migrations through 0010 and [MarketData migration 0012](../../crates/market-data-postgres/migrations/0012_explanation_serving_reviews.sql).
+Set `EDGEAGENT_RESEARCH_EXPLANATION_LISTEN` to a literal loopback socket
+address and `EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE` to the exact nonzero
+32-hex-character MarketData reader audience used in the Research grant.
+Set the existing `EDGEAGENT_RESEARCH_OWNER_BINARY`,
+`EDGEAGENT_RESEARCH_OWNER_ROOT` and `EDGEAGENT_RESEARCH_OWNER_DATABASE_URL`
+for the local MarketData installation. Research derives the acquisition ID
+from its intact original input.
+
+POST a JSON object with `scope`, `request_id`, `audience` and `companion`
+to `/internal/v1/explanation-authorizations`. The companion is the exact
+canonical companion digest. The scope and audience must match the server's
+configuration. Use a literal loopback Host and omit Origin. The body cap is
+1 KiB. The request has a five-second deadline and at most four checks run
+concurrently. SIGTERM and SIGINT stop intake and let in-flight checks drain.
+
+The endpoint returns empty, non-cacheable responses. Use 204 for permission
+for this read, 403 for a refusal, 400 for malformed input, and 503 if the
+authority is unavailable, saturated or inconsistent. It never returns
+companion bytes or transferable grants. For each call, Research verifies
+the retained artifact, decision, companion, lifecycle and current grant,
+checks the original evidence with MarketData under
+[ADR-0110](../decisions/0110-require-marketdata-serving-reviews.md), and
+rechecks Research state before allowing. MarketData I/O runs outside
+Research transactions. Unsupported evidence bindings fail closed. The
+current local profile checks one retained owner object and covers only
+derived claims from that object.
+
+Run `cargo xtask verify --check explanation-authority-http --python python3`
+for the loopback boundary, including deadline and fail-closed responses.
+The `research-processes` gate exercises the real owner command, current
+reviews, owner unavailability and graceful shutdown. Roll back by stopping
+the optional mode. Projector and Gateway integration can then treat the
+authority as unavailable.

@@ -61,7 +61,7 @@ async fn schema(
     }
     Ok(Schema { name, pool })
 }
-fn address() -> Result<std::net::SocketAddr> {
+pub(super) fn address() -> Result<std::net::SocketAddr> {
     Ok(std::net::TcpListener::bind("127.0.0.1:0")?.local_addr()?)
 }
 impl Journey {
@@ -120,6 +120,9 @@ impl Journey {
                         edgeagent_research_postgres::controls::MIGRATION,
                         edgeagent_research_postgres::experiments::MIGRATION,
                         edgeagent_research_postgres::governance::PROMOTION_MIGRATION,
+                        edgeagent_research_postgres::explanation_grants::MIGRATION,
+                        edgeagent_research_postgres::explanation_attempts::MIGRATION,
+                        edgeagent_research_postgres::explanation_completion::MIGRATION,
                     ])
                     .collect(),
             )
@@ -405,7 +408,7 @@ impl Journey {
         )
         .await
     }
-    async fn request_at(
+    pub(super) async fn request_at(
         address: std::net::SocketAddr,
         method: &str,
         path: &str,
@@ -420,8 +423,18 @@ impl Journey {
         }).await?
     }
     pub async fn input(&self, service: &str, mode: &str, input: &[u8]) -> Result<Vec<u8>> {
+        self.input_with_args(service, mode, &[], input).await
+    }
+    pub async fn input_with_args(
+        &self,
+        service: &str,
+        mode: &str,
+        args: &[&str],
+        input: &[u8],
+    ) -> Result<Vec<u8>> {
         let mut child = self
             .command(service, mode)?
+            .args(args)
             .env(
                 "EDGEAGENT_RESEARCH_REPLAY_RENDERER",
                 edgeagent_research_application::RENDERER_REVISION,
