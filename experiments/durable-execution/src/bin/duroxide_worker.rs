@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use duroxide::providers::sqlite::SqliteProvider;
 use duroxide::runtime::{self, RuntimeOptions, registry::ActivityRegistry};
 use duroxide::{
     ActivityContext, Client, OrchestrationContext, OrchestrationRegistry, OrchestrationStatus,
 };
+use duroxide_pg::PostgresProvider;
 
 const INSTANCE_ID: &str = "m08-synthetic";
 
@@ -24,11 +24,15 @@ fn record_attempt(path: &Path, marker: &str) -> io::Result<()> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
-    let database_url = args.next().ok_or("missing SQLite URL")?;
+    let port: u16 = args.next().ok_or("missing PostgreSQL port")?.parse()?;
+    if port == 0 {
+        return Err("expected a nonzero loopback PostgreSQL port".into());
+    }
+    let database_url = format!("postgresql://m08:m08@127.0.0.1:{port}/m08");
     let evidence_dir = PathBuf::from(args.next().ok_or("missing evidence directory")?);
     let phase = args.next().ok_or("missing phase")?;
     if args.next().is_some() || (phase != "crash" && phase != "resume") {
-        return Err("expected <sqlite-url> <evidence-dir> <crash|resume>".into());
+        return Err("expected <postgres-port> <evidence-dir> <crash|resume>".into());
     }
 
     let step_a_path = Arc::new(evidence_dir.join("step_a_attempts"));
@@ -78,7 +82,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     .build();
 
-    let store = Arc::new(SqliteProvider::new(&database_url, None).await?);
+    let store = Arc::new(PostgresProvider::new(&database_url).await?);
     let options = RuntimeOptions {
         worker_lock_timeout: Duration::from_secs(2),
         worker_lock_renewal_buffer: Duration::from_secs(1),

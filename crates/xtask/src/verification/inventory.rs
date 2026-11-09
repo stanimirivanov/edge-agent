@@ -2072,7 +2072,10 @@ fn m08_checks() -> Vec<Check> {
             ],
             "Self-provisioned synthetic M08 proof; cold cache needs network; Temporal/Flawless fetch digest-checked binaries, Flawless provisions Wasm; no model calls.",
         );
-        if matches!(profile, "m08-event-spine-proof" | "m08-dbos-proof") {
+        if matches!(
+            profile,
+            "m08-event-spine-proof" | "m08-durable-execution" | "m08-dbos-proof"
+        ) {
             proof.prerequisites = &[Requirement::Executable("docker")];
         }
         let expected = match profile {

@@ -35,7 +35,7 @@ must use provider idempotency keys or reconciliation where supported.
 | Package | Command | What it proves |
 | --- | --- | --- |
 | `event-spine-proof` | `cargo xtask verify m08-event-spine-proof` | Negative control using the real inbox and JetStream adapters: Step A commits and is acknowledged, but Step B has no durable continuation after a worker crash. |
-| `durable-execution` | `cargo xtask verify m08-durable-execution` | Duroxide file-backed SQLite history, child-process termination, and resumed Step B without rerunning Step A. |
+| `durable-execution` | `cargo xtask verify m08-durable-execution` | Duroxide PostgreSQL history in a self-provisioned container, child-process termination, and resumed Step B without rerunning Step A. |
 | `temporal-proof` | `cargo xtask verify m08-temporal-proof` | Temporal Rust SDK local server, child-process termination, and persisted workflow recovery; the harness downloads and SHA-256-verifies a pinned CLI archive. |
 | `dbos-proof` | `cargo xtask verify m08-dbos-proof` | Two distinct proofs: PostgreSQL app-data plus SQL enqueue rollback/commit, and native Rust SDK Step A/B crash recovery. The latter does not prove a Rust worker can consume the former's SQL-enqueued row. |
 | `flawless-proof` | `cargo xtask verify m08-flawless-proof` | Digest-pinned beta.3 server process crash/restart: previously recorded A HTTP effect once, safely retried B, and terminal C effect once. Pure local A code is not proven to be skipped. |

@@ -1,4 +1,4 @@
-//! A real worker-process crash test; no database, CLI, or service starts by hand.
+//! Real worker-process proofs with a disposable local PostgreSQL container.
 
 use std::error::Error;
 use std::fs;
@@ -8,21 +8,41 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use duroxide::providers::sqlite::SqliteProvider;
 use duroxide::{Client, OrchestrationStatus};
+use duroxide_pg::PostgresProvider;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
+
+#[path = "../../support/docker.rs"]
+mod docker;
+
+const POSTGRES_IMAGE: &str = "postgres:18.6-alpine3.23@sha256:885cf05d376c7cf27afef02073e6bdac3841252537f16e244fd1c1e6a7c99fb1";
+
+async fn database() -> io::Result<(docker::Container, String)> {
+    let postgres = docker::Container::start(
+        POSTGRES_IMAGE,
+        5432,
+        &[
+            ("POSTGRES_DB", "m08"),
+            ("POSTGRES_USER", "m08"),
+            ("POSTGRES_PASSWORD", "m08"),
+        ],
+        &[],
+        // The image's temporary initialization server listens only on a Unix socket.
+        "listening on IPv4 address \"0.0.0.0\", port 5432",
+    )
+    .await?;
+    let url = format!("postgresql://m08:m08@127.0.0.1:{}/m08", postgres.port);
+    Ok((postgres, url))
+}
 
 fn attempt_count(path: &std::path::Path) -> Result<usize, Box<dyn Error>> {
     Ok(fs::read_to_string(path)?.lines().count())
 }
 
-async fn start_worker_until_b(
-    sqlite_url: &str,
-    evidence_dir: &Path,
-) -> Result<Child, Box<dyn Error>> {
+async fn start_worker_until_b(port: u16, evidence_dir: &Path) -> Result<Child, Box<dyn Error>> {
     let mut worker = Command::new(env!("CARGO_BIN_EXE_duroxide_worker"))
-        .arg(sqlite_url)
+        .arg(port.to_string())
         .arg(evidence_dir)
         .arg("crash")
         .stdout(Stdio::piped())
@@ -54,14 +74,8 @@ async fn start_worker_until_b(
 async fn completed_step_is_not_reexecuted_after_worker_process_crash() -> Result<(), Box<dyn Error>>
 {
     let temp = tempfile::tempdir()?;
-    let sqlite_path = temp.path().join("workflow.sqlite");
-    fs::File::create(&sqlite_path)?;
-    let sqlite_url = format!(
-        "sqlite:{}",
-        sqlite_path.to_string_lossy().replace('\\', "/")
-    );
-
-    let store = Arc::new(SqliteProvider::new(&sqlite_url, None).await?);
+    let (postgres, database_url) = database().await?;
+    let store = Arc::new(PostgresProvider::new(&database_url).await?);
     let client = Client::new(store);
     client
         .start_orchestration("m08-synthetic", "M08", "synthetic")
@@ -75,7 +89,7 @@ async fn completed_step_is_not_reexecuted_after_worker_process_crash() -> Result
     );
 
     let worker = env!("CARGO_BIN_EXE_duroxide_worker");
-    let mut first = start_worker_until_b(&sqlite_url, temp.path()).await?;
+    let mut first = start_worker_until_b(postgres.port, temp.path()).await?;
 
     // This is an abrupt process death during B, not a panic caught by Tokio
     // or a graceful worker shutdown. The history database survives it.
@@ -85,7 +99,7 @@ async fn completed_step_is_not_reexecuted_after_worker_process_crash() -> Result
 
     let second_status = tokio::time::timeout(Duration::from_secs(30), async {
         Command::new(worker)
-            .arg(&sqlite_url)
+            .arg(postgres.port.to_string())
             .arg(temp.path())
             .arg("resume")
             .stdout(Stdio::null())
@@ -118,18 +132,13 @@ async fn completed_step_is_not_reexecuted_after_worker_process_crash() -> Result
 async fn cancellation_of_in_flight_b_is_terminal_without_completing_b() -> Result<(), Box<dyn Error>>
 {
     let temp = tempfile::tempdir()?;
-    let sqlite_path = temp.path().join("workflow.sqlite");
-    fs::File::create(&sqlite_path)?;
-    let sqlite_url = format!(
-        "sqlite:{}",
-        sqlite_path.to_string_lossy().replace('\\', "/")
-    );
-    let store = Arc::new(SqliteProvider::new(&sqlite_url, None).await?);
+    let (postgres, database_url) = database().await?;
+    let store = Arc::new(PostgresProvider::new(&database_url).await?);
     let client = Client::new(store);
     client
         .start_orchestration("m08-synthetic", "M08", "synthetic")
         .await?;
-    let mut worker = start_worker_until_b(&sqlite_url, temp.path()).await?;
+    let mut worker = start_worker_until_b(postgres.port, temp.path()).await?;
 
     client
         .cancel_instance("m08-synthetic", "test cancellation")

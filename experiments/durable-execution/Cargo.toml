@@ -9,9 +9,10 @@ publish = false
 [workspace]
 
 [dependencies]
-duroxide = { version = "=0.1.30", features = ["sqlite"] }
+duroxide = "=0.1.32"
+duroxide-pg = "=0.1.38"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time", "net"] }
