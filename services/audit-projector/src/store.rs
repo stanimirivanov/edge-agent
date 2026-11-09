@@ -39,8 +39,16 @@ pub struct View {
     pub decision: Option<String>,
     #[serde(skip)]
     provenance: Option<Vec<u8>>,
+    #[serde(skip)]
+    explanation: Option<Vec<u8>>,
 }
 impl View {
+    pub(crate) fn status_bytes(mut self) -> Result<Vec<u8>, serde_json::Error> {
+        // The v1 status contract counts terminal, provenance and lifecycle facts.
+        self.projection_revision -= u64::from(self.explanation.is_some());
+        serde_json::to_vec(&self)
+    }
+
     /// Exact canonical terminal bytes; None when pending or gapped.
     /// Exact canonical historical companion, absent when unobserved/gapped.
     pub fn provenance_bytes(&self) -> Option<&[u8]> {
@@ -425,6 +433,7 @@ impl ProjectionStore {
             scope: scope.into(),
             request_id: id.into(),
             projection_revision: view.revision(),
+            explanation: view.explanation_bytes().map(<[u8]>::to_vec),
             status: if gap {
                 "gap"
             } else {
@@ -452,5 +461,35 @@ impl ProjectionStore {
                 view.outcome_bytes().map(<[u8]>::to_vec)
             },
         }))
+    }
+    pub(crate) async fn verified_explanation(
+        &self,
+        view: View,
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+        let Some(bytes) = view.explanation else {
+            return Ok(None);
+        };
+        let companion = Companion::decode(&bytes).map_err(|e| Error::caused(Kind::Corrupt, e))?;
+        let id = companion
+            .id()
+            .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+        let source = edgeagent_contracts::Component::Research.source_uri();
+        let proof=sqlx::query!("SELECT envelope,message_type FROM edgeagent_message_inbox WHERE consumer_name='research-projector' AND message_source=$1 AND message_id=$2",source,id).fetch_optional(&self.pool).await?.ok_or_else(||Error::new(Kind::Corrupt))?;
+        let envelope = MessageEnvelope::from_json(&proof.envelope)
+            .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+        let partition = format!("research-request/{}/{}", view.scope, view.request_id);
+        let verified = Companion::decode_publication(&envelope)
+            .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+        if proof.message_type != envelope.message_type()
+            || envelope.partition_key() != Some(partition.as_str())
+            || envelope.id() != id
+            || verified
+                .canonical_bytes()
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?
+                != bytes
+        {
+            return Err(Error::new(Kind::Corrupt));
+        }
+        Ok(Some((id, bytes)))
     }
 }

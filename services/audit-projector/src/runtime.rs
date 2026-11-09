@@ -87,6 +87,20 @@ async fn execute(mode: &str) -> Result {
     } else {
         None
     };
+    let authority = if address.is_some() {
+        match (
+            std::env::var("EDGEAGENT_PROJECTOR_RESEARCH_AUTHORITY_URL"),
+            std::env::var("EDGEAGENT_PROJECTOR_EXPLANATION_AUDIENCE"),
+        ) {
+            (Ok(origin), Ok(audience)) => Some(crate::explanation_authority::Client::new(
+                &origin, &audience,
+            )?),
+            (Err(std::env::VarError::NotPresent), Err(std::env::VarError::NotPresent)) => None,
+            _ => return Err("incomplete projector explanation authority settings".into()),
+        }
+    } else {
+        None
+    };
     let options: sqlx::postgres::PgConnectOptions = database.parse()?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(8)
@@ -102,7 +116,7 @@ async fn execute(mode: &str) -> Result {
         sqlx::query!("SELECT request_id FROM edgeagent_research_views LIMIT 0").fetch_all(&pool).await?;
         if let Some(address)=address {
             let listener=tokio::net::TcpListener::bind(address).await?;
-            axum::serve(listener,http::router(store.clone())).with_graceful_shutdown(stop()).await?;return Ok(());
+            axum::serve(listener,http::with_authority(store.clone(), authority)).with_graceful_shutdown(stop()).await?;return Ok(());
         }
         if mode!="offline-worker" {
             use std::io::Read as _;let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;

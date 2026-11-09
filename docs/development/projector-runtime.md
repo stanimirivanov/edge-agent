@@ -73,7 +73,7 @@ redelivery leaves both the checkpoint and delivery marker intact.
 
 Apply migration 0002 and deploy EARP4-capable readers before enabling the fifth
 consumer subject. The wider check supports the reducer's full checkpoint bound.
-Existing HTTP paths expose no companion content or dedicated companion fields. Before rolling
+The status, outcome and decision routes have no dedicated companion fields or content. Before rolling
 back to a reader that only supports EARP1–EARP3, stop intake and rebuild the
 disposable projection from the original four subjects.
 
@@ -100,6 +100,32 @@ returned. Reads have a five-second deadline and bounded output. Terminal queries
 restore the checkpoint and revalidate its original inbox publication before returning
 bytes; missing/changed proof fails closed. Internal snapshots may lag the owner and
 never establish current validity, entitlement, global currency or lifecycle status.
+
+## Authorized explanation reads
+
+Set `EDGEAGENT_PROJECTOR_RESEARCH_AUTHORITY_URL` to the literal loopback HTTP
+origin of the [Research read authority](explanations.md#current-research-read-authorization)
+and `EDGEAGENT_PROJECTOR_EXPLANATION_AUDIENCE` to the same reviewed audience ID.
+Set both together. The origin accepts no credentials, path, query, fragment
+or DNS name. Unset both to disable successful explanation reads.
+
+GET `/internal/v1/research-requests/{scope}/{id}/explanation` returns 200 with
+the exact canonical companion bytes only after the retained checkpoint and
+companion inbox proof agree and Research freshly authorizes the same scope,
+request, companion digest and audience. The projector accepts only the
+documented empty, non-cacheable owner decisions. It sends no inbound headers,
+follows no redirects and makes no automatic retries. At most four owner
+checks run concurrently, with a six-second owner deadline and an eight-second
+end-to-end bound.
+
+All explanation responses are non-cacheable. Pending, missing, gapped and
+closed views return 202, 404, 409 and 410 respectively. Foreign scope or
+denial returns 403. Missing configuration, corrupted proof, owner unavailability
+or an unexpected reply returns 503. Errors expose no companion content.
+
+The v1 status revision counts only terminal, decision and lifecycle facts.
+Internally, the reducer and checkpoint also count the explanation, while
+the status wire contract keeps the revision Gateway already validates.
 
 ## Verification, rebuild and rollback
 

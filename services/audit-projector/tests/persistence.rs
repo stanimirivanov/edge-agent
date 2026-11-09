@@ -323,6 +323,18 @@ async fn decision_reordering_replays_exact_companion_and_queries_require_inbox_p
         assert_eq!(gap.projection_revision, 0);
         assert_eq!(gap.status, "gap");
         assert!(gap.applied_delivery_key.is_none());
+        let server = Server::new(store.clone()).await?;
+        let explanation_path = format!(
+            "/internal/v1/research-requests/{}/{}/explanation",
+            req.scope, req.request_id
+        );
+        assert!(
+            server
+                .query("GET", &explanation_path, "")
+                .await?
+                .starts_with("HTTP/1.1 409")
+        );
+
         store.project(&terminal, "terminal").await?;
         assert_eq!(
             store
@@ -344,7 +356,6 @@ async fn decision_reordering_replays_exact_companion_and_queries_require_inbox_p
         assert_eq!(view.status, "artifact");
         assert_eq!(view.provenance_bytes(), Some(bytes.as_slice()));
         assert_eq!(view.decision, Some(id.clone()));
-        let server = Server::new(store.clone()).await?;
         let path = format!(
             "/internal/v1/research-requests/{}/{}/decision",
             req.scope, req.request_id
@@ -430,7 +441,16 @@ async fn decision_reordering_replays_exact_companion_and_queries_require_inbox_p
         );
         let response = server.query("GET", &status_path, "").await?;
         assert!(response.starts_with("HTTP/1.1 200"));
+        assert!(response.contains(r#""projection_revision":2"#));
         assert!(!response.contains(explanation_event.id()));
+        let unavailable = server.query("GET", &explanation_path, "").await?;
+        assert!(unavailable.starts_with("HTTP/1.1 503"));
+        assert!(
+            unavailable
+                .to_ascii_lowercase()
+                .contains("cache-control: no-store")
+        );
+
         sqlx::query("DELETE FROM edgeagent_message_inbox WHERE message_id=$1")
             .bind(id)
             .execute(&db.pool)

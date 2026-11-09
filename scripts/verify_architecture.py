@@ -211,7 +211,7 @@ PACKAGE_RULES = {
     ),
     "services/audit-projector": PackageRule(
         "edgeagent-audit-projector", "bin",
-        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-audit-domain","edgeagent-research-application","edgeagent-inbox-postgres","edgeagent-messaging","edgeagent-messaging-nats","axum","async-nats","serde","serde_json","sqlx","tokio","url"}),
+        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-audit-domain","edgeagent-research-application","edgeagent-inbox-postgres","edgeagent-messaging","edgeagent-messaging-nats","axum","async-nats","reqwest","rustls","serde","serde_json","sqlx","tokio","url"}),
         frozenset({"futures-util"}),
     ),
     "services/execution-simulator": PackageRule(

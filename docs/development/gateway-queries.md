@@ -39,6 +39,10 @@ and closed states at projection revision two/three; Gateway validates the owner
 revision, scope/ID and state relation. Closed outcome GETs return 410 with their
 status; correction digests remain metadata and are never followed automatically.
 
+The projector keeps the existing status revision accounting when it consumes
+explanation companions. A companion advances the internal checkpoint revision,
+while the v1 status revision continues counting terminal, decision and lifecycle facts.
+
 A pending outcome returns 202 `{"status":"pending"}`; a gap returns 409
 `{"status":"gap"}`. Unknown IDs return 404 `{"status":"not_observed"}` on
 both routes, never authoritative rejection. Absent, timed-out, inconsistent or
