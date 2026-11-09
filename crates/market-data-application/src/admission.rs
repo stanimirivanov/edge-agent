@@ -321,6 +321,34 @@ impl AdmissionRecord {
             rights: id(rights)?,
         })
     }
+    /// Canonical serving-review scope. The full rights pin distinguishes
+    /// revisions, while the sealed feed scope can cover multiple acquisitions.
+    ///
+    /// # Errors
+    /// Rejects an incomplete retained admission.
+    pub fn explanation_rights_scope(&self) -> Result<String, Error> {
+        const FIELDS: [&str; 12] = [
+            "rights",
+            "principal",
+            "account",
+            "source",
+            "instrument",
+            "endpoint",
+            "audience",
+            "storage",
+            "semantics_id",
+            "semantics_revision",
+            "precision",
+            "market_scope",
+        ];
+        let values = FIELDS.map(|key| self.fields.get(key).map(String::as_str));
+        let mut scope = String::new();
+        for value in values {
+            scope.push('/');
+            scope.push_str(value.ok_or_else(|| Error::new(Kind::Invalid))?);
+        }
+        Ok(scope)
+    }
     /// Bind an object upload to all original request/scope and authority identities.
     /// # Errors
     /// Denies foreign scope, changed rights pins or extended retention.

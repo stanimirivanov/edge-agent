@@ -334,3 +334,113 @@ async fn policy_companions_preserve_daily_evidence_and_distinguish_synthetic_cov
     }
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn explanation_authorization_requires_current_exact_owner_review() -> Result {
+    const ACQUISITION: &str = "00000000000000000000000000000001";
+    const AUDIENCE: &str = "00000000000000000000000000000002";
+    let h = Harness::new().await?;
+    let result = std::panic::AssertUnwindSafe(async {
+        let request = h.seed("history-v1").await?;
+        let event = h.once(&delivery(&request, "serving")?).await?;
+        let input = event.to_json()?;
+        let check = ["offline-explanation-authorize", ACQUISITION, AUDIENCE];
+        let review = ["offline-explanation-review", ACQUISITION];
+        let now: i64 =
+            sqlx::query_scalar("SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint")
+                .fetch_one(&h.pool)
+                .await?;
+        let record = |revision, decision: &str, expires_at_ms| {
+            serde_json::json!({
+                "audience": AUDIENCE,
+                "agreement": "00000000000000000000000000000003",
+                "revision": revision,
+                "decision": decision,
+                "valid_from_ms": now - 10000,
+                "expires_at_ms": expires_at_ms,
+            })
+            .to_string()
+        };
+        let expired = record(2, "allow", now - 1);
+        let allowed = record(1, "allow", now + 60000);
+        assert_eq!(h.run(&check, Some(&input)).await?.status.code(), Some(77));
+        assert!(
+            h.success(&review, Some(allowed.as_bytes()))
+                .await?
+                .is_empty()
+        );
+        assert!(
+            h.success(&review, Some(allowed.as_bytes()))
+                .await?
+                .is_empty()
+        );
+        assert!(h.success(&check, Some(&input)).await?.is_empty());
+
+        let wrong = ["offline-explanation-authorize", ACQUISITION, ACQUISITION];
+        assert_eq!(h.run(&wrong, Some(&input)).await?.status.code(), Some(77));
+        let mut forged: serde_json::Value = serde_json::from_slice(&input)?;
+        forged["data"]["decision"]["outcome"]["object"]["rights"]["revision"] = "2".into();
+        let forged = h.run(&check, Some(&serde_json::to_vec(&forged)?)).await?;
+        assert!(!forged.status.success());
+        assert!(forged.stdout.is_empty());
+
+        h.success(&review, Some(expired.as_bytes())).await?;
+        assert_eq!(h.run(&check, Some(&input)).await?.status.code(), Some(77));
+        assert!(
+            !h.run(&review, Some(allowed.as_bytes()))
+                .await?
+                .status
+                .success()
+        );
+        h.success(&review, Some(record(3, "revoke", now + 60000).as_bytes()))
+            .await?;
+        assert_eq!(h.run(&check, Some(&input)).await?.status.code(), Some(77));
+        h.success(&review, Some(record(4, "allow", now + 60000).as_bytes()))
+            .await?;
+        assert!(h.success(&check, Some(&input)).await?.is_empty());
+
+        let mut untrusted = h.pool.begin().await?;
+        sqlx::raw_sql("GRANT INSERT ON edgeagent_explanation_serving_reviews TO pg_read_all_data")
+            .execute(&mut *untrusted).await?;
+        sqlx::raw_sql("SET LOCAL SESSION AUTHORIZATION pg_read_all_data")
+            .execute(&mut *untrusted).await?;
+        let insertion = sqlx::query(
+            "INSERT INTO edgeagent_explanation_serving_reviews(rights_scope,audience,revision,decision,agreement,valid_from_ms,expires_at_ms,actor)
+             SELECT rights_scope,audience,5,'allow',agreement,valid_from_ms,expires_at_ms,actor FROM edgeagent_explanation_serving_reviews WHERE revision=4"
+        ).execute(&mut *untrusted).await.err().ok_or("nonowner inserted review")?;
+        assert_eq!(insertion.as_database_error().map(sqlx::error::DatabaseError::message),
+            Some("serving reviews require append by schema owner"));
+        untrusted.rollback().await?;
+
+        let objects = h.root.join("objects");
+        let hidden = h.root.join("hidden-objects");
+        std::fs::rename(&objects, &hidden)?;
+        std::fs::create_dir(&objects)?;
+        let unavailable = h.run(&check, Some(&input)).await?;
+        std::fs::remove_dir(&objects)?;
+        std::fs::rename(&hidden, &objects)?;
+        assert_eq!(unavailable.status.code(), Some(75));
+        assert!(unavailable.stdout.is_empty());
+        assert!(
+            sqlx::query("UPDATE edgeagent_explanation_serving_reviews SET decision='allow'")
+                .execute(&h.pool)
+                .await
+                .is_err()
+        );
+
+        let owner = PostgresResearchEvidence::new(h.pool.clone())
+            .owner_record(&EvidenceId::new(ACQUISITION)?)
+            .await?;
+        PostgresAcquisitionLedger::new(h.pool.clone())
+            .revoke_evidence_scope(&owner.retention_scope()?)
+            .await?;
+        let denied = h.run(&check, Some(&input)).await?;
+        assert_eq!(denied.status.code(), Some(77));
+        assert!(denied.stdout.is_empty());
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    h.finish(result).await
+}

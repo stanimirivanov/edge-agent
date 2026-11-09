@@ -74,15 +74,20 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
             if args.first().is_some_and(|a| {
                 matches!(
                     a.as_str(),
-                    "offline-research-read" | "offline-research-policy-read"
+                    "offline-research-read"
+                        | "offline-research-policy-read"
+                        | "offline-explanation-authorize"
                 )
             }) {
                 let mut cause = Some(error.as_ref() as &(dyn std::error::Error + 'static));
                 while let Some(e) = cause {
                     if e.downcast_ref::<BudgetError>()
                         .is_some_and(|e| e.kind() == BudgetErrorKind::Denied)
-                        || e.downcast_ref::<EvidenceStorageError>()
-                            .is_some_and(|e| e.kind() == EvidenceStorageErrorKind::Denied)
+                        || e.downcast_ref::<EvidenceStorageError>().is_some_and(|e| {
+                            e.kind() == EvidenceStorageErrorKind::Denied
+                                || (args[0] == "offline-explanation-authorize"
+                                    && e.kind() == EvidenceStorageErrorKind::Expired)
+                        })
                         || matches!(
                             e.downcast_ref::<sqlx::Error>(),
                             Some(sqlx::Error::RowNotFound)
@@ -92,8 +97,15 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                     }
                     if e.downcast_ref::<BudgetError>()
                         .is_some_and(|e| e.kind() == BudgetErrorKind::Storage)
-                        || e.downcast_ref::<EvidenceStorageError>()
-                            .is_some_and(|e| e.kind() == EvidenceStorageErrorKind::Backend)
+                        || e.downcast_ref::<EvidenceStorageError>().is_some_and(|e| {
+                            e.kind() == EvidenceStorageErrorKind::Backend
+                                || (args[0] == "offline-explanation-authorize"
+                                    && matches!(
+                                        e.kind(),
+                                        EvidenceStorageErrorKind::NotFound
+                                            | EvidenceStorageErrorKind::Deadline
+                                    ))
+                        })
                         || e.downcast_ref::<sqlx::Error>().is_some()
                         || e.downcast_ref::<std::io::Error>().is_some()
                     {
@@ -134,16 +146,26 @@ async fn execute(config: &config::Config) -> Result {
             println!("{}", serde_json::to_string(job.record.command())?);
             return Ok(());
         }
+        let bridge = edgeagent_market_data_postgres::PostgresResearchEvidence::new(pool.clone());
+        if config.command == "offline-explanation-review" {
+            use std::io::Read as _;
+            let mut bytes = Vec::new();
+            std::io::stdin().take(1025).read_to_end(&mut bytes)?;
+            let review = edgeagent_market_data_postgres::ExplanationServingReview::decode(&bytes)?;
+            let id = EvidenceId::new(&format!("{:032x}", config.request.ok_or("missing acquisition")?))?;
+            bridge.review_explanation_serving(&id, &review).await?;
+            return Ok(());
+        }
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
         let mut confirmed = config.confirmed.clone();
-        if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read") {
+        if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read" | "offline-explanation-authorize") {
             use std::io::{Read as _,Write as _};
             let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let event=MessageEnvelope::from_json(&bytes)?;
             let outcome=edgeagent_contracts::research_acquisition::ResearchEvidence::from_envelope(&event)?;
             if outcome.request().scope!=std::env::var("EDGEAGENT_OFFLINE_RESEARCH_SCOPE")? {return Err(BudgetError::new(BudgetErrorKind::Denied).into());}
-            let retained=edgeagent_market_data_postgres::PostgresResearchEvidence::new(pool.clone()).export(&event).await?;
+            let retained=bridge.export(&event).await?;
             if Some(retained.admission.request().id.get())!=config.request {return Err(BudgetError::new(BudgetErrorKind::Denied).into());}
             let job=Job::restore(&retained.admission)?;
             let access=Access{job:&job,captured:now()?};
@@ -151,6 +173,11 @@ async fn execute(config: &config::Config) -> Result {
             let EvidenceOutcome::Ready{object}=&decision.outcome else {return Err(BudgetError::new(BudgetErrorKind::Invalid).into());};
             let managed=RetainedEvidenceStorage::new(&storage,&ledger);
             let artifact=managed.get(object,&access).await?;
+            if config.command == "offline-explanation-authorize" {
+                let audience = config.serving_audience.as_ref().ok_or("missing serving audience")?;
+                bridge.authorize_explanation_serving(&event, &retained.admission, audience, &access).await?;
+                return Ok(());
+            }
             if config.command=="offline-research-policy-read" {
                 use edgeagent_contracts::policy_evidence::{PolicyEvidence,EventCoverage};
                 let events=if Job::with_recipe(job.record.request().id.get(),job.record.request().admitted_at.unix_millis(),fixture::Recipe::PolicyHistory)?.record==job.record {

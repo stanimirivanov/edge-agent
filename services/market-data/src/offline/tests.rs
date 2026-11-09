@@ -93,6 +93,7 @@ fn profile_lock_excludes_a_second_owner_and_refuses_reinitialization() -> Result
         database: String::new(),
         root: root.clone(),
         request: None,
+        serving_audience: None,
         recipe: fixture::Recipe::Single,
         broker: None,
         stream: None,

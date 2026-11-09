@@ -2,9 +2,11 @@
 
 Run `cargo test --locked` in this directory. The nested Cargo workspace keeps
 experimental dependencies out of EdgeAgent's production dependency graph. The
-test starts its own file-backed SQLite store in a temporary directory and does
-not require a pre-started service, credentials, a CLI, or Docker. Cargo needs
-network access on the first run to download locked crates.
+proof requires Docker. Each test starts a separate digest-pinned PostgreSQL
+container on a random loopback port and removes it on exit. A cold cache needs
+network access for locked crates and the pinned image. The proof uses the
+PostgreSQL provider to remove the bundled SQLite affected by
+[RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html).
 
 The synthetic workflow schedules Step A (local work), then Step B (a simulated
 long-running model call). The test starts a worker subprocess, waits for Step B

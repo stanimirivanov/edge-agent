@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT decision='allow' AND valid_from_ms<=clock.now_ms AND clock.now_ms<expires_at_ms\n                AND clock.now_ms<$3 AS \"allowed!\"\n            FROM edgeagent_explanation_serving_reviews\n            CROSS JOIN (SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS now_ms) clock\n            WHERE rights_scope=$1 AND audience=$2 ORDER BY revision DESC LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "allowed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3b31a83ae5abe8b26bc12140598b74e1d0c410e4e11bf074d54424c8b12f38e7"
+}
