@@ -372,6 +372,13 @@ impl Journey {
         self.start_servers_with_gateway_otlp(None).await
     }
     pub async fn start_servers_with_gateway_otlp(&mut self, endpoint: Option<&str>) -> Result {
+        self.start_query_servers(endpoint, None).await
+    }
+    pub async fn start_query_servers(
+        &mut self,
+        endpoint: Option<&str>,
+        authority: Option<(&str, &str)>,
+    ) -> Result {
         for (service, address) in [
             ("projector", self.projector_address),
             ("gateway", self.gateway_address),
@@ -381,6 +388,13 @@ impl Journey {
                 && let Some(endpoint) = endpoint
             {
                 command.env("EDGEAGENT_GATEWAY_OTLP_ENDPOINT", endpoint);
+            }
+            if service == "projector"
+                && let Some((origin, audience)) = authority
+            {
+                command
+                    .env("EDGEAGENT_PROJECTOR_RESEARCH_AUTHORITY_URL", origin)
+                    .env("EDGEAGENT_PROJECTOR_EXPLANATION_AUDIENCE", audience);
             }
             let child = command.stdout(Stdio::null()).spawn()?;
             self.servers.push(child);

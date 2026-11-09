@@ -19,6 +19,8 @@ edgeagent-messaging.workspace = true
 edgeagent-messaging-nats.workspace = true
 axum.workspace = true
 async-nats.workspace = true
+reqwest = { workspace = true, features = ["rustls-no-provider"] }
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

@@ -330,7 +330,9 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
     let mut h = Journey::new().await?;
     let tested = AssertUnwindSafe(async {
         h.seed_history().await?;
-        h.start_servers().await?;
+        let authority_address = address()?;
+        let origin = format!("http://{authority_address}");
+        h.start_query_servers(None, Some((&origin, AUDIENCE))).await?;
         submit(&h, 5).await?;
         h.run("research", "offline-worker", &[]).await?;
         let outcome: Vec<u8> = sqlx::query_scalar("SELECT outcome FROM edgeagent_research_completions")
@@ -372,7 +374,7 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         let invalid_listener = tokio::time::timeout(Duration::from_secs(5), invalid_listener).await??;
         assert!(!invalid_listener.status.success());
         assert!(invalid_listener.stdout.is_empty());
-        let address = address()?;
+        let address = authority_address;
         let mut server = h.command("research", "offline-explanation-authority")?
             .env("EDGEAGENT_RESEARCH_EXPLANATION_LISTEN", address.to_string())
             .env("EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE", AUDIENCE)
@@ -393,23 +395,58 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         }))?;
         let check = || Journey::request_at(address, "POST", "/internal/v1/explanation-authorizations", &query);
         assert_eq!(check().await?, (403, Vec::new()));
+        let explanation_path = "/internal/v1/research-requests/operator/qualification/explanation";
+        let explanation = || Journey::request_at(h.projector_address, "GET", explanation_path, &[]);
+        assert_eq!(explanation().await?, (404, br#"{"status":"not_observed"}"#.to_vec()));
+        h.run("research", "offline-relay", &[]).await?;
+        for _ in 0..2 {
+            h.run("projector", "offline-worker", &[]).await?;
+        }
+        assert_eq!(explanation().await?, (404, br#"{"status":"not_observed"}"#.to_vec()));
+        h.run("projector", "offline-worker", &[]).await?;
+        let status = h.request("GET", "/v1/research-requests/operator/qualification", &[]).await?;
+        assert_eq!(status.0, 200);
+        let status: serde_json::Value = serde_json::from_slice(&status.1)?;
+        assert_eq!(status["projection_revision"], 2);
+        assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
         let owner_review = |revision, decision: &str| serde_json::json!({
             "audience": AUDIENCE, "agreement": ACQUISITION, "revision": revision, "decision": decision,
             "valid_from_ms": grant.valid_from_ms, "expires_at_ms": grant.expires_at_ms,
         }).to_string();
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(1, "allow").as_bytes()).await?;
         assert_eq!(check().await?, (204, Vec::new()));
+        assert_eq!(explanation().await?, (200, receipt.bytes().to_vec()));
         let lock = std::fs::OpenOptions::new().read(true).write(true)
             .open(h.root.join("offline.lock"))?;
         lock.try_lock()?;
         assert_eq!(check().await?, (503, Vec::new()));
+        assert_eq!(explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
         drop(lock);
 
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(2, "revoke").as_bytes()).await?;
         assert_eq!(check().await?, (403, Vec::new()));
+        assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(3, "allow").as_bytes()).await?;
-        store.set_explanation_grant(&Grant { revoked: true, ..grant }, 2).await?;
+        store.set_explanation_grant(&Grant { revoked: true, ..grant.clone() }, 2).await?;
         assert_eq!(check().await?, (403, Vec::new()));
+        assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
+        store.set_explanation_grant(&grant, 3).await?;
+        assert_eq!(explanation().await?, (200, receipt.bytes().to_vec()));
+        sqlx::query("DELETE FROM edgeagent_message_inbox WHERE message_id=$1")
+            .bind(&companion).execute(&h.projector.pool).await?;
+        assert_eq!(explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
+        store.append_lifecycle("operator", ResearchLifecycle {
+            scope: "operator".into(), request_id: artifact.request.request_id.clone(),
+            artifact: record.digest()?, revision: 1,
+            effective_at_ms: artifact.request.decision_at_ms,
+            change: LifecycleChange::Withdrawn,
+        }, "2026-10-30T00:00:00Z").await?;
+        h.run("research", "offline-relay", &[]).await?;
+        h.run("projector", "offline-worker", &[]).await?;
+        assert_eq!(explanation().await?, (410, br#"{"status":"withdrawn"}"#.to_vec()));
+        let (code, status) = h.request("GET", "/v1/research-requests/operator/qualification", &[]).await?;
+        assert_eq!(code, 200);
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&status)?["projection_revision"], 3);
         let pid = server.id().ok_or("authorization server already stopped")?.to_string();
         assert!(tokio::process::Command::new("kill").args(["-TERM", &pid]).status().await?.success());
         assert!(tokio::time::timeout(Duration::from_secs(5), server.wait()).await??.success());

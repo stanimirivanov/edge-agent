@@ -672,6 +672,8 @@ dependencies = [
  "edgeagent-service-runtime",
  "edgeagent-telemetry",
  "futures-util",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sqlx",

@@ -33,6 +33,24 @@ async fn internal_queries_reject_foreign_browser_hosts_and_writes_before_storage
             403,
         ),
         (
+            "GET",
+            "/internal/v1/research-requests/foreign/request-1/explanation",
+            "",
+            403,
+        ),
+        (
+            "GET",
+            "/internal/v1/research-requests/offline/request-1/explanation",
+            "Origin: http://localhost\r\n",
+            403,
+        ),
+        (
+            "GET",
+            "/internal/v1/research-requests/offline/request-1/explanation",
+            "Host: attacker.example\r\n",
+            403,
+        ),
+        (
             "POST",
             "/internal/v1/research-requests/offline/request-1",
             "",
