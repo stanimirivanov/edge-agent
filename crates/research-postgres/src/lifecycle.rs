@@ -14,7 +14,7 @@ pub const MIGRATION: &str = include_str!("../migrations/0002_research_lifecycle.
 fn invalid() -> Error {
     Error::new(Kind::Invalid)
 }
-async fn history(
+pub(super) async fn history(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     scope: &str,
     id: &str,

@@ -9,9 +9,7 @@ use std::{path::PathBuf, process::Stdio, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// Immutable operator-selected offline policy and owner endpoint; Debug omits credentials.
 pub struct OwnerLoader {
-    binary: PathBuf,
-    root: PathBuf,
-    database: String,
+    endpoint: OwnerEndpoint,
     owner_id: String,
     scope: String,
     implementation: [u8; 32],
@@ -19,6 +17,45 @@ pub struct OwnerLoader {
     max_age_ms: i64,
     ttl_ms: i64,
 }
+pub(crate) struct OwnerEndpoint {
+    binary: PathBuf,
+    root: PathBuf,
+    database: String,
+}
+
+impl OwnerEndpoint {
+    pub(crate) fn from_environment() -> Result<Self, &'static str> {
+        let binary = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_BINARY")?);
+        let root = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_ROOT")?);
+        if !binary.is_absolute() || !root.is_absolute() {
+            return Err("owner requires installed absolute paths");
+        }
+        let database = required("EDGEAGENT_RESEARCH_OWNER_DATABASE_URL")?;
+        crate::runtime::local(&database, &["postgres", "postgresql"])?;
+        Ok(Self {
+            binary,
+            root,
+            database,
+        })
+    }
+
+    pub(crate) fn command(&self, scope: &str) -> tokio::process::Command {
+        let mut command = tokio::process::Command::new(&self.binary);
+        command
+            .env_clear()
+            .env("USE_MOCK", "1")
+            .env("EDGEAGENT_MARKET_DATA_PROVIDER", "synthetic-daily-v1")
+            .env("EDGEAGENT_POSTGRES_URL", &self.database)
+            .env("EDGEAGENT_OFFLINE_ROOT", &self.root)
+            .env("EDGEAGENT_OFFLINE_RESEARCH_SCOPE", scope)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        command
+    }
+}
+
 fn required(name: &str) -> Result<String, &'static str> {
     std::env::var(name)
         .ok()
@@ -88,13 +125,7 @@ impl OwnerLoader {
         max_age_ms: i64,
         ttl_ms: i64,
     ) -> Result<Self, &'static str> {
-        let binary = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_BINARY")?);
-        let root = PathBuf::from(required("EDGEAGENT_RESEARCH_OWNER_ROOT")?);
-        if !binary.is_absolute() || !root.is_absolute() {
-            return Err("owner requires installed absolute paths");
-        }
-        let database = required("EDGEAGENT_RESEARCH_OWNER_DATABASE_URL")?;
-        crate::runtime::local(&database, &["postgres", "postgresql"])?;
+        let endpoint = OwnerEndpoint::from_environment()?;
         let owner_id = required("EDGEAGENT_RESEARCH_OWNER_ACQUISITION")?;
         EvidenceId::new(&owner_id).map_err(|_| "invalid owner acquisition")?;
         let scope = required("EDGEAGENT_RESEARCH_SCOPE")?;
@@ -102,9 +133,7 @@ impl OwnerLoader {
             return Err("research policy bounds exceeded");
         }
         Ok(Self {
-            binary,
-            root,
-            database,
+            endpoint,
             owner_id,
             scope,
             implementation,
@@ -150,7 +179,9 @@ impl OwnerLoader {
         Ok(())
     }
     async fn read(&self, delivery: &MessageEnvelope, policy: bool) -> Result<Vec<u8>, E> {
-        let mut child = tokio::process::Command::new(&self.binary)
+        let mut child = self
+            .endpoint
+            .command(&self.scope)
             .args([
                 if policy {
                     "offline-research-policy-read"
@@ -159,16 +190,6 @@ impl OwnerLoader {
                 },
                 &self.owner_id,
             ])
-            .env_clear()
-            .env("USE_MOCK", "1")
-            .env("EDGEAGENT_MARKET_DATA_PROVIDER", "synthetic-daily-v1")
-            .env("EDGEAGENT_POSTGRES_URL", &self.database)
-            .env("EDGEAGENT_OFFLINE_ROOT", &self.root)
-            .env("EDGEAGENT_OFFLINE_RESEARCH_SCOPE", &self.scope)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
             .spawn()
             .map_err(|_| E::Unavailable)?;
         let limit = if policy {

@@ -244,8 +244,8 @@ PACKAGE_RULES = {
     ),
     "services/research": PackageRule(
         "edgeagent-research", "bin",
-        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-research-application","edgeagent-research-domain","edgeagent-research-postgres","edgeagent-market-data-domain","edgeagent-inbox-postgres","edgeagent-outbox-postgres","edgeagent-outbox-relay","edgeagent-messaging","edgeagent-messaging-nats","async-nats","chrono","reqwest","rustls","serde","serde_json","sha2","sqlx","tokio","url"}),
-        frozenset({"futures-util", "axum", "opentelemetry-proto", "prost"}),
+        frozenset({TELEMETRY,"edgeagent-contracts","edgeagent-service-runtime","edgeagent-research-application","edgeagent-research-domain","edgeagent-research-postgres","edgeagent-market-data-domain","edgeagent-inbox-postgres","edgeagent-outbox-postgres","edgeagent-outbox-relay","edgeagent-messaging","edgeagent-messaging-nats","async-nats","axum","chrono","reqwest","rustls","serde","serde_json","sha2","sqlx","tokio","url"}),
+        frozenset({"futures-util", "opentelemetry-proto", "prost"}),
     ),
 }
 

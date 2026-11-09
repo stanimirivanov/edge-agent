@@ -2,13 +2,16 @@
 use super::{PostgresResearchStore, read_snapshot, storage, transaction};
 use crate::explanation_attempts::{self, Reservation};
 use edgeagent_contracts::{
-    explanation::{Binding, Companion, Fallback, Job, Outcome, RECORDED, Refusal},
-    research::ResearchRequest,
+    Component, MessageEnvelope,
+    evidence::EvidenceOutcome,
+    explanation::{Anchor, Binding, Companion, Fallback, Job, Outcome, RECORDED, Refusal},
+    research::{ResearchRecord, ResearchRequest},
+    research_acquisition::{DECIDED, ResearchEvidence},
 };
 use edgeagent_outbox_postgres::{EnqueueDisposition, OutboxErrorKind, PostgresOutbox};
 use edgeagent_research_application::{
     explanation::ValidatedExplanation,
-    explanation_context::{Grant, Permissions, Purpose},
+    explanation_context::{Grant, Permissions, Purpose, Request},
     publication::{
         CommittedOutcome, PublicationError as Error, PublicationErrorKind as Kind, decode_decision,
     },
@@ -252,6 +255,131 @@ impl PostgresResearchStore {
             companion: bytes,
             publication,
         })
+    }
+
+    /// Resolve the exact original acquisition only while Research permits this
+    /// read. The caller still needs an independent, current evidence-owner
+    /// decision for the requested serving purpose and audience.
+    pub async fn current_explanation_read(
+        &self,
+        scope: &str,
+        request_id: &str,
+        companion_id: &str,
+        audience: &str,
+        clock_ms: impl Fn() -> i64 + Send + Sync,
+    ) -> Result<Option<MessageEnvelope>, Error> {
+        let mut tx = transaction(&self.pool).await?;
+        sqlx::query!("SET TRANSACTION READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let lifecycle_lock = format!("research-lifecycle/{scope}");
+        sqlx::query!(
+            "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))",
+            lifecycle_lock
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
+        let Some(bytes) = sqlx::query_scalar!(
+            "SELECT request FROM edgeagent_research_completions WHERE caller_scope=$1 AND request_id=$2",
+            scope, request_id
+        ).fetch_optional(&mut *tx).await.map_err(storage)? else {
+            return Ok(None);
+        };
+        let ResearchRecord::Request(request) =
+            ResearchRecord::decode(&bytes).map_err(|_| invalid())?
+        else {
+            return Err(invalid());
+        };
+        if request.scope != scope || request.request_id != request_id {
+            return Err(invalid());
+        }
+        let original = read_snapshot(&mut tx, &request)
+            .await?
+            .ok_or_else(invalid)?
+            .receipt;
+        let (ResearchRecord::Artifact(artifact), Some(decision)) =
+            (original.record(), original.decision())
+        else {
+            return Ok(None);
+        };
+        let decision = decode_decision(decision)?;
+        let job = Job {
+            anchor: Anchor {
+                scope: scope.into(),
+                artifact: decision.outcome.clone(),
+                decision: decision.digest().map_err(|_| invalid())?,
+            },
+        };
+        let Some(receipt) = read(&mut tx, &job, &original).await? else {
+            return Ok(None);
+        };
+        let Some(event) = receipt.publication() else {
+            return Ok(None);
+        };
+        if MessageEnvelope::from_json(event)
+            .map_err(|_| invalid())?
+            .id()
+            != companion_id
+            || !crate::lifecycle::history(&mut tx, scope, request_id)
+                .await?
+                .is_empty()
+        {
+            return Ok(None);
+        }
+
+        let cause = original
+            .publication()
+            .extension("causationid")
+            .ok_or_else(invalid)?;
+        let source = Component::MarketData.source_uri();
+        let kind = DECIDED.message_type();
+        let Some(input) = sqlx::query_scalar!(
+            "SELECT envelope FROM edgeagent_message_inbox WHERE consumer_name='research-completion' AND message_source=$1 AND message_id=$2 AND message_type=$3",
+            source, cause, kind
+        ).fetch_optional(&mut *tx).await.map_err(storage)? else {
+            return Ok(None);
+        };
+        let delivery = MessageEnvelope::from_json(&input).map_err(|_| invalid())?;
+        let ResearchEvidence::Ready {
+            request: bound,
+            decision,
+        } = ResearchEvidence::from_envelope(&delivery).map_err(|_| invalid())?
+        else {
+            return Ok(None);
+        };
+        let EvidenceOutcome::Ready { object } = &decision.outcome else {
+            return Err(invalid());
+        };
+        if delivery.id() != cause
+            || delivery.extension("correlationid")
+                != original.publication().extension("correlationid")
+            || bound != request
+            || artifact.evidence.is_empty()
+            || artifact
+                .evidence
+                .iter()
+                .any(|reference| reference.digest != object.sha256.as_str())
+        {
+            return Err(invalid());
+        }
+        let serving = Request {
+            anchor: job.anchor,
+            audience: audience.into(),
+            purpose: Purpose::ExplanationServing,
+            document: None,
+        };
+        let Some(grant) = Self::current_explanation_grant(&mut tx, &serving, clock_ms()).await?
+        else {
+            return Ok(None);
+        };
+        let now = clock_ms();
+        let allowed = (request.decision_at_ms..artifact.expires_at_ms).contains(&now)
+            && (grant.grant.valid_from_ms..grant.grant.expires_at_ms).contains(&now);
+        tx.commit().await.map_err(storage)?;
+        Ok(allowed.then_some(delivery))
     }
 
     /// Read an intact committed companion for internal recovery without writes.

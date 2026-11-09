@@ -862,6 +862,7 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "research-lifecycle",
             "research-projection-contracts",
             "research-replay",
+            "explanation-authority-http",
             "research-worker-contracts",
             "research-rendering",
             "research-momentum",
