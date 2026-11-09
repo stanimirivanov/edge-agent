@@ -165,6 +165,7 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             MessageEnvelope::from_json(&message.payload)?.to_json()?,
             retained
         );
+        prove_explanation_admission(&db, &stream, &context, &broker, &profile, &retained).await?;
         controls.control(&control(2, true)).await?;
         let (pending, _) = support::governed_event("unavailable")?;
         context
@@ -194,7 +195,7 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
         );
         assert_eq!(consumer.info().await?.num_ack_pending, 0);
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine")
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine WHERE consumer_name='research-worker'")
                 .fetch_one(&db.pool)
                 .await?,
             2
@@ -221,7 +222,7 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
             );
         }
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine")
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine WHERE consumer_name='research-worker'")
                 .fetch_one(&db.pool)
                 .await?,
             2
@@ -314,4 +315,152 @@ async fn research_ack_relay_restart_poison_and_retry_exhaustion_preserve_complet
     let _ = context.delete_stream(&name).await;
     client.drain().await?;
     db.finish(result).await
+}
+
+async fn prove_explanation_admission(
+    db: &Database,
+    stream: &async_nats::jetstream::stream::Stream,
+    context: &async_nats::jetstream::Context,
+    broker: &str,
+    profile: &Profile,
+    retained: &[u8],
+) -> Result {
+    let subject = PUBLISHED.subject()?;
+    let mut consumer = stream
+        .create_consumer(async_nats::jetstream::consumer::pull::Config {
+            durable_name: Some("explanations".into()),
+            filter_subject: subject.clone(),
+            ack_policy: async_nats::jetstream::consumer::AckPolicy::Explicit,
+            ack_wait: Duration::from_secs(60),
+            max_deliver: 3,
+            max_ack_pending: 1,
+            ..Default::default()
+        })
+        .await?;
+    let run = |scope: &str| {
+        let mut command = profile.command(&db.schema, "offline-explanation-scheduler");
+        command
+            .env_remove("EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION")
+            .env("EDGEAGENT_NATS_URL", broker)
+            .env("EDGEAGENT_RESEARCH_STREAM", &db.schema)
+            .env("EDGEAGENT_RESEARCH_CONSUMER", "explanations")
+            .env("EDGEAGENT_RESEARCH_MAX_MESSAGES", "1")
+            .env("EDGEAGENT_RESEARCH_SCOPE", scope);
+        let mut command = tokio::process::Command::from(command);
+        command.kill_on_drop(true);
+        async move {
+            let output = tokio::time::timeout(Duration::from_secs(40), command.output()).await??;
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        }
+    };
+    let inbox_count = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM edgeagent_message_inbox WHERE consumer_name='research-explanation-jobs'",
+        )
+        .fetch_one(&db.pool)
+        .await
+    };
+
+    // Authenticated bytes on the correct subject still cannot cross the configured scope.
+    run("foreign").await?;
+    assert_eq!(inbox_count().await?, 0);
+
+    let mut forged: serde_json::Value = serde_json::from_slice(retained)?;
+    forged["correlationid"] = "forged".into();
+    for invalid in [serde_json::to_vec(&forged)?, {
+        forged["type"] = ABSTAINED.message_type().into();
+        serde_json::to_vec(&forged)?
+    }] {
+        context
+            .publish(subject.clone(), invalid.into())
+            .await?
+            .await?;
+        run("operator").await?;
+    }
+    assert_eq!(inbox_count().await?, 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_message_quarantine WHERE consumer_name='research-explanation-jobs'")
+            .fetch_one(&db.pool).await?,
+        3
+    );
+
+    sqlx::raw_sql(
+        "CREATE FUNCTION fail_explanation_commit() RETURNS trigger LANGUAGE plpgsql AS
+         $$ BEGIN RAISE EXCEPTION 'proof commit failure'; END $$;
+         CREATE CONSTRAINT TRIGGER fail_explanation_commit AFTER INSERT ON edgeagent_research_explanation_jobs
+         DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_explanation_commit();",
+    )
+    .execute(&db.pool)
+    .await?;
+    context
+        .publish(subject.clone(), retained.to_vec().into())
+        .await?
+        .await?;
+    run("operator").await?;
+    assert_eq!(inbox_count().await?, 0);
+    let jobs = || async {
+        sqlx::query_as::<_, (String, Vec<u8>)>(
+            "SELECT job_id, job FROM edgeagent_research_explanation_jobs ORDER BY job_id",
+        )
+        .fetch_all(&db.pool)
+        .await
+    };
+    assert!(jobs().await?.is_empty());
+    assert_eq!(consumer.info().await?.num_ack_pending, 1);
+    sqlx::raw_sql("DROP TRIGGER fail_explanation_commit ON edgeagent_research_explanation_jobs")
+        .execute(&db.pool)
+        .await?;
+    let mut pending = consumer
+        .fetch()
+        .max_messages(1)
+        .expires(Duration::from_secs(5))
+        .messages()
+        .await?;
+    let delivery = pending
+        .next()
+        .await
+        .ok_or("missing retried publication")??;
+    let sequence = delivery.info()?.stream_sequence;
+    let store = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
+    store
+        .admit_explanation_job("operator", &MessageEnvelope::from_json(&delivery.payload)?)
+        .await?;
+    // Simulate losing the successful ACK, then ask JetStream to redeliver without waiting for AckWait.
+    delivery
+        .ack_with(async_nats::jetstream::AckKind::Nak(None))
+        .await?;
+    drop(pending);
+    run("operator").await?;
+    assert_eq!(consumer.info().await?.ack_floor.stream_sequence, sequence);
+    let admitted = jobs().await?;
+    assert_eq!(admitted.len(), 1);
+    assert_eq!(inbox_count().await?, 1);
+    let job = edgeagent_contracts::explanation::Job::decode(&admitted[0].1)?;
+    assert_eq!(job.id()?, admitted[0].0);
+    let artifact: edgeagent_contracts::research::ResearchRecord =
+        MessageEnvelope::from_json(retained)?.payload()?;
+    let decision: Vec<u8> =
+        sqlx::query_scalar("SELECT publication FROM edgeagent_research_decisions")
+            .fetch_one(&db.pool)
+            .await?;
+    job.bind(
+        &artifact,
+        &edgeagent_research_application::publication::decode_decision(
+            &MessageEnvelope::from_json(&decision)?,
+        )?,
+    )?;
+    context
+        .publish(subject, retained.to_vec().into())
+        .await?
+        .await?;
+    run("operator").await?;
+    assert_eq!(consumer.info().await?.num_ack_pending, 0);
+    assert_eq!(jobs().await?, admitted);
+    assert_eq!(inbox_count().await?, 1);
+    Ok(())
 }

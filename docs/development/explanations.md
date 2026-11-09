@@ -377,3 +377,29 @@ The `research-processes` gate exercises the real owner command, current
 reviews, owner unavailability and graceful shutdown. Roll back by stopping
 the optional mode. Projector and Gateway integration can then treat the
 authority as unavailable.
+
+## Published-artifact scheduler
+
+Apply [Research migration 0011](../../crates/research-postgres/migrations/0011_explanation_jobs.sql)
+in the private Research schema after 0010. Run the Research binary in
+`offline-explanation-scheduler` mode with the existing
+`EDGEAGENT_POSTGRES_URL`, `EDGEAGENT_RESEARCH_SCHEMA`, and
+`EDGEAGENT_RESEARCH_SCOPE`. Configure a loopback `EDGEAGENT_NATS_URL`,
+`EDGEAGENT_RESEARCH_STREAM`, a dedicated `EDGEAGENT_RESEARCH_CONSUMER`,
+and `EDGEAGENT_RESEARCH_MAX_MESSAGES` (1–16 per invocation). Use a separate
+durable consumer per configured scope with the exact subject
+`edgeagent.event.research.artifact-published.v1`, explicit acknowledgements, an ACK
+wait of at least 60 seconds, three delivery attempts, and 1–32 pending ACKs.
+
+Research checks the event against its exact retained artifact and decision.
+It records the inbox receipt and one immutable, content-addressed job in
+one transaction before acknowledging JetStream. Redelivery reuses that job.
+Verified legacy publications without a decision are acknowledged without a job.
+Invalid publications are quarantined. If storage remains unavailable through
+the final delivery, the worker fails without settling it. After restoring
+storage, an operator can replay the retained original event to this consumer.
+Scheduling does not load a model profile or grant execution authority.
+
+The real PostgreSQL and JetStream proof runs via
+`cargo xtask verify --check research-worker-broker --python python3`
+with isolated `EDGEAGENT_POSTGRES_URL` and `EDGEAGENT_NATS_URL`.

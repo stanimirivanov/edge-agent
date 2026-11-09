@@ -12,7 +12,7 @@ use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub(crate) type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 /// Loopback-only URL with no query/fragment routing overrides.
 /// # Errors
 /// Rejects unsupported/nonlocal endpoints without echoing them.
@@ -72,6 +72,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-experiment-ledger"
                 | "offline-once"
                 | "offline-worker"
+                | "offline-explanation-scheduler"
                 | "offline-relay"
                 | "offline-lifecycle"
                 | "offline-invalidation-check"
@@ -323,22 +324,38 @@ async fn execute(mode: &str) -> Result {
                 if matches!(outcome,edgeagent_outbox_relay::RelayOutcome::Idle) {break;}
             }
         } else {
-            let loader=OwnerLoader::from_environment()?;
-            let selected=execution_selection()?.profile(&scope);
-            if loader.governance_profile(selected.lookback_sessions)!=selected {return Err("execution profile mismatch".into());}
-            let store=PostgresResearchStore::governed(pool.clone(),selected);
             let name=required("EDGEAGENT_RESEARCH_STREAM")?;let durable=required("EDGEAGENT_RESEARCH_CONSUMER")?;
             if !token(&name)||!token(&durable) {return Err("invalid research consumer identity".into());}
             let stream=context.get_stream(name).await?;
             let consumer:async_nats::jetstream::consumer::PullConsumer=stream.get_consumer(&durable).await?;
             let c=&consumer.cached_info().config;
-            if ![DECIDED.subject()?,publication::EVALUATE.subject()?].contains(&c.filter_subject)
+            let scheduler = mode == "offline-explanation-scheduler";
+            let valid_filter = if scheduler {
+                c.filter_subject == publication::PUBLISHED.subject()?
+            } else {
+                [DECIDED.subject()?, publication::EVALUATE.subject()?].contains(&c.filter_subject)
+            };
+            if !valid_filter
                 || !c.filter_subjects.is_empty() || c.ack_wait<Duration::from_secs(60)
                 || c.max_deliver!=3 || !(1..=32).contains(&c.max_ack_pending) {return Err("incompatible research consumer bounds".into());}
             let mut consumer=edgeagent_messaging_nats::JetStreamConsumer::new(consumer).await?;
+            let evaluation = if scheduler {
+                None
+            } else {
+                let loader=OwnerLoader::from_environment()?;
+                let selected=execution_selection()?.profile(&scope);
+                if loader.governance_profile(selected.lookback_sessions)!=selected {return Err("execution profile mismatch".into());}
+                Some((PostgresResearchStore::governed(pool.clone(),selected),loader))
+            };
             for _ in 0..maximum {
                 let delivery=tokio::select! {_=stop()=>break,result=tokio::time::timeout(Duration::from_secs(30),consumer.receive())=>result??};
-                tokio::time::timeout(Duration::from_secs(30),handle(&pool,&store,&loader,delivery,&scope)).await??;
+                tokio::time::timeout(Duration::from_secs(30),async {
+                    if let Some((store,loader))=&evaluation {
+                        handle(&pool,store,loader,delivery,&scope).await
+                    } else {
+                        crate::explanation_jobs::handle(&pool,&store,delivery,&scope).await
+                    }
+                }).await??;
             }
         }
         tokio::time::timeout(Duration::from_secs(5),client.drain()).await??;Ok(())
