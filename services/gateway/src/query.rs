@@ -10,7 +10,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use edgeagent_contracts::research::{MAX_RESEARCH_BYTES, ResearchRecord};
+use edgeagent_contracts::{
+    explanation::{Companion, MAX_BYTES as MAX_EXPLANATION_BYTES, Outcome},
+    research::{MAX_RESEARCH_BYTES, ResearchRecord},
+};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -20,6 +23,13 @@ pub struct ProjectorClient {
     base: String,
     slots: tokio::sync::Semaphore,
 }
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ReadKind {
+    Status,
+    Outcome,
+    Explanation,
+}
+
 fn unavailable() -> Error {
     Error::new(Kind::Storage)
 }
@@ -83,25 +93,37 @@ impl ProjectorClient {
             slots: tokio::sync::Semaphore::new(8),
         })
     }
-    async fn read(
+    async fn fetch(
         &self,
         scope: &str,
         id: &str,
-        outcome: bool,
+        kind: ReadKind,
     ) -> Result<(StatusCode, Vec<u8>), Error> {
-        let _permit = self.slots.try_acquire().map_err(cause)?;
-        let suffix = if outcome { "/outcome" } else { "" };
-        let mut response = self
-            .client
-            .get(format!(
-                "{}/internal/v1/research-requests/{scope}/{id}{suffix}",
-                self.base
-            ))
-            .send()
-            .await
-            .map_err(cause)?;
+        let suffix = match kind {
+            ReadKind::Status => "",
+            ReadKind::Outcome => "/outcome",
+            ReadKind::Explanation => "/explanation",
+        };
+        let request = self.client.get(format!(
+            "{}/internal/v1/research-requests/{scope}/{id}{suffix}",
+            self.base
+        ));
+        // Research's authorization and the projector's own read have bounded
+        // deadlines. Leave room for them without changing the v1 read timeouts.
+        let request = if kind == ReadKind::Explanation {
+            request.timeout(Duration::from_secs(9))
+        } else {
+            request
+        };
+        let mut response = request.send().await.map_err(cause)?;
         let status = response.status();
-        if !matches!(status.as_u16(), 200 | 202 | 404 | 409 | 410)
+        if !(matches!(status.as_u16(), 200 | 202 | 404 | 409 | 410)
+            || kind == ReadKind::Explanation && status == StatusCode::FORBIDDEN)
+            || (kind == ReadKind::Explanation
+                && response
+                    .headers()
+                    .get("cache-control")
+                    .is_none_or(|v| v != "no-store"))
             || response.headers().contains_key("content-encoding")
             || response
                 .headers()
@@ -111,10 +133,10 @@ impl ProjectorClient {
         {
             return Err(unavailable());
         }
-        let maximum = if outcome && status == StatusCode::OK {
-            MAX_RESEARCH_BYTES
-        } else {
-            4096
+        let maximum = match (status, kind) {
+            (StatusCode::OK, ReadKind::Outcome) => MAX_RESEARCH_BYTES,
+            (StatusCode::OK, ReadKind::Explanation) => MAX_EXPLANATION_BYTES,
+            _ => 4096,
         };
         if response
             .content_length()
@@ -129,16 +151,34 @@ impl ProjectorClient {
             }
             bytes.extend_from_slice(&chunk);
         }
-        if status == StatusCode::OK && outcome {
-            let record = ResearchRecord::decode(&bytes).map_err(cause)?;
-            let request = match &record {
-                ResearchRecord::Artifact(a) => &a.request,
-                ResearchRecord::Abstention(a) => &a.request,
-                _ => return Err(unavailable()),
-            };
-            if request.scope != scope
-                || request.request_id != id
-                || record.canonical_bytes().map_err(cause)? != bytes
+        Ok((status, bytes))
+    }
+
+    async fn read(
+        &self,
+        scope: &str,
+        id: &str,
+        kind: ReadKind,
+    ) -> Result<(StatusCode, Vec<u8>), Error> {
+        let _permit = self.slots.try_acquire().map_err(cause)?;
+        let (status, mut bytes) = self.fetch(scope, id, kind).await?;
+        if status == StatusCode::OK && kind == ReadKind::Outcome {
+            decode_outcome(&bytes, scope, id)?;
+        } else if status == StatusCode::OK && kind == ReadKind::Explanation {
+            let companion = Companion::decode(&bytes).map_err(cause)?;
+            let anchor = &companion.binding.anchor;
+            if anchor.scope != scope || matches!(companion.outcome, Outcome::Refused { .. }) {
+                return Err(unavailable());
+            }
+            // The companion contains an artifact digest rather than a request ID.
+            // Corroborate it against the exact scoped outcome before returning bytes.
+            let (status, artifact) = self.fetch(scope, id, ReadKind::Outcome).await?;
+            if status != StatusCode::OK {
+                return Err(unavailable());
+            }
+            let artifact = decode_outcome(&artifact, scope, id)?;
+            if !matches!(artifact, ResearchRecord::Artifact(_))
+                || artifact.digest().map_err(cause)? != anchor.artifact
             {
                 return Err(unavailable());
             }
@@ -150,12 +190,14 @@ impl ProjectorClient {
             bytes = serde_json::to_vec(&view).map_err(cause)?;
         } else {
             let state: Observation = serde_json::from_slice(&bytes).map_err(cause)?;
+            let scoped_record = kind != ReadKind::Status;
             let expected = match status {
+                StatusCode::FORBIDDEN if kind == ReadKind::Explanation => "forbidden",
                 StatusCode::NOT_FOUND => "not_observed",
-                StatusCode::ACCEPTED if outcome => "pending",
-                StatusCode::CONFLICT if outcome => "gap",
+                StatusCode::ACCEPTED if scoped_record => "pending",
+                StatusCode::CONFLICT if scoped_record => "gap",
                 StatusCode::GONE
-                    if outcome
+                    if scoped_record
                         && matches!(
                             state.status.as_str(),
                             "invalidated" | "expired" | "withdrawn" | "corrected"
@@ -173,6 +215,22 @@ impl ProjectorClient {
         Ok((status, bytes))
     }
 }
+fn decode_outcome(bytes: &[u8], scope: &str, id: &str) -> Result<ResearchRecord, Error> {
+    let record = ResearchRecord::decode(bytes).map_err(cause)?;
+    let request = match &record {
+        ResearchRecord::Artifact(a) => &a.request,
+        ResearchRecord::Abstention(a) => &a.request,
+        _ => return Err(unavailable()),
+    };
+    if request.scope != scope
+        || request.request_id != id
+        || record.canonical_bytes().map_err(cause)? != bytes
+    {
+        return Err(unavailable());
+    }
+    Ok(record)
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Observation {
@@ -259,6 +317,10 @@ pub(crate) fn router(scope: String, client: Option<Arc<ProjectorClient>>) -> Rou
     Router::new()
         .route("/v1/research-requests/{scope}/{id}", get(status))
         .route("/v1/research-requests/{scope}/{id}/outcome", get(outcome))
+        .route(
+            "/v1/research-requests/{scope}/{id}/explanation",
+            get(explanation),
+        )
         .with_state(QueryState { scope, client })
 }
 fn reply(status: StatusCode, bytes: Vec<u8>) -> Response {
@@ -277,7 +339,7 @@ async fn query(
     scope: String,
     id: String,
     headers: HeaderMap,
-    outcome: bool,
+    kind: ReadKind,
 ) -> Response {
     if !local_request(&headers) || scope != state.scope {
         return reply(StatusCode::FORBIDDEN, br#"{"status":"forbidden"}"#.to_vec());
@@ -288,9 +350,10 @@ async fn query(
             br#"{"status":"invalid_request"}"#.to_vec(),
         );
     }
+    let deadline = Duration::from_secs(if kind == ReadKind::Explanation { 12 } else { 5 });
     if let Some(client) = state.client
         && let Ok(Ok((status, bytes))) =
-            tokio::time::timeout(Duration::from_secs(5), client.read(&scope, &id, outcome)).await
+            tokio::time::timeout(deadline, client.read(&scope, &id, kind)).await
     {
         return reply(status, bytes);
     }
@@ -304,12 +367,20 @@ async fn status(
     Path((scope, id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    query(state, scope, id, headers, false).await
+    query(state, scope, id, headers, ReadKind::Status).await
 }
 async fn outcome(
     State(state): State<QueryState>,
     Path((scope, id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    query(state, scope, id, headers, true).await
+    query(state, scope, id, headers, ReadKind::Outcome).await
+}
+
+async fn explanation(
+    State(state): State<QueryState>,
+    Path((scope, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    query(state, scope, id, headers, ReadKind::Explanation).await
 }

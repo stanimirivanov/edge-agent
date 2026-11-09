@@ -1679,6 +1679,7 @@ pub(super) fn checks() -> Vec<Check> {
                     args,
                     expected: vec![
                         "query_scope_host_origin_and_invalid_ids_are_refused_before_upstream",
+                        "explanations_require_exact_scoped_artifact_binding_and_propagate_safe_refusals",
                         "queries_preserve_observations_and_exact_terminal_bytes_without_forwarded_identity",
                         "invalid_oversized_redirected_and_unavailable_projector_responses_fail_closed",
                         "stalled_projector_is_bounded_and_configuration_cannot_redirect_authority",
