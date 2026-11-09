@@ -6,12 +6,16 @@ use edgeagent_audit_domain::{
 };
 use edgeagent_contracts::{
     MessageEnvelope,
+    explanation::{Companion, RECORDED},
     research::{ResearchRecord, ResearchRequest},
 };
 use edgeagent_inbox_postgres::{DeliveryDisposition, InboxErrorKind, PostgresInbox};
 use edgeagent_research_application::publication::{self, CommittedOutcome};
 /// Apply explicitly with all inbox migrations in a private projector schema.
-pub const MIGRATION: &str = include_str!("../migrations/0001_research_projection.sql");
+pub const MIGRATIONS: [&str; 2] = [
+    include_str!("../migrations/0001_research_projection.sql"),
+    include_str!("../migrations/0002_explanation_checkpoint.sql"),
+];
 /// Internal query snapshot. Revision is local view revision, not a stream watermark.
 #[derive(serde::Serialize)]
 pub struct View {
@@ -171,51 +175,62 @@ impl ProjectionStore {
     ) -> Result<ReplayOutcome, Error> {
         edgeagent_messaging::DeliveryMessageKey::new(key)
             .map_err(|e| Error::caused(Kind::Invalid, e))?;
-        let companion = if envelope.message_type() == publication::DECISION.message_type() {
-            Some(
-                publication::decode_decision(envelope)
-                    .map_err(|e| Error::caused(Kind::Invalid, e))?,
-            )
-        } else {
+        let explanation = (envelope.message_type() == RECORDED.message_type())
+            .then(|| Companion::decode_publication(envelope))
+            .transpose()
+            .map_err(|e| Error::caused(Kind::Invalid, e))?;
+        let decision = (envelope.message_type() == publication::DECISION.message_type())
+            .then(|| publication::decode_decision(envelope))
+            .transpose()
+            .map_err(|e| Error::caused(Kind::Invalid, e))?;
+        let record = if explanation.is_some() || decision.is_some() {
             None
-        };
-        let record = if let Some(decision) = &companion {
-            ResearchRecord::Request(decision.request.clone())
         } else if envelope.message_type()
             == edgeagent_research_application::lifecycle::CHANGED.message_type()
         {
-            ResearchRecord::Lifecycle(
+            Some(ResearchRecord::Lifecycle(
                 edgeagent_research_application::lifecycle::decode(envelope)
                     .map_err(|e| Error::caused(Kind::Invalid, e))?,
-            )
+            ))
         } else {
-            terminal(envelope)?
+            Some(terminal(envelope)?)
         };
-        let req = if let ResearchRecord::Lifecycle(change) = &record {
-            if change.scope != self.scope {
-                return Err(Error::new(Kind::Scope));
-            }
-            let row=sqlx::query!("SELECT request FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2",change.scope,change.request_id).fetch_optional(&self.pool).await?.ok_or_else(||Error::new(Kind::Gap))?;
-            let ResearchRecord::Request(req) = ResearchRecord::decode(&row.request)
-                .map_err(|e| Error::caused(Kind::Corrupt, e))?
-            else {
-                return Err(Error::new(Kind::Corrupt));
-            };
-            req
+        let seed = match (&decision, &record) {
+            (Some(decision), _) => Some(&decision.request),
+            (_, Some(ResearchRecord::Lifecycle(_)) | None) => None,
+            (_, Some(record)) => Some(request(record)?),
+        };
+        let (scope_key, request_key) = if let Some(req) = seed {
+            (req.scope.clone(), req.request_id.clone())
+        } else if let Some(ResearchRecord::Lifecycle(change)) = &record {
+            (change.scope.clone(), change.request_id.clone())
         } else {
-            request(&record)?.clone()
+            let anchor = &explanation
+                .as_ref()
+                .ok_or_else(|| Error::new(Kind::Invalid))?
+                .binding
+                .anchor;
+            let (scope, id) = envelope
+                .partition_key()
+                .and_then(|key| key.strip_prefix("research-request/"))
+                .and_then(|key| key.split_once('/'))
+                .filter(|(scope, id)| *scope == anchor.scope && token(id))
+                .ok_or_else(|| Error::new(Kind::Invalid))?;
+            (scope.to_owned(), id.to_owned())
         };
-        if req.scope != self.scope {
+        let (scope, id) = (scope_key.as_str(), request_key.as_str());
+        if scope != self.scope {
             return Err(Error::new(Kind::Scope));
         }
         let bytes = envelope
             .to_json()
             .map_err(|e| Error::caused(Kind::Invalid, e))?;
-        let initial = ResearchProjection::new(req.clone())?;
         let mut tx = self.tx().await?;
-        Self::seed(&mut tx, &initial).await?;
-        let row=sqlx::query!("SELECT request,checkpoint,applied_delivery_key,gap_envelope FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2 FOR UPDATE",req.scope,req.request_id).fetch_one(&mut *tx).await?;
-        let mut view = restore(&req.scope, &req.request_id, &row.request, &row.checkpoint)?;
+        if let Some(req) = seed {
+            Self::seed(&mut tx, &ResearchProjection::new(req.clone())?).await?;
+        }
+        let row=sqlx::query!("SELECT request,checkpoint,applied_delivery_key,gap_envelope FROM edgeagent_research_views WHERE caller_scope=$1 AND request_id=$2 FOR UPDATE",scope,id).fetch_optional(&mut *tx).await?.ok_or_else(||Error::new(Kind::Gap))?;
+        let mut view = restore(scope, id, &row.request, &row.checkpoint)?;
         // A missing lifecycle predecessor may be backfilled; owner conflicts stay blocked.
         let recoverable_gap = row.gap_envelope.as_ref().is_some_and(|bytes| {
             if view.outcome_bytes().is_none()
@@ -242,18 +257,44 @@ impl ProjectionStore {
         if was_pending != row.applied_delivery_key.is_none() {
             return Err(Error::new(Kind::Corrupt));
         }
-        let applied = match if let Some(companion) = companion {
-            view.apply_provenance(companion)
-        } else {
-            view.apply(record)
-        } {
-            Ok(value) => value,
-            Err(error @ (ReplayError::Conflict | ReplayError::Gap)) => {
-                Self::gap(&mut tx, &req.scope, &req.request_id, &bytes, key).await?;
-                tx.commit().await?;
-                return Err(Error::caused(Kind::Gap, error));
+        let applied = if let Some(explanation) = explanation {
+            let artifact = explanation.binding.anchor.artifact.clone();
+            let applied = view.apply_explanation(explanation)?;
+            let source = edgeagent_contracts::Component::Research.source_uri();
+            let proof=sqlx::query!("SELECT envelope,message_type FROM edgeagent_message_inbox WHERE consumer_name='research-projector' AND message_source=$1 AND message_id=$2",source,artifact).fetch_optional(&mut *tx).await?.ok_or_else(||Error::new(Kind::Corrupt))?;
+            let original = MessageEnvelope::from_json(&proof.envelope)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            let original_bytes = terminal(&original)
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?
+                .canonical_bytes()
+                .map_err(|e| Error::caused(Kind::Corrupt, e))?;
+            if proof.message_type != original.message_type()
+                || Some(original_bytes.as_slice()) != view.outcome_bytes()
+            {
+                return Err(Error::new(Kind::Corrupt));
             }
-            Err(error) => return Err(error.into()),
+            if original.partition_key() != envelope.partition_key()
+                || ["correlationid", "traceparent", "tracestate"]
+                    .iter()
+                    .any(|key| original.extension(key) != envelope.extension(key))
+            {
+                return Err(Error::new(Kind::Invalid));
+            }
+            applied
+        } else {
+            match if let Some(decision) = decision {
+                view.apply_provenance(decision)
+            } else {
+                view.apply(record.ok_or_else(|| Error::new(Kind::Invalid))?)
+            } {
+                Ok(value) => value,
+                Err(error @ (ReplayError::Conflict | ReplayError::Gap)) => {
+                    Self::gap(&mut tx, scope, id, &bytes, key).await?;
+                    tx.commit().await?;
+                    return Err(Error::caused(Kind::Gap, error));
+                }
+                Err(error) => return Err(error.into()),
+            }
         };
         let disposition = match PostgresInbox
             .record_delivery(
@@ -267,21 +308,30 @@ impl ProjectionStore {
             Ok(value) => value,
             Err(error) if error.kind() == InboxErrorKind::MessageIdentityConflict => {
                 tx.rollback().await?;
+                if envelope.message_type() == RECORDED.message_type() {
+                    return Err(Error::caused(Kind::Conflict, error));
+                }
                 let mut diagnostic = self.tx().await?;
-                Self::gap(&mut diagnostic, &req.scope, &req.request_id, &bytes, key).await?;
+                Self::gap(&mut diagnostic, scope, id, &bytes, key).await?;
                 diagnostic.commit().await?;
                 return Err(Error::caused(Kind::Gap, error));
             }
             Err(error) => return Err(Error::caused(Kind::Storage, error)),
         };
-        if disposition == DeliveryDisposition::FirstDelivery {
+        let first_delivery = disposition == DeliveryDisposition::FirstDelivery;
+        if envelope.message_type() == RECORDED.message_type()
+            && first_delivery != (applied == ReplayOutcome::Applied)
+        {
+            return Err(Error::new(Kind::Corrupt));
+        }
+        if first_delivery {
             let checkpoint = view.checkpoint()?;
-            sqlx::query!("UPDATE edgeagent_research_views SET checkpoint=$3,applied_delivery_key=$4 WHERE caller_scope=$1 AND request_id=$2",req.scope,req.request_id,checkpoint,key).execute(&mut *tx).await?;
+            sqlx::query!("UPDATE edgeagent_research_views SET checkpoint=$3,applied_delivery_key=$4 WHERE caller_scope=$1 AND request_id=$2",scope,id,checkpoint,key).execute(&mut *tx).await?;
         } else if was_pending || row.applied_delivery_key.is_none() {
             return Err(Error::new(Kind::Corrupt));
         }
         if resolving_gap {
-            sqlx::query!("UPDATE edgeagent_research_views SET gap_envelope=NULL,gap_delivery_key=NULL WHERE caller_scope=$1 AND request_id=$2",req.scope,req.request_id).execute(&mut *tx).await?;
+            sqlx::query!("UPDATE edgeagent_research_views SET gap_envelope=NULL,gap_delivery_key=NULL WHERE caller_scope=$1 AND request_id=$2",scope,id).execute(&mut *tx).await?;
         }
         tx.commit().await?;
         Ok(applied)

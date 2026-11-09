@@ -5,9 +5,12 @@ use crate::{
     store::{ProjectionStore, token},
 };
 use edgeagent_audit_domain::ReplayOutcome;
-use edgeagent_contracts::{MessageEnvelope, research::ResearchRecord};
+use edgeagent_contracts::{MessageEnvelope, explanation::RECORDED, research::ResearchRecord};
 use edgeagent_messaging::{DeliveryDisposition, MessageConsumer, RetryDelay};
-use edgeagent_research_application::publication::{ABSTAINED, PUBLISHED};
+use edgeagent_research_application::{
+    lifecycle::CHANGED,
+    publication::{ABSTAINED, DECISION, PUBLISHED},
+};
 use edgeagent_telemetry::{
     EventSpineContext, EventSpineOutcome, EventSpineStage, record_event_spine_operation,
 };
@@ -119,7 +122,10 @@ async fn execute(mode: &str) -> Result {
         let context=async_nats::jetstream::new(client.clone());let stream=context.get_stream(name).await?;
         let consumer:async_nats::jetstream::consumer::PullConsumer=stream.get_consumer(&durable).await?;
         let c=&consumer.cached_info().config;
-        let mut expected=vec![PUBLISHED.subject()?,ABSTAINED.subject()?,edgeagent_research_application::lifecycle::CHANGED.subject()?,edgeagent_research_application::publication::DECISION.subject()?];expected.sort();let mut actual=c.filter_subjects.clone();actual.sort();
+        let routes = [PUBLISHED, ABSTAINED, CHANGED, DECISION, RECORDED];
+        let mut expected = routes.iter().map(|definition| definition.subject()).collect::<std::result::Result<Vec<_>, _>>()?;
+        expected.sort();
+        let mut actual=c.filter_subjects.clone();actual.sort();
         if !c.filter_subject.is_empty() || actual!=expected || c.ack_wait<Duration::from_secs(60) || c.max_deliver!=3 || !(1..=32).contains(&c.max_ack_pending) {return Err("incompatible projector consumer bounds".into());}
         let mut consumer=edgeagent_messaging_nats::JetStreamConsumer::new(consumer).await?;
         for _ in 0..maximum {
@@ -127,8 +133,10 @@ async fn execute(mode: &str) -> Result {
             let started=Instant::now();
             let envelope=MessageEnvelope::from_json(delivery.payload());
             let valid=envelope.as_ref().is_ok_and(|e| {
-                let def=if e.message_type()==PUBLISHED.message_type() {PUBLISHED} else if e.message_type()==ABSTAINED.message_type() {ABSTAINED} else if e.message_type()==edgeagent_research_application::publication::DECISION.message_type() {edgeagent_research_application::publication::DECISION} else {edgeagent_research_application::lifecycle::CHANGED};
-                def.subject().is_ok_and(|s|s==delivery.metadata().subject())
+                routes.iter().any(|definition| {
+                    definition.message_type() == e.message_type()
+                        && definition.subject().is_ok_and(|subject| subject == delivery.metadata().subject())
+                })
             });
             let result=if valid {Some(tokio::time::timeout(Duration::from_secs(25),store.project(envelope.as_ref().map_err(|_|"invalid envelope")?,delivery.metadata().message_key())).await?)} else {None};
             let duplicate=matches!(&result,Some(Ok(ReplayOutcome::Duplicate)));

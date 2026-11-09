@@ -75,5 +75,7 @@ EARP4. Update readers and check the projector's storage bounds before enabling
 companion consumption. To roll back a reader after EARP4 activation, quiesce
 consumption and rebuild a compatible disposable view from retained owner facts.
 
-The reducer only projects authenticated historical records. Current disclosure
-authorization and persistence integration belong to the serving adapter.
+The reducer only projects authenticated historical records. The
+[projector runtime](projector-runtime.md#historical-explanation-intake) persists
+those records. Any serving adapter must separately check current disclosure
+authorization.

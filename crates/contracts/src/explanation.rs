@@ -408,6 +408,25 @@ impl Companion {
         .map_err(|_| Error)
     }
 
+    /// Validate the owner route and immutable publication identity.
+    /// Callers authenticate the transport and reconcile inherited metadata
+    /// with the original artifact publication.
+    pub fn decode_publication(envelope: &MessageEnvelope) -> Result<Self, Error> {
+        RECORDED.validate_envelope(envelope).map_err(|_| Error)?;
+        let CompanionWire::V1(companion): CompanionWire<Self> =
+            envelope.payload().map_err(|_| Error)?;
+        let id = companion.id()?;
+        if matches!(companion.outcome, Outcome::Refused { .. })
+            || envelope.id() != id
+            || envelope.extension("idempotencykey") != Some(id.as_str())
+            || envelope.extension("causationid") != Some(companion.binding.anchor.artifact.as_str())
+            || envelope.subject() != envelope.partition_key()
+        {
+            return Err(Error);
+        }
+        Ok(companion)
+    }
+
     /// Recover the scheduling intent for this terminal record.
     pub fn job(&self) -> Job {
         Job {

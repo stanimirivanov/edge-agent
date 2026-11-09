@@ -34,7 +34,7 @@ impl Database {
             .await?;
         for sql in edgeagent_inbox_postgres::PostgresInbox::MIGRATIONS
             .into_iter()
-            .chain([edgeagent_audit_projector::store::MIGRATION])
+            .chain(edgeagent_audit_projector::store::MIGRATIONS)
         {
             sqlx::raw_sql(sql).execute(&pool).await?;
         }

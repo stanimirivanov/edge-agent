@@ -36,8 +36,9 @@ pub const DECISION: MessageDefinition = MessageDefinition::event(
     "research-request",
     EventRetention::Workflow,
 );
-const DEFINITIONS: [MessageDefinition; 6] = [
+const DEFINITIONS: [MessageDefinition; 7] = [
     DECISION,
+    edgeagent_contracts::explanation::RECORDED,
     EVALUATE,
     crate::lifecycle::CHANGED,
     PUBLISHED,

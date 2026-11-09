@@ -15,7 +15,8 @@ The binary keeps its descriptor commands and adds `offline-track`, `offline-once
 prefix, lowercase ASCII/digits/underscore, at most 63 bytes) and
 `EDGEAGENT_PROJECTOR_SCOPE` (1–64 ASCII letters/digits/period/underscore/hyphen).
 
-Apply the [projector migration](../../services/audit-projector/migrations/0001_research_projection.sql)
+Apply [projector migration 0001](../../services/audit-projector/migrations/0001_research_projection.sql),
+[projector migration 0002](../../services/audit-projector/migrations/0002_explanation_checkpoint.sql)
 and all inbox migrations to the same independent private schema before activation.
 Startup never upgrades or creates it. Use a runtime role with required projection/
 inbox/quarantine permissions, no DDL/TRUNCATE/trigger-disable privileges and no peer
@@ -29,8 +30,9 @@ a broker offset. Both inputs are capped at 262144 bytes before decoding.
 
 `offline-worker` also requires loopback `EDGEAGENT_NATS_URL`, explicit
 `EDGEAGENT_PROJECTOR_STREAM`, `EDGEAGENT_PROJECTOR_CONSUMER` and
-`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with all four
-Research PUBLISHED, ABSTAINED, lifecycle CHANGED and decision DECISION subjects, no broad single filter, explicit ACK,
+`EDGEAGENT_PROJECTOR_MAX_MESSAGES` (1–16). Provision a durable pull consumer with all five
+Research subjects (PUBLISHED, ABSTAINED, lifecycle CHANGED, decision DECISION and
+explanation RECORDED), no broad single filter, explicit ACK,
 at least 60-second ACK wait, three maximum deliveries and 1–32 pending ACKs. The
 consumer validates actual subject against payload route before projection. SIGINT/
 SIGTERM stop intake; each operation is bounded. No topology or deployment is created.
@@ -58,6 +60,22 @@ At the broker delivery ceiling it remains unresolved for operator intervention.
 Malformed, foreign-scope and misrouted messages are quarantined before termination;
 storage/corruption failures remain retryable and do not become successful projection.
 See [Research lifecycle](research-lifecycle.md) for the owner route, backfill and upgrade rules.
+
+## Historical explanation intake
+
+The companion event must come from the Research route and bind the exact artifact
+and decision in the scoped checkpoint. The projector also checks inherited
+partition, correlation and trace metadata against the retained artifact inbox
+proof. A companion with missing predecessors receives the ordinary delayed retry
+without seeding a view, recording a receipt or blocking artifact reads.
+Conflicting companions and invalid bindings go through quarantine. Exact
+redelivery leaves both the checkpoint and delivery marker intact.
+
+Apply migration 0002 and deploy EARP4-capable readers before enabling the fifth
+consumer subject. The wider check supports the reducer's full checkpoint bound.
+Existing HTTP paths expose no companion content or dedicated companion fields. Before rolling
+back to a reader that only supports EARP1–EARP3, stop intake and rebuild the
+disposable projection from the original four subjects.
 
 ## Internal read API
 
