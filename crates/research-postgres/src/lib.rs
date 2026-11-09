@@ -5,6 +5,7 @@ pub mod experiments;
 pub mod explanation_attempts;
 pub mod explanation_completion;
 pub mod explanation_grants;
+pub mod explanation_jobs;
 pub mod governance;
 pub mod lifecycle;
 use edgeagent_contracts::{
@@ -248,13 +249,15 @@ async fn inbox(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     delivery: &MessageEnvelope,
 ) -> Result<DeliveryDisposition, Error> {
+    record_delivery(tx, "research-completion", delivery).await
+}
+async fn record_delivery(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    consumer: &str,
+    delivery: &MessageEnvelope,
+) -> Result<DeliveryDisposition, Error> {
     PostgresInbox
-        .record_delivery(
-            tx,
-            "research-completion",
-            &publication::registry()?,
-            delivery,
-        )
+        .record_delivery(tx, consumer, &publication::registry()?, delivery)
         .await
         .map_err(|e| {
             let kind = if e.kind() == InboxErrorKind::MessageIdentityConflict {
