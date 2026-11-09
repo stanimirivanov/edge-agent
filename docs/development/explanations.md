@@ -12,8 +12,8 @@
 
 This protocol implements the design in
 [ADR-0109](../decisions/0109-bound-evidence-grounded-explanations.md). The
-fixtures, evaluator, and model driver are later M06 work. Cases use invented
-artifacts and documents. No production evidence or private prompts enter
+evaluator uses invented artifacts and documents. The model driver is later
+M06 work. No production evidence or private prompts enter
 the suite.
 
 ## Frozen paired cases
@@ -99,6 +99,29 @@ suite, baseline, and verified deployment identities with the case results,
 reviewer ratings, and disposition. A failed or incomplete result keeps
 generation disabled. Synthetic adapter tests can establish integration
 behavior. Real-model qualification supplies the evidence for activation.
+
+## Offline evaluator
+
+The [v1 fixture manifest](../../crates/research-application/tests/fixtures/explanations/usefulness-v1.tsv)
+retains all 30 reader tasks. Each executable row pins the artifact, decision,
+standard proposal, baseline output, renderer revision, and task. The suite
+digest also binds the rubric and the local safety probes. The evaluator
+validates proposal bytes independently and keeps the rendered digest, blinded
+order, and both ratings in its report. Each rating binds to the exact pair,
+order, and deployment. A rejected proposal earns no preference.
+Reviewer independence and deployment identity are verified by the caller.
+
+The current renderer supports 10 paired fixtures. The other 20 tasks remain
+unresolved until the renderer and fixtures can support the original distinctions.
+For example, the renderer omits event-window endpoints, expiry, and policy
+thresholds. Even unanimous preferences on available pairs leave qualification
+incomplete. The local safety probes exercise the validator and synthetic
+permission checks. A later model driver must run the real candidate and retain
+its qualification evidence before generation can be enabled.
+
+Run `cargo test --locked -p edgeagent-research-application --test explanation_evaluation`
+for the fixture and census checks. The threshold boundary tests run in the
+application library suite.
 
 ## Versioned records
 
