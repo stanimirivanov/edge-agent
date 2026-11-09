@@ -15,7 +15,7 @@ loopback origin, for example `http://127.0.0.1:8081` or `http://[::1]:8081`.
 Credentials, DNS names (including localhost), paths other than `/`, query strings,
 fragments, HTTPS and nonloopback IPs are rejected before startup. A malformed
 explicit setting fails startup; an absent setting preserves admission-only startup
-and both query routes return 503. Descriptor commands remain configuration-free.
+and all query routes return 503. Descriptor commands remain configuration-free.
 
 Start the [projector internal server](projector-runtime.md) independently with the
 same operator scope. No automatic topology, schema, tracking or projector startup
@@ -28,6 +28,7 @@ may therefore be not-observed until trusted tracking or its terminal event arriv
 |---|---|
 | `/v1/research-requests/{scope}/{id}` | 200 scoped projector metadata |
 | `/v1/research-requests/{scope}/{id}/outcome` | 200 exact canonical artifact/abstention record bytes |
+| `/v1/research-requests/{scope}/{id}/explanation` | 200 exact authorized companion bytes |
 
 Metadata preserves `scope`, `request_id`, `projection_revision`, `status` and
 `applied_delivery_key`. Before lifecycle, projection revisions are zero/one;
@@ -61,17 +62,19 @@ sent upstream. IDs use the existing 1–64 ASCII letter/digit/period/underscore/
 token profile, with standalone `.` and `..` refused to prevent URL normalization.
 Invalid IDs return 400 and scope/Host/Origin refusals return 403.
 
-The Gateway constructs only the two fixed internal GET routes at the configured
+The Gateway constructs only the fixed internal GET routes at the configured
 origin. Reqwest is already pinned and license-reviewed in the workspace; this
 adapter adds no package/version and borrows the existing transport's no-proxy,
 no-redirect, no-retry policy. Supply the existing explicit Rustls/ring configuration
 with an empty root store to survive workspace `rustls-no-provider` feature unification;
-HTTPS origins remain refused and no global crypto-provider setting is changed. It uses a one-second connection timeout, four-second
-request/body deadline and five-second outer query bound, HTTP/1 with at most 32
+HTTPS origins remain refused and no global crypto-provider setting is changed.
+The client uses a one-second connection timeout, HTTP/1 with at most 32
 response headers, at most eight concurrent upstream requests (503 on saturation),
 and two retained idle connections per upstream. No incoming
 headers, query strings, credentials or response headers are forwarded. Compression
-is disabled. Work occurs outside admission transactions and has no automatic retry.
+is disabled. Status and outcome use a four-second upstream deadline and a
+five-second Gateway deadline. Work occurs outside admission transactions
+and has no automatic retry.
 
 Only the documented status/body combinations and `application/json` are accepted.
 Metadata/error bodies are capped at 4096 bytes; canonical outcomes at 131072 bytes.
@@ -82,6 +85,24 @@ scope/ID; Gateway does not render, mutate or reinterpret numeric research facts.
 Unexpected schemas, redirects, content encodings/types or malformed/foreign
 records become 503 without exposing upstream diagnostics or URLs.
 
+## Explanation queries
+
+The explanation route applies the same local scope and identifier checks.
+The [projector](projector-runtime.md#authorized-explanation-reads) checks
+current Research authorization on each read. Gateway accepts only a
+non-cacheable, canonical renderable companion for the configured scope.
+On success, Gateway checks that the companion's artifact digest matches the
+exact artifact at the requested scope and ID before returning the original
+bytes. A missing or inconsistent artifact fails closed.
+
+The companion body cap is 16 KiB. The projector explanation request has a
+nine-second deadline, and the full Gateway query has a twelve-second deadline
+including the artifact check. Both reads share one slot in the existing
+concurrency limit. Pending, missing, gapped and closed views return 202, 404,
+409 and 410 respectively. A validated authorization refusal returns 403.
+Unavailable authority or inconsistent upstream responses return 503. All
+responses disable caching.
+
 ## Verification and rollback
 
 `cargo xtask verify --check gateway-http --check gateway-query-contracts --python python3`
@@ -90,8 +111,9 @@ query refusal, exact artifact/abstention bytes, observation states, upstream sha
 size/timeout/saturation failures and destination restrictions. The focused gate is part of
 default acceptance and protects exact test discovery. Existing real PostgreSQL
 admission proofs remain `cargo xtask verify --check gateway-admission --python python3`.
-These adapter tests include lifecycle metadata and 410 responses and use a controlled HTTP projector double; they do not claim a
-full multi-service owner-to-Gateway acceptance run, which remains later work.
+The adapter tests use a controlled HTTP projector double. The
+`research-processes` gate also checks exact Gateway companion bytes,
+revocation, owner unavailability and closure with the real services.
 
 No migrations or persistent state changes are introduced. Rollback stops serving
 and deploys the prior Gateway; admissions and projector state remain intact.

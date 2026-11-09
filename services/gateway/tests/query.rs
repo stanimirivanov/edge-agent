@@ -78,6 +78,7 @@ struct Upstream {
     bytes: Vec<u8>,
     content_type: &'static str,
     delay: bool,
+    outcome: Option<Vec<u8>>,
     calls: Arc<Mutex<Vec<(String, axum::http::HeaderMap)>>>,
     entered: Arc<tokio::sync::Notify>,
 }
@@ -91,10 +92,16 @@ async fn upstream(State(state): State<Upstream>, request: Request) -> axum::resp
     if state.delay {
         std::future::pending::<()>().await;
     }
+    if request.uri().path().ends_with("/outcome")
+        && let Some(bytes) = state.outcome
+    {
+        return ([("content-type", "application/json")], bytes).into_response();
+    }
     (
         state.status,
         [
             ("content-type", state.content_type),
+            ("cache-control", "no-store"),
             ("location", "http://127.0.0.1:1/private"),
         ],
         state.bytes,
@@ -107,11 +114,21 @@ async fn setup(
     content_type: &'static str,
     delay: bool,
 ) -> Result<(Server, Server, Upstream)> {
+    setup_with_outcome(status, bytes, content_type, delay, None).await
+}
+async fn setup_with_outcome(
+    status: u16,
+    bytes: Vec<u8>,
+    content_type: &'static str,
+    delay: bool,
+    outcome: Option<Vec<u8>>,
+) -> Result<(Server, Server, Upstream)> {
     let state = Upstream {
         status: axum::http::StatusCode::from_u16(status)?,
         bytes,
         content_type,
         delay,
+        outcome,
         calls: Arc::default(),
         entered: Arc::default(),
     };
@@ -447,6 +464,128 @@ async fn stalled_projector_is_bounded_and_configuration_cannot_redirect_authorit
     assert_eq!(state.calls.lock().await.len(), 8);
     for request in waiting {
         assert!(request.await??.starts_with("HTTP/1.1 503"));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn explanations_require_exact_scoped_artifact_binding_and_propagate_safe_refusals() -> Result
+{
+    use edgeagent_contracts::explanation::{Companion, MAX_BYTES, Outcome, Refusal};
+    let ResearchRecord::Artifact(mut artifact) = ResearchRecord::decode(include_bytes!(
+        "../../../crates/contracts/fixtures/research/v1/artifact.json"
+    ))?
+    else {
+        return Err("artifact fixture".into());
+    };
+    artifact.request.request_id = "request.1".into();
+    let artifact = ResearchRecord::Artifact(artifact);
+    let artifact_bytes = artifact.canonical_bytes()?;
+    let mut companion = Companion::decode(include_bytes!(
+        "../../../crates/contracts/fixtures/explanation/companion-v1.json"
+    ))?;
+    companion.binding.anchor.artifact = artifact.digest()?;
+    let exact = companion.canonical_bytes()?;
+    let path = format!("{PATH}/explanation");
+    let (gateway, _owner, state) = setup_with_outcome(
+        200,
+        exact.clone(),
+        "application/json",
+        false,
+        Some(artifact_bytes.clone()),
+    )
+    .await?;
+    for (path, headers, code) in [
+        (
+            "/v1/research-requests/foreign/request.1/explanation",
+            "",
+            403,
+        ),
+        ("/v1/research-requests/offline/../explanation", "", 400),
+        (&path, "Origin: http://localhost\r\n", 403),
+    ] {
+        assert!(
+            gateway
+                .get(path, headers)
+                .await?
+                .starts_with(&format!("HTTP/1.1 {code}"))
+        );
+    }
+    assert!(state.calls.lock().await.is_empty());
+    let response = gateway
+        .get(&path, "Authorization: private-test-sentinel\r\n")
+        .await?;
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.contains("cache-control: no-store"));
+    assert_eq!(body(&response)?.as_bytes(), exact);
+    let calls = state.calls.lock().await;
+    assert_eq!(
+        calls
+            .iter()
+            .map(|(path, _)| path.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "/internal/v1/research-requests/offline/request.1/explanation",
+            "/internal/v1/research-requests/offline/request.1/outcome",
+        ]
+    );
+    assert!(
+        calls
+            .iter()
+            .all(|(_, headers)| !headers.contains_key("authorization"))
+    );
+    drop(calls);
+
+    for (code, state) in [
+        (202, "pending"),
+        (403, "forbidden"),
+        (404, "not_observed"),
+        (409, "gap"),
+        (410, "withdrawn"),
+        (503, "unavailable"),
+    ] {
+        let bytes = format!(r#"{{"status":"{state}"}}"#);
+        let (gateway, _owner, upstream) =
+            setup(code, bytes.as_bytes().to_vec(), "application/json", false).await?;
+        let response = gateway.get(&path, "").await?;
+        assert!(response.starts_with(&format!("HTTP/1.1 {code}")));
+        assert_eq!(body(&response)?, bytes);
+        assert_eq!(upstream.calls.lock().await.len(), 1);
+    }
+
+    companion.binding.anchor.artifact = "f".repeat(64);
+    let wrong_artifact = companion.canonical_bytes()?;
+    companion.binding.anchor.scope = "foreign".into();
+    let wrong_scope = companion.canonical_bytes()?;
+    companion.binding.anchor.scope = "offline".into();
+    companion.binding.anchor.artifact = artifact.digest()?;
+    companion.outcome = Outcome::Refused {
+        reason: Refusal::DisclosureDenied,
+    };
+    let refusal = companion.canonical_bytes()?;
+    for (code, bytes) in [
+        (200, wrong_artifact),
+        (200, wrong_scope),
+        (200, refusal),
+        (200, exact[..exact.len() - 1].to_vec()),
+        (200, vec![b' '; MAX_BYTES + 1]),
+        (302, exact),
+        (
+            403,
+            br#"{"status":"forbidden","detail":"private-test-sentinel"}"#.to_vec(),
+        ),
+    ] {
+        let (gateway, _owner, _) = setup_with_outcome(
+            code,
+            bytes,
+            "application/json",
+            false,
+            Some(artifact_bytes.clone()),
+        )
+        .await?;
+        let response = gateway.get(&path, "").await?;
+        assert!(response.starts_with("HTTP/1.1 503"), "{response}");
+        assert_eq!(body(&response)?, r#"{"status":"unavailable"}"#);
     }
     Ok(())
 }

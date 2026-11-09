@@ -397,6 +397,8 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         assert_eq!(check().await?, (403, Vec::new()));
         let explanation_path = "/internal/v1/research-requests/operator/qualification/explanation";
         let explanation = || Journey::request_at(h.projector_address, "GET", explanation_path, &[]);
+        let gateway_explanation = || h.request("GET", "/v1/research-requests/operator/qualification/explanation", &[]);
+
         assert_eq!(explanation().await?, (404, br#"{"status":"not_observed"}"#.to_vec()));
         h.run("research", "offline-relay", &[]).await?;
         for _ in 0..2 {
@@ -409,6 +411,7 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         let status: serde_json::Value = serde_json::from_slice(&status.1)?;
         assert_eq!(status["projection_revision"], 2);
         assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
         let owner_review = |revision, decision: &str| serde_json::json!({
             "audience": AUDIENCE, "agreement": ACQUISITION, "revision": revision, "decision": decision,
             "valid_from_ms": grant.valid_from_ms, "expires_at_ms": grant.expires_at_ms,
@@ -416,25 +419,31 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(1, "allow").as_bytes()).await?;
         assert_eq!(check().await?, (204, Vec::new()));
         assert_eq!(explanation().await?, (200, receipt.bytes().to_vec()));
+        assert_eq!(gateway_explanation().await?, (200, receipt.bytes().to_vec()));
         let lock = std::fs::OpenOptions::new().read(true).write(true)
             .open(h.root.join("offline.lock"))?;
         lock.try_lock()?;
         assert_eq!(check().await?, (503, Vec::new()));
         assert_eq!(explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
         drop(lock);
 
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(2, "revoke").as_bytes()).await?;
         assert_eq!(check().await?, (403, Vec::new()));
         assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
         h.input_with_args("market", "offline-explanation-review", &[ACQUISITION], owner_review(3, "allow").as_bytes()).await?;
         store.set_explanation_grant(&Grant { revoked: true, ..grant.clone() }, 2).await?;
         assert_eq!(check().await?, (403, Vec::new()));
         assert_eq!(explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (403, br#"{"status":"forbidden"}"#.to_vec()));
         store.set_explanation_grant(&grant, 3).await?;
         assert_eq!(explanation().await?, (200, receipt.bytes().to_vec()));
+        assert_eq!(gateway_explanation().await?, (200, receipt.bytes().to_vec()));
         sqlx::query("DELETE FROM edgeagent_message_inbox WHERE message_id=$1")
             .bind(&companion).execute(&h.projector.pool).await?;
         assert_eq!(explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (503, br#"{"status":"unavailable"}"#.to_vec()));
         store.append_lifecycle("operator", ResearchLifecycle {
             scope: "operator".into(), request_id: artifact.request.request_id.clone(),
             artifact: record.digest()?, revision: 1,
@@ -444,6 +453,7 @@ async fn explanation_authority_rechecks_marketdata_and_research_on_every_read() 
         h.run("research", "offline-relay", &[]).await?;
         h.run("projector", "offline-worker", &[]).await?;
         assert_eq!(explanation().await?, (410, br#"{"status":"withdrawn"}"#.to_vec()));
+        assert_eq!(gateway_explanation().await?, (410, br#"{"status":"withdrawn"}"#.to_vec()));
         let (code, status) = h.request("GET", "/v1/research-requests/operator/qualification", &[]).await?;
         assert_eq!(code, 200);
         assert_eq!(serde_json::from_slice::<serde_json::Value>(&status)?["projection_revision"], 3);
