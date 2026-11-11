@@ -473,3 +473,15 @@ impl Companion {
         }
     }
 }
+
+/// Point-in-time projection of existing MarketData serving authority. This does not prevent later revocation.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServingPermit {
+    pub scope: String,
+    pub acquisition: String,
+    pub evidence: String,
+    pub audience: String,
+    pub checked_at_ms: i64,
+    pub expires_at_ms: i64,
+}

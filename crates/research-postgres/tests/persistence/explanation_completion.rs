@@ -38,18 +38,19 @@ async fn explanation_completion_rolls_back_and_recovers_exact_first_terminal() -
         };
         let validated = Allowlist::from_verified(original.record(), &decision)?.standard()?;
         let mut serving = super::explanation_grants::grant(Purpose::ExplanationServing);
+        serving.valid_from_ms = 90;
         serving.request.anchor = binding.anchor.clone();
         let mut model = Grant { request: serving.request.clone(), ..serving.clone() };
         model.request.purpose = Purpose::ModelDisclosure;
         store.set_explanation_grant(&model, 1).await?;
-        let intent = Intent { binding: binding.clone(), input_digest: "f".repeat(64), audience: model.request.audience.clone(), deadline_ms: 150 };
-        let ReservationOutcome::Reserved(permit) = store.reserve_explanation_attempt(&intent, || 100).await? else { return Err("missing permit".into()); };
+        let intent = Intent { binding: binding.clone(), input_digest: "f".repeat(64), audience: model.request.audience.clone(), deadline_ms: 100 };
+        let ReservationOutcome::Reserved(permit) = store.reserve_explanation_attempt(&intent, || 99).await? else { return Err("missing permit".into()); };
         let job = Job { anchor: binding.anchor.clone() };
         let fallback = || Completion::Fallback { explanation: &validated, reason: Fallback::UncertainAttempt };
-        assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 150, TIME).await.is_err());
+        assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 100, TIME).await.is_err());
         store.set_explanation_grant(&serving, 1).await?;
-        assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 149, TIME).await.is_err());
-        store.recover_explanation_attempt(&job, || 150).await?;
+        assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 99, TIME).await.is_err());
+        store.recover_explanation_attempt(&job, || 100).await?;
 
         sqlx::raw_sql("CREATE FUNCTION explanation_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected failure'; END $$")
             .execute(&h.pool).await?;
@@ -58,21 +59,21 @@ async fn explanation_completion_rolls_back_and_recovers_exact_first_terminal() -
             ("CREATE CONSTRAINT TRIGGER explanation_fault AFTER INSERT ON edgeagent_explanation_completions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION explanation_fault()", "DROP TRIGGER explanation_fault ON edgeagent_explanation_completions"),
         ] {
             sqlx::raw_sql(create).execute(&h.pool).await?;
-            assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 150, TIME).await.is_err());
+            assert!(store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 100, TIME).await.is_err());
             assert_eq!(counts(&h).await?, (0, 0));
             sqlx::raw_sql(drop).execute(&h.pool).await?;
         }
 
         let restarted = PostgresResearchStore::new(h.reconnect().await?);
         let (first, duplicate) = tokio::join!(
-            store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 150, TIME),
-            restarted.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 150, TIME),
+            store.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 100, TIME),
+            restarted.complete_explanation(base.request(), &binding, fallback(), Some(&serving), || 100, TIME),
         );
         let receipt = first?;
         assert_eq!(receipt.publication(), duplicate?.publication());
         assert!(matches!(restarted.recover_explanation_attempt(&job, || 151).await?, Recovery::Terminal));
         let recovered = restarted.recover_explanation(base.request(), &job).await?.ok_or("missing receipt")?;
-        let retry = restarted.complete_explanation(base.request(), &binding, fallback(), None, || 150, "2026-10-31T00:00:00Z").await?;
+        let retry = restarted.complete_explanation(base.request(), &binding, fallback(), None, || 100, "2026-10-31T00:00:00Z").await?;
         assert_eq!(receipt.bytes(), recovered.bytes());
         assert_eq!(receipt.publication(), recovered.publication());
         assert_eq!(receipt.publication(), retry.publication());
@@ -125,12 +126,13 @@ async fn explanation_completion_rolls_back_and_recovers_exact_first_terminal() -
         serving.request.anchor = binding.anchor.clone();
         store.set_explanation_grant(&model, 1).await?;
         store.set_explanation_grant(&serving, 1).await?;
-        let intent = Intent { binding: binding.clone(), ..refused_intent };
+        let intent = Intent { binding: binding.clone(), deadline_ms: 150, ..refused_intent };
         let ReservationOutcome::Reserved(permit) = store.reserve_explanation_attempt(&intent, || 100).await? else {
             return Err("missing generated permit".into());
         };
         let validated = Allowlist::from_verified(retained.record(), &decision)?.standard()?;
-        let generated = store.complete_explanation(third.request(), &binding, Completion::Generated { explanation: &validated, permit: &permit }, Some(&serving), || 120, TIME).await?;
+        assert_eq!(store.complete_explanation(third.request(), &binding, Completion::Generated { explanation: &validated, permit: &permit }, Some(&serving), || 101, TIME).await.err().ok_or("expired completion accepted")?.kind(),Kind::Disabled);
+        let generated = store.complete_explanation(third.request(), &binding, Completion::Generated { explanation: &validated, permit: &permit }, Some(&serving), || 100, TIME).await?;
         assert!(matches!(Companion::decode(generated.bytes())?.outcome, edgeagent_contracts::explanation::Outcome::Generated { .. }));
         let job = Job { anchor: binding.anchor };
         assert!(matches!(store.recover_explanation_attempt(&job, || 151).await?, Recovery::Terminal));

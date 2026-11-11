@@ -489,3 +489,59 @@ and `cargo test --locked -p edgeagent-research --example qualify_explanation`
 for manifest, identity, transport, failure and review-import verification.
 The transport test uses a deterministic local server. A real model qualification
 remains pending until licensed artifacts and independent ratings are available.
+
+## Execute durable explanation jobs
+
+Deploy MarketData with `offline-explanation-permit` support before enabling the
+Research worker. This command projects the existing serving policy's checked
+scope, acquisition, evidence digest, audience, observation time and exclusive
+expiry. Expiry is capped by evidence retention. Existing
+`offline-explanation-authorize` callers keep their empty-output status protocol.
+The projected permission is a current observation. Subsequent reads still
+check owner authority independently.
+
+Apply Research migrations through 0011 and install an explicit canonical
+explanation profile under `EDGEAGENT_RESEARCH_EXPLANATION_PROFILE`. The worker
+accepts SHA-256 of the exact revision strings
+`research-explanation-allowlist-v1` for `profile.validator` and
+`research-explanation-trace.v1` for `profile.renderer`. Deployment, prompt and
+settings remain requested immutable profile pins. The current runtime always
+uses deterministic fallback because model qualification is incomplete. Model
+response composition is tested through the application port. Activation of a
+qualified model still requires reviewed runtime wiring.
+
+Run the Research binary in `offline-explanation-worker` mode with the existing
+loopback database, private schema, operator scope and owner endpoint settings.
+Set `EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE` to the reviewed 32-digit lowercase
+hex audience and install the exact Research serving grant. The worker processes
+one oldest unfinished job per invocation, or the exact SHA-256 job ID named by
+`EDGEAGENT_RESEARCH_EXPLANATION_JOB`. An explicit completed job returns its
+original internal receipt before opening the profile or contacting the owner.
+This recovery path grants no permission to serve its content.
+
+For fresh work, Research verifies the retained job, completion, original owner
+input and pinned execution through the existing replay verifier. It checks
+the acquisition from that authenticated input; active acquisition and strategy
+configuration environment settings are unnecessary. It checks
+current serving authorization before and after the owner evidence read. The
+terminal transaction checks Research grants, owner observation bounds, artifact
+expiry and lifecycle before retaining one companion and outbox event. Historical
+receipts remain recoverable after expiry or revocation. This is a behavior
+change for fresh direct completion calls that previously accepted expired
+artifacts.
+
+A denied or unavailable authority produces one immutable private refusal with
+no publication. Restore deployment configuration before consuming jobs. An owner
+outage can therefore leave a permanent refusal for that job. A spent attempt
+waits until its original deadline, then recovers through deterministic fallback
+under its retained binding. Keep the original profile available for unresolved
+attempts. A pending attempt returns no receipt and leaves the job unfinished.
+The invocation has a 40-second bound and performs no model I/O or automatic
+retry. Store failures leave the job available for a later invocation, including
+ambiguous commit recovery.
+
+Run `cargo test --locked -p edgeagent-research --test explanation_worker` for
+proposal and fallback composition. With an isolated `EDGEAGENT_POSTGRES_URL`,
+run `cargo xtask verify --check research-explanation-worker --check research-evidence-processes --check research-persistence --python python3`
+for process restart, concurrent completion, commit rollback, owner policy bounds,
+revocation during evidence loading, lifecycle refusal and original-byte checks.

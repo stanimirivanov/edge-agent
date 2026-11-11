@@ -9,6 +9,7 @@ pub mod explanation;
 pub mod explanation_context;
 pub mod explanation_evaluation;
 pub mod explanation_model;
+pub mod explanation_worker;
 pub mod governed;
 pub mod lifecycle;
 pub mod publication;

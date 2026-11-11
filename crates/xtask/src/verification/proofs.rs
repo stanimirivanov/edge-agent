@@ -197,6 +197,11 @@ const RESEARCH_WORKER: Target = Target {
         "governed_processes_require_owner_approval_and_retirement_preserves_original_receipt",
     ],
 };
+const EXPLANATION_WORKER: Target = Target {
+    package: "edgeagent-research",
+    name: "explanation_worker",
+    identities: &["durable_worker_recovers_before_owner_reads_and_commits_one_authorized_terminal"],
+};
 const RESEARCH_WORKER_BROKER: Target = Target {
     package: "edgeagent-research",
     name: "broker",
@@ -447,6 +452,12 @@ pub(super) fn checks() -> Vec<Check> {
             &RESEARCH_WORKER,
             POSTGRES,
             "Separate Research worker processes: exact first result recovery before owner reads, denied/corrupt abstention and unavailable-read noncompletion.",
+        ),
+        suite(
+            "research-explanation-worker",
+            &EXPLANATION_WORKER,
+            POSTGRES,
+            "Real explanation workers recover before external work, fence authority, roll back failed commits, and retain one companion/publication.",
         ),
         suite(
             "research-worker-broker",
@@ -826,6 +837,7 @@ pub(super) fn ignored_inventory() -> Vec<&'static str> {
         RESEARCH_PROCESSES,
         RESEARCH_IMAGE_OWNER,
         RESEARCH_WORKER_BROKER,
+        EXPLANATION_WORKER,
         RESEARCH_EVIDENCE_BROKER,
         RESEARCH_EVIDENCE_PROCESSES,
         RESEARCH_CORRELATION,
@@ -1150,7 +1162,7 @@ mod tests {
     -> Result<(), Box<dyn Error>> {
         let mut executed = Vec::new();
         let checks = checks();
-        assert_eq!(checks.len(), 51);
+        assert_eq!(checks.len(), 52);
         for check in checks {
             let discovery = check.discovery.ok_or("every proof requires discovery")?;
             assert!(discovery.ignored);
@@ -1166,8 +1178,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 167);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 167);
+        assert_eq!(inventory.len(), 168);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 168);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

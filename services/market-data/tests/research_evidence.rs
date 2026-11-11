@@ -376,6 +376,12 @@ async fn explanation_authorization_requires_current_exact_owner_review() -> Resu
                 .is_empty()
         );
         assert!(h.success(&check, Some(&input)).await?.is_empty());
+        let permit=h.success(&["offline-explanation-permit",ACQUISITION,AUDIENCE],Some(&input)).await?;
+        let permit:edgeagent_contracts::explanation::ServingPermit=serde_json::from_slice(&permit)?;
+        assert_eq!(permit.acquisition,ACQUISITION);
+        assert_eq!(permit.audience,AUDIENCE);
+        assert!(permit.checked_at_ms>=now);
+        assert!(permit.expires_at_ms>permit.checked_at_ms && permit.expires_at_ms<=now+60000);
 
         let wrong = ["offline-explanation-authorize", ACQUISITION, ACQUISITION];
         assert_eq!(h.run(&wrong, Some(&input)).await?.status.code(), Some(77));
@@ -399,6 +405,12 @@ async fn explanation_authorization_requires_current_exact_owner_review() -> Resu
         h.success(&review, Some(record(4, "allow", now + 60000).as_bytes()))
             .await?;
         assert!(h.success(&check, Some(&input)).await?.is_empty());
+        let permit=h.success(&["offline-explanation-permit",ACQUISITION,AUDIENCE],Some(&input)).await?;
+        let permit:edgeagent_contracts::explanation::ServingPermit=serde_json::from_slice(&permit)?;
+        assert_eq!(permit.acquisition,ACQUISITION);
+        assert_eq!(permit.audience,AUDIENCE);
+        assert!(permit.checked_at_ms>=now);
+        assert!(permit.expires_at_ms>permit.checked_at_ms && permit.expires_at_ms<=now+60000);
 
         let mut untrusted = h.pool.begin().await?;
         sqlx::raw_sql("GRANT INSERT ON edgeagent_explanation_serving_reviews TO pg_read_all_data")

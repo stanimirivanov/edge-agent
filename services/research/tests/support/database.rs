@@ -43,6 +43,9 @@ impl Database {
                 edgeagent_research_postgres::controls::MIGRATION,
                 edgeagent_research_postgres::experiments::MIGRATION,
                 edgeagent_research_postgres::governance::PROMOTION_MIGRATION,
+                edgeagent_research_postgres::explanation_grants::MIGRATION,
+                edgeagent_research_postgres::explanation_attempts::MIGRATION,
+                edgeagent_research_postgres::explanation_completion::MIGRATION,
                 edgeagent_research_postgres::explanation_jobs::MIGRATION,
             ])
         {
