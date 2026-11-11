@@ -112,3 +112,20 @@ impl PostgresResearchStore {
             }))
     }
 }
+
+impl PostgresResearchStore {
+    /// Observe current Research authority before a fresh explanation operation.
+    /// The terminal transaction rechecks the grant under its scope fence.
+    pub async fn explanation_grant(
+        &self,
+        request: &Request,
+        now_ms: i64,
+    ) -> Result<Option<Grant>, Error> {
+        let mut tx = transaction(&self.pool).await?;
+        let grant = Self::current_explanation_grant(&mut tx, request, now_ms)
+            .await?
+            .map(|value| value.grant);
+        tx.commit().await.map_err(storage)?;
+        Ok(grant)
+    }
+}

@@ -133,6 +133,21 @@ impl PostgresResearchEvidence {
         audience: &EvidenceId,
         access: &impl EvidenceAccess,
     ) -> Result<(), Error> {
+        self.explanation_serving_permit(event, admission, audience, access)
+            .await
+            .map(|_| ())
+    }
+
+    /// Project the exact existing owner review and retention bounds for a fresh serving operation.
+    /// # Errors
+    /// Denies whenever the existing serving authorization would deny.
+    pub async fn explanation_serving_permit(
+        &self,
+        event: &MessageEnvelope,
+        admission: &AdmissionRecord,
+        audience: &EvidenceId,
+        access: &impl EvidenceAccess,
+    ) -> Result<edgeagent_contracts::explanation::ServingPermit, Error> {
         let denied = || Error::new(K::Denied);
         let ResearchEvidence::Ready { request, decision } =
             ResearchEvidence::from_envelope(event).map_err(|_| invalid())?
@@ -166,18 +181,24 @@ impl PostgresResearchEvidence {
         access
             .authorize(object)
             .map_err(|cause| Error::with_source(K::Denied, cause))?;
-        let allowed = sqlx::query_scalar!(r#"
+        let allowed = sqlx::query!(r#"
             SELECT decision='allow' AND valid_from_ms<=clock.now_ms AND clock.now_ms<expires_at_ms
-                AND clock.now_ms<$3 AS "allowed!"
+                AND clock.now_ms<$3 AS "allowed!", clock.now_ms AS "checked_at!", LEAST(expires_at_ms,$3) AS "expires!"
             FROM edgeagent_explanation_serving_reviews
             CROSS JOIN (SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS now_ms) clock
             WHERE rights_scope=$1 AND audience=$2 ORDER BY revision DESC LIMIT 1
         "#,scope, audience.as_str(), object.delete_by.seconds.checked_mul(1000)
             .and_then(|ms| ms.checked_add(i64::from(object.delete_by.nanos / 1_000_000))).ok_or_else(invalid)?)
             .fetch_optional(&mut *tx).await.map_err(Error::storage)?;
-        if allowed != Some(true) {
-            return Err(denied());
-        }
-        tx.commit().await.map_err(Error::storage)
+        let allowed = allowed.filter(|row| row.allowed).ok_or_else(denied)?;
+        tx.commit().await.map_err(Error::storage)?;
+        Ok(edgeagent_contracts::explanation::ServingPermit {
+            scope: request.scope,
+            acquisition: decision.request.request.as_str().into(),
+            evidence: object.sha256.as_str().into(),
+            audience: audience.as_str().into(),
+            checked_at_ms: allowed.checked_at,
+            expires_at_ms: allowed.expires,
+        })
     }
 }

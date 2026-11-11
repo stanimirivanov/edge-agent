@@ -73,6 +73,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-once"
                 | "offline-worker"
                 | "offline-explanation-scheduler"
+                | "offline-explanation-worker"
                 | "offline-relay"
                 | "offline-lifecycle"
                 | "offline-invalidation-check"
@@ -166,6 +167,15 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode=="offline-explanation-worker" {
+            use std::io::Write as _;
+            let id=std::env::var("EDGEAGENT_RESEARCH_EXPLANATION_JOB").ok();
+            if let Some(id)=&id {crate::loader::digest(id)?;}
+            if let Some(receipt)=tokio::time::timeout(Duration::from_secs(40),crate::explanation_worker::execute(&store,&scope,id.as_deref())).await?? {
+                std::io::stdout().write_all(receipt.bytes())?;
+            }
+            return Ok(());
+        }
         if let Some((address, audience, owner)) = authority {
             let listener = tokio::net::TcpListener::bind(address).await?;
             let router = crate::explanation_authority::owner_router(scope, audience, store, owner);

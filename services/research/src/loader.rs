@@ -119,6 +119,36 @@ impl OwnerLoader {
         Ok(loader)
     }
 
+    /// Resolve one authenticated retained job without the active strategy or acquisition profile.
+    pub(crate) fn from_explanation_input(
+        profile: &edgeagent_contracts::strategy_governance::Profile,
+        delivery: &MessageEnvelope,
+    ) -> Result<Self, E> {
+        let ResearchEvidence::Ready { request, decision } =
+            ResearchEvidence::from_envelope(delivery).map_err(|_| E::Invalid)?
+        else {
+            return Err(E::Invalid);
+        };
+        let scope = required("EDGEAGENT_RESEARCH_SCOPE").map_err(|_| E::Unavailable)?;
+        if scope != profile.scope
+            || !(1..=2_678_400_000_i64).contains(&profile.max_age_ms)
+            || !(1..=300_000).contains(&profile.ttl_ms)
+        {
+            return Err(E::Denied);
+        }
+        let loader = Self {
+            endpoint: OwnerEndpoint::from_environment().map_err(|_| E::Unavailable)?,
+            owner_id: decision.request.request.as_str().into(),
+            scope,
+            implementation: digest(&profile.implementation)?,
+            configuration: digest(&profile.configuration)?,
+            max_age_ms: profile.max_age_ms,
+            ttl_ms: profile.ttl_ms,
+        };
+        loader.validate_request(&request)?;
+        Ok(loader)
+    }
+
     fn with_policy(
         implementation: [u8; 32],
         configuration: [u8; 32],

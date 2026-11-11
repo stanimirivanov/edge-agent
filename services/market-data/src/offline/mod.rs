@@ -77,6 +77,7 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                     "offline-research-read"
                         | "offline-research-policy-read"
                         | "offline-explanation-authorize"
+                        | "offline-explanation-permit"
                 )
             }) {
                 let mut cause = Some(error.as_ref() as &(dyn std::error::Error + 'static));
@@ -85,8 +86,10 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                         .is_some_and(|e| e.kind() == BudgetErrorKind::Denied)
                         || e.downcast_ref::<EvidenceStorageError>().is_some_and(|e| {
                             e.kind() == EvidenceStorageErrorKind::Denied
-                                || (args[0] == "offline-explanation-authorize"
-                                    && e.kind() == EvidenceStorageErrorKind::Expired)
+                                || (matches!(
+                                    args[0].as_str(),
+                                    "offline-explanation-authorize" | "offline-explanation-permit"
+                                ) && e.kind() == EvidenceStorageErrorKind::Expired)
                         })
                         || matches!(
                             e.downcast_ref::<sqlx::Error>(),
@@ -99,12 +102,14 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                         .is_some_and(|e| e.kind() == BudgetErrorKind::Storage)
                         || e.downcast_ref::<EvidenceStorageError>().is_some_and(|e| {
                             e.kind() == EvidenceStorageErrorKind::Backend
-                                || (args[0] == "offline-explanation-authorize"
-                                    && matches!(
-                                        e.kind(),
-                                        EvidenceStorageErrorKind::NotFound
-                                            | EvidenceStorageErrorKind::Deadline
-                                    ))
+                                || (matches!(
+                                    args[0].as_str(),
+                                    "offline-explanation-authorize" | "offline-explanation-permit"
+                                ) && matches!(
+                                    e.kind(),
+                                    EvidenceStorageErrorKind::NotFound
+                                        | EvidenceStorageErrorKind::Deadline
+                                ))
                         })
                         || e.downcast_ref::<sqlx::Error>().is_some()
                         || e.downcast_ref::<std::io::Error>().is_some()
@@ -159,7 +164,7 @@ async fn execute(config: &config::Config) -> Result {
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
         let mut confirmed = config.confirmed.clone();
-        if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read" | "offline-explanation-authorize") {
+        if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read" | "offline-explanation-authorize" | "offline-explanation-permit") {
             use std::io::{Read as _,Write as _};
             let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             let event=MessageEnvelope::from_json(&bytes)?;
@@ -173,9 +178,10 @@ async fn execute(config: &config::Config) -> Result {
             let EvidenceOutcome::Ready{object}=&decision.outcome else {return Err(BudgetError::new(BudgetErrorKind::Invalid).into());};
             let managed=RetainedEvidenceStorage::new(&storage,&ledger);
             let artifact=managed.get(object,&access).await?;
-            if config.command == "offline-explanation-authorize" {
+            if matches!(config.command.as_str(), "offline-explanation-authorize" | "offline-explanation-permit") {
                 let audience = config.serving_audience.as_ref().ok_or("missing serving audience")?;
-                bridge.authorize_explanation_serving(&event, &retained.admission, audience, &access).await?;
+                let permit=bridge.explanation_serving_permit(&event, &retained.admission, audience, &access).await?;
+                if config.command == "offline-explanation-permit" { serde_json::to_writer(std::io::stdout(), &permit)?; }
                 return Ok(());
             }
             if config.command=="offline-research-policy-read" {

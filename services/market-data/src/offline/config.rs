@@ -95,11 +95,11 @@ impl Config {
                 request = Some(u128::from_str_radix(id.as_str(), 16)?);
             }
             "offline-research-once" | "offline-research-worker" | "offline-research-read" | "offline-research-policy-read"
-            | "offline-explanation-review" | "offline-explanation-authorize"
-                if args.len() == if command == "offline-explanation-authorize" { 3 } else { 2 } => {
+            | "offline-explanation-review" | "offline-explanation-authorize" | "offline-explanation-permit"
+                if args.len() == if matches!(command.as_str(), "offline-explanation-authorize" | "offline-explanation-permit") { 3 } else { 2 } => {
                 let id=EvidenceId::new(&args[1]).map_err(|_|ConfigError("research requires one owner-installed acquisition ID"))?;
                 request=Some(u128::from_str_radix(id.as_str(),16)?);
-                if command == "offline-explanation-authorize" {
+                if matches!(command.as_str(), "offline-explanation-authorize" | "offline-explanation-permit") {
                     serving_audience = Some(EvidenceId::new(&args[2]).map_err(|_| ConfigError("invalid serving audience"))?);
                 }
                 if command != "offline-explanation-review" {
@@ -187,6 +187,7 @@ impl Config {
                     "offline-research-read"
                         | "offline-research-policy-read"
                         | "offline-explanation-authorize"
+                        | "offline-explanation-permit"
                 ) {
                     BudgetError::with_source(BudgetErrorKind::Storage, error).into()
                 } else {

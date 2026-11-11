@@ -88,3 +88,69 @@ impl PostgresResearchStore {
         tx.commit().await.map_err(storage)
     }
 }
+
+/// Authenticated durable job and its intact original owner completion.
+pub struct Scheduled {
+    pub job: Job,
+    pub request: edgeagent_contracts::research::ResearchRequest,
+    pub original: super::ReplaySnapshot,
+    pub receipt: Option<super::explanation_completion::Receipt>,
+}
+impl PostgresResearchStore {
+    /// Read an explicit job for recovery, or the oldest unfinished scoped job.
+    /// # Errors
+    /// Rejects changed retained identity and storage failures.
+    pub async fn explanation_job(
+        &self,
+        scope: &str,
+        id: Option<&str>,
+    ) -> Result<Option<Scheduled>, Error> {
+        let mut tx = transaction(&self.pool).await?;
+        let row=sqlx::query!("SELECT j.job_id,j.job,c.request FROM edgeagent_research_explanation_jobs j JOIN edgeagent_research_completions c USING(caller_scope,request_id) WHERE j.caller_scope=$1 AND ($2::text IS NULL OR j.job_id=$2) AND ($2::text IS NOT NULL OR NOT EXISTS(SELECT 1 FROM edgeagent_explanation_completions e WHERE e.job_id=j.job_id)) ORDER BY j.admitted_at,j.job_id LIMIT 1",scope,id)
+            .fetch_optional(&mut *tx).await.map_err(storage)?;
+        let Some(row) = row else { return Ok(None) };
+        let job = Job::decode(&row.job).map_err(|_| invalid())?;
+        if job.id().map_err(|_| invalid())? != row.job_id || job.anchor.scope != scope {
+            return Err(invalid());
+        }
+        let ResearchRecord::Request(request) =
+            ResearchRecord::decode(&row.request).map_err(|_| invalid())?
+        else {
+            return Err(invalid());
+        };
+        let original = read_snapshot(&mut tx, &request)
+            .await?
+            .ok_or_else(invalid)?;
+        let decision =
+            publication::decode_decision(original.receipt.decision().ok_or_else(invalid)?)?;
+        job.bind(original.receipt.record(), &decision)
+            .map_err(|_| invalid())?;
+        let receipt = super::explanation_completion::read(&mut tx, &job, &original.receipt).await?;
+        tx.commit().await.map_err(storage)?;
+        Ok(Some(Scheduled {
+            job,
+            request,
+            original,
+            receipt,
+        }))
+    }
+
+    /// Resolve the original owner event only for a fresh job's evidence verification.
+    /// # Errors
+    /// Refuses absent, changed or foreign original input.
+    pub async fn explanation_input(&self, scheduled: &Scheduled) -> Result<MessageEnvelope, Error> {
+        let publication = scheduled.original.receipt.publication();
+        let cause = publication.extension("causationid").ok_or_else(invalid)?;
+        let source = edgeagent_contracts::Component::MarketData.source_uri();
+        let kind = edgeagent_contracts::research_acquisition::DECIDED.message_type();
+        let bytes=sqlx::query_scalar!("SELECT envelope FROM edgeagent_message_inbox WHERE consumer_name='research-completion' AND message_source=$1 AND message_id=$2 AND message_type=$3",source,cause,kind)
+            .fetch_optional(&self.pool).await.map_err(storage)?.ok_or_else(invalid)?;
+        let event = MessageEnvelope::from_json(&bytes).map_err(|_| invalid())?;
+        if publication::evaluation_request(&event)? != scheduled.request
+            || event.extension("correlationid") != publication.extension("correlationid")
+        {
+            return Err(invalid());
+        }
+        Ok(event)
+    }
+}

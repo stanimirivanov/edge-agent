@@ -58,7 +58,7 @@ pub(super) async fn exists(tx: &mut Transaction<'_, Postgres>, id: &str) -> Resu
         .fetch_one(&mut **tx).await.map_err(storage)
 }
 
-async fn read(
+pub(super) async fn read(
     tx: &mut Transaction<'_, Postgres>,
     job: &Job,
     original: &CommittedOutcome,
@@ -167,6 +167,15 @@ impl PostgresResearchStore {
             .bind(original.record(), &decision)
             .map_err(|_| invalid())?;
 
+        // Serialize fresh publication with owner lifecycle changes. Receipt recovery precedes this fence.
+        let lifecycle_lock = format!("research-lifecycle/{}", request.scope);
+        sqlx::query!(
+            "SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))",
+            lifecycle_lock
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
         let event = if matches!(completion, Completion::Refused(_)) {
             None
         } else {
@@ -175,6 +184,16 @@ impl PostgresResearchStore {
             if serving.anchor != job.anchor
                 || serving.purpose != Purpose::ExplanationServing
                 || serving.document.is_some()
+            {
+                return Err(Error::new(Kind::Disabled));
+            }
+            let ResearchRecord::Artifact(artifact) = original.record() else {
+                return Err(invalid());
+            };
+            if !(request.decision_at_ms..artifact.expires_at_ms).contains(&clock_ms())
+                || !crate::lifecycle::history(&mut tx, &request.scope, &request.request_id)
+                    .await?
+                    .is_empty()
             {
                 return Err(Error::new(Kind::Disabled));
             }
