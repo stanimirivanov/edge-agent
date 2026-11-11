@@ -585,3 +585,43 @@ traces and checks deterministic fallback, uncertain-attempt fallback, denied or
 unavailable authority and recovery. It also retains the durable assertions while
 the collector stalls or returns HTTP 503. Telemetry library tests exercise every
 bounded classification and reject payload and arbitrary-dimension injection.
+
+## Replay retained companions
+
+Run the Research binary with `offline-explanation-replay` for internal historical
+integrity verification. Use the existing loopback database, private Research
+schema, operator scope and owner endpoint settings. Set
+`EDGEAGENT_RESEARCH_EXPLANATION_JOB` to the exact scoped job digest and
+`EDGEAGENT_RESEARCH_EXPLANATION_PROFILE` to its original canonical profile.
+Set `EDGEAGENT_RESEARCH_REPLAY_RENDERER=research-ranking-raw-v1` and
+`EDGEAGENT_RESEARCH_REPLAY_MOMENTUM=raw-usd-roc-ppm-half-even-v1` to the
+compiled Research revisions. Use the revision constants from the running build;
+unsupported values fail closed. Active strategy configuration and acquisition
+settings are unnecessary: replay resolves the authenticated retained input and
+execution selection.
+
+The command uses database connections with `default_transaction_read_only=on`.
+It authenticates the retained companion/publication and original owner event,
+independently replays strategy and policy with currently authorized owner
+evidence, checks all explanation profile and evidence bindings, and reruns
+proposal validation and deterministic rendering. It reconstructs and compares
+exact canonical companion bytes. Success writes only the original companion to
+stdout; refusal exits nonzero without content. Missing jobs, completions,
+profiles or evidence, changed pins/citations/templates and corrupt retained
+publication bindings all refuse reproduction. Private refusal records have no
+renderable output and are not successful reproductions.
+
+The persisted companion contains typed selections, not a rendered-text snapshot.
+Replay reconstructs text under the pinned compiled renderer; it cannot compare
+against an absent text snapshot. Fallback categories remain historical records;
+replay does not recreate past outages or authorization decisions. It never calls
+a model, reserves an attempt, publishes, or updates database state. A successful
+internal replay confers no permission to serve the companion; serving still
+requires the independent current Research and evidence-owner checks.
+
+Run `cargo test --locked -p edgeagent-research-application --lib explanation_replay`
+for binding, profile, proposal, fallback and encoding rejection tests. With an
+isolated `EDGEAGENT_POSTGRES_URL`, run
+`cargo xtask verify --check research-replay-postgres --python python3` for real
+process restarts, owner-read refusals, tampered retained output, exact companion
+bytes and unchanged Research, explanation, inbox and outbox row snapshots.

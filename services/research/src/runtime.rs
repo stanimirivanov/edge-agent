@@ -74,6 +74,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-worker"
                 | "offline-explanation-scheduler"
                 | "offline-explanation-worker"
+                | "offline-explanation-replay"
                 | "offline-relay"
                 | "offline-lifecycle"
                 | "offline-invalidation-check"
@@ -154,6 +155,11 @@ async fn execute(mode: &str) -> Result {
         None
     };
     let options: sqlx::postgres::PgConnectOptions = database.parse()?;
+    let options = if mode == "offline-explanation-replay" {
+        options.options([("default_transaction_read_only", "on")])
+    } else {
+        options
+    };
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(4)
         .acquire_timeout(Duration::from_secs(5))
@@ -167,6 +173,13 @@ async fn execute(mode: &str) -> Result {
         // Compilation/readiness requires the explicitly prepared private completion schema.
         sqlx::query!("SELECT request_id FROM edgeagent_research_completions LIMIT 0").fetch_all(&pool).await?;
         let store=PostgresResearchStore::new(pool.clone());
+        if mode == "offline-explanation-replay" {
+            use std::io::Write as _;
+            let verified = tokio::time::timeout(Duration::from_secs(25),
+                crate::explanation_replay::execute(&store, &scope)).await??;
+            std::io::stdout().write_all(&verified)?;
+            return Ok(());
+        }
         if mode=="offline-explanation-worker" {
             use std::io::Write as _;
             let id=std::env::var("EDGEAGENT_RESEARCH_EXPLANATION_JOB").ok();
