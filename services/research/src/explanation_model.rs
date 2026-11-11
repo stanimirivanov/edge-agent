@@ -3,6 +3,9 @@ use edgeagent_contracts::{explanation::Proposal, explanation_profile::Deployment
 use edgeagent_research_application::explanation_model::{
     ExplanationModel, Failure, Reply, Request,
 };
+use edgeagent_telemetry::{
+    ExplanationOutcome as Observation, ExplanationStage as Stage, record_explanation_operation,
+};
 use reqwest::{Client, StatusCode, header};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -10,7 +13,7 @@ use sha2::{Digest, Sha256};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
 
@@ -150,11 +153,25 @@ impl<V: DeploymentVerifier> HttpModel<V> {
 
 impl<V: DeploymentVerifier> ExplanationModel for HttpModel<V> {
     async fn propose(&self, request: &Request<'_>) -> Result<Reply, Failure> {
-        let _slot = self.busy.try_lock().map_err(|_| Failure::Unavailable)?;
-        let timeout = Duration::from_millis(u64::from(request.profile().settings.timeout_ms));
-        tokio::time::timeout(timeout, self.exchange(request))
-            .await
-            .map_err(|_| Failure::Timeout)?
+        let started = Instant::now();
+        let result = async {
+            let _slot = self.busy.try_lock().map_err(|_| Failure::Unavailable)?;
+            let timeout = Duration::from_millis(u64::from(request.profile().settings.timeout_ms));
+            tokio::time::timeout(timeout, self.exchange(request))
+                .await
+                .map_err(|_| Failure::Timeout)?
+        }
+        .await;
+        let outcome = match &result {
+            Ok(_) => Observation::ProposalReceived,
+            Err(Failure::Timeout) => Observation::Timeout,
+            Err(Failure::BudgetExhausted) => Observation::BudgetExhausted,
+            Err(Failure::Unavailable) => Observation::Unavailable,
+            Err(Failure::InvalidResponse) => Observation::InvalidProposal,
+            Err(_) => Observation::Failed,
+        };
+        record_explanation_operation(Stage::Generation, outcome, started.elapsed());
+        result
     }
 }
 

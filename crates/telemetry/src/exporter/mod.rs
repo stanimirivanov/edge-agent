@@ -1,5 +1,6 @@
 //! Bounded loopback OTLP lifecycle for synchronous process entry points.
 
+mod explanation;
 mod signals;
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,8 @@ const EXPORT_TIMEOUT: Duration = Duration::from_millis(250);
 const QUEUE: usize = 64;
 const BATCH: usize = 8;
 const CARDINALITY: usize = 20; // Four stages times five outcomes, never IDs.
+const EXPLANATION_CARDINALITY: usize =
+    crate::ExplanationStage::ALL.len() * crate::ExplanationOutcome::ALL.len();
 const BODY_LIMIT: usize = 262_144;
 const BOUNDARIES: [f64; 6] = [0.001, 0.01, 0.1, 1.0, 5.0, 30.0];
 
@@ -153,12 +156,30 @@ impl Telemetry {
                     .with_interval(Duration::from_secs(1))
                     .build(),
             )
-            .with_view(|_| metric_stream())
+            .with_view(|instrument| {
+                if matches!(
+                    instrument.name(),
+                    crate::EXPLANATION_OPERATIONS | crate::EXPLANATION_DURATION
+                ) {
+                    Stream::builder()
+                        .with_cardinality_limit(EXPLANATION_CARDINALITY)
+                        .build()
+                        .ok()
+                } else {
+                    metric_stream()
+                }
+            })
             .build();
         let meter = metrics.meter(instrumentation_scope);
         let subscriber = tracing_subscriber::registry().with(signals::Signals {
             tracer: traces.tracer(instrumentation_scope),
             operations: meter.u64_counter(EVENT_SPINE_OPERATIONS_TOTAL).build(),
+            explanation_operations: meter.u64_counter(crate::EXPLANATION_OPERATIONS).build(),
+            explanation_duration: meter
+                .f64_histogram(crate::EXPLANATION_DURATION)
+                .with_unit("s")
+                .with_boundaries(BOUNDARIES.to_vec())
+                .build(),
             duration: meter
                 .f64_histogram(EVENT_SPINE_OPERATION_DURATION_SECONDS)
                 .with_unit("s")

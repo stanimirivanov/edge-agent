@@ -104,6 +104,8 @@ async fn model_failures_render_the_exact_baseline_and_leave_original_bytes_uncha
 
 #[path = "support/database.rs"]
 mod database;
+#[path = "process_telemetry/explanation.rs"]
+mod explanation_telemetry;
 #[allow(dead_code)]
 mod support;
 
@@ -129,6 +131,9 @@ async fn process(
         command.env("EDGEAGENT_RESEARCH_EXPLANATION_JOB", job);
     }
     if mode == "offline-explanation-worker" {
+        if let Ok(endpoint) = std::fs::read_to_string(profile.root.join("otlp-endpoint")) {
+            command.env("EDGEAGENT_RESEARCH_OTLP_ENDPOINT", endpoint);
+        }
         command
             .env_remove("EDGEAGENT_RESEARCH_OWNER_ACQUISITION")
             .env_remove("EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION");
@@ -186,6 +191,12 @@ async fn durable_worker_recovers_before_owner_reads_and_commits_one_authorized_t
         ] {
             let (event, bytes) = support::governed_event(label)?;
             let owner = support::Profile::new(&bytes)?;
+            let mode = match label {
+                "success" => 2,
+                "denied" => 1,
+                _ => 0,
+            };
+            let mut observer = explanation_telemetry::Observer::start(&owner.root, mode).await?;
             let initial = process(
                 &owner,
                 &db.schema,
@@ -431,6 +442,14 @@ async fn durable_worker_recovers_before_owner_reads_and_commits_one_authorized_t
             .await?;
             assert!(recovered.status.success());
             assert_eq!(recovered.stdout, first.stdout);
+            let outcome = match label {
+                "success" => "deterministic",
+                "uncertain" => "uncertain_attempt",
+                "denied" | "withdrawn" | "revoked" => "disclosure_denied",
+                _ => "authority_unavailable",
+            };
+            observer.assert_outcomes(&[outcome, "recovered"], mode == 0)?;
+            observer.close().await?;
         }
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM edgeagent_explanation_completions")

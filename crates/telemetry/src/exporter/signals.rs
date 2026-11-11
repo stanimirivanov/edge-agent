@@ -21,15 +21,24 @@ use tracing_subscriber::{Layer, layer::Context as LayerContext};
 pub(super) struct Signals {
     pub(super) tracer: SdkTracer,
     pub(super) operations: Counter<u64>,
+    pub(super) explanation_operations: Counter<u64>,
+    pub(super) explanation_duration: Histogram<f64>,
     pub(super) duration: Histogram<f64>,
 }
 
 impl<S: Subscriber> Layer<S> for Signals {
     fn enabled(&self, metadata: &tracing::Metadata<'_>, _: LayerContext<'_, S>) -> bool {
-        metadata.target() == "edgeagent.event_spine"
+        matches!(
+            metadata.target(),
+            "edgeagent.event_spine" | "edgeagent.explanation"
+        )
     }
 
     fn on_event(&self, event: &Event<'_>, _: LayerContext<'_, S>) {
+        if event.metadata().target() == "edgeagent.explanation" {
+            super::explanation::record(self, event);
+            return;
+        }
         let Some(signal) = Signal::read(event) else {
             return;
         };

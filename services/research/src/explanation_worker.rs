@@ -4,7 +4,7 @@ use crate::{
     runtime::{Result, clock_ms},
 };
 use edgeagent_contracts::{
-    explanation::{Fallback, Refusal, ServingPermit},
+    explanation::{Companion, Fallback, Outcome, Refusal, ServingPermit},
     explanation_profile::Profile,
 };
 use edgeagent_research_application::{
@@ -17,7 +17,13 @@ use edgeagent_research_postgres::{
     explanation_attempts::Recovery,
     explanation_completion::{Completion, Receipt},
 };
-use std::{io::Read as _, time::Duration};
+use edgeagent_telemetry::{
+    ExplanationOutcome as Observation, ExplanationStage as Stage, record_explanation_operation,
+};
+use std::{
+    io::Read as _,
+    time::{Duration, Instant},
+};
 
 /// Process one exact durable job. Internal recovery does not grant serving authority.
 /// # Errors
@@ -27,19 +33,62 @@ pub async fn execute(
     scope: &str,
     id: Option<&str>,
 ) -> Result<Option<Receipt>> {
+    let started = Instant::now();
+    let mut outcome = Observation::Failed;
+    let result = execute_inner(store, scope, id, &mut outcome).await;
+    if result.is_err() {
+        outcome = Observation::Failed;
+    } else if outcome != Observation::Recovered
+        && let Ok(Some(receipt)) = &result
+    {
+        outcome = terminal_outcome(receipt);
+    }
+    record_explanation_operation(Stage::Completion, outcome, started.elapsed());
+    result
+}
+fn terminal_outcome(receipt: &Receipt) -> Observation {
+    let Ok(companion) = Companion::decode(receipt.bytes()) else {
+        return Observation::Failed;
+    };
+    match companion.outcome {
+        Outcome::Generated { .. } => Observation::Generated,
+        Outcome::Fallback { reason, .. } => match reason {
+            Fallback::Disabled => Observation::Deterministic,
+            Fallback::Unavailable => Observation::Unavailable,
+            Fallback::Timeout => Observation::Timeout,
+            Fallback::BudgetExhausted => Observation::BudgetExhausted,
+            Fallback::InvalidProposal => Observation::InvalidProposal,
+            Fallback::UncertainAttempt => Observation::UncertainAttempt,
+        },
+        Outcome::Refused { reason } => match reason {
+            Refusal::DisclosureDenied => Observation::DisclosureDenied,
+            Refusal::AuthorityUnavailable => Observation::AuthorityUnavailable,
+        },
+    }
+}
+async fn execute_inner(
+    store: &PostgresResearchStore,
+    scope: &str,
+    id: Option<&str>,
+    outcome: &mut Observation,
+) -> Result<Option<Receipt>> {
     let Some(job) = store.explanation_job(scope, id).await? else {
+        *outcome = Observation::Idle;
         return Ok(None);
     };
     if job.receipt.is_some() {
+        *outcome = Observation::Recovered;
         return Ok(job.receipt);
     }
     let recovery = store
         .recover_explanation_attempt(&job.job, || clock_ms().unwrap_or(-1))
         .await?;
     if matches!(recovery, Recovery::Pending { .. }) {
+        *outcome = Observation::Pending;
         return Ok(None);
     }
     if matches!(recovery, Recovery::Terminal) {
+        *outcome = Observation::Recovered;
         return Ok(store.recover_explanation(&job.request, &job.job).await?);
     }
     let path = std::env::var("EDGEAGENT_RESEARCH_EXPLANATION_PROFILE")?;
@@ -50,7 +99,18 @@ pub async fn execute(
     let profile = Profile::decode(&bytes)?;
     let decision =
         publication::decode_decision(job.original.receipt.decision().ok_or("missing decision")?)?;
-    let prepared = Prepared::new(job.original.receipt.record(), &decision, &profile)?;
+    let started = Instant::now();
+    let prepared = Prepared::new(job.original.receipt.record(), &decision, &profile);
+    record_explanation_operation(
+        Stage::Validation,
+        if prepared.is_ok() {
+            Observation::Validated
+        } else {
+            Observation::Failed
+        },
+        started.elapsed(),
+    );
+    let prepared = prepared?;
     let reason = match &recovery {
         Recovery::Fallback(spent) => {
             let binding = &spent.intent().binding;

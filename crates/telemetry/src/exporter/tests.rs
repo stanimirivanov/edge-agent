@@ -131,3 +131,48 @@ fn unknown_debug_fields_and_invalid_classifications_never_become_exportable()
     assert!(!formatted.load(Ordering::Relaxed));
     Ok(())
 }
+
+#[derive(Clone, Default)]
+struct ExplanationCapture(Arc<Mutex<Vec<super::explanation::Signal>>>);
+impl<S: tracing::Subscriber> Layer<S> for ExplanationCapture {
+    fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
+        if let Some(signal) = super::explanation::Signal::read(event)
+            && let Ok(mut captured) = self.0.lock()
+        {
+            captured.push(signal);
+        }
+    }
+}
+#[test]
+fn explanation_projection_is_closed_and_never_formats_sensitive_fields() -> Result<(), ExportError>
+{
+    use crate::{ExplanationOutcome, ExplanationStage, record_explanation_operation};
+    let capture = ExplanationCapture::default();
+    let _facade = crate::FACADE_TEST_LOCK.lock().map_err(|_| "facade lock")?;
+    let formatted = Arc::new(AtomicBool::new(false));
+    let sensitive = SensitiveDebug(formatted.clone());
+    tracing::subscriber::with_default(tracing_subscriber::registry().with(capture.clone()), || {
+        for stage in ExplanationStage::ALL {
+            for outcome in ExplanationOutcome::ALL {
+                record_explanation_operation(stage, outcome, Duration::from_millis(5));
+            }
+        }
+        tracing::event!(target:"edgeagent.explanation",tracing::Level::INFO,
+            event_name="edgeagent.explanation.operation",stage="completion",outcome="generated",duration_seconds=0.1,
+            payload=?sensitive);
+        tracing::event!(target:"edgeagent.explanation",tracing::Level::INFO,
+            event_name="edgeagent.explanation.operation",stage="completion",outcome="arbitrary",duration_seconds=0.1);
+        tracing::event!(target:"edgeagent.explanation",tracing::Level::INFO,
+            event_name="edgeagent.explanation.operation",stage="arbitrary",outcome="generated",duration_seconds=0.1);
+        tracing::event!(target:"edgeagent.explanation",tracing::Level::INFO,
+            event_name="edgeagent.explanation.operation",stage="completion",outcome="generated",duration_seconds=0.1,
+            artifact="private-artifact");
+        for duration in [-1.0, f64::NAN, f64::INFINITY, 41.0] {
+            tracing::event!(target:"edgeagent.explanation",tracing::Level::INFO,
+                event_name="edgeagent.explanation.operation",stage="completion",outcome="generated",duration_seconds=duration);
+        }
+    });
+    assert_eq!(capture.0.lock().map_err(|_| "capture")?.len(), 45);
+    assert!(!formatted.load(Ordering::Relaxed));
+    Ok(())
+}
