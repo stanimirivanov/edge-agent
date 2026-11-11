@@ -295,6 +295,11 @@ impl Suite {
         fixtures::load()
     }
 
+    /// Canonical identity of this exact suite, rubric and baseline.
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+
     /// Frozen usefulness cases, including unresolved cases.
     pub fn cases(&self) -> &[Case] {
         &self.cases

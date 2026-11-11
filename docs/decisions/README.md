@@ -222,3 +222,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0108](0108-enable-bounded-otlp-in-gateway-and-projector.md) | Accepted | Enable bounded loopback OTLP in Gateway and the audit projector. |
 | [ADR-0109](0109-bound-evidence-grounded-explanations.md) | Accepted | Bound evidence-grounded explanations. |
 | [ADR-0110](0110-require-marketdata-serving-reviews.md) | Accepted | Require MarketData reviews for explanation serving. |
+| [ADR-0111](0111-own-local-explanation-qualification-runtime.md) | Proposed | Own the local explanation qualification runtime. |

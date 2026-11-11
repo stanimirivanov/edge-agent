@@ -426,3 +426,66 @@ Scheduling does not load a model profile or grant execution authority.
 The real PostgreSQL and JetStream proof runs via
 `cargo xtask verify --check research-worker-broker --python python3`
 with isolated `EDGEAGENT_POSTGRES_URL` and `EDGEAGENT_NATS_URL`.
+
+## Pinned model qualification driver
+
+[ADR-0111](../decisions/0111-own-local-explanation-qualification-runtime.md)
+describes the opt-in Linux CPU launcher. Build its bridge with
+`cargo build --locked -p edgeagent-research --example qualify_explanation`.
+The bridge uses the existing HTTP adapter and frozen evaluator. Its default
+location is `target/debug/examples/qualify_explanation`.
+
+Copy the [manifest template](../../services/research/fixtures/explanations/qualification-manifest.example.json)
+to a private absolute path and replace every placeholder with reviewed local
+paths and SHA-256 digests. Record the model's license and every required runtime
+library. The template is deliberately incomplete. A compatible llama.cpp server
+must support the pinned adapter protocol and CPU launch flags documented in the
+[reviewed server reference](https://github.com/ggml-org/llama.cpp/blob/b12188/tools/server/README.md).
+No selected model or real-model result is supplied with this driver.
+
+The manifest's hardware fields come from `hardware()` in
+`scripts/qualify_explanation_model.py`. Its `runtime_id(manifest)` computes
+`profile.deployment.runtime` from executable, library and weights digests,
+hardware, thread count, context size, supervisor source digest and the fixed
+launch revision. The profile
+uses the existing canonical `research.explanation.profile.v1` format. Pin the
+reviewed prompt, validator and renderer revisions. Hash the canonical profile
+bytes for the manifest's profile pin. Keep all operator manifests and reports
+outside the repository. The helper binary and runtime libraries must be built
+or reviewed for the intended runtime before their pins are recorded.
+
+Run `python3 scripts/qualify_explanation_model.py --manifest /private/manifest.json --report /private/preflight.json`
+to check local pins without inference. Add
+`--execute-manifest <sha256-of-the-exact-manifest-file>` to collect candidate
+outputs. Every report path must be new. Collection owns a loopback server,
+checks the process and listener before and after requests, and terminates it
+when finished. The launch allows 120 seconds for a successful `/health` response. The helper has a
+600-second bound and uses the profile's per-request deadline without retries.
+Only invented fixture data enters this path. The checked-in
+[adversarial context corpus](../../services/research/fixtures/explanations/model-context-v1.tsv)
+is bound separately to the frozen evaluator suite.
+
+The private `edgeagent.explanation-qualification.v1` report includes exact
+accepted proposals, safe failures, profile
+and suite identities, blinded order and presentation digests. Raw rejected
+responses and runtime output are discarded. Collection also writes a separate
+`.pairs.json` file. Give each reviewer only that file and the frozen rubric.
+Each independently supplied review contains `reviewer` and `ratings`. Each
+rating has `id`, `presentation`, and `preference`, whose value is `first`,
+`second`, or `tie`. The review import file contains exactly two review records.
+Authenticate reviewer independence before importing it.
+
+Run `python3 scripts/qualify_explanation_model.py --manifest /private/manifest.json --collection /private/collection.json --reviews /private/reviews.json --report /private/assessment.json`
+to reconcile both reviews without inference. The evaluator revalidates retained
+proposals and requires the exact usefulness and adversarial case census.
+Missing reviews, changed inputs and unresolved reader tasks cannot qualify.
+The command returns 2 for unqualified evidence and 0 only for a passing assessed
+report. The report always records `generation_enabled=false` because activation
+is a separate reviewed operation. The current 20 unresolved tasks keep the
+suite incomplete even after a successful collection and review.
+
+Run `python3 -m unittest discover -s tests -p test_qualify_explanation_model.py`
+and `cargo test --locked -p edgeagent-research --example qualify_explanation`
+for manifest, identity, transport, failure and review-import verification.
+The transport test uses a deterministic local server. A real model qualification
+remains pending until licensed artifacts and independent ratings are available.
