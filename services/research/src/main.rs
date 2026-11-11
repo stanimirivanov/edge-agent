@@ -19,6 +19,7 @@ fn main() -> ExitCode {
         let telemetry = match args.first().map(String::as_str) {
             Some("offline-worker") => start_telemetry("offline-worker"),
             Some("offline-relay") => start_telemetry("offline-relay"),
+            Some("offline-explanation-worker") => start_telemetry("offline-explanation-worker"),
             _ => Ok(None),
         };
         let Ok(telemetry) = telemetry else {
@@ -46,7 +47,11 @@ fn start_telemetry(
 ) -> Result<Option<Telemetry>, Box<dyn std::error::Error + Send + Sync>> {
     Telemetry::start(
         "EDGEAGENT_RESEARCH_OTLP_ENDPOINT",
-        "edgeagent.research.event-spine",
+        if role == "offline-explanation-worker" {
+            "edgeagent.research.explanation"
+        } else {
+            "edgeagent.research.event-spine"
+        },
         role,
         Component::Research.as_str(),
     )

@@ -2,9 +2,14 @@
 
 #![forbid(unsafe_code)]
 
+mod explanation;
 /// Opt-in exporter lifecycle for process composition roots.
 #[cfg(feature = "otlp")]
 pub mod exporter;
+pub use explanation::{
+    EXPLANATION_DURATION, EXPLANATION_OPERATIONS, ExplanationOutcome, ExplanationStage,
+    record_explanation_operation,
+};
 
 use edgeagent_contracts::MessageEnvelope;
 use edgeagent_messaging::DeliveryMetadata;

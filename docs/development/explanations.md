@@ -545,3 +545,43 @@ proposal and fallback composition. With an isolated `EDGEAGENT_POSTGRES_URL`,
 run `cargo xtask verify --check research-explanation-worker --check research-evidence-processes --check research-persistence --python python3`
 for process restart, concurrent completion, commit rollback, owner policy bounds,
 revocation during evidence loading, lifecycle refusal and original-byte checks.
+
+## Bounded explanation telemetry
+
+`offline-explanation-worker` opts in through
+`EDGEAGENT_RESEARCH_OTLP_ENDPOINT=http://127.0.0.1:<port>`, using the existing
+bounded loopback OTLP exporter. Ambient `OTEL_*` overrides are rejected. Its
+instrumentation scope is `edgeagent.research.explanation`; resource attributes
+are only `service.name=edgeagent.research` and
+`edgeagent.worker.role=offline-explanation-worker`.
+
+`edgeagent.explanation.operations` counts operations and
+`edgeagent.explanation.operation.duration` records seconds. Both carry only
+`stage` and `outcome`, with at most 45 combinations per instrument. The
+`edgeagent.explanation.operation` span adds only `duration_seconds` (0–40).
+The existing event-spine instruments retain their 20-combination limit.
+
+Stages are `generation` (HTTP model port), `validation` (local input and allowlist
+preparation), and `completion` (durable worker invocation). Outcomes are
+`proposal_received`, `validated`, `generated`, `deterministic`, `unavailable`,
+`timeout`, `budget_exhausted`, `invalid_proposal`, `uncertain_attempt`,
+`disclosure_denied`, `authority_unavailable`, `recovered`, `pending`, `idle`, and
+`failed`. A received proposal has not passed semantic validation. A recovered
+receipt counts as recovery rather than another fresh completion. Failed
+invocations do not claim a durable terminal result. The current runtime still
+uses deterministic fallback; these observations do not enable model execution.
+
+The projection rejects unknown fields, dimensions, invalid durations and debug
+payloads without formatting them. It exports no artifact, job, scope, evidence,
+model or prompt identifiers, documents, raw responses or error text. It ignores
+ambient trace context. Export uses the existing 64-span queue, batches of eight,
+262144-byte body ceiling and 250ms HTTP timeout, without retries. Collector
+failure cannot change completion or receipt recovery; telemetry is best effort
+and is not an audit ledger. Cancellation before an operation finishes may omit
+its observation.
+
+The `research-explanation-worker` process gate decodes actual OTLP metrics and
+traces and checks deterministic fallback, uncertain-attempt fallback, denied or
+unavailable authority and recovery. It also retains the durable assertions while
+the collector stalls or returns HTTP 503. Telemetry library tests exercise every
+bounded classification and reject payload and arbitrary-dimension injection.
