@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "runtime": {"path": "/absolute/path/llama-server", "sha256": "REPLACE_WITH_RUNTIME_SHA256"},
+  "weights": {"path": "/absolute/path/model.gguf", "sha256": "REPLACE_WITH_WEIGHTS_SHA256"},
+  "license": {"path": "/absolute/path/MODEL_LICENSE", "sha256": "REPLACE_WITH_REVIEWED_LICENSE_SHA256"},
+  "helper": {"path": "/absolute/path/qualify_explanation", "sha256": "REPLACE_WITH_HELPER_SHA256"},
+  "prompt": {"path": "/absolute/path/system-prompt.txt", "sha256": "REPLACE_WITH_PROMPT_SHA256"},
+  "profile": {"path": "/absolute/path/explanation-profile.json", "sha256": "REPLACE_WITH_CANONICAL_PROFILE_SHA256"},
+  "libraries": [],
+  "hardware": {"machine": "REPLACE", "kernel": "REPLACE", "cpu_count": 0, "cpuinfo_sha256": "REPLACE"},
+  "threads": 1,
+  "context": 4096
+}
