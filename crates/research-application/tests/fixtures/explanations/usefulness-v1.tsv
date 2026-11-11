@@ -1,0 +1,30 @@
+U01	one	0d3c0079e08643511109f35d49e852001e357480c31649bc013b828906a9cbc0	One eligible candidate	Identify the candidate and the basis for inclusion.
+U02	two	78cca6e83affefc0fb4213adaba901f605d2af0169aabbb56fe474ef3e492fef	Two candidates with distinct scores	Identify the leader and the score comparison.
+U03	narrow	5d3c6f50422e46f47ae9b8230a36d0d20da1d45767ebf68b09d771eb64632510	Three candidates with a narrow lead	Distinguish a small lead from a large separation.
+U04	-	-	Equal scores resolved by the configured tie-break	Explain why the displayed order resolves a tie.
+U05	negative	fee1f64d022786d47dc4e842ccc72ef6bab248799b06bbe1c309522e7fba454f	All eligible scores are negative	Distinguish relative rank from positive performance.
+U06	zero	6a9cade5bebafecf407be000131d9c8730bbe745295637f36f7a8744a3e75b7f	A zero score separates positive and negative scores	Identify what the zero value represents.
+U07	similar	1dcc60645b5af7c16d99136feaa46f1f935e280f4766ea279fc7f425f9addc28	Similar instrument identifiers	Attribute each result to the correct instrument.
+U08	liquidity	ece7260904cff18d760cdd92642396fdb368c66c94decd2d9fec82166925d962	One candidate fails the liquidity floor	Identify the reason it was excluded.
+U09	-	-	Observed liquidity equals the configured floor	Identify how the boundary applies.
+U10	-	-	One candidate fails the volatility ceiling	Find the breached limit and its unit.
+U11	-	-	An opening gap exceeds its ceiling	Distinguish the gap from close-to-close volatility.
+U12	limits	7e464d0fda628848bb186ca38a7ec14cdea67dca62497474886f502291390c2f	A candidate breaches both gap and volatility limits	Identify both adverse reasons.
+U13	-	-	An approved long-only artifact	Identify the supported direction without inferring authorization to trade.
+U14	-	-	The requested horizon equals the policy maximum	Identify the applicable horizon restriction.
+U15	-	-	A request uses a narrow approved universe	Identify the scope of the ranking.
+U16	-	-	A candidate falls outside the allowed regime	Identify the regime constraint.
+U17	-	-	A flat regime is permitted	Distinguish the regime label from the ranking.
+U18	-	-	An event at the exclusion window's first endpoint	Explain why the event qualifies for exclusion.
+U19	-	-	An event at the exclusion window's last endpoint	Locate the event reason and its time boundary.
+U20	-	-	Complete event coverage with no qualifying event	Distinguish a checked absence from unknown coverage.
+U21	-	-	Two evidence sources have different ages within the ceiling	Identify which source is closer to the freshness cutoff.
+U22	-	-	Evidence is exactly at the age ceiling	Find the cutoff and how it was applied.
+U23	-	-	Event and observation times differ	Identify the two times and their meanings.
+U24	two	dfd352507e9dd6935bec587779f4bec6bfdfd63ab7c531766f5987e494ee9a46	Sources have distinct evidence digests	Follow a claim to its supporting source.
+U25	one	b007c92ad0006d51cc83a919bc4e4a9b5a2ca269239d8ea2fb1f8bcc003ffe5f	One cited source supports several claims	Locate the right citation for a selected claim.
+U26	-	-	Multiple sources support distinct policy reasons	Match each reason to its supporting evidence.
+U27	-	-	The artifact has a short expiry	Locate the validity cutoff.
+U28	-	-	A short lookback and longer holding horizon	Distinguish measurement from intended horizon.
+U29	-	-	An approved context excerpt accompanies the artifact	Distinguish context from the facts used in ranking.
+U30	-	-	The artifact carries several required disclosures	Find the limitation relevant to the reader task.
