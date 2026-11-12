@@ -20,6 +20,10 @@ async fn snapshot(db: &Database) -> Result<Vec<String>> {
         "edgeagent_research_approvals",
         "edgeagent_research_controls",
         "edgeagent_research_lifecycle",
+        "edgeagent_explanation_grants",
+        "edgeagent_explanation_attempts",
+        "edgeagent_explanation_completions",
+        "edgeagent_research_explanation_jobs",
         "edgeagent_message_inbox",
         "edgeagent_message_outbox",
     ] {
@@ -231,4 +235,121 @@ async fn pinned_policy_abstention_replays_without_active_configuration() -> Resu
         Ok(())
     }).catch_unwind().await;
     db.finish(result).await
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn explanation_replay_revalidates_without_model_publication_or_mutation() -> Result {
+    use edgeagent_contracts::{
+        explanation::{Companion, Variant},
+        explanation_profile::Profile as ExplanationProfile,
+    };
+    use edgeagent_research_application::{
+        explanation::Allowlist,
+        explanation_context::{Grant, Purpose, Request},
+        explanation_worker::Prepared,
+        publication::decode_decision,
+    };
+    use edgeagent_research_postgres::{
+        PostgresResearchStore,
+        explanation_attempts::{Intent, ReservationOutcome},
+        explanation_completion::Completion,
+    };
+    let db = Database::new().await?;
+    let result = AssertUnwindSafe(async {
+        let (event, bytes) = event("explanation-replay")?;
+        let owner = Profile::new(&bytes)?;
+        let input = event.to_json()?;
+        let original = run(&owner, &db.schema, &input).await?;
+        assert!(original.status.success());
+        let store = PostgresResearchStore::new(db.pool.clone());
+        let retained = store.retained_for_replay(&event).await?.ok_or("original")?;
+        let decision = decode_decision(retained.receipt.decision().ok_or("decision")?)?;
+        let hash = edgeagent_contracts::evidence::DailyEvidenceArtifact::hash;
+        let profile: ExplanationProfile = serde_json::from_value(serde_json::json!({
+            "deployment":{"runtime":"a".repeat(64),"weights":"b".repeat(64)},
+            "settings":{"seed":1,"temperature_milli":0,"max_output_tokens":512,"timeout_ms":1000},
+            "prompt":"c".repeat(64), "tools":"none",
+            "validator":hash(b"research-explanation-allowlist-v1").as_str(),
+            "renderer":hash(b"research-explanation-trace.v1").as_str()
+        }))?;
+        let prepared = Prepared::new(retained.receipt.record(), &decision, &profile)?;
+        let allowlist = Allowlist::from_verified(retained.receipt.record(), &decision)?;
+        let mut proposal = allowlist.standard()?.proposal().clone();
+        proposal.claims[0].variant = Variant::PlainLanguage;
+        let validated = allowlist.validate(&proposal.canonical_bytes()?)?;
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut grant = Grant {request: Request {anchor: prepared.binding().anchor.clone(),
+            audience:"00000000000000000000000000000002".into(), purpose: Purpose::ModelDisclosure, document: None},
+            valid_from_ms: now-1000, expires_at_ms: now+60000, revoked:false};
+        store.set_explanation_grant(&grant,1).await?;
+        let intent = Intent {binding: prepared.binding().clone(),input_digest:prepared.input_digest(),audience:grant.request.audience.clone(),deadline_ms:now+30000};
+        let ReservationOutcome::Reserved(permit) = store.reserve_explanation_attempt(&intent, || now).await? else {return Err("permit".into())};
+        grant.request.purpose = Purpose::ExplanationServing;
+        store.set_explanation_grant(&grant,1).await?;
+        let receipt = store.complete_explanation(&publication_request(&event)?, prepared.binding(),
+            Completion::Generated {explanation:&validated,permit:&permit},Some(&grant), || now,"2026-11-11T00:00:00Z").await?;
+        store.admit_explanation_job("operator",retained.receipt.publication()).await?;
+        let job = Companion::decode(receipt.bytes())?.job().id()?;
+        let profile_path = owner.root.join("explanation.json");
+        std::fs::write(&profile_path,profile.canonical_bytes()?)?;
+        // No model server, runtime executable, weights or prompt is installed.
+        // The replay application accepts no model/attempt/publication capability.
+        let command = || {
+            let mut command = owner.command(&db.schema,"offline-explanation-replay");
+            command.env("EDGEAGENT_RESEARCH_EXPLANATION_JOB",&job)
+                .env("EDGEAGENT_RESEARCH_EXPLANATION_PROFILE",&profile_path)
+                .env("EDGEAGENT_RESEARCH_REPLAY_RENDERER",edgeagent_research_application::RENDERER_REVISION)
+                .env("EDGEAGENT_RESEARCH_REPLAY_MOMENTUM",edgeagent_research_domain::momentum::REVISION)
+                .env_remove("EDGEAGENT_RESEARCH_EXECUTION_CONFIGURATION")
+                .env_remove("EDGEAGENT_RESEARCH_OWNER_ACQUISITION");
+            command
+        };
+        let before = snapshot(&db).await?;
+        for _ in 0..2 {
+            let output = invoke(command(),b"").await?;
+            assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+            assert_eq!(output.stdout,receipt.bytes());
+        }
+        for key in ["EDGEAGENT_RESEARCH_REPLAY_RENDERER","EDGEAGENT_RESEARCH_REPLAY_MOMENTUM","EDGEAGENT_RESEARCH_EXPLANATION_JOB","EDGEAGENT_RESEARCH_SCOPE"] {
+            let mut changed = command(); changed.env(key,"e".repeat(64));
+            let output = invoke(changed,b"").await?;
+            assert!(!output.status.success() && output.stdout.is_empty());
+        }
+        let mut changed = profile.clone(); changed.prompt = "e".repeat(64);
+        std::fs::write(&profile_path,changed.canonical_bytes()?)?;
+        let output = invoke(command(),b"").await?;
+        assert!(!output.status.success() && output.stdout.is_empty());
+        std::fs::write(&profile_path,profile.canonical_bytes()?)?;
+        let owner_script = std::fs::read(&owner.owner)?;
+        for exit in [75,77] {
+            std::fs::write(&owner.owner,format!("#!/bin/sh\nexit {exit}\n"))?;
+            let output = invoke(command(),b"").await?;
+            assert!(!output.status.success() && output.stdout.is_empty());
+        }
+        std::fs::write(&owner.owner,owner_script)?;
+        std::fs::write(&owner.artifact,b"corrupt invented evidence")?;
+        let output = invoke(command(),b"").await?;
+        assert!(!output.status.success() && output.stdout.is_empty());
+        std::fs::write(&owner.artifact,&bytes)?;
+        assert_eq!(snapshot(&db).await?,before);
+        // Fault only this owned fixture: a valid but changed presentation must
+        // fail its authenticated publication binding, even if it could render.
+        let mut corrupt = Companion::decode(receipt.bytes())?;
+        let edgeagent_contracts::explanation::Outcome::Generated {proposal} = &mut corrupt.outcome else {return Err("generated".into())};
+        proposal.claims[0].variant = Variant::Standard;
+        sqlx::raw_sql("DROP TRIGGER edgeagent_explanation_completion_immutable ON edgeagent_explanation_completions").execute(&db.pool).await?;
+        sqlx::query("UPDATE edgeagent_explanation_completions SET companion=$1").bind(corrupt.canonical_bytes()?).execute(&db.pool).await?;
+        let damaged = snapshot(&db).await?;
+        let output = invoke(command(),b"").await?;
+        assert!(!output.status.success() && output.stdout.is_empty());
+        assert_eq!(snapshot(&db).await?,damaged);
+        Ok(())
+    }).catch_unwind().await;
+    db.finish(result).await
+}
+fn publication_request(
+    event: &edgeagent_contracts::MessageEnvelope,
+) -> Result<edgeagent_contracts::research::ResearchRequest> {
+    Ok(edgeagent_research_application::publication::evaluation_request(event)?)
 }
