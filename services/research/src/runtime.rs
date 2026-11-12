@@ -80,6 +80,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-invalidation-check"
                 | "offline-replay"
                 | "offline-explain"
+                | "offline-explain-v2"
         )
     {
         return Err("invalid research mode".into());
@@ -271,7 +272,7 @@ async fn execute(mode: &str) -> Result {
             let revision=match mode {"offline-governance-install"=>1,"offline-governance-approve"=>2,_=>3};
             store.govern(&profile,revision).await?;return Ok(());
         }
-        if matches!(mode, "offline-replay" | "offline-explain") {
+        if matches!(mode, "offline-replay" | "offline-explain" | "offline-explain-v2") {
             use std::io::{Read as _,Write as _};let mut bytes=Vec::new();std::io::stdin().take(262_145).read_to_end(&mut bytes)?;
             if bytes.len() > 262_144 { return Err("oversized research input".into()); }
             let delivery=MessageEnvelope::from_json(&bytes)?;
@@ -284,16 +285,20 @@ async fn execute(mode: &str) -> Result {
                 let bytes=if let Some(selection)=snapshot.selection {
                     let loader=OwnerLoader::from_retained_profile(&selection.profile(&request.scope))?;
                     let verified=replay::verify_execution(&loader,&delivery,&snapshot.receipt,selection,&renderer,&momentum).await?;
-                    if mode == "offline-explain" {
+                    if matches!(mode, "offline-explain" | "offline-explain-v2") {
                         use edgeagent_research_application::explanation::Allowlist;
                         let envelope = snapshot.receipt.decision().ok_or("explanation requires retained decision")?;
                         let decision = publication::decode_decision(envelope)?;
-                        Allowlist::from_verified(snapshot.receipt.record(), &decision)?.render()?.into_bytes()
+                        if mode == "offline-explain-v2" {
+                            edgeagent_research_application::explanation_intent::Preview::from_verified(snapshot.receipt.record(), &decision)?.standard()?.into_bytes()
+                        } else {
+                            Allowlist::from_verified(snapshot.receipt.record(), &decision)?.render()?.into_bytes()
+                        }
                     } else {
                         verified
                     }
                 } else {
-                    if mode == "offline-explain" {
+                    if matches!(mode, "offline-explain" | "offline-explain-v2") {
                         return Err("explanation requires retained decision".into());
                     }
                     let loader=OwnerLoader::from_environment()?;

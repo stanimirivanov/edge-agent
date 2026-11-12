@@ -105,6 +105,24 @@ impl<'a> Facts<'a> {
         &self.anchor
     }
 
+    /// Exact retained request: universe, cutoff and implementation/configuration pins.
+    pub const fn request(&self) -> &ResearchRequest {
+        self.request
+    }
+    /// Exact retained intent, policy assessment and approval bindings.
+    pub const fn decision(&self) -> &DecisionProvenance {
+        let DecisionRecord::V1(decision) = self.decision;
+        decision
+    }
+    /// Historical artifact expiry; never a current serving authorization.
+    pub const fn expires_at_ms(&self) -> i64 {
+        self.expires_at_ms
+    }
+    /// Full source census, including references for excluded instruments.
+    pub const fn evidence(&self) -> &[EvidenceRef] {
+        self.evidence
+    }
+
     /// Recursively key-sorted JSON with one LF, independent of map-order features.
     /// # Errors
     /// Refuses serialization errors or an oversized fact projection.
