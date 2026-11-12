@@ -133,6 +133,11 @@ built `EDGEAGENT_RESEARCH_IMAGE`, isolated `EDGEAGENT_POSTGRES_URL` and
 `EDGEAGENT_NATS_URL`. The wrapper supplies fresh host binary paths and numeric
 identity, and the test owns only its schemas, streams and named Research containers.
 The image-smoke supervisor removes its dependency containers and volumes on failure.
+Dependency startup and port-discovery failures report the failed operation and
+exit status with the final 4000 characters of captured Docker stderr. Timeouts
+retain bounded partial diagnostics, including byte output. Cleanup still runs
+for every owned dependency, including a container whose startup failed.
+
 This packaged proof is separate from the original four-process crash/rebuild gate.
 
 ## M06 explanation qualification

@@ -65,6 +65,20 @@ def main() -> int:
             ["cargo", "xtask", "verify", "--check", "research-image-owner", "--python", sys.executable],
             cwd=root, env=environment, check=False, timeout=330,
         ).returncode
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        command = error.cmd
+        operation = command[0] if isinstance(command, (list, tuple)) and command else "process"
+        status = (f"exited with status {error.returncode}"
+                  if isinstance(error, subprocess.CalledProcessError)
+                  else f"timed out after {error.timeout}s")
+        print(f"packaged Research qualification: {operation} {status}", file=sys.stderr)
+        detail = error.stderr or ""
+        if isinstance(detail, bytes):
+            detail = detail.decode("utf-8", errors="replace")
+        if detail.strip():
+            # Preserve the final daemon/pull error without flooding CI with progress.
+            print(detail.strip()[-4000:], file=sys.stderr)
+        return 1
     finally:
         for name in reversed(owned):
             subprocess.run(["docker", "rm", "-f", "-v", name], check=False,
