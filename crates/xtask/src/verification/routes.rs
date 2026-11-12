@@ -127,6 +127,16 @@ const ROUTES: &[Route] = &[
         checks: &["research-processes"],
     },
     Route {
+        matcher: Matcher::Exact("services/research/examples/qualify_explanation_process.rs"),
+        guides: &["docs/development/research-processes.md"],
+        checks: &["research-processes"],
+    },
+    Route {
+        matcher: Matcher::Prefix("services/research/tests/process_explanations/"),
+        guides: &["docs/development/research-processes.md"],
+        checks: &["research-processes"],
+    },
+    Route {
         matcher: Matcher::Exact("services/research/tests/processes.rs"),
         guides: &["docs/development/research-processes.md"],
         checks: &["research-processes"],

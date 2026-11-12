@@ -134,3 +134,47 @@ built `EDGEAGENT_RESEARCH_IMAGE`, isolated `EDGEAGENT_POSTGRES_URL` and
 identity, and the test owns only its schemas, streams and named Research containers.
 The image-smoke supervisor removes its dependency containers and volumes on failure.
 This packaged proof is separate from the original four-process crash/rebuild gate.
+
+## M06 explanation qualification
+
+The protected `research-processes` gate includes three named journeys under
+`process_explanations`: `scheduled_fallback_queries_and_replay_preserve_original_artifact`,
+`controlled_generation_queries_and_revocation_preserve_original_artifact`, and
+`controlled_injection_is_rejected_and_falls_back_through_queries`.
+
+All three submit through Gateway, acquire actual invented MarketData evidence,
+publish the original Research artifact, and admit a durable explanation job
+through the real scheduler consumer. The production Research worker exercises
+its generation-disabled deterministic fallback path. A separate host-only Cargo
+example, `qualify_explanation_process`, exercises controlled generation and
+injection/fallback. The process wrapper builds that example and obtains its
+executable path from Cargo artifacts alongside the four service binaries.
+
+The example requires explicit `EDGEAGENT_SYNTHETIC_EXPLANATION_PROOF=1`, the
+owned invented-fixture marker, synthetic provider configuration, a fresh exact
+job, and fixed invented deployment identities. It independently replays retained
+Research using actual owner evidence, spends a durable attempt under an installed
+Research model-disclosure grant, and uses the existing bounded HTTP model adapter
+against the process driver's owned synthetic loopback server. Valid output selects a
+supported presentation variant. An injected instruction field is rejected and
+falls back without retaining the rejected response. The example commits through
+the existing sealed validation and atomic completion APIs.
+
+The owned fixture explicitly asserts invented-data model-disclosure and completion
+owner rights. This is a test seam, not MarketData's production model-disclosure
+authority or a real-runtime/weights attestation. Actual serving checks still run
+through both Research and MarketData processes. These integration results do not
+qualify model quality, license rights, real deployment identity or production
+model-disclosure policy. Production model generation remains disabled; no runtime
+flag, public service command or container-image executable is added for it.
+
+The real relay/projector path exposes the separately bound companion through
+Gateway while preserving exact original artifact bytes. Each journey recovers the
+same terminal receipt, verifies one companion/outbox intent, performs read-only
+replay, and checks unchanged retained rows. Controlled cases observe one actual
+HTTP model request; the server remains live across receipt recovery and replay,
+which add none. Revoking MarketData's
+serving review after projection creation denies the next explanation query while
+the original artifact remains available. Missing synthetic opt-in refuses before
+spending an attempt. The rejected injection sentinel cannot appear in retained
+Research, explanation or outbox rows. The crash/rebuild matrix remains M06-PR20.
