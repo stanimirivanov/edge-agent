@@ -223,3 +223,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0109](0109-bound-evidence-grounded-explanations.md) | Accepted | Bound evidence-grounded explanations. |
 | [ADR-0110](0110-require-marketdata-serving-reviews.md) | Accepted | Require MarketData reviews for explanation serving. |
 | [ADR-0111](0111-own-local-explanation-qualification-runtime.md) | Proposed | Own the local explanation qualification runtime. |
+| [ADR-0112](0112-version-verified-explanation-preparation.md) | Accepted | Version verified explanation preparation. |

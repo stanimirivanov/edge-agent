@@ -9,6 +9,7 @@ pub mod audit;
 pub mod evidence;
 pub mod execution;
 pub mod explanation;
+pub mod explanation_facts;
 pub mod explanation_profile;
 mod message_type;
 mod messaging;

@@ -625,3 +625,35 @@ isolated `EDGEAGENT_POSTGRES_URL`, run
 `cargo xtask verify --check research-replay-postgres --python python3` for real
 process restarts, owner-read refusals, tampered retained output, exact companion
 bytes and unchanged Research, explanation, inbox and outbox row snapshots.
+
+## Versioned verified facts and preparation
+
+[ADR-0112](../decisions/0112-version-verified-explanation-preparation.md)
+introduces a shared foundation for the next renderer, evaluator and runtime
+slices. `edgeagent_contracts::explanation_facts::Facts::from_bound` projects
+`research.explanation-facts.v1` from an exact artifact/decision pair. The caller
+must first authenticate retained state and independently verify it against
+owner evidence. Binding checks do not establish those authorities or current
+model-disclosure/serving permission.
+
+The read-only facts retain the request/configuration/implementation identities,
+decision/approval bindings and assessment, direction, horizon, ordered ranks
+with ppm scores, the full artifact evidence census and each rank's supporting
+references with availability times, expiry and
+explicitly unqualified scenarios. Narrative artifact text is excluded. Missing
+policy measurements and event/observation times stay absent; availability is
+not a substitute for those times. A model cannot deserialize or mutate this
+projection.
+
+`CanonicalPreparation::from_verified` in the Research application constructs
+`research.explanation-input.v2` with these facts, a validated standard proposal
+and null untrusted context. Nested keys are sorted, bytes end with one LF, and
+`input_digest()` hashes exactly `input()`. Both runtime and qualification must
+use this preparation when deliberately adopting the new revision. The result
+is bounded by the existing model port's 65,536-byte input limit.
+
+This API does not select a profile, call a model or commit a companion. Existing
+`Prepared::new`, rendering/replay and the frozen qualification suite keep their
+legacy bytes and identities. Adoption requires later revision-aware runtime,
+replay and qualification work; do not persist a new input digest through legacy
+replay or claim the old suite qualifies this new input. Generation stays disabled.
