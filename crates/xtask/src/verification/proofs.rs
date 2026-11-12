@@ -176,6 +176,9 @@ const RESEARCH_PROCESSES: Target = Target {
         "process_explanations::scheduled_fallback_queries_and_replay_preserve_original_artifact",
         "process_explanations::controlled_generation_queries_and_revocation_preserve_original_artifact",
         "process_explanations::controlled_injection_is_rejected_and_falls_back_through_queries",
+        "process_explanations::recovery::death_at_reservation_request_response_and_commit_recovers_one_terminal",
+        "process_explanations::recovery::late_model_response_cannot_replace_recovered_fallback",
+        "process_explanations::recovery::relay_death_duplicate_delivery_and_rebuild_preserve_current_authorization",
         "telemetry::research_exports_bounded_signals_and_survives_stalled_collector",
         "telemetry::gateway_and_projector_export_without_depending_on_collector_success",
     ],
@@ -1182,8 +1185,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 172);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 172);
+        assert_eq!(inventory.len(), 175);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 175);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

@@ -1,6 +1,7 @@
 //! Real scheduler/worker, owner authority, projection, Gateway queries and replay.
 use super::*;
 mod model;
+mod recovery;
 use edgeagent_contracts::{
     evidence::DailyEvidenceArtifact,
     explanation::{Companion, Fallback, Outcome},

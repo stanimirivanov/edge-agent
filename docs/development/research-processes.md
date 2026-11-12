@@ -178,3 +178,41 @@ serving review after projection creation denies the next explanation query while
 the original artifact remains available. Missing synthetic opt-in refuses before
 spending an attempt. The rejected injection sentinel cannot appear in retained
 Research, explanation or outbox rows. The crash/rebuild matrix remains M06-PR20.
+
+## M06 crash, redelivery and rebuild qualification
+
+The protected gate also runs the three `process_explanations::recovery` proofs:
+
+- `death_at_reservation_request_response_and_commit_recovers_one_terminal`
+  kills actual qualification processes after durable reservation, during an
+  observed HTTP request, after validated response, during a blocked PostgreSQL
+  completion commit, and after committed completion before stdout delivery.
+- `late_model_response_cannot_replace_recovered_fallback` keeps a real HTTP
+  response pending past the retained five-second attempt deadline. Another
+  Research process commits uncertain-attempt fallback. The server then returns
+  a valid response within the fixture's longer HTTP timeout; the fixture observes
+  successful validation before allowing the late commit, which is refused.
+- `relay_death_duplicate_delivery_and_rebuild_preserve_current_authorization`
+  receives and queries the actual broker publication while mark-published is
+  blocked, kills the relay, waits its real 30-second lease, and restarts it.
+  An additional publish without deduplication headers exercises actual duplicate
+  delivery. Rebuilding the disposable projector from all retained deliveries
+  restores exact checkpoint bytes, preserves current owner denial, and returns
+  identical companion bytes after a new owner approval.
+
+Observation files and response holding belong only to the explicitly opted-in
+synthetic fixture. PostgreSQL barriers are installed only in owned disposable
+schemas. The tests observe ready states before killing; exceptions do not stand
+in for process death, and clocks, deadlines and leases are not rewritten. Losing
+an invocation during COMMIT can leave its outcome ambiguous: recovery accepts the
+first durable generated result or one uncertain fallback, never partial terminal
+state or an additional attempt. A killed pre-send reservation remains spent even
+when the live model witness observed zero requests.
+
+Each recovery verifies one attempt, one terminal companion, one explanation
+publication intent, unchanged original artifact bytes, and no extra model request.
+The late result cannot alter retained rows. Relay retry is at least once; broker
+publish deduplication does not establish exactly-once external execution. The
+projector restart retains its original Research authority URL and audience so
+missing configuration cannot masquerade as preserved revocation. Production
+model generation and the PR19 synthetic-rights/identity limitations are unchanged.
