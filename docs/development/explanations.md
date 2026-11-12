@@ -657,3 +657,32 @@ This API does not select a profile, call a model or commit a companion. Existing
 legacy bytes and identities. Adoption requires later revision-aware runtime,
 replay and qualification work; do not persist a new input digest through legacy
 replay or claim the old suite qualifies this new input. Generation stays disabled.
+
+## Intent and chronology preview v2
+
+[ADR-0113](../decisions/0113-render-retained-explanation-intent.md) defines
+`research-explanation-trace.v2`. Run `edgeagent-research offline-explain-v2`
+with the same input delivery, private schema, operator scope, owner reader and
+replay revision pins as `offline-explain`. Both modes independently replay the
+original completion against current authorized owner evidence before emitting
+text. Neither command grants serving or model-disclosure authority.
+
+The v2 header identifies the original artifact and decision. Fixed metadata
+shows the full requested universe, configuration/implementation pins, direction,
+holding horizon, historical measurement lookback, decision cutoff, artifact
+expiry and complete source census. Each source has its exact availability and
+age at the decision cutoff in milliseconds. Event and observation timestamps
+are explicitly unavailable, not inferred from availability. No freshness ceiling
+or policy measurement is inferred from a reason code.
+
+Validated rank presentation can use either existing variant. Every result keeps
+all original rank/reason claims, citations and the research-only/no-trading-
+authority disclosure, plus fixed historical-evidence/not-current-quote and
+unqualified-scenario/risk-illustration disclosures. Replaying the same typed
+choices over the same verified facts returns identical v2 text without a model.
+
+Legacy `offline-explain`, preparation, persisted companions and replay keep
+their exact existing behavior. This preview is not selectable by production
+profiles and does not change the frozen evaluator. Reader tasks requiring
+missing policy limits or event/observation evidence remain unresolved until
+verified enrichment and the subsequent complete suite revision land.
