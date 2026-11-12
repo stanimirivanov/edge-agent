@@ -3,6 +3,7 @@
     clippy::disallowed_methods,
     reason = "Owned schema inspection, observed lock barrier and disposable projection rebuild."
 )]
+mod process_explanations;
 mod process_support;
 #[path = "process_telemetry/mod.rs"]
 mod telemetry;

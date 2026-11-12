@@ -123,6 +123,7 @@ impl Journey {
                         edgeagent_research_postgres::explanation_grants::MIGRATION,
                         edgeagent_research_postgres::explanation_attempts::MIGRATION,
                         edgeagent_research_postgres::explanation_completion::MIGRATION,
+                        edgeagent_research_postgres::explanation_jobs::MIGRATION,
                     ])
                     .collect(),
             )
@@ -178,6 +179,7 @@ impl Journey {
                 ("acquisition", vec![evidence::DEFINITIONS[0].subject()?]),
                 ("market", vec![research_acquisition::REQUEST.subject()?]),
                 ("research", vec![research_acquisition::DECIDED.subject()?]),
+                ("explanation-jobs", vec![PUBLISHED.subject()?]),
                 (
                     "projector",
                     vec![
@@ -263,6 +265,7 @@ impl Journey {
             "gateway" => "EDGEAGENT_PROCESS_GATEWAY",
             "market" => "EDGEAGENT_PROCESS_MARKET_DATA",
             "research" => "EDGEAGENT_PROCESS_RESEARCH",
+            "qualification" => "EDGEAGENT_PROCESS_EXPLANATION_QUALIFICATION",
             _ => "EDGEAGENT_PROCESS_PROJECTOR",
         };
         let mut command = tokio::process::Command::new(binary(key)?);

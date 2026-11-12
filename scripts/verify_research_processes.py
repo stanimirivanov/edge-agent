@@ -22,8 +22,10 @@ def main() -> int:
         if not os.environ.get(key):
             print(f"required process prerequisite unavailable: {key}", file=sys.stderr)
             return 1
-    argv = ["cargo", "build", "--locked", "--message-format=json"]
-    for package in binaries:
+    packages = tuple(binaries)
+    binaries["qualify_explanation_process"] = "EDGEAGENT_PROCESS_EXPLANATION_QUALIFICATION"
+    argv = ["cargo", "build", "--locked", "--bins", "--example", "qualify_explanation_process", "--message-format=json"]
+    for package in packages:
         argv.extend(["-p", package])
     build = subprocess.run(argv, cwd=root, stdout=subprocess.PIPE, text=True, check=False)
     environment = os.environ.copy()

@@ -1103,3 +1103,24 @@ fn stream_publication_changes_route_atomic_and_storage_proofs() -> Result<(), St
     }
     Ok(())
 }
+
+#[test]
+fn explanation_process_qualification_routes_its_protected_gate() -> Result<(), String> {
+    for path in [
+        "services/research/examples/qualify_explanation_process.rs",
+        "services/research/tests/process_explanations/mod.rs",
+    ] {
+        let advice = advise(&[path.to_owned()])?;
+        assert_eq!(advice.mandatory, DEFAULT_COMMAND);
+        assert!(
+            advice.checks.contains("research-processes"),
+            "missing qualification gate for {path}"
+        );
+        assert!(
+            advice
+                .guides
+                .contains("docs/development/research-processes.md")
+        );
+    }
+    Ok(())
+}
