@@ -10,10 +10,12 @@ use axum::{
 use serde_json::{Value, json};
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 pub struct Server {
     calls: Arc<AtomicUsize>,
+    ready: Arc<AtomicBool>,
+    pause: tokio::sync::watch::Sender<bool>,
     task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 impl Server {
@@ -34,12 +36,17 @@ impl Server {
         let response = json!({"model":weights,"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":serde_json::to_string(&proposal)?}}]});
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = calls.clone();
+        let ready = Arc::new(AtomicBool::new(false));
+        let observed_ready = ready.clone();
+        let (pause, paused) = tokio::sync::watch::channel(false);
         let expected = std::str::from_utf8(input)?.to_owned();
         let app = Router::new().route(
             "/v1/chat/completions",
             post(move |request: Request| {
                 let (calls, response, expected) =
                     (observed.clone(), response.clone(), expected.clone());
+                let ready = observed_ready.clone();
+                let mut paused = paused.clone();
                 async move {
                     let count = calls.fetch_add(1, Ordering::SeqCst);
                     let bytes = to_bytes(request.into_body(), 262_144)
@@ -49,6 +56,17 @@ impl Server {
                         serde_json::from_slice(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
                     if count != 0 || body["messages"][1]["content"] != expected {
                         return Err(StatusCode::BAD_REQUEST);
+                    }
+                    ready.store(true, Ordering::SeqCst);
+                    loop {
+                        let blocked = *paused.borrow_and_update();
+                        if !blocked {
+                            break;
+                        }
+                        paused
+                            .changed()
+                            .await
+                            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
                     }
                     Ok((
                         [(header::CONTENT_TYPE, "application/json")],
@@ -64,7 +82,21 @@ impl Server {
             listener.local_addr()?.to_string(),
         )?;
         let task = tokio::spawn(async move { axum::serve(listener, app).await });
-        Ok(Self { calls, task })
+        Ok(Self {
+            calls,
+            ready,
+            pause,
+            task,
+        })
+    }
+    pub fn hold(&self) {
+        self.pause.send_replace(true);
+    }
+    pub fn release(&self) {
+        self.pause.send_replace(false);
+    }
+    pub fn ready(&self) -> bool {
+        self.ready.load(Ordering::SeqCst)
     }
     pub fn calls(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
@@ -72,6 +104,7 @@ impl Server {
 }
 impl Drop for Server {
     fn drop(&mut self) {
+        self.release();
         self.task.abort();
     }
 }

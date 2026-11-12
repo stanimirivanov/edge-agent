@@ -54,6 +54,20 @@ fn required(name: &str) -> Result<String> {
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
+// Optional observation barriers belong only to this explicitly opted-in fixture.
+async fn checkpoint(root: &std::path::Path, stage: &str) -> Result {
+    if std::env::var("EDGEAGENT_SYNTHETIC_EXPLANATION_BARRIER")
+        .ok()
+        .as_deref()
+        == Some(stage)
+    {
+        std::fs::write(root.join(format!("proof-{stage}")), b"ready")?;
+        while !root.join(format!("proof-release-{stage}")).is_file() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+    Ok(())
+}
 async fn run() -> Result<Vec<u8>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if required("EDGEAGENT_SYNTHETIC_EXPLANATION_PROOF")? != "1"
@@ -152,6 +166,7 @@ async fn run() -> Result<Vec<u8>> {
     else {
         return Err("attempt spent".into());
     };
+    checkpoint(&root, "reserved").await?;
     let endpoint: SocketAddrV4 =
         std::fs::read_to_string(root.join("synthetic-model-endpoint"))?.parse()?;
     if *endpoint.ip() != std::net::Ipv4Addr::LOCALHOST || endpoint.port() == 0 {
@@ -163,6 +178,15 @@ async fn run() -> Result<Vec<u8>> {
         PROMPT.into(),
     )?;
     let resolved = prepared.infer(&profile, &model).await?;
+    std::fs::write(
+        root.join("proof-model-result"),
+        if resolved.reason.is_none() {
+            b"generated".as_slice()
+        } else {
+            b"fallback".as_slice()
+        },
+    )?;
+    checkpoint(&root, "response").await?;
     let serving = Request {
         purpose: Purpose::ExplanationServing,
         ..grant.request
@@ -195,6 +219,7 @@ async fn run() -> Result<Vec<u8>> {
             &time,
         )
         .await?;
+    checkpoint(&root, "committed").await?;
     let ResearchRecord::Artifact(_) = original.receipt.record() else {
         return Err("artifact".into());
     };

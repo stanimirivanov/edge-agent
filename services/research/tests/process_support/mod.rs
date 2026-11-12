@@ -32,6 +32,7 @@ pub struct Journey {
     pub gateway_address: std::net::SocketAddr,
     pub projector_address: std::net::SocketAddr,
     servers: Vec<tokio::process::Child>,
+    explanation_authority: Option<(String, String)>,
     root_pool: sqlx::PgPool,
     client: async_nats::Client,
 }
@@ -236,6 +237,7 @@ impl Journey {
                 gateway_address: address()?,
                 projector_address: address()?,
                 servers: Vec::new(),
+                explanation_authority: None,
             })
         }
         .await;
@@ -382,6 +384,8 @@ impl Journey {
         endpoint: Option<&str>,
         authority: Option<(&str, &str)>,
     ) -> Result {
+        self.explanation_authority =
+            authority.map(|(origin, audience)| (origin.to_owned(), audience.to_owned()));
         for (service, address) in [
             ("projector", self.projector_address),
             ("gateway", self.gateway_address),
@@ -500,11 +504,13 @@ impl Journey {
                 ..Default::default()
             })
             .await?;
-        self.servers.push(
-            self.command("projector", "serve")?
-                .stdout(Stdio::null())
-                .spawn()?,
-        );
+        let mut command = self.command("projector", "serve")?;
+        if let Some((origin, audience)) = &self.explanation_authority {
+            command
+                .env("EDGEAGENT_PROJECTOR_RESEARCH_AUTHORITY_URL", origin)
+                .env("EDGEAGENT_PROJECTOR_EXPLANATION_AUDIENCE", audience);
+        }
+        self.servers.push(command.stdout(Stdio::null()).spawn()?);
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 if tokio::net::TcpStream::connect(self.projector_address)
