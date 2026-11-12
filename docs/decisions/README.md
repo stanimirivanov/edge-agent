@@ -225,3 +225,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0111](0111-own-local-explanation-qualification-runtime.md) | Proposed | Own the local explanation qualification runtime. |
 | [ADR-0112](0112-version-verified-explanation-preparation.md) | Accepted | Version verified explanation preparation. |
 | [ADR-0113](0113-render-retained-explanation-intent.md) | Accepted | Render retained explanation intent. |
+| [ADR-0114](0114-render-reconciled-policy-measurements.md) | Accepted | Render reconciled policy measurements. |
