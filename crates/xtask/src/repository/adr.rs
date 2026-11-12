@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 111] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 112] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -576,6 +576,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 111] = [
         number: 111,
         path: "docs/decisions/0111-own-local-explanation-qualification-runtime.md",
         title: "Own the local explanation qualification runtime",
+    },
+    PublishedIdentity {
+        number: 112,
+        path: "docs/decisions/0112-version-verified-explanation-preparation.md",
+        title: "Version verified explanation preparation",
     },
 ];
 
