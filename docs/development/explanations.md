@@ -839,3 +839,35 @@ or grant training, tools, prompt/response persistence or cross-request reuse.
 The `research-correlation-postgres` gate includes real model-review administration,
 revocation/retention, integrity and competing transaction tests. The
 `research-evidence-processes` gate includes review/permit command qualification.
+
+## Shared owned-deployment verification
+
+`research::explanation_deployment` exposes the qualification bridge's existing
+Linux `Observation`, `Verifier` and model-port lease implementation. The bridge
+now constructs `Verifier::new(observation, deployment)` rather than defining a
+private verifier. Initialization checks process start ticks, the supervisor's
+sibling-process relationship, exact arguments, exclusive IPv4 loopback listener
+ownership and the bounded executable hash. Subsequent checks retain the same
+process/listener checks and executable metadata stamp; endpoint acquisition still
+requires the exact observed loopback port. Model response metadata grants none
+of these properties.
+
+This is a behavior-preserving extraction under ADR-0111's operator-controlled
+host/process-namespace assumptions. The supervisor still pins libraries, weights,
+hardware and launch settings, prevents endpoint replacement during a lease and
+reaps its owned server. The shared verifier does not launch or reap a process,
+lock an OS port, authorize disclosure, qualify a model or enable the worker.
+Collection/report/profile formats, frozen v1 suite and historical artifacts are
+unchanged; this extraction does not adopt the complete evaluator revision.
+
+Rebuilding the bridge produces a new helper executable. Hash that exact reviewed
+binary into a new private manifest and retain fresh matching collection/assessment
+evidence; never reuse an old helper checksum or rewrite historical evidence to
+make the new binary appear qualified. Supervisor/runtime/weights and profile
+pins remain subject to their existing independent checks.
+
+Verify the shared OS boundary with
+`cargo test --locked -p edgeagent-research --test explanation_deployment`, alongside
+`cargo test --locked -p edgeagent-research --test explanation_model --example qualify_explanation`
+and `python3 -m unittest discover -s tests -p test_qualify_explanation_model.py`.
+These tests use local listeners and invented responses, not a real model.
