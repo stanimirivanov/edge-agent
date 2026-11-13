@@ -87,6 +87,12 @@ pub enum Command {
         attestation: String,
         evidence: Box<Evidence>,
     },
+    ApproveRuntime {
+        scope: String,
+        revision: i64,
+        attestation: String,
+        evidence: Box<Evidence>,
+    },
     Revoke {
         scope: String,
         revision: i64,
@@ -99,6 +105,8 @@ pub enum Command {
 enum Wire<T> {
     #[serde(rename = "research.explanation-qualification.review.v1")]
     V1(T),
+    #[serde(rename = "research.explanation-qualification.review.v2")]
+    V2(T),
 }
 fn pin(value: &str) -> bool {
     digest(value) && value.bytes().any(|b| b != b'0')
@@ -106,32 +114,40 @@ fn pin(value: &str) -> bool {
 impl Command {
     pub fn scope(&self) -> &str {
         match self {
-            Self::Approve { scope, .. } | Self::Revoke { scope, .. } => scope,
+            Self::ApproveRuntime { scope, .. }
+            | Self::Approve { scope, .. }
+            | Self::Revoke { scope, .. } => scope,
         }
     }
     pub fn revision(&self) -> i64 {
         match self {
-            Self::Approve { revision, .. } | Self::Revoke { revision, .. } => *revision,
+            Self::ApproveRuntime { revision, .. }
+            | Self::Approve { revision, .. }
+            | Self::Revoke { revision, .. } => *revision,
         }
     }
     pub fn profile(&self) -> &Profile {
         match self {
-            Self::Approve { evidence, .. } => &evidence.collection.profile,
+            Self::ApproveRuntime { evidence, .. } | Self::Approve { evidence, .. } => {
+                &evidence.collection.profile
+            }
             Self::Revoke { profile, .. } => profile,
         }
     }
     pub fn approved(&self) -> bool {
-        matches!(self, Self::Approve { .. })
+        matches!(self, Self::Approve { .. } | Self::ApproveRuntime { .. })
     }
     pub fn bytes(&self) -> Result<Vec<u8>, Error> {
         self.profile().canonical_bytes().map_err(|_| Error)?;
         let attestation = match self {
-            Self::Approve { attestation, .. } | Self::Revoke { attestation, .. } => attestation,
+            Self::ApproveRuntime { attestation, .. }
+            | Self::Approve { attestation, .. }
+            | Self::Revoke { attestation, .. } => attestation,
         };
         if !token(self.scope()) || self.revision() <= 0 || !pin(attestation) {
             return Err(Error);
         }
-        if let Self::Approve { evidence, .. } = self {
+        if let Self::Approve { evidence, .. } | Self::ApproveRuntime { evidence, .. } = self {
             let c = &evidence.collection;
             if [&c.suite, &c.preparation, &c.manifest, &c.helper]
                 .into_iter()
@@ -162,7 +178,12 @@ impl Command {
                 return Err(Error);
             }
         }
-        let mut bytes = canonical_json::to_vec(&Wire::V1(self)).map_err(|_| Error)?;
+        let mut bytes = canonical_json::to_vec(&if matches!(self, Self::ApproveRuntime { .. }) {
+            Wire::V2(self)
+        } else {
+            Wire::V1(self)
+        })
+        .map_err(|_| Error)?;
         bytes.push(b'\n');
         if bytes.len() > MAX_COMMAND_BYTES {
             return Err(Error);
@@ -173,7 +194,10 @@ impl Command {
         if bytes.len() > MAX_COMMAND_BYTES {
             return Err(Error);
         }
-        let Wire::V1(value): Wire<Self> = serde_json::from_slice(bytes).map_err(|_| Error)?;
+        let wire: Wire<Self> = serde_json::from_slice(bytes).map_err(|_| Error)?;
+        let value = match wire {
+            Wire::V1(value) | Wire::V2(value) => value,
+        };
         if value.bytes()? != bytes {
             return Err(Error);
         }

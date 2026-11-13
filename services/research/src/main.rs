@@ -19,7 +19,9 @@ fn main() -> ExitCode {
         let telemetry = match args.first().map(String::as_str) {
             Some("offline-worker") => start_telemetry("offline-worker"),
             Some("offline-relay") => start_telemetry("offline-relay"),
-            Some("offline-explanation-worker") => start_telemetry("offline-explanation-worker"),
+            Some("offline-explanation-worker" | "offline-explanation-worker-owned") => {
+                start_telemetry("offline-explanation-worker")
+            }
             _ => Ok(None),
         };
         let Ok(telemetry) = telemetry else {

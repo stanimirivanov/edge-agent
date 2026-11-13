@@ -46,7 +46,7 @@ pub async fn execute(
     record_explanation_operation(Stage::Completion, outcome, started.elapsed());
     result
 }
-fn terminal_outcome(receipt: &Receipt) -> Observation {
+pub(crate) fn terminal_outcome(receipt: &Receipt) -> Observation {
     let Ok(companion) = Companion::decode(receipt.bytes()) else {
         return Observation::Failed;
     };
@@ -212,7 +212,7 @@ async fn execute_inner(
     )
     .await
 }
-async fn commit(
+pub(crate) async fn commit(
     store: &PostgresResearchStore,
     request: &edgeagent_contracts::research::ResearchRequest,
     binding: &edgeagent_contracts::explanation::Binding,
@@ -260,7 +260,7 @@ async fn commit(
         Err(error) => Err(error.into()),
     }
 }
-async fn authorize(
+pub(crate) async fn authorize(
     owner: &OwnerEndpoint,
     event: &edgeagent_contracts::MessageEnvelope,
     serving: &Request,

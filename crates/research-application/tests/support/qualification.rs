@@ -9,8 +9,22 @@ use edgeagent_research_application::{
     explanation_qualification::protocol,
 };
 pub fn approved() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
-    let suite = Suite::complete()?;
-    let (preparation, validator, renderer) = protocol()?;
+    build(false)
+}
+pub fn runtime() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
+    build(true)
+}
+fn build(runtime: bool) -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
+    let suite = if runtime {
+        Suite::runtime()?
+    } else {
+        Suite::complete()?
+    };
+    let (preparation, validator, renderer) = if runtime {
+        edgeagent_research_application::explanation_qualification::runtime_protocol()?
+    } else {
+        protocol()?
+    };
     let profile = Profile {
         deployment: edgeagent_contracts::explanation_profile::Deployment {
             runtime: "a".repeat(64),
@@ -68,7 +82,22 @@ pub fn approved() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
         .find(|c| c.id() == "U08")
         .and_then(|c| c.input())
         .ok_or("safety input")?;
-    let probes = edgeagent_research_application::explanation_qualification::context_inputs()?
+    let contexts = if runtime {
+        Suite::runtime_probe_inputs()?
+            .into_iter()
+            .map(|(id, input)| {
+                (
+                    id,
+                    edgeagent_contracts::evidence::DailyEvidenceArtifact::hash(&input)
+                        .as_str()
+                        .into(),
+                )
+            })
+            .collect()
+    } else {
+        edgeagent_research_application::explanation_qualification::context_inputs()?
+    };
+    let probes = contexts
         .into_iter()
         .map(|(id, input)| {
             Ok(Case {
@@ -81,7 +110,7 @@ pub fn approved() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
             })
         })
         .collect::<Result<Vec<_>, Box<dyn std::error::Error + Send + Sync>>>()?;
-    Ok(Command::Approve {
+    let command = Command::Approve {
         scope: "scope".into(),
         revision: 1,
         attestation: "d".repeat(64),
@@ -107,5 +136,24 @@ pub fn approved() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
                 },
             ],
         }),
-    })
+    };
+    if runtime {
+        let Command::Approve {
+            scope,
+            revision,
+            attestation,
+            evidence,
+        } = command
+        else {
+            unreachable!()
+        };
+        Ok(Command::ApproveRuntime {
+            scope,
+            revision,
+            attestation,
+            evidence,
+        })
+    } else {
+        Ok(command)
+    }
 }

@@ -113,7 +113,11 @@ impl PostgresResearchStore {
         {
             return Err(invalid());
         }
-        let edgeagent_contracts::explanation_qualification::Command::Approve { evidence, .. } = c
+        let (edgeagent_contracts::explanation_qualification::Command::Approve { evidence, .. }
+        | edgeagent_contracts::explanation_qualification::Command::ApproveRuntime {
+            evidence,
+            ..
+        }) = c
         else {
             return Ok(None);
         };

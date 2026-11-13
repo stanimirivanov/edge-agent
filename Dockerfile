@@ -10,6 +10,7 @@ COPY .cargo/config.toml ./.cargo/config.toml
 COPY .sqlx ./.sqlx
 COPY crates ./crates
 COPY services ./services
+COPY scripts/run_explanation_owned.py scripts/qualify_explanation_model.py scripts/qualify_daily.py ./scripts/
 
 # SQLx checks the committed schema descriptions, never a build-time database.
 ENV SQLX_OFFLINE=true

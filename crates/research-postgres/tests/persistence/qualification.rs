@@ -46,6 +46,51 @@ async fn qualification_approvals_are_exact_audited_revocable_and_fenced() -> Res
         }).catch_unwind().await;
         guest.close().await;sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP OWNED BY {role}; DROP ROLE {role}"))).execute(&h.pool).await?;
         match denied {Ok(r)=>r?,Err(panic)=>std::panic::resume_unwind(panic)};
+        // Runtime-parity approvals remain separately versioned and can fence a
+        // durable attempt through revocation without upgrading historical reviews.
+        for migration in [edgeagent_research_postgres::explanation_grants::MIGRATION,
+            edgeagent_research_postgres::explanation_attempts::MIGRATION,
+            edgeagent_research_postgres::explanation_completion::MIGRATION] {
+            sqlx::raw_sql(migration).execute(&h.pool).await?;
+        }
+        let runtime=fixture::runtime()?;
+        let runtime_profile=runtime.profile().clone();
+        store.review_qualification(&VerifiedReview::decode(&runtime.bytes()?)?).await?;
+        let approval=store.qualification_approval("scope",&runtime_profile).await?.ok_or("runtime approval")?;
+        let grant=super::explanation_grants::grant(edgeagent_research_application::explanation_context::Purpose::ModelDisclosure);
+        store.set_explanation_grant(&grant,1).await?;
+        let request=edgeagent_contracts::model_disclosure::Request {
+            operation:edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000001")?,
+            research:edgeagent_contracts::research::ResearchRequest { scope:"scope".into(),request_id:"qualification".into(),implementation:"a".repeat(64),configuration:"b".repeat(64),decision_at_ms:100,lookback_sessions:1,instruments:vec!["00000000000000000000000000000001".into()] },
+            anchor:grant.request.anchor.clone(),acquisition:edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000002")?,
+            publication:"a".repeat(64),evidence:edgeagent_contracts::evidence::EvidenceDigest::new(&"b".repeat(64))?,
+            audience:grant.request.audience.clone(),purpose:edgeagent_contracts::model_disclosure::Purpose::ModelDisclosure,
+            profile:runtime_profile.clone(),input_contract:approval.preparation.clone(),input:"c".repeat(64),
+        };
+        let owner=edgeagent_contracts::model_disclosure::Permit {
+            review_key:request.review_key(&"d".repeat(64))?,rights_scope:"d".repeat(64),request,
+            review_revision:1,agreement:edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000003")?,
+            checked_at_ms:100,expires_at_ms:200,review_until_ms:200,retention_until_ms:200,
+        };
+        let intent=edgeagent_research_postgres::explanation_attempts::Intent {
+            binding:edgeagent_contracts::explanation::Binding {anchor:grant.request.anchor.clone(),profile:runtime_profile.id()?,evidence:"c".repeat(64)},
+            input_digest:"c".repeat(64),audience:grant.request.audience.clone(),deadline_ms:150,
+        };
+        let mut refreshed=owner.clone();
+        refreshed.request.operation=edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000004")?;
+        let authority=edgeagent_research_postgres::explanation_attempts::QualifiedAuthority {
+            owner,manifest:approval.manifest,helper:approval.helper,revision:approval.revision,assessment:approval.assessment,
+        };
+        let edgeagent_research_postgres::explanation_attempts::ReservationOutcome::Reserved(mut permit)=store.reserve_qualified_explanation_attempt(&intent,authority,||100).await? else { return Err("fresh attempt".into()); };
+        let mut foreign=refreshed.clone(); foreign.request.input="e".repeat(64);
+        assert!(permit.refresh_owner(foreign,110).is_err());
+        permit.refresh_owner(refreshed,110)?;
+        let mut tx=h.pool.begin().await?;
+        PostgresResearchStore::fence_explanation_result(&mut tx,&permit,||110).await?;tx.commit().await?;
+        let revoke=Command::Revoke {scope:"scope".into(),revision:2,attestation:"a".repeat(64),profile:runtime_profile};
+        store.review_qualification(&VerifiedReview::decode(&revoke.bytes()?)?).await?;
+        let mut tx=h.pool.begin().await?;
+        assert!(PostgresResearchStore::fence_explanation_result(&mut tx,&permit,||110).await.is_err());tx.rollback().await?;
         // Retained assessment/command corruption must never become approval.
         sqlx::raw_sql("ALTER TABLE edgeagent_explanation_qualification DISABLE TRIGGER USER").execute(&h.pool).await?;
         sqlx::query("UPDATE edgeagent_explanation_qualification SET assessment=repeat('a',64) WHERE revision=3").execute(&h.pool).await?;

@@ -442,6 +442,16 @@ async fn durable_worker_recovers_before_owner_reads_and_commits_one_authorized_t
             .await?;
             assert!(recovered.status.success());
             assert_eq!(recovered.stdout, first.stdout);
+            let owned_recovery = process(
+                &owner,
+                &db.schema,
+                "offline-explanation-worker-owned",
+                None,
+                Some(&id),
+            )
+            .await?;
+            assert!(owned_recovery.status.success());
+            assert_eq!(owned_recovery.stdout, first.stdout);
             let outcome = match label {
                 "success" => "deterministic",
                 "uncertain" => "uncertain_attempt",

@@ -75,6 +75,8 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-worker"
                 | "offline-explanation-scheduler"
                 | "offline-explanation-worker"
+                | "offline-explanation-worker-owned"
+                | "offline-explanation-runtime-collect"
                 | "offline-explanation-replay"
                 | "offline-relay"
                 | "offline-lifecycle"
@@ -95,6 +97,9 @@ pub fn run(args: &[String]) -> Result {
     result
 }
 async fn execute(mode: &str) -> Result {
+    if mode == "offline-explanation-runtime-collect" {
+        return crate::explanation_collection::collect().await;
+    }
     if mode == "offline-experiment" {
         use std::io::{Read as _, Write as _};
         let mut bytes = Vec::new();
@@ -182,11 +187,12 @@ async fn execute(mode: &str) -> Result {
             std::io::stdout().write_all(&verified)?;
             return Ok(());
         }
-        if mode=="offline-explanation-worker" {
+        if mode=="offline-explanation-worker" || mode=="offline-explanation-worker-owned" {
             use std::io::Write as _;
             let id=std::env::var("EDGEAGENT_RESEARCH_EXPLANATION_JOB").ok();
             if let Some(id)=&id {crate::loader::digest(id)?;}
-            if let Some(receipt)=tokio::time::timeout(Duration::from_secs(40),crate::explanation_worker::execute(&store,&scope,id.as_deref())).await?? {
+            let budget = if mode=="offline-explanation-worker-owned" { 240 } else { 40 };
+            if let Some(receipt)=tokio::time::timeout(Duration::from_secs(budget),async { if mode=="offline-explanation-worker-owned" { crate::explanation_guarded::execute(&store,&scope,id.as_deref()).await } else { crate::explanation_worker::execute(&store,&scope,id.as_deref()).await } }).await?? {
                 std::io::stdout().write_all(receipt.bytes())?;
             }
             return Ok(());

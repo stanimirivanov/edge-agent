@@ -117,3 +117,28 @@ fn qualification_keeps_the_historical_context_corpus_unchanged() {
         include_str!("../../../services/research/fixtures/explanations/model-context-v1.tsv")
     );
 }
+
+#[test]
+fn runtime_approval_is_versioned_and_independently_rescored() -> Result {
+    let command = fixture::runtime()?;
+    let bytes = command.bytes()?;
+    assert!(String::from_utf8(bytes.clone())?.contains("review.v2"));
+    let verified = VerifiedReview::decode(&bytes)?;
+    assert_eq!(verified.command().profile().id()?, command.profile().id()?);
+    assert_eq!(verified.assessment().len(), 64);
+    assert!(
+        VerifiedReview::decode(
+            &String::from_utf8(bytes)?
+                .replace("review.v2", "review.v1")
+                .into_bytes()
+        )
+        .is_err()
+    );
+    let mut wrong = command;
+    let Command::ApproveRuntime { evidence, .. } = &mut wrong else {
+        return Err("runtime".into());
+    };
+    evidence.collection.safety[0].input = "a".repeat(64);
+    assert!(VerifiedReview::decode(&wrong.bytes()?).is_err());
+    Ok(())
+}

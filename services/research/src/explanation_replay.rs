@@ -30,6 +30,59 @@ pub(crate) async fn execute(store: &PostgresResearchStore, scope: &str) -> Resul
     let profile = Profile::decode(&bytes)?;
     let renderer = std::env::var("EDGEAGENT_RESEARCH_REPLAY_RENDERER")?;
     let momentum = std::env::var("EDGEAGENT_RESEARCH_REPLAY_MOMENTUM")?;
+    if profile.renderer
+        == crate::explanation_owned::digest(
+            edgeagent_research_application::explanation_runtime::RENDERER_REVISION.as_bytes(),
+        )
+    {
+        use edgeagent_contracts::explanation::{Companion, Outcome};
+        use edgeagent_research_application::{
+            explanation_runtime::RuntimePreparation, worker::ExecutionLoader,
+        };
+        if renderer != edgeagent_research_application::RENDERER_REVISION
+            || momentum != edgeagent_research_domain::momentum::REVISION
+        {
+            return Err("unsupported replay revision".into());
+        }
+        let evidence = loader.load_execution(&input).await?;
+        let decision = edgeagent_research_application::publication::decode_decision(
+            original.receipt.decision().ok_or("decision")?,
+        )?;
+        let prepared = RuntimePreparation::from_verified(
+            original.receipt.record(),
+            &decision,
+            selection.bytes(),
+            &evidence,
+            None,
+        )?;
+        let binding = prepared.binding(&profile)?;
+        let companion = Companion::decode(receipt.bytes())?;
+        companion.bind(original.receipt.record(), &decision)?;
+        if companion.binding.anchor != binding.anchor
+            || companion.binding.profile != binding.profile
+            || companion.binding.evidence != binding.evidence
+        {
+            return Err("replay binding changed".into());
+        }
+        match companion.outcome {
+            Outcome::Generated { proposal } => {
+                prepared.validate(&proposal.canonical_bytes()?, None)?;
+            }
+            Outcome::Fallback { proposal, .. } => {
+                if proposal.canonical_bytes()?
+                    != prepared
+                        .standard(None)?
+                        .validated()
+                        .proposal()
+                        .canonical_bytes()?
+                {
+                    return Err("fallback changed".into());
+                }
+            }
+            Outcome::Refused { .. } => return Err("private refusal".into()),
+        }
+        return Ok(receipt.bytes().to_vec());
+    }
     verify(
         &loader,
         &input,
