@@ -4,7 +4,11 @@ use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 
-pub(crate) fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
+/// Encode recursively key-sorted JSON, independent of serde map-order features.
+/// No newline, size policy, authentication or authorization is added.
+/// # Errors
+/// Returns the underlying serialization failure.
+pub fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
     let value = serde_json::to_value(value)?;
     serde_json::to_vec(&CanonicalValue(&value))
 }

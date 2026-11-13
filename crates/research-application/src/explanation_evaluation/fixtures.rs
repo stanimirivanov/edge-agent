@@ -49,7 +49,11 @@ pub(super) fn load() -> Result<Suite, EvaluationError> {
     if identity != "2631d3bb0a693070a96592dd3b5c3d2ce3b39d1bcef9c5a54659c179cd23ca49" {
         return Err(INVALID);
     }
-    Ok(Suite { cases, identity })
+    Ok(Suite {
+        cases,
+        identity,
+        complete: false,
+    })
 }
 
 pub(super) fn build(id: &str, recipe: &str, task: &str) -> Result<Input, EvaluationError> {
@@ -136,5 +140,7 @@ pub(super) fn build(id: &str, recipe: &str, task: &str) -> Result<Input, Evaluat
         decision,
         baseline,
         standard,
+        complete_case: None,
+        prepared: None,
     })
 }

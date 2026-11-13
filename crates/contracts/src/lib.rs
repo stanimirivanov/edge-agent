@@ -13,6 +13,7 @@ pub mod explanation_facts;
 pub mod explanation_profile;
 mod message_type;
 mod messaging;
+pub use messaging::canonical_json::to_vec as canonical_json_bytes;
 pub mod policy_evidence;
 pub mod research;
 pub mod research_acquisition;

@@ -197,6 +197,21 @@ const ROUTES: &[Route] = &[
         checks: &["research-projection-contracts"],
     },
     Route {
+        matcher: Matcher::Prefix("crates/research-application/src/explanation_evaluation"),
+        guides: &["docs/development/explanations.md"],
+        checks: &["explanation-complete-evaluation"],
+    },
+    Route {
+        matcher: Matcher::Exact("crates/research-application/tests/explanation_complete.rs"),
+        guides: &["docs/development/explanations.md"],
+        checks: &["explanation-complete-evaluation"],
+    },
+    Route {
+        matcher: Matcher::Prefix("crates/research-application/tests/fixtures/explanations/"),
+        guides: &["docs/development/explanations.md"],
+        checks: &["explanation-complete-evaluation"],
+    },
+    Route {
         matcher: Matcher::Exact("services/research/src/explanation_worker.rs"),
         guides: &["docs/development/explanations.md"],
         checks: &[
