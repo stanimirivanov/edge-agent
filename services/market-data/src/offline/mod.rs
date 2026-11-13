@@ -3,6 +3,7 @@ mod bootstrap;
 mod config;
 mod fixture;
 mod handling;
+mod model_disclosure;
 mod policy;
 mod research;
 use handling::handle;
@@ -78,6 +79,7 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                         | "offline-research-policy-read"
                         | "offline-explanation-authorize"
                         | "offline-explanation-permit"
+                        | "offline-model-disclosure-permit"
                 )
             }) {
                 let mut cause = Some(error.as_ref() as &(dyn std::error::Error + 'static));
@@ -88,7 +90,9 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                             e.kind() == EvidenceStorageErrorKind::Denied
                                 || (matches!(
                                     args[0].as_str(),
-                                    "offline-explanation-authorize" | "offline-explanation-permit"
+                                    "offline-explanation-authorize"
+                                        | "offline-explanation-permit"
+                                        | "offline-model-disclosure-permit"
                                 ) && e.kind() == EvidenceStorageErrorKind::Expired)
                         })
                         || matches!(
@@ -104,7 +108,9 @@ pub(super) fn run(args: &[String]) -> std::process::ExitCode {
                             e.kind() == EvidenceStorageErrorKind::Backend
                                 || (matches!(
                                     args[0].as_str(),
-                                    "offline-explanation-authorize" | "offline-explanation-permit"
+                                    "offline-explanation-authorize"
+                                        | "offline-explanation-permit"
+                                        | "offline-model-disclosure-permit"
                                 ) && matches!(
                                     e.kind(),
                                     EvidenceStorageErrorKind::NotFound
@@ -163,6 +169,9 @@ async fn execute(config: &config::Config) -> Result {
         }
         let backend = object_store::local::LocalFileSystem::new_with_prefix(config.root.join("objects"))?;
         let storage = ImmutableEvidenceStore::new(Arc::new(backend), Duration::from_secs(15))?;
+        if matches!(config.command.as_str(), "offline-model-disclosure-review" | "offline-model-disclosure-permit") {
+            return model_disclosure::execute(config,&bridge,&ledger,&storage).await;
+        }
         let mut confirmed = config.confirmed.clone();
         if matches!(config.command.as_str(),"offline-research-read" | "offline-research-policy-read" | "offline-explanation-authorize" | "offline-explanation-permit") {
             use std::io::{Read as _,Write as _};

@@ -230,12 +230,18 @@ const RESEARCH_EVIDENCE_PROCESSES: Target = Target {
         "incomplete_owner_history_abstains_without_a_ready_reference",
         "policy_companions_preserve_daily_evidence_and_distinguish_synthetic_coverage",
         "explanation_authorization_requires_current_exact_owner_review",
+        "model_disclosure_commands_require_independent_current_owner_review",
     ],
 };
 const RESEARCH_CORRELATION: Target = Target {
     package: "edgeagent-market-data-postgres",
     name: "research",
-    identities: &["correlation_commit_failures_preserve_pending_work_without_inbox_or_outbox"],
+    identities: &[
+        "correlation_commit_failures_preserve_pending_work_without_inbox_or_outbox",
+        "model_disclosure::model_reviews_are_separate_current_and_exactly_bound",
+        "model_disclosure::model_review_administration_is_audited_serialized_and_append_only",
+        "model_disclosure::model_permit_waits_for_review_commit_and_observes_revocation",
+    ],
 };
 const GATEWAY_ADMISSION: Target = Target {
     package: "edgeagent-gateway",
@@ -1185,8 +1191,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 175);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 175);
+        assert_eq!(inventory.len(), 179);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 179);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

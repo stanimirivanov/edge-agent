@@ -791,3 +791,51 @@ reviews and fresh authenticated checks; PR32 must enforce them before dispatch
 alongside current Research grants, runtime attestation and durable attempts.
 Serving grants, Research-use permission and synthetic tests confer no model rights.
 This addition does not enable generation or authorize documents from another owner.
+
+## Owner model-disclosure review ledger
+
+MarketData implements [ADR-0117](../decisions/0117-specify-owner-model-disclosure-policy.md)
+in its private `edgeagent_model_disclosure_reviews` table. Apply migration
+`0013_model_disclosure_reviews.sql` after migration 0012, as the schema owner,
+before running the new commands. `offline-init` includes it for new profiles;
+existing profiles require an explicit owner-managed upgrade. Empty ledgers deny.
+Retain audit rows on rollback; older binaries ignore this additive table.
+
+With the existing offline root, database and `EDGEAGENT_OFFLINE_RESEARCH_SCOPE`
+configured, use `offline-model-disclosure-review <acquisition-id>` for an owner
+review and `offline-model-disclosure-permit <acquisition-id>` for a fresh check.
+Both run through the MarketData executable and its exclusive local profile lock.
+The review command consumes at most 10240 bytes: recursively key-sorted compact
+JSON plus one LF, containing exactly `request`, `revision`, `decision`, `agreement`,
+`valid_from_ms`, `expires_at_ms`. `request` is the model-disclosure Request data
+object (including the complete profile); `agreement` is an opaque nonzero 32-hex
+reference; `decision` is `allow`, `deny` or `revoke`; revisions start at one and
+advance consecutively. The owner resolves scope from the sealed acquisition,
+including listing and the full rights pin. No caller-supplied rights scope is used.
+
+The authenticated schema owner alone may append reviews. Actor and database time
+are recorded independently of command input. Only an identical retry of the latest
+revision by the same actor is idempotent. Updates, deletes and truncation refuse.
+Review changes and permit snapshots serialize on the same review-key lock.
+The latest revision is selected before testing decision and the inclusive-start,
+exclusive-end validity interval, so an expired or future review cannot uncover
+an older allow. Current rights and retention independently remain mandatory.
+
+The permit command consumes the canonical versioned Request bytes (maximum 8192),
+checks the configured acquisition and Research scope, verifies the actual retained
+object, then reconciles current owner correlation/publication/evidence and returns
+only the canonical permit. It emits no evidence content. Exit statuses follow
+existing owner reads: 77 denial, 75 unavailable dependency, 65 invalid contract.
+Model reviews never substitute for serving grants or Research disclosure grants.
+The historical metadata accessor is not read/disclosure authority.
+
+The API uses an owner-local `EvidenceAccess` adapter for current rights after
+storage verification. Research still must validate its anchor, actual prepared
+input/contract and independently attested local deployment, obtain fresh permits
+for every contributing acquisition and enforce durable dispatch authority in PR32.
+This ledger does not activate generation, authorize independently owned documents,
+or grant training, tools, prompt/response persistence or cross-request reuse.
+
+The `research-correlation-postgres` gate includes real model-review administration,
+revocation/retention, integrity and competing transaction tests. The
+`research-evidence-processes` gate includes review/permit command qualification.

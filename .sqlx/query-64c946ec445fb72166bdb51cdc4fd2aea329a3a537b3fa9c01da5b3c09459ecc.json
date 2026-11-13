@@ -1,0 +1,107 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT revision,request,rights_scope,decision,agreement,valid_from_ms,expires_at_ms,actor::text AS \"actor!\" FROM edgeagent_model_disclosure_reviews WHERE review_key=$1 ORDER BY revision DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rights_scope",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "rights_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "agreement",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "agreement"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "valid_from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "valid_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_model_disclosure_reviews",
+            "name": "expires_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actor!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "64c946ec445fb72166bdb51cdc4fd2aea329a3a537b3fa9c01da5b3c09459ecc"
+}

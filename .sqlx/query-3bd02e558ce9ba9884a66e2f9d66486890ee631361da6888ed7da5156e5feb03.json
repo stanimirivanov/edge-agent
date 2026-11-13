@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_model_disclosure_reviews(review_key,rights_scope,revision,request,decision,agreement,valid_from_ms,expires_at_ms,actor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,session_user)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Int8",
+        "Bytea",
+        "Text",
+        "Varchar",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3bd02e558ce9ba9884a66e2f9d66486890ee631361da6888ed7da5156e5feb03"
+}

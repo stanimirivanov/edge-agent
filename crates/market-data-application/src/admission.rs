@@ -349,6 +349,40 @@ impl AdmissionRecord {
         }
         Ok(scope)
     }
+    /// Digest of the sealed model-disclosure rights/feed scope (ADR-0117).
+    /// # Errors
+    /// Rejects incomplete owner records; never accepts caller-supplied scope.
+    pub fn model_disclosure_rights_scope(&self) -> Result<String, Error> {
+        let mut data = BTreeMap::new();
+        for name in [
+            "rights",
+            "principal",
+            "account",
+            "source",
+            "instrument",
+            "listing",
+            "endpoint",
+            "audience",
+            "storage",
+            "semantics_id",
+            "semantics_revision",
+            "precision",
+            "market_scope",
+        ] {
+            data.insert(
+                name,
+                self.fields
+                    .get(name)
+                    .ok_or_else(|| Error::new(Kind::Invalid))?,
+            );
+        }
+        let value =
+            serde_json::json!({"kind":"market-data.model-disclosure-rights-scope.v1", "data":data});
+        let mut bytes = edgeagent_contracts::canonical_json_bytes(&value)
+            .map_err(|_| Error::new(Kind::Invalid))?;
+        bytes.push(b'\n');
+        Ok(DailyEvidenceArtifact::hash(&bytes).as_str().into())
+    }
     /// Bind an object upload to all original request/scope and authority identities.
     /// # Errors
     /// Denies foreign scope, changed rights pins or extended retention.

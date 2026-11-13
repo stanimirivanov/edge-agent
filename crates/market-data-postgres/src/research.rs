@@ -1,5 +1,6 @@
 //! Durable MarketData-owned research/acquisition correlation; no peer tables or external I/O.
 mod explanation_serving;
+mod model_disclosure;
 use edgeagent_contracts::{
     Component, MessageEnvelope, MessageMetadata,
     evidence::{AcquireEvidence, EvidenceDigest, EvidenceId},
@@ -12,6 +13,7 @@ use edgeagent_market_data_application::{
 };
 use edgeagent_outbox_postgres::{EnqueueDisposition, PostgresOutbox};
 pub use explanation_serving::ExplanationServingReview;
+pub use model_disclosure::ModelDisclosureReview;
 /// Retained owner-selected work. A completed publication is historical metadata, not read authority.
 pub struct PendingResearchEvidence {
     /// Exact original research intent.
