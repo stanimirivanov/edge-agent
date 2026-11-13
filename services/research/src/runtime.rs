@@ -68,6 +68,7 @@ pub fn run(args: &[String]) -> Result {
                 | "offline-governance-retire"
                 | "offline-control"
                 | "offline-explanation-grant"
+                | "offline-explanation-qualification"
                 | "offline-explanation-authority"
                 | "offline-experiment-ledger"
                 | "offline-once"
@@ -213,6 +214,15 @@ async fn execute(mode: &str) -> Result {
                 store.experiment_ledger(&command),
             ).await??;
             std::io::stdout().write_all(&retained)?;
+            return Ok(());
+        }
+        if mode == "offline-explanation-qualification" {
+            use std::io::Read as _;
+            let mut bytes=Vec::new();
+            std::io::stdin().take((edgeagent_contracts::explanation_qualification::MAX_COMMAND_BYTES+1) as u64).read_to_end(&mut bytes)?;
+            let review=edgeagent_research_application::explanation_qualification::VerifiedReview::decode(&bytes)?;
+            if review.command().scope()!=scope {return Err("foreign qualification scope".into());}
+            tokio::time::timeout(Duration::from_secs(25),store.review_qualification(&review)).await??;
             return Ok(());
         }
         if mode == "offline-explanation-grant" {

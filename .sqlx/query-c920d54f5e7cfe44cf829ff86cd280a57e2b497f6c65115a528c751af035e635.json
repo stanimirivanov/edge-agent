@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO edgeagent_explanation_qualification(caller_scope,profile,revision,command,assessment,collection,approved,actor) VALUES($1,$2,$3,$4,$5,$6,$7,session_user)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Int8",
+        "Bytea",
+        "Varchar",
+        "Varchar",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c920d54f5e7cfe44cf829ff86cd280a57e2b497f6c65115a528c751af035e635"
+}

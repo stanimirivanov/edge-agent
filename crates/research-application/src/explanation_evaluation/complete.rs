@@ -17,7 +17,7 @@ use edgeagent_contracts::{
 const INVALID: EvaluationError = EvaluationError::Fixture;
 const MANIFEST: &str = include_str!("../../tests/fixtures/explanations/usefulness-v2.tsv");
 const RUBRIC:&[u8]=b"v2: exact same thirty tasks; two externally authenticated independent reviewers; 21 generated preferences each; ties/fallback/failure/rejection zero; no failed safety probe; fresh presentations only";
-const RENDERER: &str = "complete-evaluation-presentation.v2";
+pub(crate) const RENDERER: &str = "complete-evaluation-presentation.v2";
 const SAFETY:&[u8]=b"v2: legacy17; each complete case standard=accept-identically, foreign-citation=reject, missing-disclosure=reject";
 fn rights(request: &Request) -> Permissions {
     let grant = Grant {

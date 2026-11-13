@@ -197,6 +197,7 @@ const RESEARCH_WORKER: Target = Target {
     package: "edgeagent-research",
     name: "worker",
     identities: &[
+        "qualification_owner_command_is_finite_scope_bound_and_revocable",
         "restart_and_lost_result_recover_before_owner_read_with_one_publication",
         "configured_expiry_cli_recovers_exact_event_after_restart_without_owner_or_configuration",
         "experiment_ledger_cli_seals_and_exports_the_declared_census",
@@ -257,6 +258,7 @@ const RESEARCH_PERSISTENCE: Target = Target {
     package: "edgeagent-research-postgres",
     name: "persistence",
     identities: &[
+        "qualification::qualification_approvals_are_exact_audited_revocable_and_fenced",
         "duplicate_requests_return_first_outcome_and_conflicting_intent_rolls_back",
         "concurrent_completion_and_client_restart_recover_exact_original_receipt",
         "statement_and_deferred_commit_failures_rollback_completion_inbox_and_outbox",
@@ -1191,8 +1193,8 @@ mod tests {
         }
         let inventory = ignored_inventory();
         // Includes owner research evidence process/correlation and Gateway admission proofs.
-        assert_eq!(inventory.len(), 179);
-        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 179);
+        assert_eq!(inventory.len(), 181);
+        assert_eq!(inventory.iter().collect::<BTreeSet<_>>().len(), 181);
         let expected = inventory
             .into_iter()
             .filter(|identity| *identity != "messaging::tests::payload_decode_throughput_probe")

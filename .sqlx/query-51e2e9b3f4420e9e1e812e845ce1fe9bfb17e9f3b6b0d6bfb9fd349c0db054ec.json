@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT revision,command,collection,assessment,approved,actor::text AS \"actor!\" FROM edgeagent_explanation_qualification WHERE caller_scope=$1 AND profile=$2 ORDER BY revision DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_qualification",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "command",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_qualification",
+            "name": "command"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "collection",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_qualification",
+            "name": "collection"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "assessment",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_qualification",
+            "name": "assessment"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "approved",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "edgeagent_explanation_qualification",
+            "name": "approved"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "actor!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "51e2e9b3f4420e9e1e812e845ce1fe9bfb17e9f3b6b0d6bfb9fd349c0db054ec"
+}

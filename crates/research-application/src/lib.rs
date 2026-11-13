@@ -12,6 +12,7 @@ pub mod explanation_intent;
 pub mod explanation_model;
 pub mod explanation_policy;
 pub mod explanation_preparation;
+pub mod explanation_qualification;
 pub mod explanation_replay;
 pub mod explanation_reviewed_context;
 pub mod explanation_worker;

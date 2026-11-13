@@ -920,6 +920,8 @@ pub(super) fn checks() -> Vec<Check> {
                 "--test",
                 "explanation_complete",
                 "--test",
+                "explanation_qualification",
+                "--test",
                 "explanation_evaluation",
                 "--features",
                 "map-order-test",

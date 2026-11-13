@@ -1,5 +1,5 @@
 //! Offline evaluation of invented explanation cases with independent ratings.
-mod complete;
+pub(crate) mod complete;
 mod fixtures;
 mod safety;
 

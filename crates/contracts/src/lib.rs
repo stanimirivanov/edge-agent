@@ -11,6 +11,7 @@ pub mod execution;
 pub mod explanation;
 pub mod explanation_facts;
 pub mod explanation_profile;
+pub mod explanation_qualification;
 mod message_type;
 mod messaging;
 pub mod model_disclosure;

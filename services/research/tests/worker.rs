@@ -506,3 +506,85 @@ async fn experiment_ledger_cli_seals_and_exports_the_declared_census() -> Result
     .await;
     db.finish(result).await
 }
+
+#[path = "../../../crates/research-application/tests/support/qualification.rs"]
+mod qualification_fixture;
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn qualification_owner_command_is_finite_scope_bound_and_revocable() -> Result {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt as _;
+    async fn command(db: &Database, bytes: &[u8], scope: &str) -> Result<std::process::Output> {
+        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_edgeagent-research"))
+            .arg("offline-explanation-qualification")
+            .env(
+                "EDGEAGENT_POSTGRES_URL",
+                std::env::var("EDGEAGENT_POSTGRES_URL")?,
+            )
+            .env("EDGEAGENT_RESEARCH_SCHEMA", &db.schema)
+            .env("EDGEAGENT_RESEARCH_SCOPE", scope)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let mut stdin = child.stdin.take().ok_or("stdin")?;
+        if let Err(e) = stdin.write_all(bytes).await
+            && e.kind() != std::io::ErrorKind::BrokenPipe
+        {
+            return Err(e.into());
+        }
+        drop(stdin);
+        Ok(
+            tokio::time::timeout(std::time::Duration::from_secs(30), child.wait_with_output())
+                .await??,
+        )
+    }
+    let db = Database::new().await?;
+    let result = std::panic::AssertUnwindSafe(async {
+        sqlx::raw_sql(edgeagent_research_postgres::explanation_qualification::MIGRATION)
+            .execute(&db.pool)
+            .await?;
+        let approval = qualification_fixture::approved()?;
+        let bytes = approval.bytes()?;
+        let result = command(&db, &bytes, "scope").await?;
+        assert!(
+            result.status.success(),
+            "qualification owner command failed"
+        );
+        assert!(result.stdout.is_empty());
+        assert!(command(&db, &bytes, "scope").await?.status.success());
+        assert!(!command(&db, &bytes, "foreign").await?.status.success());
+        let store = edgeagent_research_postgres::PostgresResearchStore::new(db.pool.clone());
+        assert_eq!(
+            store
+                .qualification_approval("scope", approval.profile())
+                .await?
+                .ok_or("approval")?
+                .revision,
+            1
+        );
+        let revoke = edgeagent_contracts::explanation_qualification::Command::Revoke {
+            scope: "scope".into(),
+            revision: 2,
+            attestation: "a".repeat(64),
+            profile: approval.profile().clone(),
+        };
+        assert!(
+            command(&db, &revoke.bytes()?, "scope")
+                .await?
+                .status
+                .success()
+        );
+        assert!(
+            store
+                .qualification_approval("scope", approval.profile())
+                .await?
+                .is_none()
+        );
+        Ok(())
+    })
+    .catch_unwind()
+    .await;
+    db.finish(result).await
+}
