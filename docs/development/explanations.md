@@ -686,3 +686,29 @@ their exact existing behavior. This preview is not selectable by production
 profiles and does not change the frozen evaluator. Reader tasks requiring
 missing policy limits or event/observation evidence remain unresolved until
 verified enrichment and the subsequent complete suite revision land.
+
+## Reconciled policy measurements
+
+[ADR-0114](../decisions/0114-render-reconciled-policy-measurements.md) defines
+`research-explanation-policy.v1`. The pure application API
+`explanation_policy::PolicyPreview::from_verified` takes retained artifact and
+decision, exact execution configuration bytes and complete owner-authorized
+`ExecutionEvidence`. It reuses M05 execution validation to reconcile both retained
+records before computing display facts with the existing domain functions.
+
+The preview shows close-volume proxy cents (not executable liquidity), population
+volatility and maximum gap in ppm, inclusive thresholds, regime membership,
+closed event exclusion windows, complete coverage and event instants, and actual
+selected-session event/observation/availability times. Every measurement cites
+its daily evidence; calendar claims also cite the owner event-source identity.
+Excluded instruments retain their measurements. An adverse aggregate reason is
+not attributed to every instrument. Unknown coverage refuses rather than
+appearing as a checked absence. Evidence-age limits retain their M05 meanings;
+volatility is not annualized and all formula/window/rounding revisions are shown.
+
+Both supported rank variants retain fixed facts and disclosures. This API
+replaces the immutable v2 source-summary rows with verified owner chronology;
+legacy outputs and canonical preparation bytes remain unchanged. No CLI,
+production profile, companion persistence or model activation is added. Later
+qualification/runtime consumers must adopt the revision explicitly and recheck
+current rights; frozen v1 cases and ratings remain untouched.
