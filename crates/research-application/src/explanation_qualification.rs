@@ -196,3 +196,31 @@ impl VerifiedReview {
         &self.assessment
     }
 }
+
+/// Additive production-parity protocol pins; not accepted by historical PR31 approval.
+/// Worker/producer/approval adoption requires an explicit later versioned change.
+/// # Errors
+/// Refuses frozen or preparation drift.
+pub fn runtime_protocol() -> Result<(String, String, String), Error> {
+    let suite = Suite::runtime().map_err(|_| Error)?;
+    let cases=suite.cases().iter().map(|c| {
+        let input=c.input().ok_or(Error)?;
+        Ok(serde_json::json!({"id":c.id(),"case":input.identity(),"input":Hash::hash(input.prepared_input().ok_or(Error)?).as_str()}))
+    }).collect::<Result<Vec<_>,Error>>()?;
+    let probes = Suite::runtime_probe_inputs()
+        .map_err(|_| Error)?
+        .into_iter()
+        .map(|(id, input)| serde_json::json!({"id":id,"input":Hash::hash(&input).as_str()}))
+        .collect::<Vec<_>>();
+    Ok((
+        digest(
+            serde_json::json!({"kind":"research.explanation-qualification.preparation.v2","suite":suite.identity(),"cases":cases,"contexts":probes}),
+        )?,
+        Hash::hash(crate::explanation_runtime::VALIDATOR_REVISION.as_bytes())
+            .as_str()
+            .into(),
+        Hash::hash(crate::explanation_runtime::RENDERER_REVISION.as_bytes())
+            .as_str()
+            .into(),
+    ))
+}
