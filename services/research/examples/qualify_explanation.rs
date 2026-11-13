@@ -1,153 +1,23 @@
 //! Opt-in bridge from the local launcher to the existing model port and frozen suite.
-use edgeagent_contracts::{
-    explanation::Binding,
-    explanation_profile::{Deployment, Profile},
+use edgeagent_contracts::{explanation::Binding, explanation_profile::Profile};
+use edgeagent_research::{
+    explanation_deployment::{Observation, Verifier},
+    explanation_model::HttpModel,
 };
-use edgeagent_research::explanation_model::{DeploymentLease, DeploymentVerifier, HttpModel};
 use edgeagent_research_application::{
     explanation::Allowlist,
     explanation_evaluation::{Candidate, Suite},
-    explanation_model::{ExplanationModel, Failure, Request},
+    explanation_model::{ExplanationModel, Request},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    fs,
     io::{Read as _, Write as _},
     net::{Ipv4Addr, SocketAddrV4},
-    os::unix::fs::MetadataExt as _,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Observation {
-    pid: u32,
-    port: u16,
-    command: Vec<String>,
-    start: String,
-    executable: String,
-}
-impl Observation {
-    fn verify(&self) -> Result<()> {
-        if self.pid == 0 || self.port == 0 {
-            return Err("invalid runtime".into());
-        }
-        let directory = format!("/proc/{}", self.pid);
-        let process = fs::read_to_string(format!("{directory}/stat"))?;
-        let start = process
-            .rsplit_once(')')
-            .ok_or("invalid runtime")?
-            .1
-            .split_whitespace()
-            .nth(19)
-            .ok_or("invalid runtime")?;
-        let parent = |pid| -> Result<String> {
-            let status = fs::read_to_string(format!("/proc/{pid}/status"))?;
-            Ok(status
-                .lines()
-                .find_map(|line| line.strip_prefix("PPid:"))
-                .ok_or("missing parent")?
-                .trim()
-                .to_owned())
-        };
-        if start != self.start || parent(self.pid)? != parent(std::process::id())? {
-            return Err("runtime identity changed".into());
-        }
-        let command = fs::read(format!("{directory}/cmdline"))?;
-        let expected: Vec<_> = self
-            .command
-            .iter()
-            .flat_map(|arg| arg.bytes().chain([0]))
-            .collect();
-        if command != expected {
-            return Err("runtime arguments changed".into());
-        }
-        let address = format!("0100007F:{:04X}", self.port);
-        let tcp = fs::read_to_string("/proc/net/tcp")?;
-        let listeners: Vec<_> = tcp
-            .lines()
-            .filter_map(|line| {
-                let fields: Vec<_> = line.split_whitespace().collect();
-                (fields.get(1) == Some(&address.as_str()) && fields.get(3) == Some(&"0A"))
-                    .then(|| fields.get(9).copied())
-                    .flatten()
-            })
-            .collect();
-        let [inode] = listeners.as_slice() else {
-            return Err("runtime listener is not exclusive".into());
-        };
-        let socket = format!("socket:[{inode}]");
-        let owned = fs::read_dir(format!("{directory}/fd"))?
-            .filter_map(std::result::Result::ok)
-            .any(|entry| {
-                fs::read_link(entry.path()).is_ok_and(|path| path.to_str() == Some(&socket))
-            });
-        if !owned {
-            return Err("runtime does not own listener".into());
-        }
-        Ok(())
-    }
-    fn executable_stamp(&self) -> Result<[i128; 7]> {
-        let directory = format!("/proc/{}", self.pid);
-        let executable = fs::File::open(format!("{directory}/exe"))?;
-        let mut bytes = Vec::new();
-        executable.take(268_435_457).read_to_end(&mut bytes)?;
-        if bytes.len() > 268_435_456 || digest(&bytes) != self.executable {
-            return Err("runtime executable changed".into());
-        }
-        stamp(&format!("{directory}/exe"))
-    }
-}
-
-#[derive(Clone)]
-struct Verifier {
-    stamp: [i128; 7],
-    observation: Observation,
-    identity: Deployment,
-}
-fn stamp(path: &str) -> Result<[i128; 7]> {
-    let metadata = fs::metadata(path)?;
-    Ok([
-        i128::from(metadata.dev()),
-        i128::from(metadata.ino()),
-        i128::from(metadata.len()),
-        i128::from(metadata.mtime()),
-        i128::from(metadata.mtime_nsec()),
-        i128::from(metadata.ctime()),
-        i128::from(metadata.ctime_nsec()),
-    ])
-}
-impl Verifier {
-    fn verify(&self) -> Result<()> {
-        self.observation.verify()?;
-        if stamp(&format!("/proc/{}/exe", self.observation.pid))? != self.stamp {
-            return Err("runtime executable changed".into());
-        }
-        Ok(())
-    }
-}
-struct Lease(SocketAddrV4, Deployment);
-impl DeploymentLease for Lease {
-    fn endpoint(&self) -> SocketAddrV4 {
-        self.0
-    }
-    fn identity(&self) -> &Deployment {
-        &self.1
-    }
-}
-impl DeploymentVerifier for Verifier {
-    type Lease = Lease;
-    async fn acquire(&self, endpoint: SocketAddrV4) -> std::result::Result<Lease, Failure> {
-        self.verify().map_err(|_| Failure::DeploymentMismatch)?;
-        if endpoint != SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.observation.port) {
-            return Err(Failure::DeploymentMismatch);
-        }
-        Ok(Lease(endpoint, self.identity.clone()))
-    }
-}
 
 fn digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -235,12 +105,7 @@ async fn collect(data: Collection) -> Result<Value> {
     if data.orders.len() != inputs.len() {
         return Err("case census mismatch".into());
     }
-    data.observation.verify()?;
-    let verifier = Verifier {
-        stamp: data.observation.executable_stamp()?,
-        observation: data.observation.clone(),
-        identity: profile.deployment.clone(),
-    };
+    let verifier = Verifier::new(data.observation.clone(), profile.deployment.clone())?;
     let endpoint = SocketAddrV4::new(Ipv4Addr::LOCALHOST, data.observation.port);
     let model = HttpModel::new(endpoint, verifier.clone(), data.prompt)?;
     let mut cases = Vec::new();
@@ -476,7 +341,8 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgeagent_contracts::explanation_profile::{Settings, Tools};
+    use edgeagent_contracts::explanation_profile::{Deployment, Settings, Tools};
+    use std::fs;
     use std::sync::Arc;
     use tokio::{
         io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader},
@@ -513,7 +379,16 @@ mod tests {
         observation.verify()?;
         let mut changed = observation.clone();
         changed.executable = "f".repeat(64);
-        assert!(changed.executable_stamp().is_err());
+        assert!(
+            Verifier::new(
+                changed.clone(),
+                Deployment {
+                    runtime: "a".repeat(64),
+                    weights: "b".repeat(64)
+                }
+            )
+            .is_err()
+        );
         changed = observation.clone();
         changed.start = "0".into();
         assert!(changed.verify().is_err());
