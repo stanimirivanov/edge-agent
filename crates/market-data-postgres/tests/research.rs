@@ -73,3 +73,5 @@ async fn correlation_commit_failures_preserve_pending_work_without_inbox_or_outb
     }).catch_unwind().await;
     h.finish(result).await
 }
+#[path = "research/model_disclosure.rs"]
+mod model_disclosure;

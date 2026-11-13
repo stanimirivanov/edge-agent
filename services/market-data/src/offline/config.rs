@@ -96,6 +96,7 @@ impl Config {
             }
             "offline-research-once" | "offline-research-worker" | "offline-research-read" | "offline-research-policy-read"
             | "offline-explanation-review" | "offline-explanation-authorize" | "offline-explanation-permit"
+            | "offline-model-disclosure-review" | "offline-model-disclosure-permit"
                 if args.len() == if matches!(command.as_str(), "offline-explanation-authorize" | "offline-explanation-permit") { 3 } else { 2 } => {
                 let id=EvidenceId::new(&args[1]).map_err(|_|ConfigError("research requires one owner-installed acquisition ID"))?;
                 request=Some(u128::from_str_radix(id.as_str(),16)?);

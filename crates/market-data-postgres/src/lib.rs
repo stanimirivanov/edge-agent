@@ -2,7 +2,10 @@
 //! No timers, provider requests or implicit retries live here.
 #![deny(missing_docs)]
 mod research;
-pub use research::{ExplanationServingReview, PendingResearchEvidence, PostgresResearchEvidence};
+pub use research::{
+    ExplanationServingReview, ModelDisclosureReview, PendingResearchEvidence,
+    PostgresResearchEvidence,
+};
 mod ledger;
 mod qualification;
 mod runtime;
@@ -23,7 +26,7 @@ pub const TERMINAL_MIGRATION_SQL: &str =
 /// Retirement inventory, opaque denial identities and account block generations.
 pub const RETENTION_MIGRATION_SQL: &str = include_str!("../migrations/0003_evidence_retention.sql");
 /// Ordered private migrations; retention refuses un-inventoried legacy publication metadata.
-pub const MIGRATIONS: [&str; 12] = [
+pub const MIGRATIONS: [&str; 13] = [
     MIGRATION_SQL,
     TERMINAL_MIGRATION_SQL,
     RETENTION_MIGRATION_SQL,
@@ -36,4 +39,5 @@ pub const MIGRATIONS: [&str; 12] = [
     include_str!("../migrations/0010_stream_owner_inputs.sql"),
     include_str!("../migrations/0011_research_evidence.sql"),
     include_str!("../migrations/0012_explanation_serving_reviews.sql"),
+    include_str!("../migrations/0013_model_disclosure_reviews.sql"),
 ];

@@ -456,3 +456,36 @@ async fn explanation_authorization_requires_current_exact_owner_review() -> Resu
     .await;
     h.finish(result).await
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL via EDGEAGENT_POSTGRES_URL"]
+async fn model_disclosure_commands_require_independent_current_owner_review() -> Result {
+    const ACQUISITION: &str = "00000000000000000000000000000001";
+    const AUDIENCE: &str = "00000000000000000000000000000002";
+    let h = Harness::new().await?;
+    let result=std::panic::AssertUnwindSafe(async {
+        use edgeagent_contracts::{explanation::Anchor,model_disclosure::{Request,Permit,Purpose}};
+        let research=h.seed("history-v1").await?;let event=h.once(&delivery(&research,"model-delivery")?).await?;
+        let ResearchEvidence::Ready{decision,..}=ResearchEvidence::from_envelope(&event)? else {return Err("ready".into());};
+        let EvidenceOutcome::Ready{object}=decision.outcome else {return Err("object".into());};
+        let request=Request{operation:EvidenceId::new(&"1".repeat(32))?,anchor:Anchor{scope:research.scope.clone(),artifact:"a".repeat(64),decision:"b".repeat(64)},research,acquisition:EvidenceId::new(ACQUISITION)?,publication:DailyEvidenceArtifact::hash(&event.to_json()?).as_str().into(),evidence:object.sha256,audience:"local-model".into(),purpose:Purpose::ModelDisclosure,profile:serde_json::from_value(serde_json::json!({"deployment":{"runtime":"a".repeat(64),"weights":"b".repeat(64)},"settings":{"seed":1,"temperature_milli":0,"max_output_tokens":512,"timeout_ms":1000},"prompt":"c".repeat(64),"validator":"d".repeat(64),"renderer":"e".repeat(64),"tools":"none"}))?,input_contract:"e".repeat(64),input:"f".repeat(64)};
+        let command=["offline-model-disclosure-permit",ACQUISITION];let bytes=request.canonical_bytes()?;
+        let missing=h.run(&command,Some(&bytes)).await?;assert_eq!(missing.status.code(),Some(77));assert!(missing.stdout.is_empty());
+        let review=|revision,decision|->Result<Vec<u8>> {
+            let value=serde_json::json!({"request":request,"revision":revision,"decision":decision,"agreement":"3".repeat(32),"valid_from_ms":request.research.decision_at_ms,"expires_at_ms":request.research.decision_at_ms+60000});
+            let mut bytes=edgeagent_contracts::canonical_json_bytes(&value)?;bytes.push(b'\n');Ok(bytes)
+        };
+        let admin=["offline-model-disclosure-review",ACQUISITION];
+        let allowed=review(1,"allow")?;h.success(&admin,Some(&allowed)).await?;h.success(&admin,Some(&allowed)).await?;
+        let permit=Permit::decode(&h.success(&command,Some(&bytes)).await?)?;permit.bind(&request,permit.checked_at_ms)?;
+        for invalid in [vec![b' ';10241], format!(" {}",String::from_utf8(allowed.clone())?).into_bytes(), String::from_utf8(allowed.clone())?.replace("\"revision\":1", "\"revision\":1,\"revision\":1").into_bytes(), String::from_utf8(allowed.clone())?.replace("\"revision\":1", "\"unknown\":true,\"revision\":1").into_bytes()] {
+            let refused=h.run(&admin,Some(&invalid)).await?;assert!(!refused.status.success());assert!(refused.stdout.is_empty());
+        }
+
+        let wrong=h.run(&["offline-model-disclosure-permit",AUDIENCE],Some(&bytes)).await?;assert_eq!(wrong.status.code(),Some(77));assert!(wrong.stdout.is_empty());
+        h.success(&admin,Some(&review(2,"revoke")?)).await?;
+        let denied=h.run(&command,Some(&bytes)).await?;assert_eq!(denied.status.code(),Some(77));assert!(denied.stdout.is_empty());
+        Ok(())
+    }).catch_unwind().await;
+    h.finish(result).await
+}
