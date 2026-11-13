@@ -1,0 +1,30 @@
+U01	runtime	553fa88abeb9a2ac94fe775b6439a2c6b40b1264f7c6359d937ded271af66488	One eligible candidate	Identify the candidate and the basis for inclusion.
+U02	runtime	c08edfdc8d37bbfcefe1a5d5f229d7923a6deafce6916346bd683a470913cade	Two candidates with distinct scores	Identify the leader and the score comparison.
+U03	runtime	e2ef5c650a772d609f8f6da62936925a8c2a65d3e1ff4fdeff0de1f6e1bb05f1	Three candidates with a narrow lead	Distinguish a small lead from a large separation.
+U04	runtime	f86c914f440c6dea638ee1eeb424115a07994851cb69666e950d176262f2a448	Equal scores resolved by the configured tie-break	Explain why the displayed order resolves a tie.
+U05	runtime	c5474caf1f7ba044ea0fd3b5a2c1108a05fb7cd27dc68d0388bd7939df410817	All eligible scores are negative	Distinguish relative rank from positive performance.
+U06	runtime	94358d7d31a3f420d5f99e855ded55bdfb027f70ac4a73ffb964eb6b470d1f11	A zero score separates positive and negative scores	Identify what the zero value represents.
+U07	runtime	5a170f0203d050a2b64a9e3d7877d9eb98536885820a37a69cfb11e1f1673f48	Similar instrument identifiers	Attribute each result to the correct instrument.
+U08	runtime	2a282354b223b03236096b2d14827457f6b6a5d35433b835e77c3dfcea638353	One candidate fails the liquidity floor	Identify the reason it was excluded.
+U09	runtime	dce85068dfffb3a594cd21c649137f62e88eda728d98c1b95f5155fcb67930f1	Observed liquidity equals the configured floor	Identify how the boundary applies.
+U10	runtime	7662dc2bfbab94001da168612c80ef4f696c6db775626cac709b1fa52f951bcc	One candidate fails the volatility ceiling	Find the breached limit and its unit.
+U11	runtime	71835779a753d8711e866a777554cbc24b8c0dddbcc1bab01eb048c748505f4a	An opening gap exceeds its ceiling	Distinguish the gap from close-to-close volatility.
+U12	runtime	9d7d79aacdeea8801559b9c8da6df1095837f87fa38a3c77d128ad1d3f96c2f9	A candidate breaches both gap and volatility limits	Identify both adverse reasons.
+U13	runtime	9f6e9d081149e579d21001de1fbadff7726a60f729133a5b64880f29d8a49060	An approved long-only artifact	Identify the supported direction without inferring authorization to trade.
+U14	runtime	e667eebf9af0436d41fcdb8ae445944f460652c61963c604e4ed8fd5f4103e2d	The requested horizon equals the policy maximum	Identify the applicable horizon restriction.
+U15	runtime	0b88cc0ee399125831886f20438b630009358e6cecb9a19937cbd1bac193a809	A request uses a narrow approved universe	Identify the scope of the ranking.
+U16	runtime	2033fd01acd9b241d322cc7d99ef34ab02d4112b05f5e4a01450e136ff36e7ed	A candidate falls outside the allowed regime	Identify the regime constraint.
+U17	runtime	19643e4ff5d9cad215fc26f1f635435fe27f71c63f0084872c3985859185dad4	A flat regime is permitted	Distinguish the regime label from the ranking.
+U18	runtime	cd12c9c6f0845d11a54f1b73ef2da741460f5d63d44ec61ce9c74abfb2817904	An event at the exclusion window's first endpoint	Explain why the event qualifies for exclusion.
+U19	runtime	68a3fe19a3343afc237d323b6d7511d070779e70a587c4ea1bdf929344e8239c	An event at the exclusion window's last endpoint	Locate the event reason and its time boundary.
+U20	runtime	2827ed431c14072cea2aefc66729c4f79497d1bb612747fdea0a32fa39dcf295	Complete event coverage with no qualifying event	Distinguish a checked absence from unknown coverage.
+U21	runtime	0e24220bf0f9ab461d00f0bc0155dda375dcc4e678dc41a8c7f882e7e02c2f24	Two evidence sources have different ages within the ceiling	Identify which source is closer to the freshness cutoff.
+U22	runtime	7231dfdcab88760bf856f6a93c08174bbe0ca744d5a5687db5c23a2ea9caa3b9	Evidence is exactly at the age ceiling	Find the cutoff and how it was applied.
+U23	runtime	38acc6d434b6c077ac5bfa32d6256812d2b53257f6021a496eaf880d6eaf5de1	Event and observation times differ	Identify the two times and their meanings.
+U24	runtime	1e8a17d31f555f1202a88d15e1f5eacf2f2d07dece3273dd3c14531bd055a17a	Sources have distinct evidence digests	Follow a claim to its supporting source.
+U25	runtime	5fab52dab4ae0d990addf17a3c071cbdfee8d68f3d7a58cfe90cd7848a642f10	One cited source supports several claims	Locate the right citation for a selected claim.
+U26	runtime	59f880ebd24c33f5e2a1f89bf71f76a535ece05ee02ca1c46ec7e04bf89a55fe	Multiple sources support distinct policy reasons	Match each reason to its supporting evidence.
+U27	runtime	0bec82514e09949e543ec24172d18a6a810d6c84d2decf93856036cd8b122e80	The artifact has a short expiry	Locate the validity cutoff.
+U28	runtime	5f2822e5689d47a771aeafe0bd57373106e8fe0d9a92a719ab235a51c7828e14	A short lookback and longer holding horizon	Distinguish measurement from intended horizon.
+U29	runtime	4c0a8fb811b66bb63cf9b28632c1b16681a2fee9cd4352faba62ce186006b04c	An approved context excerpt accompanies the artifact	Distinguish context from the facts used in ranking.
+U30	runtime	de760a9b8799e478680b38eb5106dfa495a79d0a717bdb7cc2cf0d0491894539	The artifact carries several required disclosures	Find the limitation relevant to the reader task.

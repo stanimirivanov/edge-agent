@@ -141,6 +141,7 @@ pub(super) fn build(id: &str, recipe: &str, task: &str) -> Result<Input, Evaluat
         baseline,
         standard,
         complete_case: None,
+        runtime_case: None,
         prepared: None,
     })
 }

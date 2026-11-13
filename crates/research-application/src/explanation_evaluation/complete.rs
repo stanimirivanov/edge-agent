@@ -1,5 +1,6 @@
 //! Separate frozen v2 census; legacy manifests, ratings and driver behavior stay unchanged.
 mod recipe;
+pub(crate) mod runtime;
 mod semantic;
 use super::{Case, EvaluationError, Input, SafetyCheck, Suite, identity, safety};
 use crate::{
@@ -191,6 +192,7 @@ pub(super) fn load() -> Result<Suite, EvaluationError> {
                 baseline,
                 standard,
                 complete_case: Some(index + 1),
+                runtime_case: None,
                 prepared: Some(prepared),
             }),
         });
@@ -242,3 +244,5 @@ pub(super) fn checks(suite: &Suite) -> Result<Vec<SafetyCheck>, EvaluationError>
     }
     Ok(checks)
 }
+#[cfg(test)]
+mod runtime_tests;

@@ -914,3 +914,38 @@ hash/scoring tests under alternate JSON map ordering. Use the pure
 `explanation_qualification` application tests, the
 `research-persistence` PostgreSQL gate and the `research-worker-postgres` finite
 owner-command proof, plus the default and SQLx metadata gates.
+
+## Production and qualification parity prerequisite
+
+[ADR-0119](../decisions/0119-share-runtime-explanation-preparation.md) records the
+separate prerequisite approved before guarded generation. `RuntimePreparation`
+in the application layer reconciles actual execution evidence through the M05
+policy preview and prepares `research.explanation-input.v5`. Its envelope contains
+canonical verified facts, the deterministic policy baseline and optional checked
+reviewed context. Model input has no invented assertion template. Complete input
+bytes, including LF, must fit 65536 bytes.
+
+`standard` and `validate` use `research-explanation-runtime.v1` and return sealed
+typed choices plus deterministic text. Profile bindings require the exact shared
+renderer/validator pins and actual input digest. Optional context is checked for
+model disclosure during preparation and requires fresh artifact-and-document
+serving observations for rendering; quoted document text creates no claims or
+capabilities. This API performs no dispatch, approval, persistence or retrieval.
+
+`Suite::runtime()` freezes the same thirty tasks through that exact public
+constructor/rendering path. Its v3 manifest and suite identity are distinct:
+`b28ce7cb889d64e8b20f397c0b2a56f66ab3630128c8f5c888d49f527346d994`.
+The four existing adversarial contexts also use the shared document path via
+`Suite::runtime_probe_inputs()`. `runtime_protocol()` returns preparation census
+`3f9aa8d7bbc26fea7e1dda7de7e9e7a40bca080c9e27595346393ffb6530d1b2`
+and the shared validator/renderer pins. Current PR31 approval decoding still
+accepts only its historical complete protocol; these new pins do not upgrade it.
+
+The existing default `explanation-complete-evaluation` check includes these unit
+tests under alternate map ordering. A focused command is
+`cargo test --locked -p edgeagent-research-application --lib explanation_evaluation::complete::runtime_tests --features map-order-test`.
+It covers all-task parity, semantic and historical identity preservation, scoring,
+stale ratings, context permissions and the aggregate input limit. Legacy worker,
+replay/query rendering, qualifier, owner review files and receipts are unchanged.
+PR32 must explicitly adopt the new path and versioned approval/producer bindings;
+this prerequisite alone does not complete guarded generation or qualify a model.

@@ -79,6 +79,7 @@ pub struct Input {
     baseline: String,
     standard: Vec<u8>,
     complete_case: Option<usize>,
+    runtime_case: Option<usize>,
     prepared: Option<Vec<u8>>,
 }
 
@@ -114,6 +115,9 @@ impl Input {
     /// # Errors
     /// Refuses unsupported proposals and invalid fixture bindings.
     pub fn render_candidate(&self, bytes: &[u8]) -> Result<String, crate::explanation::Error> {
+        if let Some(n) = self.runtime_case {
+            return complete::runtime::render(n, bytes);
+        }
         if let Some(n) = self.complete_case {
             return complete::render(n, bytes);
         }
@@ -312,6 +316,22 @@ impl Suite {
     /// Refuses semantic drift, preparation/presentation drift, or changed frozen pins.
     pub fn complete() -> Result<Self, EvaluationError> {
         complete::load()
+    }
+
+    /// Load the new frozen census through the shared production preparation/rendering path.
+    /// Historical frozen/complete suites remain immutable and distinct.
+    /// # Errors
+    /// Refuses semantic, preparation, rendering or frozen identity drift.
+    pub fn runtime() -> Result<Self, EvaluationError> {
+        complete::runtime::load()
+    }
+
+    /// Exact model-context probe inputs through the production reviewed-document path.
+    /// These invented fixture grants are never production disclosure authority.
+    /// # Errors
+    /// Refuses inconsistent frozen inputs or unauthorized/malformed preparation.
+    pub fn runtime_probe_inputs() -> Result<Vec<(String, Vec<u8>)>, EvaluationError> {
+        complete::runtime::probe_inputs()
     }
 
     /// Canonical identity of this exact suite, rubric and baseline.

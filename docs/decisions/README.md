@@ -230,3 +230,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0116](0116-freeze-complete-explanation-evaluation.md) | Accepted | Freeze complete explanation evaluation. |
 | [ADR-0117](0117-specify-owner-model-disclosure-policy.md) | Accepted | Specify owner model-disclosure policy. |
 | [ADR-0118](0118-retain-reviewed-explanation-qualification.md) | Accepted | Retain reviewed explanation qualification. |
+| [ADR-0119](0119-share-runtime-explanation-preparation.md) | Accepted | Share runtime explanation preparation. |

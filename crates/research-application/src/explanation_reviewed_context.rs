@@ -149,6 +149,30 @@ impl<'a> ReviewedContext<'a> {
         now_ms: i64,
     ) -> Result<String, Error> {
         let anchor = self.prepared.anchor();
+        let document = self.serving_document(operation, artifact, document, now_ms)?;
+        let (_, body) = baseline.split_once('\n').ok_or(Error)?;
+        // Canonical JSON quotes newline/tab content, preventing forged presentation rows.
+        Ok(format!(
+            "{RENDERER_REVISION} artifact={} decision={} context_digest={} input={}\n{body}Reviewed document context only; not evidence for ranking or policy; no tool or action authority.\ncontext_data={}",
+            anchor.artifact,
+            anchor.decision,
+            self.excerpt.digest(),
+            self.input_digest(),
+            std::str::from_utf8(document).map_err(|_| Error)?
+        ))
+    }
+    /// Return the exact canonical excerpt only after a fresh serving check.
+    /// Reusable by production rendering without duplicating legacy preview text.
+    /// # Errors
+    /// Refuses wrong subjects/purposes, future times and unavailable current grants.
+    pub fn serving_document(
+        &self,
+        operation: &Request,
+        artifact: &Permissions,
+        document: &Permissions,
+        now_ms: i64,
+    ) -> Result<&[u8], Error> {
+        let anchor = self.prepared.anchor();
         if now_ms < self.prepared.facts().request().decision_at_ms {
             return Err(Error);
         }
@@ -163,16 +187,7 @@ impl<'a> ReviewedContext<'a> {
         ) {
             return Err(Error);
         }
-        let (_, body) = baseline.split_once('\n').ok_or(Error)?;
-        // Canonical JSON quotes newline/tab content, preventing forged presentation rows.
-        Ok(format!(
-            "{RENDERER_REVISION} artifact={} decision={} context_digest={} input={}\n{body}Reviewed document context only; not evidence for ranking or policy; no tool or action authority.\ncontext_data={}",
-            anchor.artifact,
-            anchor.decision,
-            self.excerpt.digest(),
-            self.input_digest(),
-            std::str::from_utf8(&self.document).map_err(|_| Error)?
-        ))
+        Ok(&self.document)
     }
     /// Pin the exact baseline, reader task, input and serving audience for a future suite.
     /// This is an integrity identity, not a passing score or generation approval.
