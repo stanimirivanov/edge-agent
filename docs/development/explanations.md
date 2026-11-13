@@ -871,3 +871,46 @@ Verify the shared OS boundary with
 `cargo test --locked -p edgeagent-research --test explanation_model --example qualify_explanation`
 and `python3 -m unittest discover -s tests -p test_qualify_explanation_model.py`.
 These tests use local listeners and invented responses, not a real model.
+
+## Reviewed qualification approval
+
+[ADR-0118](../decisions/0118-retain-reviewed-explanation-qualification.md) adds
+Research migration `0012_explanation_qualification.sql`, applied by the schema
+owner after 0011. The empty ledger denies every profile. Existing roots need an
+explicit migration; this is not an automatic upgrade or generation activation.
+
+Run `offline-explanation-qualification` through the Research executable with the
+existing `EDGEAGENT_POSTGRES_URL`, `EDGEAGENT_RESEARCH_SCHEMA` and
+`EDGEAGENT_RESEARCH_SCOPE`. It consumes one canonical versioned approve/revoke
+command on stdin, bounded to 2 MiB, and prints no evidence. The command's scope
+must match configuration. Approve includes the full profile, complete suite and
+preparation identity, manifest/helper pins, owned-runtime provenance, thirty
+observations, four context probes and two independent presentation-bound reviews.
+The Contracts types define the exact format; no `passed` flag or scores are input.
+`explanation_qualification::protocol()` supplies the compiled preparation,
+validator and renderer pins; `context_inputs()` supplies the four frozen input
+identities. The existing v1 driver does not yet produce this complete format.
+
+`VerifiedReview::decode` independently validates proposals and rescores the fixed
+suite, computes collection/assessment hashes, and seals the bounded command.
+The schema owner must additionally authenticate real owned-runtime provenance,
+private artifact association and reviewer independence, retain that private review
+record and supply its digest as `attestation`. Merely relabelling synthetic work
+as an owned runtime is a false attestation. No actual model has been qualified by
+these code/tests. New producers and real evidence remain later slices.
+
+Owner review appends consecutive audited revisions. An exact latest actor-bound
+retry is idempotent; revocation prevents an older approval from resurfacing.
+Updates/deletes/truncation refuse. `qualification_approval` is a fresh snapshot;
+`current_qualification_approval` holds a shared transaction fence for later worker
+composition. Every retained approval is rescored and its digests/subject reconciled
+before use. A changed profile, protocol or private helper needs matching evidence
+and a new owner review. Approval persists until explicitly revoked; it grants no
+disclosure rights and does not attest the current deployment or prepared input.
+
+Rollback leaves audit history intact; older binaries ignore this additive table.
+The default `explanation-complete-evaluation` check also runs the approval
+hash/scoring tests under alternate JSON map ordering. Use the pure
+`explanation_qualification` application tests, the
+`research-persistence` PostgreSQL gate and the `research-worker-postgres` finite
+owner-command proof, plus the default and SQLx metadata gates.

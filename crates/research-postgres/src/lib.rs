@@ -6,6 +6,7 @@ pub mod explanation_attempts;
 pub mod explanation_completion;
 pub mod explanation_grants;
 pub mod explanation_jobs;
+pub mod explanation_qualification;
 pub mod governance;
 pub mod lifecycle;
 use edgeagent_contracts::{

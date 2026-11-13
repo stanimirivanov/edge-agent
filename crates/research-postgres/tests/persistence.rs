@@ -720,3 +720,5 @@ mod explanation_attempts;
 
 #[path = "persistence/explanation_completion.rs"]
 mod explanation_completion;
+#[path = "persistence/qualification.rs"]
+mod qualification;
