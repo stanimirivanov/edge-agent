@@ -712,3 +712,30 @@ legacy outputs and canonical preparation bytes remain unchanged. No CLI,
 production profile, companion persistence or model activation is added. Later
 qualification/runtime consumers must adopt the revision explicitly and recheck
 current rights; frozen v1 cases and ratings remain untouched.
+
+## Reviewed context preparation and reader qualification
+
+[ADR-0115](../decisions/0115-bind-reviewed-context-qualification.md) adds the
+pure `explanation_reviewed_context::ReviewedContext` API for the next suite's
+reviewed-document reader case. Its constructor accepts verified artifact/decision,
+canonical excerpt bytes and current authenticated permission observations.
+Both artifact-level and document-specific model-disclosure permissions are
+required from owner and Research. The excerpt's exact digest, source, scope,
+availability and text, plus model audience/purpose, are bound into
+`research.explanation-input.v3`; unchanged v2 preparation is nested separately
+from `untrusted_context`. The existing document and total model-input bounds apply.
+
+Presentation rechecks independent artifact/document serving permissions for the
+exact audience and current time. It retains validated facts/disclosures and
+shows canonical quoted context under an explicit non-authority label. Document
+instructions cannot supply typed claims, tools or policy facts. Availability at
+the decision cutoff is inclusive; future excerpts, unavailable observations,
+revocations, expired grants and foreign bindings refuse.
+
+`case_identity` binds input bytes, presentation revision, exact standard baseline,
+reader task and serving audience/purpose. It provides an integrity pin for PR27,
+not a qualification score or generation approval. Input bytes are a checked data
+snapshot: callers must recheck current rights immediately before dispatch.
+Existing frozen v1 cases/ratings, preparation, replay and production generation
+remain unchanged. No fetcher, document-authority adapter, CLI or active profile
+is added; the tests use explicitly invented documents and permission observations.

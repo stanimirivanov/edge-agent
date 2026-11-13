@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 114] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 115] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -591,6 +591,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 114] = [
         number: 114,
         path: "docs/decisions/0114-render-reconciled-policy-measurements.md",
         title: "Render reconciled policy measurements",
+    },
+    PublishedIdentity {
+        number: 115,
+        path: "docs/decisions/0115-bind-reviewed-context-qualification.md",
+        title: "Bind reviewed context qualification",
     },
 ];
 
