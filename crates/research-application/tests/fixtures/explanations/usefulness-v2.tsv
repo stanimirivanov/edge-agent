@@ -1,0 +1,30 @@
+U01	reconciled	d9e5db33cfa1356317e01485b6756562bcb408f261f4c5ef6582435d95780696	One eligible candidate	Identify the candidate and the basis for inclusion.
+U02	reconciled	751a7a40a7252adcc85de4aebc54a767621ee451186d673e0259c02f09bcfd85	Two candidates with distinct scores	Identify the leader and the score comparison.
+U03	reconciled	85531ad6c3b5fc9a524beab8e0b6ef3d8d38c0822d3c907b5dc9dcebaefdd84d	Three candidates with a narrow lead	Distinguish a small lead from a large separation.
+U04	reconciled	82272c02dd38996e972be8335c5a61a89e265aaeacd59a7b6e3ca31cba1c17ea	Equal scores resolved by the configured tie-break	Explain why the displayed order resolves a tie.
+U05	reconciled	bfd130c97ad5521ae200bce00598c5a65febaf46f34e41c7813a6fd8f9b95b4d	All eligible scores are negative	Distinguish relative rank from positive performance.
+U06	reconciled	1e45ca5bcbcceea6aa9a6733d6047e046c333cf5366eb6046015bcab6eccf5ac	A zero score separates positive and negative scores	Identify what the zero value represents.
+U07	reconciled	315543385552c7c3e780e2f00856628062986830d6edadecc1fbb39cdb95f3de	Similar instrument identifiers	Attribute each result to the correct instrument.
+U08	reconciled	76fc235778d1fd1b47ed8af5d2aa1a4dbf560bb56efae17abee72dcff6af3117	One candidate fails the liquidity floor	Identify the reason it was excluded.
+U09	reconciled	70f59a4effad8093dc6775107a2ccead33cee67d739a62db7715696afcefd980	Observed liquidity equals the configured floor	Identify how the boundary applies.
+U10	reconciled	5ea156dcb3c1f0cf7ab6cb8e858c956a7dc401104e65311e250e137db8a85928	One candidate fails the volatility ceiling	Find the breached limit and its unit.
+U11	reconciled	e3206bd173dd880f9874bb4cc1343e98f4783a0a33a5918b1113be49673b89d5	An opening gap exceeds its ceiling	Distinguish the gap from close-to-close volatility.
+U12	reconciled	42c827b66c5e59ee37eb2b2808d7fa29e5e431b01ab85fe731325f4c3937c6eb	A candidate breaches both gap and volatility limits	Identify both adverse reasons.
+U13	reconciled	7b50b9eb877b78b181b3230ee9d1c498c31884dd7a3306b2bae589f9081b4f5d	An approved long-only artifact	Identify the supported direction without inferring authorization to trade.
+U14	reconciled	fd0b171a454596aa29168791ef60491f7e0a71a682cadf71b7a2885217bad898	The requested horizon equals the policy maximum	Identify the applicable horizon restriction.
+U15	reconciled	5ced5932f0c17da736050f60c055e072556f8eca0038d841872e8fe6bb29f7bb	A request uses a narrow approved universe	Identify the scope of the ranking.
+U16	reconciled	426dbd627ea555272ce05b7da6cff55f04661e4e83d91fa69e3ec0eb70915f38	A candidate falls outside the allowed regime	Identify the regime constraint.
+U17	reconciled	e1c3adc213931feab1c7691a7a2afcb7e1e5652c04c8b0efea2ffb79fa8c98a9	A flat regime is permitted	Distinguish the regime label from the ranking.
+U18	reconciled	60d6e601bc1290df6a769694deaaf392951c839b0c6adc29cec7e6928feed2c7	An event at the exclusion window's first endpoint	Explain why the event qualifies for exclusion.
+U19	reconciled	7cfb26c7aafb1e71777032564ac9dd58310349520875a02b6dbbfb895439fc5c	An event at the exclusion window's last endpoint	Locate the event reason and its time boundary.
+U20	reconciled	9c63762f15bda1cca6d87375af1d24950936e34731e2bca0d7cca4fb4cab11ec	Complete event coverage with no qualifying event	Distinguish a checked absence from unknown coverage.
+U21	reconciled	6bdb2ee694782468ca7b9d46ea0c20dbe912870774bdf3ccb51ca356f084a14a	Two evidence sources have different ages within the ceiling	Identify which source is closer to the freshness cutoff.
+U22	reconciled	69bb0e042863c55df8957bcf228d92acbdb526744e9e52f0418c22b8878e81f4	Evidence is exactly at the age ceiling	Find the cutoff and how it was applied.
+U23	reconciled	5c83b5d0a3469336a7c5b25a10452ae5b7bc4707b2b96b3c25bc7d38c9b15ba6	Event and observation times differ	Identify the two times and their meanings.
+U24	reconciled	b21dac75abc873541ecd84dcc032b9873cc486765880e993c9a04e0b26c17e77	Sources have distinct evidence digests	Follow a claim to its supporting source.
+U25	reconciled	c637094e6f5d6c0de4c25af31269c126a9969094b03094640f6f8b0d44ecee72	One cited source supports several claims	Locate the right citation for a selected claim.
+U26	reconciled	ac14821fa0958c3188c224dc35eef8be1ec98d545dc133151700f112efc5eb17	Multiple sources support distinct policy reasons	Match each reason to its supporting evidence.
+U27	reconciled	17f48469bb01a2ea9179d8788e7c129aea090eda127c2bef6cc9aedd04933d65	The artifact has a short expiry	Locate the validity cutoff.
+U28	reconciled	7476ba2b7eeba010e7e29371520027b6e5b55171df715e0a23786f8b4ffcf889	A short lookback and longer holding horizon	Distinguish measurement from intended horizon.
+U29	reconciled	0432204ee07c95aab24b6a47167ee4923d60803ac9534ebde851afad2a693e6d	An approved context excerpt accompanies the artifact	Distinguish context from the facts used in ranking.
+U30	reconciled	6f46a9cf9fb9fc5eed5fc94ef46e1cec3a80290a0987ca37125a4b062f318b3e	The artifact carries several required disclosures	Find the limitation relevant to the reader task.

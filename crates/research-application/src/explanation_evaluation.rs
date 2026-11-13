@@ -1,4 +1,5 @@
 //! Offline evaluation of invented explanation cases with independent ratings.
+mod complete;
 mod fixtures;
 mod safety;
 
@@ -77,6 +78,8 @@ pub struct Input {
     decision: DecisionProvenance,
     baseline: String,
     standard: Vec<u8>,
+    complete_case: Option<usize>,
+    prepared: Option<Vec<u8>>,
 }
 
 impl Input {
@@ -101,11 +104,19 @@ impl Input {
         &self.standard
     }
 
+    /// Exact model preparation for the complete revision; absent for historical v1.
+    pub fn prepared_input(&self) -> Option<&[u8]> {
+        self.prepared.as_deref()
+    }
+
     /// Independently validate and render a proposed candidate for blinded review.
     ///
     /// # Errors
     /// Refuses unsupported proposals and invalid fixture bindings.
     pub fn render_candidate(&self, bytes: &[u8]) -> Result<String, crate::explanation::Error> {
+        if let Some(n) = self.complete_case {
+            return complete::render(n, bytes);
+        }
         let allowlist = Allowlist::from_verified(&self.record, &self.decision)?;
         Ok(allowlist.validate(bytes)?.rendered().to_owned())
     }
@@ -284,6 +295,7 @@ pub struct Report<'a> {
 pub struct Suite {
     cases: Vec<Case>,
     identity: String,
+    complete: bool,
 }
 
 impl Suite {
@@ -293,6 +305,13 @@ impl Suite {
     /// Rejects drift in the checked-in fixture bytes or renderer.
     pub fn frozen() -> Result<Self, EvaluationError> {
         fixtures::load()
+    }
+
+    /// Load the complete semantically checked v2 census, preserving the historical v1 protocol.
+    /// # Errors
+    /// Refuses semantic drift, preparation/presentation drift, or changed frozen pins.
+    pub fn complete() -> Result<Self, EvaluationError> {
+        complete::load()
     }
 
     /// Canonical identity of this exact suite, rubric and baseline.
@@ -384,7 +403,11 @@ impl Suite {
                 ratings: preferences,
             });
         }
-        let safety = safety::run()?;
+        let safety = if self.complete {
+            complete::checks(self)?
+        } else {
+            safety::run()?
+        };
         let safe = safety.iter().all(|check| check.passed);
         let (preferences, disposition) = score(&pairs, safe);
         Ok(Report {

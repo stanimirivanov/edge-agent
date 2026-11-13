@@ -739,3 +739,38 @@ snapshot: callers must recheck current rights immediately before dispatch.
 Existing frozen v1 cases/ratings, preparation, replay and production generation
 remain unchanged. No fetcher, document-authority adapter, CLI or active profile
 is added; the tests use explicitly invented documents and permission observations.
+
+## Complete frozen evaluation revision
+
+[ADR-0116](../decisions/0116-freeze-complete-explanation-evaluation.md) defines
+the explicit `Suite::complete()` API and `usefulness-v2.tsv`. Its suite identity
+is `f74eebaddbb3ce2553ba5139d72aaa75eb4836bee8e7ef6687911f64ba85e2a0`.
+All thirty original scenarios/questions have independently reconciled invented
+M05 fixtures. Per-case semantic guards check the actual scenario before accepting
+its pin. U25 genuinely reuses a daily source for multiple measurements; U26
+attributes distinct adverse comparisons to different daily sources. Model-free
+safety verification includes the original seventeen probes and one combined
+positive/citation/disclosure check per complete case (47 checks total).
+
+Each case pins raw invented assertions/configuration, exact model preparation,
+artifact/decision, baseline, standard proposal, alternate rank presentation and
+reader task. Non-document cases expose `research.explanation-input.v4`, containing
+canonical assertions and policy baseline alongside unchanged v2 preparation. U29
+uses reviewed-context v3 preparation and also binds its PR26 reader-case identity.
+`Input::prepared_input()` returns these exact bytes for explicit later adoption;
+it returns no preparation for historical v1 cases. The common new presentation
+states the configured instrument-ascending tie-break for equal scores.
+
+Scoring still requires two independently authenticated reviewers with at least
+21 generated preferences each across the same thirty pairs and no safety failures.
+Fallback, failure, rejected output and ties earn no preference credit. Pair pins
+include actual candidate rendering, deployment and blind order; fresh ratings
+are required. Tests use synthetic ratings to verify scoring, not as model evidence.
+
+Run `cargo xtask verify --check explanation-complete-evaluation --python python3`
+for the focused complete/historical census gate under map-order unification.
+`Suite::frozen()` retains its original identity, ten ready cases and twenty
+unresolved cases. The existing model driver remains on v1. Neither corpus
+completeness nor a synthetic test report enables production generation; later
+runtime/collection integration, a real pinned run and independent review remain
+required. Do not refresh v1 pins, reuse its ratings or claim a real-model pass.

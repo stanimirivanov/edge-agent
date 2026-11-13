@@ -60,7 +60,7 @@ dependencies between workspace packages:
 | `edgeagent-contracts` | None |
 | `edgeagent-audit-domain` | `edgeagent-contracts`, `edgeagent-research-domain`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |
 | `edgeagent-research-postgres` | `edgeagent-contracts`, `edgeagent-research-application`, `edgeagent-inbox-postgres`, `edgeagent-outbox-postgres` |
-| `edgeagent-research-application` | `edgeagent-contracts`, `edgeagent-research-domain` |
+| `edgeagent-research-application` | `edgeagent-contracts`, `edgeagent-research-domain`, `edgeagent-market-data-domain` |
 | `edgeagent-research-domain` | `edgeagent-market-data-domain` |
 | `edgeagent-market-data-domain` | None |
 | `edgeagent-market-data-replay` | `edgeagent-market-data-application`, `edgeagent-market-data-domain`, `edgeagent-simulation-domain` |

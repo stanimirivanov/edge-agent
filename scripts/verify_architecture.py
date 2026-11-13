@@ -166,8 +166,7 @@ PACKAGE_RULES = {
         frozenset({"edgeagent-research-domain", "edgeagent-market-data-domain", "futures-util", "tokio"}),
     ),
     "crates/research-application": PackageRule(
-        "edgeagent-research-application", "lib", frozenset({CONTRACTS, "edgeagent-research-domain"}),
-        frozenset({"edgeagent-market-data-domain", "serde_json"}),
+        "edgeagent-research-application", "lib", frozenset({CONTRACTS, "edgeagent-research-domain", "edgeagent-market-data-domain", "serde_json"}),
     ),
     "crates/research-domain": PackageRule(
         "edgeagent-research-domain", "lib", frozenset({"edgeagent-market-data-domain"}),
