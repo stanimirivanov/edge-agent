@@ -774,3 +774,20 @@ unresolved cases. The existing model driver remains on v1. Neither corpus
 completeness nor a synthetic test report enables production generation; later
 runtime/collection integration, a real pinned run and independent review remain
 required. Do not refresh v1 pins, reuse its ratings or claim a real-model pass.
+
+## Owner model-disclosure contract
+
+[ADR-0117](../decisions/0117-specify-owner-model-disclosure-policy.md) specifies
+MarketData's distinct model-disclosure policy. `contracts::model_disclosure`
+provides bounded canonical v1 requests and non-bearer permit snapshots. A request
+pins the fresh operation, Research intent/anchor, acquisition/publication/evidence,
+model audience, full explanation profile and preparation-contract/actual-input
+hashes. The review key excludes payload instances but includes owner rights scope,
+recipient, profile/deployment and preparation contract. Expiry is exclusive and
+capped by both review and retention bounds.
+
+Decoding and `Permit::bind` establish consistency only. PR29 must implement owner
+reviews and fresh authenticated checks; PR32 must enforce them before dispatch
+alongside current Research grants, runtime attestation and durable attempts.
+Serving grants, Research-use permission and synthetic tests confer no model rights.
+This addition does not enable generation or authorize documents from another owner.

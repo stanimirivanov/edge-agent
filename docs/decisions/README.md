@@ -228,3 +228,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0114](0114-render-reconciled-policy-measurements.md) | Accepted | Render reconciled policy measurements. |
 | [ADR-0115](0115-bind-reviewed-context-qualification.md) | Accepted | Bind reviewed context qualification. |
 | [ADR-0116](0116-freeze-complete-explanation-evaluation.md) | Accepted | Freeze complete explanation evaluation. |
+| [ADR-0117](0117-specify-owner-model-disclosure-policy.md) | Accepted | Specify owner model-disclosure policy. |
