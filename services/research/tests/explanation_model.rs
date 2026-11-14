@@ -286,6 +286,10 @@ async fn timeout_and_cancellation_release_the_deployment_lease() -> Result {
     let request = Request::new(&profile, &binding, b"input")?;
     let (result, connection) = tokio::join!(adapter.propose(&request), listener.accept());
     assert!(matches!(result, Err(Failure::Timeout)));
+    assert_eq!(
+        serde_json::to_value(adapter.diagnostic_stage())?,
+        "waiting_response"
+    );
     assert!(!lease.load(Ordering::SeqCst));
     drop(connection?);
 

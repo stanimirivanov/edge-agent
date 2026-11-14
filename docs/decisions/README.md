@@ -233,3 +233,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0119](0119-share-runtime-explanation-preparation.md) | Accepted | Share runtime explanation preparation. |
 | [ADR-0120](0120-compose-guarded-owned-explanations.md) | Accepted | Compose guarded owned explanations. |
 | [ADR-0121](0121-define-hosted-ai-explanation-review.md) | Accepted | Define hosted AI explanation review. |
+| [ADR-0122](0122-retain-payload-free-explanation-diagnostic-replays.md) | Accepted | Retain payload-free explanation diagnostic replays. |

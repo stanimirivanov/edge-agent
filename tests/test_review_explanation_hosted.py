@@ -15,6 +15,11 @@ import review_explanation_hosted as review
 
 
 class ReviewTests(unittest.TestCase):
+    def test_diagnostic_reports_cannot_become_qualification_packets(self):
+        for kind in ("research.explanation-runtime.diagnostics.v1", "research.explanation-runtime.diagnostics-complete.v1"):
+            with self.subTest(kind=kind), self.assertRaises(review.HarnessError):
+                review.prepare(dict(self.bundle, kind=kind), self.plan()["config"])
+
     def setUp(self):
         self.calls = 0
         rows = review.TASKS.read_text().splitlines()

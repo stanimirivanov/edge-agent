@@ -5,7 +5,7 @@
 - On 2026-11-14, the owned runtime completed all 30 reader cases and four adversarial probes.
 - Every observation was `failed`; all reader pairs contained identical fallback text.
 - This trial cannot qualify. Hosted judging, independent rescoring and owner approval were not performed.
-- Preserve the private evidence, diagnose with bounded failure categories, and review a separate fresh trial before any further qualification claim.
+- A separate diagnostic replay reproduced 34 response-header timeouts at the maximum permitted deadline; a fresh qualification remains pending.
 
 ## Candidate and execution
 
@@ -58,7 +58,7 @@ are separate software verification and cannot establish those missing results.
 ADR-0111 remains Proposed; this negative collection does not resolve operator
 review of runtime/model rights or authorize disclosure/activation.
 
-## Continuation
+## Initial continuation requirements
 
 Keep issue #508 open. First retain bounded, payload-safe failure categories in
 the owned collector under tests, preserving this trial unchanged. Diagnose the
@@ -69,3 +69,48 @@ collections before any external disclosure. When a fresh eligible collection
 exists, follow [ADR-0121](../decisions/0121-define-hosted-ai-explanation-review.md),
 obtain account/handling/quote acceptance, and retain both complete AI reviews
 before independent rescoring and authenticated owner attestation.
+
+## Diagnostic replay — 2026-11-14
+
+The maintainer requested safe failure diagnostics on issue #508/PR #511. Under
+[ADR-0122](../decisions/0122-retain-payload-free-explanation-diagnostic-replays.md),
+a separate instrumented helper replayed the complete fixed census once. Its
+launcher refused any change to the original runtime, weights, libraries, license,
+prompt, hardware, thread/context settings, sampling, output limit, deadline,
+validator, renderer or tools. Only the helper/launcher identity and corresponding
+profile identity changed. All 34 ordered input identities matched the original
+30 reader cases and four probes. The supervisor exited zero and cleaned up the
+owned processes; the original collection's exact-byte digest remains unchanged.
+
+Every replay attempt returned `timeout` at transport stage `waiting_response`.
+Measured model-port durations ranged from 30000 to 30008 ms. This means request
+serialization and deployment verification completed, but the HTTP send did not
+return response headers before the deadline. No response reached parsing or
+proposal validation. An independently bounded, read-only health observation
+returned HTTP 200/`status: ok` while probe S01 remained pending; it sent no
+additional inference request and retained no response body.
+
+The reproduced immediate failure is deadline exhaustion while awaiting the local
+non-streaming response, rather than deterministic proposal rejection. It does
+not establish server-internal prefill, generation, queue or cancellation timing,
+nor prove that a longer deadline would qualify the model. Missing historical
+categories cannot be retroactively assigned to the first trial. Actual model
+output/schema compatibility remains unproven because no response reached parsing.
+
+| Diagnostic binding | SHA-256 |
+|---|---|
+| Complete private JSONL journal | `4f950fbcb28d94dc05b3589e68009304b3b71e578013eafba27a7a746b81a403` |
+| Diagnostic completion envelope | `747efe487ed4d7431476788e3f2351052782e8938fb033c5bcb7c62cfda724da` |
+| Diagnostic v2 manifest bytes | `dfa0fe0364cffe1377226ef49f80a4c42bc61ba5667b459180d2a90fbd07affd` |
+| Instrumented helper executable | `9f5cf3dd4af91185d0ba107e05402963f1086358f6f0e927e77b792fff78bc05` |
+
+## Remaining decision before fresh qualification
+
+The 30000 ms value already equals the profile contract's maximum; it cannot be
+raised through a manifest edit. Review a CPU runtime/model/resource configuration
+that meets the existing bound, or make a separate versioned contract decision
+before changing that bound. Preserve this diagnosis and both private packages.
+No deadline, prompt, output budget, corpus, qualification threshold or production
+setting was changed. No fresh qualification, hosted judgment, owner approval or
+activation was performed. Diagnostic formats are rejected by hosted preparation;
+the campaign and issue #508 remain incomplete.

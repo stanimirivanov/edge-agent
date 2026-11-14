@@ -72,7 +72,38 @@ def exec_owned(arguments):
     os.execv(executable, [executable, *rest])
 
 
-def supervise(manifest_path, manifest_pin, mode):
+def diagnostic_source(source, source_pin, source_manifest, manifest):
+    """A new helper/launcher identity may diagnose, but may not retune inference."""
+    source, source_manifest = source.resolve(), source_manifest.resolve()
+    common.check_file({"path": str(source), "sha256": source_pin}, LIMIT)
+    bundle = common.load(source)
+    if (set(bundle) != {"kind", "collection", "pairs", "permission_granted"}
+            or bundle["kind"] != "research.explanation-runtime.collection.v2"
+            or bundle["permission_granted"] is not False):
+        raise common.HarnessError("invalid_diagnostic_source")
+    original = bundle["collection"]
+    common.check_file({"path": str(source_manifest), "sha256": original["manifest"]}, 32768)
+    previous = common.load(source_manifest, 32768)
+    if (set(previous) != common.FIELDS or previous["version"] != 2
+            or original["helper"] != previous["helper"]["sha256"]
+            or len(original["cases"]) != 30 or len(original["safety"]) != 4 or len(bundle["pairs"]) != 30
+            or any(manifest[k] != previous[k] for k in common.FIELDS - {"helper", "profile"})):
+        raise common.HarnessError("diagnostic_configuration_changed")
+    profiles = []
+    for pin in (previous["profile"], manifest["profile"]):
+        common.check_file(pin, 2048)
+        profiles.append(common.load(Path(pin["path"]), 2048))
+    old, current = profiles
+    if (old["kind"] != "research.explanation.profile.v1" or current["kind"] != old["kind"]
+            or old["data"] != original["profile"]
+            or {k:v for k,v in old["data"].items() if k != "deployment"}
+               != {k:v for k,v in current["data"].items() if k != "deployment"}
+            or old["data"]["deployment"]["weights"] != current["data"]["deployment"]["weights"]):
+        raise common.HarnessError("diagnostic_profile_changed")
+    return source_pin
+
+
+def supervise(manifest_path, manifest_pin, mode, diagnostic=None):
     raw = manifest_path.read_bytes()
     if len(raw) > 32768 or hashlib.sha256(raw).hexdigest() != manifest_pin:
         raise common.HarnessError("manifest_pin_mismatch")
@@ -85,6 +116,14 @@ def supervise(manifest_path, manifest_pin, mode):
     child = model = None
     environment = dict(os.environ, EDGEAGENT_EXPLANATION_MANIFEST=str(manifest_path),
                        EDGEAGENT_EXPLANATION_MANIFEST_SHA256=manifest_pin)
+    for key in ("EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT", "EDGEAGENT_EXPLANATION_DIAGNOSTIC_SOURCE"):
+        environment.pop(key, None)
+    if diagnostic is not None:
+        if mode != "offline-explanation-runtime-collect":
+            raise common.HarnessError("diagnostic_mode_required")
+        source_pin, report = diagnostic
+        environment.update(EDGEAGENT_EXPLANATION_DIAGNOSTIC_SOURCE=source_pin,
+                           EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT=str(report))
     try:
         child = subprocess.Popen(owned_command([manifest["helper"]["path"], mode]), stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=environment)
@@ -163,14 +202,31 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--execute-manifest", required=True)
-    parser.add_argument("--collect", action="store_true")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--collect", action="store_true")
+    selection.add_argument("--diagnose", action="store_true")
+    parser.add_argument("--source-collection", type=Path)
+    parser.add_argument("--source-collection-sha256")
+    parser.add_argument("--source-manifest", type=Path)
+    parser.add_argument("--diagnostic-report", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
     try:
+        diagnostic = None
+        inputs = [options.source_collection, options.source_collection_sha256, options.source_manifest, options.diagnostic_report]
+        if options.diagnose:
+            if not all(inputs) or options.diagnostic_report.exists():
+                raise common.HarnessError("invalid_diagnostic_configuration")
+            manifest = common.load(options.manifest, 32768)
+            source_pin = diagnostic_source(*inputs[:3], manifest)
+            diagnostic = source_pin, options.diagnostic_report.resolve()
+        elif any(inputs):
+            raise common.HarnessError("diagnostic_mode_required")
         # Never overwrite a private report or expose proposal/reader material on stdout.
         with os.fdopen(os.open(options.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as target:
             target.write(supervise(options.manifest, options.execute_manifest,
-                                   "offline-explanation-runtime-collect" if options.collect else "offline-explanation-worker-owned"))
+                                   "offline-explanation-runtime-collect" if options.collect or options.diagnose else "offline-explanation-worker-owned",
+                                   diagnostic=diagnostic))
         return 0
     except (OSError, ValueError, KeyError, subprocess.SubprocessError, common.HarnessError, KeyboardInterrupt):
         print("owned explanation execution failed closed", file=sys.stderr)

@@ -1118,3 +1118,37 @@ account access, actual data-handling settings or judging quality.
 The [first PR33 trial report](explanation-qualification-m06-pr33.md) records a
 completed local census that failed these necessary conditions. It is not model
 qualification or an authorization to run hosted judges.
+
+### Safe local diagnostic replay
+
+[ADR-0122](../decisions/0122-retain-payload-free-explanation-diagnostic-replays.md)
+authorizes fixed application labels and timings, never raw model/server logs or
+response bodies. Prepare a separate package with the instrumented helper and
+matching launcher/profile pins. Preserve the original collection and manifest.
+The diagnostic launcher checks every original inference parameter; changing the
+weights, runtime, libraries, license, prompt, hardware, threads, context, sampling,
+output/deadline limits, validator, renderer or tools refuses before execution.
+
+```sh
+python3 scripts/run_explanation_owned.py --manifest /private/diagnostic-manifest.json --execute-manifest DIAGNOSTIC_MANIFEST_SHA256 --diagnose --source-collection /private/original-collection.json --source-collection-sha256 ORIGINAL_COLLECTION_SHA256 --source-manifest /private/original-manifest.json --diagnostic-report /private/attempts.jsonl --output /private/diagnostic-completion.json
+```
+
+Both output paths must be new. The JSONL report is mode 0600 and flushed for each
+start/finish record. It binds source, actual package and corpus identities, then
+records only fixed case/input identifiers, closed status/transport-stage labels
+and model-call elapsed milliseconds. A terminal marker requires all 34 attempts;
+an absent finish/completion remains incomplete. Inherited diagnostic flags cannot
+alter ordinary collection or worker execution.
+
+`waiting_response` means the HTTP send has not returned response headers;
+`reading_response` covers header/body framing; `decoding_response` covers response
+shape/identity/termination checks; `validating_proposal` covers model-proposal
+parsing. `complete` describes the model port, not qualification: the independent
+renderer can still reject the proposal. Timeouts retain the last reached phase.
+No rejected text, path, PID, credential or server diagnostic is written here.
+
+Diagnostic report/completion kinds are rejected by hosted preparation and cannot
+install approval. Diagnostic replay may reproduce a failure, but cannot supply
+categories missing from historical evidence. Do not retune during replay or use
+its result as a fresh qualification. The profile contract currently caps request
+deadlines at 30000 ms; exceeding that is a contract decision, not a manifest edit.
