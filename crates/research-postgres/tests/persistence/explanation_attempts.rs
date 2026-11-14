@@ -12,6 +12,8 @@ async fn explanation_attempts_spend_once_and_fence_ambiguous_recovery() -> Resul
             edgeagent_research_postgres::explanation_grants::MIGRATION,
             edgeagent_research_postgres::explanation_attempts::MIGRATION,
             edgeagent_research_postgres::explanation_completion::MIGRATION,
+            edgeagent_research_postgres::explanation_jobs::MIGRATION,
+            edgeagent_research_postgres::explanation_qualification::MIGRATION,
         ] {
             sqlx::raw_sql(migration).execute(&h.pool).await?;
         }
@@ -91,6 +93,26 @@ async fn explanation_attempts_spend_once_and_fence_ambiguous_recovery() -> Resul
                 tx.rollback().await?;
             }
 
+            // A grant revoked after reservation cannot retain a generated result.
+            if index == 0 {
+                store
+                    .set_explanation_grant(
+                        &edgeagent_research_application::explanation_context::Grant {
+                            revoked: true,
+                            ..grant.clone()
+                        },
+                        2,
+                    )
+                    .await?;
+                let mut tx = h.pool.begin().await?;
+                assert!(
+                    PostgresResearchStore::fence_explanation_result(&mut tx, &permit, || 110)
+                        .await
+                        .is_err()
+                );
+                tx.rollback().await?;
+                store.set_explanation_grant(&grant, 3).await?;
+            }
             // The other case abandons the permit before touching a result.
             // Both interruptions leave the same durable spent state.
             let restarted = PostgresResearchStore::new(h.reconnect().await?);
@@ -111,7 +133,7 @@ async fn explanation_attempts_spend_once_and_fence_ambiguous_recovery() -> Resul
                         revoked: true,
                         ..grant
                     },
-                    2,
+                    if index == 0 { 4 } else { 2 },
                 )
                 .await?;
             for _ in 0..2 {

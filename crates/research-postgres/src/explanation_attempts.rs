@@ -49,9 +49,78 @@ pub enum ReservationOutcome {
 
 /// Send permit for one committed attempt. The caller still checks current
 /// disclosure authority immediately before sending.
-pub struct Reservation(Spent);
+pub struct Reservation(Spent, Option<Box<QualifiedAuthority>>);
+/// Current owner response and exact reviewed runtime. The caller authenticates the
+/// owner response; this non-bearer snapshot cannot independently grant disclosure.
+pub struct QualifiedAuthority {
+    pub owner: edgeagent_contracts::model_disclosure::Permit,
+    pub manifest: String,
+    pub helper: String,
+    pub revision: i64,
+    pub assessment: String,
+}
+impl QualifiedAuthority {
+    async fn check(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        intent: &Intent,
+    ) -> Result<(), Error> {
+        let request = &self.owner.request;
+        self.owner
+            .canonical_bytes()
+            .map_err(|_| Error::new(Kind::Disabled))?;
+        if request.anchor != intent.binding.anchor
+            || request
+                .profile
+                .id()
+                .map_err(|_| Error::new(Kind::Invalid))?
+                != intent.binding.profile
+            || request.input != intent.input_digest
+            || request.input != intent.binding.evidence
+            || request.audience != intent.audience
+            || intent.deadline_ms > self.owner.expires_at_ms
+        {
+            return Err(Error::new(Kind::Disabled));
+        }
+        let approval = PostgresResearchStore::current_qualification_approval(
+            tx,
+            &request.research.scope,
+            &request.profile,
+        )
+        .await?
+        .ok_or_else(|| Error::new(Kind::Disabled))?;
+        let (preparation, _, _) =
+            edgeagent_research_application::explanation_qualification::runtime_protocol()
+                .map_err(|_| Error::new(Kind::Invalid))?;
+        if approval.manifest != self.manifest
+            || approval.helper != self.helper
+            || approval.revision != self.revision
+            || approval.assessment != self.assessment
+            || approval.preparation != preparation
+            || request.input_contract != preparation
+        {
+            return Err(Error::new(Kind::Disabled));
+        }
+        Ok(())
+    }
+}
 
 impl Reservation {
+    /// Refresh the same disclosure subject with a fresh authenticated owner challenge.
+    pub fn refresh_owner(
+        &mut self,
+        owner: edgeagent_contracts::model_disclosure::Permit,
+        now: i64,
+    ) -> Result<(), Error> {
+        let authority = self.1.as_mut().ok_or_else(|| Error::new(Kind::Invalid))?;
+        let mut expected = authority.owner.request.clone();
+        expected.operation = owner.request.operation.clone();
+        owner
+            .bind(&expected, now)
+            .map_err(|_| Error::new(Kind::Disabled))?;
+        authority.owner = owner;
+        Ok(())
+    }
     /// Exact input authorized for this send.
     pub const fn intent(&self) -> &Intent {
         self.0.intent()
@@ -135,6 +204,24 @@ impl PostgresResearchStore {
         intent: &Intent,
         clock_ms: impl FnOnce() -> i64 + Send,
     ) -> Result<ReservationOutcome, Error> {
+        self.reserve_attempt(intent, None, clock_ms).await
+    }
+    /// Reserve only under the current exact runtime qualification and owner disclosure.
+    pub async fn reserve_qualified_explanation_attempt(
+        &self,
+        intent: &Intent,
+        authority: QualifiedAuthority,
+        clock_ms: impl FnOnce() -> i64 + Send,
+    ) -> Result<ReservationOutcome, Error> {
+        self.reserve_attempt(intent, Some(authority), clock_ms)
+            .await
+    }
+    async fn reserve_attempt(
+        &self,
+        intent: &Intent,
+        authority: Option<QualifiedAuthority>,
+        clock_ms: impl FnOnce() -> i64 + Send,
+    ) -> Result<ReservationOutcome, Error> {
         let request = intent.request();
         if !intent.valid(&request) {
             return Err(Error::new(Kind::Invalid));
@@ -167,6 +254,9 @@ impl PostgresResearchStore {
             tx.commit().await.map_err(storage)?;
             return Ok(ReservationOutcome::AlreadySpent);
         }
+        if let Some(authority) = &authority {
+            authority.check(&mut tx, intent).await?;
+        }
         let now_ms = clock_ms();
         if now_ms < 0
             || !intent
@@ -176,6 +266,12 @@ impl PostgresResearchStore {
         {
             return Err(Error::new(Kind::Invalid));
         }
+        if let Some(authority) = &authority {
+            authority
+                .owner
+                .bind(&authority.owner.request, now_ms)
+                .map_err(|_| Error::new(Kind::Disabled))?;
+        }
         let grant = Self::current_explanation_grant(&mut tx, &request, now_ms)
             .await?
             .filter(|grant| intent.deadline_ms <= grant.grant.expires_at_ms)
@@ -184,10 +280,13 @@ impl PostgresResearchStore {
             id,intent.binding.profile,intent.binding.evidence,intent.input_digest,intent.audience,grant.revision,now_ms,intent.deadline_ms)
             .execute(&mut *tx).await.map_err(storage)?;
         tx.commit().await.map_err(storage)?;
-        Ok(ReservationOutcome::Reserved(Reservation(Spent {
-            intent: intent.clone(),
-            grant_revision: grant.revision,
-        })))
+        Ok(ReservationOutcome::Reserved(Reservation(
+            Spent {
+                intent: intent.clone(),
+                grant_revision: grant.revision,
+            },
+            authority.map(Box::new),
+        )))
     }
 
     /// After the deadline, record deterministic fallback for the spent attempt.
@@ -257,10 +356,25 @@ impl PostgresResearchStore {
         let id = job_id(&Job {
             anchor: permit.intent().binding.anchor.clone(),
         })?;
+        if let Some(authority) = &permit.1 {
+            authority.check(tx, permit.intent()).await?;
+        }
         let row = locked(tx, &id)
             .await?
             .ok_or_else(|| Error::new(Kind::Invalid))?;
         let now_ms = clock_ms();
+        let current = Self::current_explanation_grant(tx, &permit.intent().request(), now_ms)
+            .await?
+            .ok_or_else(|| Error::new(Kind::Disabled))?;
+        if current.revision != permit.grant_revision() {
+            return Err(Error::new(Kind::Disabled));
+        }
+        if let Some(authority) = &permit.1 {
+            authority
+                .owner
+                .bind(&authority.owner.request, now_ms)
+                .map_err(|_| Error::new(Kind::Disabled))?;
+        }
         if row.fallback
             || super::explanation_completion::exists(tx, &id).await?
             || row.grant_revision != permit.grant_revision()

@@ -545,6 +545,13 @@ async fn qualification_owner_command_is_finite_scope_bound_and_revocable() -> Re
         sqlx::raw_sql(edgeagent_research_postgres::explanation_qualification::MIGRATION)
             .execute(&db.pool)
             .await?;
+        let runtime = qualification_fixture::runtime()?;
+        assert!(
+            command(&db, &runtime.bytes()?, "scope")
+                .await?
+                .status
+                .success()
+        );
         let approval = qualification_fixture::approved()?;
         let bytes = approval.bytes()?;
         let result = command(&db, &bytes, "scope").await?;

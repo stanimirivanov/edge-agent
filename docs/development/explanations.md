@@ -949,3 +949,64 @@ stale ratings, context permissions and the aggregate input limit. Legacy worker,
 replay/query rendering, qualifier, owner review files and receipts are unchanged.
 PR32 must explicitly adopt the new path and versioned approval/producer bindings;
 this prerequisite alone does not complete guarded generation or qualify a model.
+
+## Guarded owned execution (M06-PR32)
+
+[ADR-0120](../decisions/0120-compose-guarded-owned-explanations.md) adds a separate
+finite owned path. The default `offline-explanation-worker` remains deterministic.
+No real model, private weights, prompt or approval is installed by this change.
+
+Build the same `edgeagent-research` service binary for collection and execution.
+Create a private manifest with the fields in
+[the historical example](../../services/research/fixtures/explanations/qualification-manifest.example.json),
+changing `version` to `2` and `helper.path` to that exact absolute service binary.
+Replace every example pin and hardware field with reviewed local values. Use
+`scripts/run_explanation_owned.py`'s `runtime_id()` to derive the runtime pin after
+building the helper; pin weights and prompt separately in the canonical profile.
+Pin the canonical profile file and the entire final manifest. Changing the helper,
+launcher/support source or artifact requires a fresh package and review.
+
+Collect with the owned supervisor (the paths below are operator-provided, not
+checked-in artifacts):
+
+```text
+python3 scripts/run_explanation_owned.py --manifest /private/manifest.json --execute-manifest MANIFEST_SHA256 --collect --output /private/collection.json
+```
+
+The exclusive mode-0600 output contains `collection`, blinded reader `pairs`, and
+`permission_granted: false`. The collection uses `Suite::runtime()` and actual
+prepared inputs, including all four reviewed-context probes. Two independent
+reviewers return the frozen presentation IDs and preferences. The schema owner
+constructs a canonical `research.explanation-qualification.review.v2` command with
+`action: approve_runtime`, scope, next revision, opaque attestation digest and
+`evidence: {collection, reviews}`. The existing `offline-explanation-qualification`
+command independently rescores before retaining approval. Do not use historical
+v1 collections, a passed flag or synthetic process reports as runtime evidence.
+The attestation remains an explicit human assertion of owned-runtime provenance,
+licensed artifact association and reviewer independence. Collection cannot grant it.
+
+Apply Research migrations through 0012. Configure the existing local Research
+scope/schema/database, exact job, owner executable/root/database/schema, and
+`EDGEAGENT_RESEARCH_EXPLANATION_AUDIENCE`. Set `EDGEAGENT_RESEARCH_MODEL_AUDIENCE`
+to the separately owner-reviewed logical model recipient. The model-disclosure
+owner review must bind the exact profile and `runtime_protocol()` preparation
+census as `input_contract`; serving authority is separate. Then run:
+
+```text
+python3 scripts/run_explanation_owned.py --manifest /private/manifest.json --execute-manifest MANIFEST_SHA256 --output /private/receipt.json
+```
+
+The helper recovers first and requests runtime startup only for a fresh eligible
+job. The model inherits only PATH, LANG and reviewed library directories. A missing
+qualification yields deterministic fallback; denied or unavailable disclosure
+produces private typed refusal. A spent ambiguous attempt never dispatches again.
+The supervisor bounds control/output, kills and reaps children on failure and
+never overwrites a report. Internal receipt recovery needs no model files or owner
+availability after the pinned helper has started. Runtime replay uses the original
+profile, selected configuration and newly authenticated owner evidence without
+inference; Gateway continues returning typed companion choices.
+
+This worker deliberately supplies no optional document excerpt. Reviewed-context
+qualification remains required, but adding general retrieval or document ownership
+is outside this consumer. PR33 must still produce real qualification evidence and
+review before activation; PR34 owns the broader owned-process crash/rebuild proof.

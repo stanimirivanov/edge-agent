@@ -67,10 +67,22 @@ impl VerifiedReview {
         let command = Command::decode(bytes)?;
         let mut collection = String::new();
         let mut assessment = String::new();
-        if let Command::Approve { evidence, .. } = &command {
+        if let Command::Approve { evidence, .. } | Command::ApproveRuntime { evidence, .. } =
+            &command
+        {
             let c = &evidence.collection;
-            let suite = Suite::complete().map_err(|_| Error)?;
-            let (preparation, validator, renderer) = protocol()?;
+            let runtime = matches!(command, Command::ApproveRuntime { .. });
+            let suite = if runtime {
+                Suite::runtime()
+            } else {
+                Suite::complete()
+            }
+            .map_err(|_| Error)?;
+            let (preparation, validator, renderer) = if runtime {
+                runtime_protocol()?
+            } else {
+                protocol()?
+            };
             if c.suite != suite.identity()
                 || c.preparation != preparation
                 || c.profile.validator != validator
@@ -79,7 +91,15 @@ impl VerifiedReview {
                 return Err(Error);
             }
             let deployment = c.profile.id().map_err(|_| Error)?;
-            let expected = contexts(&suite)?;
+            let expected = if runtime {
+                Suite::runtime_probe_inputs()
+                    .map_err(|_| Error)?
+                    .into_iter()
+                    .map(|(id, bytes)| (id, Hash::hash(&bytes).as_str().into()))
+                    .collect()
+            } else {
+                contexts(&suite)?
+            };
             if c.safety.len() != expected.len() {
                 return Err(Error);
             }
@@ -166,10 +186,10 @@ impl VerifiedReview {
                 return Err(Error);
             }
             collection = digest(
-                serde_json::json!({"kind":"research.explanation-qualification.collection.v1","data":c}),
+                serde_json::json!({"kind":if runtime {"research.explanation-qualification.collection.v2"} else {"research.explanation-qualification.collection.v1"},"data":c}),
             )?;
             assessment = digest(
-                serde_json::json!({"kind":"research.explanation-qualification.assessment.v1","evidence":evidence,"collection":collection,"preferences":report.preferences,"safety":report.safety.iter().map(|s|serde_json::json!({"id":s.id,"passed":s.passed})).collect::<Vec<_>>()}),
+                serde_json::json!({"kind":if runtime {"research.explanation-qualification.assessment.v2"} else {"research.explanation-qualification.assessment.v1"},"evidence":evidence,"collection":collection,"preferences":report.preferences,"safety":report.safety.iter().map(|s|serde_json::json!({"id":s.id,"passed":s.passed})).collect::<Vec<_>>()}),
             )?;
         }
         Ok(Self {
@@ -197,8 +217,8 @@ impl VerifiedReview {
     }
 }
 
-/// Additive production-parity protocol pins; not accepted by historical PR31 approval.
-/// Worker/producer/approval adoption requires an explicit later versioned change.
+/// Production-parity protocol pins for versioned runtime approval and owned execution.
+/// Historical v1 approval retains its separate protocol and identities.
 /// # Errors
 /// Refuses frozen or preparation drift.
 pub fn runtime_protocol() -> Result<(String, String, String), Error> {

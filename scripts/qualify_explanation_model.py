@@ -56,9 +56,9 @@ def load(path, limit=LIMIT):
     return json.loads(path.read_bytes(), object_pairs_hook=unique)
 
 
-def preflight(manifest):
+def preflight(manifest, *, version=1, identity=None):
     """Check every local pin before executing any process."""
-    if set(manifest) != FIELDS or type(manifest["version"]) is not int or manifest["version"] != 1:
+    if set(manifest) != FIELDS or type(manifest["version"]) is not int or manifest["version"] != version:
         raise HarnessError("invalid_manifest")
     if (type(manifest["threads"]) is not int or not 1 <= manifest["threads"] <= 256
             or type(manifest["context"]) is not int or not 512 <= manifest["context"] <= 32768
@@ -76,7 +76,7 @@ def preflight(manifest):
         raise HarnessError("noncanonical_profile")
     data = profile["data"]
     if (profile["kind"] != "research.explanation.profile.v1"
-            or data["deployment"] != {"runtime": runtime_id(manifest), "weights": manifest["weights"]["sha256"]}
+            or data["deployment"] != {"runtime": (identity or runtime_id)(manifest), "weights": manifest["weights"]["sha256"]}
             or data["prompt"] != manifest["prompt"]["sha256"]):
         raise HarnessError("profile_binding_mismatch")
     return profile

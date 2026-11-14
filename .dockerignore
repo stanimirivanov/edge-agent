@@ -20,3 +20,8 @@ supply-chain/*
 supply-chain/licenses/*
 !supply-chain/licenses/MPL-2.0.txt
 !supply-chain/licenses/ca-certificates-NOTICE.txt
+!scripts/
+scripts/*
+!scripts/run_explanation_owned.py
+!scripts/qualify_explanation_model.py
+!scripts/qualify_daily.py
