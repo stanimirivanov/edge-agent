@@ -79,6 +79,8 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 For M06 explanation authority, compatibility, and model qualification, read
 [ADR-0109](decisions/0109-bound-evidence-grounded-explanations.md) and the
 [frozen explanation protocol](development/explanations.md).
+For PR33 hosted AI judging, also read
+[ADR-0121](decisions/0121-define-hosted-ai-explanation-review.md).
 
 For M04 versioned research payloads, read [research contracts](development/research-contracts.md).
 
