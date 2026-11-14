@@ -6,6 +6,83 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_explanation_owned as owned
 
 class OwnedLauncherTests(unittest.TestCase):
+    def test_inherited_diagnostic_flags_cannot_change_normal_execution(self):
+        import hashlib
+        import os
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = root / "edgeagent-research"
+            helper.write_text('#!/bin/sh\nprintf "%s\\n" "${EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT:-absent}"\n')
+            helper.chmod(0o700)
+            manifest = dict.fromkeys(owned.common.FIELDS)
+            manifest.update(version=2, helper={"path":str(helper),"sha256":hashlib.sha256(helper.read_bytes()).hexdigest()})
+            path = root / "manifest"
+            path.write_bytes(owned.common.canonical(manifest))
+            with patch.dict(os.environ, {"EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT":"inherited",
+                                         "EDGEAGENT_EXPLANATION_DIAGNOSTIC_SOURCE":"a"*64}):
+                result = owned.supervise(path, hashlib.sha256(path.read_bytes()).hexdigest(), "offline-explanation-worker-owned")
+            self.assertEqual(result, b"absent\n")
+
+    def test_partial_diagnostic_survives_a_failed_helper_without_becoming_a_receipt(self):
+        import hashlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = root / "diagnostic.jsonl"
+            helper = root / "edgeagent-research"
+            helper.write_text(f'#!{sys.executable}\nimport os\nwith os.fdopen(os.open(os.environ["EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT"], os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), "wb") as f: f.write(b\'{{"kind":"research.explanation-runtime.diagnostics.v1","permission_granted":false}}\\n\')\nraise SystemExit(2)\n')
+            helper.chmod(0o700)
+            manifest = dict.fromkeys(owned.common.FIELDS)
+            manifest.update(version=2, helper={"path":str(helper),"sha256":hashlib.sha256(helper.read_bytes()).hexdigest()})
+            path = root / "manifest"
+            path.write_bytes(owned.common.canonical(manifest))
+            with self.assertRaises(owned.common.HarnessError):
+                owned.supervise(path, hashlib.sha256(path.read_bytes()).hexdigest(), "offline-explanation-runtime-collect", ("a"*64, report))
+            self.assertIn(b"diagnostics.v1", report.read_bytes())
+            self.assertEqual(report.stat().st_mode & 0o777, 0o600)
+
+    def test_diagnostic_replay_binds_source_and_preserves_inference_settings(self):
+        import copy
+        import hashlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def pin(name, value):
+                path = root / name
+                raw = owned.common.canonical(value)
+                path.write_bytes(raw)
+                return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
+            profile = {"kind":"research.explanation.profile.v1", "data": {
+                "deployment":{"runtime":"a"*64,"weights":"b"*64},
+                "settings":{"timeout_ms":30000,"max_output_tokens":1024},
+                "prompt":"c"*64,"validator":"d"*64,"renderer":"e"*64,"tools":"none"}}
+            old = dict.fromkeys(owned.common.FIELDS, "fixed")
+            old.update(version=2, profile=pin("old-profile", profile), helper={"sha256":"f"*64})
+            old_manifest = pin("old-manifest", old)
+            source = {"kind":"research.explanation-runtime.collection.v2", "permission_granted":False,
+                "collection":{"manifest":old_manifest["sha256"],"helper":"f"*64,
+                              "profile":profile["data"],"cases":[{}]*30,"safety":[{}]*4},"pairs":[{}]*30}
+            source_pin = pin("source", source)
+            current = copy.deepcopy(old)
+            profile["data"]["deployment"]["runtime"] = "1"*64
+            current["profile"] = pin("new-profile", profile)
+            current["helper"] = {"sha256":"2"*64}
+            arguments = (Path(source_pin["path"]), source_pin["sha256"], Path(old_manifest["path"]))
+            self.assertEqual(owned.diagnostic_source(*arguments, current), source_pin["sha256"])
+            for field in ("runtime","weights","prompt","threads","context","hardware","libraries"):
+                changed = copy.deepcopy(current)
+                changed[field] = "changed"
+                with self.subTest(field=field), self.assertRaises(owned.common.HarnessError):
+                    owned.diagnostic_source(*arguments, changed)
+            profile["data"]["settings"]["timeout_ms"] = 60000
+            current["profile"] = pin("retuned-profile", profile)
+            with self.assertRaises(owned.common.HarnessError):
+                owned.diagnostic_source(*arguments, current)
+            with self.assertRaises(owned.common.HarnessError):
+                owned.diagnostic_source(arguments[0], "0"*64, arguments[2], current)
+
     def test_identity_changes_with_helper_and_resources(self):
         manifest = {"hardware": {}, "threads": 1, "context": 4096,
                     "runtime": {"sha256": "a"*64}, "weights": {"sha256": "b"*64},

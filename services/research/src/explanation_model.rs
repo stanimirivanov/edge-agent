@@ -12,13 +12,42 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
 
 const MAX_RESPONSE_BYTES: usize = 65_536;
 const MAX_PROMPT_BYTES: usize = 4096;
+
+/// Payload-free location of the last exclusive local attempt, never authority.
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelStage {
+    Idle,
+    CheckingDeployment,
+    WaitingResponse,
+    ReadingResponse,
+    DecodingResponse,
+    ValidatingProposal,
+    Complete,
+}
+impl ModelStage {
+    fn read(value: &AtomicU8) -> Self {
+        match value.load(Ordering::Relaxed) {
+            1 => Self::CheckingDeployment,
+            2 => Self::WaitingResponse,
+            3 => Self::ReadingResponse,
+            4 => Self::DecodingResponse,
+            5 => Self::ValidatingProposal,
+            6 => Self::Complete,
+            _ => Self::Idle,
+        }
+    }
+}
 
 /// Trusted observation that holds an exact listener and deployment for the
 /// duration of the request. The launcher must prevent endpoint replacement
@@ -52,6 +81,7 @@ pub struct HttpModel<V> {
     prompt_id: String,
     schema: Value,
     busy: Mutex<()>,
+    stage: AtomicU8,
 }
 
 impl<V: DeploymentVerifier> HttpModel<V> {
@@ -107,7 +137,14 @@ impl<V: DeploymentVerifier> HttpModel<V> {
             prompt_id,
             schema,
             busy: Mutex::new(()),
+            stage: AtomicU8::new(0),
         })
+    }
+
+    /// Diagnostic snapshot after sequential calls by the owned collector only.
+    /// Concurrent rejected callers cannot replace the active attempt's stage.
+    pub fn diagnostic_stage(&self) -> ModelStage {
+        ModelStage::read(&self.stage)
     }
 
     async fn exchange(&self, request: &Request<'_>) -> Result<Reply, Failure> {
@@ -136,6 +173,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
             "response_format": {"type": "json_schema", "schema": self.schema},
         }))
         .map_err(|_| Failure::InvalidRequest)?;
+        self.stage.store(2, Ordering::Relaxed);
         let response = self
             .client
             .post(format!("http://{}/v1/chat/completions", self.endpoint))
@@ -144,8 +182,12 @@ impl<V: DeploymentVerifier> HttpModel<V> {
             .send()
             .await
             .map_err(|_| Failure::Unavailable)?;
-        let proposal = read_proposal(response, &profile.deployment.weights).await?;
+        self.stage.store(3, Ordering::Relaxed);
+        let proposal = read_proposal(response, &profile.deployment.weights, &self.stage).await?;
         let reply = request.accept(lease.identity().clone(), proposal);
+        if reply.is_ok() {
+            self.stage.store(6, Ordering::Relaxed);
+        }
         drop(lease);
         reply
     }
@@ -156,6 +198,7 @@ impl<V: DeploymentVerifier> ExplanationModel for HttpModel<V> {
         let started = Instant::now();
         let result = async {
             let _slot = self.busy.try_lock().map_err(|_| Failure::Unavailable)?;
+            self.stage.store(1, Ordering::Relaxed);
             let timeout = Duration::from_millis(u64::from(request.profile().settings.timeout_ms));
             tokio::time::timeout(timeout, self.exchange(request))
                 .await
@@ -194,7 +237,11 @@ struct Message {
     content: Option<String>,
 }
 
-async fn read_proposal(mut response: reqwest::Response, model: &str) -> Result<Vec<u8>, Failure> {
+async fn read_proposal(
+    mut response: reqwest::Response,
+    model: &str,
+    stage: &AtomicU8,
+) -> Result<Vec<u8>, Failure> {
     if response.status().is_server_error() {
         return Err(Failure::Unavailable);
     }
@@ -223,6 +270,7 @@ async fn read_proposal(mut response: reqwest::Response, model: &str) -> Result<V
         }
         body.extend_from_slice(&chunk);
     }
+    stage.store(4, Ordering::Relaxed);
     let response: Response = serde_json::from_slice(&body).map_err(|_| Failure::InvalidResponse)?;
     let [choice] = response.choices;
     if response.model != model || choice.message.role != "assistant" {
@@ -234,5 +282,28 @@ async fn read_proposal(mut response: reqwest::Response, model: &str) -> Result<V
         _ => return Err(Failure::InvalidResponse),
     }
     let content = choice.message.content.ok_or(Failure::InvalidResponse)?;
+    stage.store(5, Ordering::Relaxed);
     Proposal::from_model_json(content.as_bytes()).map_err(|_| Failure::InvalidResponse)
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    #[test]
+    fn diagnostic_stages_are_payload_free_and_not_model_authority()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let stage = std::sync::atomic::AtomicU8::new(2);
+        assert_eq!(
+            serde_json::to_value(ModelStage::read(&stage))?,
+            "waiting_response"
+        );
+        stage.store(4, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            serde_json::to_value(ModelStage::read(&stage))?,
+            "decoding_response"
+        );
+        stage.store(255, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(serde_json::to_value(ModelStage::read(&stage))?, "idle");
+        Ok(())
+    }
 }

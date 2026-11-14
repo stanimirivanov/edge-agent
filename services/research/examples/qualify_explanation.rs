@@ -9,7 +9,7 @@ use edgeagent_research_application::{
     explanation_evaluation::{Candidate, Suite},
     explanation_model::{ExplanationModel, Request},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -307,6 +307,87 @@ fn assess(data: AssessmentInput) -> Result<Value> {
     )
 }
 
+#[derive(Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct RuntimePair {
+    id: String,
+    presentation: String,
+    first: String,
+    second: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeEnvelope {
+    kind: String,
+    collection: edgeagent_contracts::explanation_qualification::Collection,
+    pairs: Vec<RuntimePair>,
+    permission_granted: bool,
+}
+fn verify_runtime(data: RuntimeEnvelope) -> Result<Value> {
+    use edgeagent_contracts::explanation_qualification::Observation as Observed;
+    let suite = Suite::runtime()?;
+    let (preparation, validator, renderer) =
+        edgeagent_research_application::explanation_qualification::runtime_protocol()?;
+    let c = data.collection;
+    if data.kind != "research.explanation-runtime.collection.v2"
+        || data.permission_granted
+        || c.suite != suite.identity()
+        || c.preparation != preparation
+        || c.profile.validator != validator
+        || c.profile.renderer != renderer
+        || c.cases.len() != suite.cases().len()
+    {
+        return Err("runtime collection mismatch".into());
+    }
+    let profile = c.profile.id()?;
+    let mut pairs = Vec::new();
+    for (case, expected) in c.cases.iter().zip(suite.cases()) {
+        let input = expected.input().ok_or("input")?;
+        if case.id != expected.id() || case.input != input.identity() {
+            return Err("runtime case mismatch".into());
+        }
+        let (candidate, text) = match &case.candidate {
+            Observed::Generated(p) => (
+                Candidate::Proposed(p.as_bytes()),
+                input.render_candidate(p.as_bytes())?,
+            ),
+            Observed::Fallback => (Candidate::Fallback, input.baseline().into()),
+            Observed::Failed => (Candidate::Failed, input.baseline().into()),
+        };
+        let presentation = input.presentation_id(&profile, candidate, case.candidate_first);
+        let (first, second) = if case.candidate_first {
+            (text, input.baseline().into())
+        } else {
+            (input.baseline().into(), text)
+        };
+        pairs.push(RuntimePair {
+            id: case.id.clone(),
+            presentation,
+            first,
+            second,
+        });
+    }
+    let probes = Suite::runtime_probe_inputs()?;
+    if c.safety.len() != probes.len() || pairs != data.pairs {
+        return Err("runtime pair mismatch".into());
+    }
+    let safety = suite
+        .cases()
+        .iter()
+        .find(|c| c.id() == "U08")
+        .and_then(|c| c.input())
+        .ok_or("safety input")?;
+    for (case, (id, input)) in c.safety.iter().zip(probes) {
+        if case.id != id || case.input != digest(&input) {
+            return Err("runtime probe mismatch".into());
+        }
+        if let Observed::Generated(p) = &case.candidate {
+            safety.render_candidate(p.as_bytes())?;
+        }
+    }
+    Ok(json!({"pairs":pairs}))
+}
+
 #[tokio::main]
 async fn main() {
     let result: Result<Value> = async {
@@ -319,6 +400,7 @@ async fn main() {
             Some("export") => export(),
             Some("collect") => collect(serde_json::from_slice(&input)?).await,
             Some("assess") => assess(serde_json::from_slice(&input)?),
+            Some("verify-runtime") => verify_runtime(serde_json::from_slice(&input)?),
             _ => Err("invalid qualification mode".into()),
         }
     }
@@ -348,6 +430,122 @@ mod tests {
         io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader},
         net::TcpListener,
     };
+
+    #[test]
+    fn runtime_pair_verification_reconstructs_text_and_identity_without_model_calls() -> Result<()>
+    {
+        use edgeagent_contracts::explanation_qualification::{
+            Case, Collection, Observation, Provenance,
+        };
+        let suite = Suite::runtime()?;
+        let (preparation, validator, renderer) =
+            edgeagent_research_application::explanation_qualification::runtime_protocol()?;
+        let profile = Profile {
+            deployment: Deployment {
+                runtime: "a".repeat(64),
+                weights: "b".repeat(64),
+            },
+            settings: Settings {
+                seed: 0,
+                temperature_milli: 0,
+                max_output_tokens: 1024,
+                timeout_ms: 30000,
+            },
+            prompt: "c".repeat(64),
+            validator,
+            renderer,
+            tools: Tools::None,
+        };
+        let id = profile.id()?;
+        let cases = suite
+            .cases()
+            .iter()
+            .map(|case| {
+                Ok(Case {
+                    id: case.id().into(),
+                    input: case.input().ok_or("input")?.identity().into(),
+                    candidate_first: true,
+                    candidate: Observation::Failed,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let pairs = suite.cases().iter().map(|case| {
+            let input = case.input().ok_or("input")?;
+            Ok(json!({"id":case.id(),"presentation":input.presentation_id(&id,Candidate::Failed,true),
+                "first":input.baseline(),"second":input.baseline()}))
+        }).collect::<Result<Vec<_>>>()?;
+        let safety = Suite::runtime_probe_inputs()?
+            .into_iter()
+            .map(|(id, bytes)| Case {
+                id,
+                input: digest(&bytes),
+                candidate_first: true,
+                candidate: Observation::Failed,
+            })
+            .collect();
+        let collection = Collection {
+            profile,
+            suite: suite.identity().into(),
+            preparation,
+            manifest: "d".repeat(64),
+            helper: "e".repeat(64),
+            provenance: Provenance::OwnedLocalRuntimeV1,
+            cases,
+            safety,
+        };
+        let original = json!({"kind":"research.explanation-runtime.collection.v2","collection":collection,
+                              "pairs":pairs,"permission_granted":false});
+        assert_eq!(
+            verify_runtime(serde_json::from_value(original.clone())?)?["pairs"],
+            original["pairs"]
+        );
+        let mut generated = original.clone();
+        for (index, case) in suite.cases().iter().enumerate() {
+            let input = case.input().ok_or("input")?;
+            let proposal = std::str::from_utf8(input.standard_proposal())?;
+            generated["collection"]["cases"][index]["candidate"] =
+                json!({"outcome":"generated","proposal":proposal});
+            generated["pairs"][index]["first"] =
+                json!(input.render_candidate(proposal.as_bytes())?);
+            generated["pairs"][index]["presentation"] =
+                json!(input.presentation_id(&id, Candidate::Proposed(proposal.as_bytes()), true));
+        }
+        let safety = suite
+            .cases()
+            .iter()
+            .find(|c| c.id() == "U08")
+            .and_then(|c| c.input())
+            .ok_or("safety")?;
+        for case in generated["collection"]["safety"]
+            .as_array_mut()
+            .ok_or("safety")?
+        {
+            case["candidate"] = json!({"outcome":"generated","proposal":std::str::from_utf8(safety.standard_proposal())?});
+        }
+        assert!(verify_runtime(serde_json::from_value(generated)?).is_ok());
+        for pointer in [
+            "/pairs/0/first",
+            "/pairs/0/presentation",
+            "/collection/cases/0/input",
+            "/collection/safety/0/input",
+            "/collection/profile/renderer",
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).ok_or("pointer")? = json!("tampered");
+            assert!(
+                verify_runtime(serde_json::from_value(changed)?).is_err(),
+                "{pointer}"
+            );
+        }
+        let mut changed = original.clone();
+        changed["collection"]["cases"][0]["candidate"] =
+            json!({"outcome":"generated","proposal":"{}"});
+        assert!(verify_runtime(serde_json::from_value(changed)?).is_err());
+        let mut changed = original;
+        changed["pairs"].as_array_mut().ok_or("pairs")?.pop();
+        assert!(verify_runtime(serde_json::from_value(changed)?).is_err());
+        Ok(())
+    }
 
     #[tokio::test]
     async fn owned_local_transport_collects_every_case_and_redacts_failed_proposals() -> Result<()>
