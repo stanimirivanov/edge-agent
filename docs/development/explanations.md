@@ -1045,3 +1045,110 @@ input/output/time/concurrency caps and ambiguity handling. Existing collectors
 and approval importers do not implement hosted API calls or these view checks;
 the opt-in operator tool needs its focused tests before execution. No hosted
 judgment or candidate qualification has occurred merely by recording this ADR.
+
+### Opt-in hosted review runner
+
+Use [review_explanation_hosted.py](../../scripts/review_explanation_hosted.py)
+after collecting the complete private `research.explanation-runtime.collection.v2`
+envelope. It takes its literal reader tasks and input census from the frozen
+`usefulness-v3.tsv`; it never forwards the full collection. No SDK or new package
+is required. Before freezing a packet it invokes a pinned local
+[Rust verifier](../../services/research/examples/qualify_explanation.rs) in
+`verify-runtime` mode. That mode independently reconstructs both texts and their
+presentation identities with the frozen renderer, checks probe/input/profile
+bindings and refuses altered pair files. Pin the verifier built from reviewed
+repository source; its digest is private run provenance. This check performs no
+inference or approval. Network transport uses only the two first-party TLS hosts, refuses
+redirects, and runs each request in a child with a 120-second total deadline.
+
+Prepare a private accounts JSON file with exactly `accounts`, `ceiling_micro_usd`
+and `overhead_micro_usd`. `accounts` has exactly `openai` and `anthropic`, each
+with `account`, `handling`, `pricing`, `input_rate` and `output_rate`. The first
+three strings identify the actual operator-reviewed account, retention/training/
+regional handling record and quote. They are private provenance, not API inputs.
+Rates are integer micro-USD per million tokens, including applicable uplifts;
+overhead covers remaining fixed costs/taxes. The initial ceiling is at most
+20000000 micro-USD (USD 20). Do not populate these records with inferred consent.
+
+For the standard rates in ADR-0121, input/output rates are respectively
+2500000/15000000 and 4000000/20000000. The full-cap planned generation quote is
+14609760 micro-USD (USD 14.60976) before any account-specific overhead. Confirm
+current rates and that actual billing can be bounded before accepting a plan.
+
+From the repository root, prepare without reading credentials or using a network:
+
+```sh
+cargo build --locked -p edgeagent-research --example qualify_explanation
+sha256sum target/debug/examples/qualify_explanation
+python3 scripts/review_explanation_hosted.py --collection /private/collection.json --accounts /private/accounts.json --plan /private/review-plan.json --verifier target/debug/examples/qualify_explanation --verifier-sha256 VERIFIER_SHA256
+```
+
+Replace `VERIFIER_SHA256` with the reviewed executable's printed digest.
+After reviewing that exact plan, supply its printed SHA-256 through
+`--execute-plan SHA256` and a new `--audit-dir /private/review-trial` using the
+same command. This explicitly accepts the quote and invented-data handling.
+Credentials come only from `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`; never pass
+them as arguments. All audit files are exclusively created with mode 0600.
+The plan gets a durable `.spent` sidecar before network I/O, so changing the audit
+directory cannot retry an accepted plan. Preserve spent plans and failed trials;
+do not remove the fence or select favorable records from another attempt.
+
+Execution first makes 132 token-count requests for the exact planned inputs,
+then at most 132 judgment requests. Token counting also discloses the invented
+texts and requires accepted handling. Provider counts are preflight estimates;
+receipt usage is independently checked against the 12000 input / 4096 output
+limits. A count failure or oversized request prevents all paid judgments.
+Before creating a plan, an already-failed adversarial probe or fewer than 21
+generated reader observations refuses the collection: no reviews can make that
+trial qualify. This necessary-condition check does not replace independent
+validation, safety evaluation or owner attestation.
+Calibration failure stops before reader grading. Timeout, identity drift,
+duplicate response/request IDs or malformed output retain an incomplete outcome
+without imported ratings; automatic retries and trial resumption are absent.
+
+Only a fully completed trial writes `reviews.json` with the existing two-reviewer
+wire shape. Accepted view records plus the frozen plan retain both votes and the
+deterministic normalization trace; hidden thinking and rejected bodies are never
+retained. A complete AI review is not qualification: locally rescore the exact
+evidence package and have the schema owner authenticate/attest its provenance
+under ADR-0118/0121. No database write, approval or activation is performed by this
+runner. Synthetic transport tests run in default CI; they do not verify hosted
+account access, actual data-handling settings or judging quality.
+
+The [first PR33 trial report](explanation-qualification-m06-pr33.md) records a
+completed local census that failed these necessary conditions. It is not model
+qualification or an authorization to run hosted judges.
+
+### Safe local diagnostic replay
+
+[ADR-0122](../decisions/0122-retain-payload-free-explanation-diagnostic-replays.md)
+authorizes fixed application labels and timings, never raw model/server logs or
+response bodies. Prepare a separate package with the instrumented helper and
+matching launcher/profile pins. Preserve the original collection and manifest.
+The diagnostic launcher checks every original inference parameter; changing the
+weights, runtime, libraries, license, prompt, hardware, threads, context, sampling,
+output/deadline limits, validator, renderer or tools refuses before execution.
+
+```sh
+python3 scripts/run_explanation_owned.py --manifest /private/diagnostic-manifest.json --execute-manifest DIAGNOSTIC_MANIFEST_SHA256 --diagnose --source-collection /private/original-collection.json --source-collection-sha256 ORIGINAL_COLLECTION_SHA256 --source-manifest /private/original-manifest.json --diagnostic-report /private/attempts.jsonl --output /private/diagnostic-completion.json
+```
+
+Both output paths must be new. The JSONL report is mode 0600 and flushed for each
+start/finish record. It binds source, actual package and corpus identities, then
+records only fixed case/input identifiers, closed status/transport-stage labels
+and model-call elapsed milliseconds. A terminal marker requires all 34 attempts;
+an absent finish/completion remains incomplete. Inherited diagnostic flags cannot
+alter ordinary collection or worker execution.
+
+`waiting_response` means the HTTP send has not returned response headers;
+`reading_response` covers header/body framing; `decoding_response` covers response
+shape/identity/termination checks; `validating_proposal` covers model-proposal
+parsing. `complete` describes the model port, not qualification: the independent
+renderer can still reject the proposal. Timeouts retain the last reached phase.
+No rejected text, path, PID, credential or server diagnostic is written here.
+
+Diagnostic report/completion kinds are rejected by hosted preparation and cannot
+install approval. Diagnostic replay may reproduce a failure, but cannot supply
+categories missing from historical evidence. Do not retune during replay or use
+its result as a fresh qualification. The profile contract currently caps request
+deadlines at 30000 ms; exceeding that is a contract decision, not a manifest edit.
