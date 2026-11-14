@@ -232,3 +232,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0118](0118-retain-reviewed-explanation-qualification.md) | Accepted | Retain reviewed explanation qualification. |
 | [ADR-0119](0119-share-runtime-explanation-preparation.md) | Accepted | Share runtime explanation preparation. |
 | [ADR-0120](0120-compose-guarded-owned-explanations.md) | Accepted | Compose guarded owned explanations. |
+| [ADR-0121](0121-define-hosted-ai-explanation-review.md) | Accepted | Define hosted AI explanation review. |

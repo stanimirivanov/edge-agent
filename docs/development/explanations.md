@@ -1010,3 +1010,38 @@ This worker deliberately supplies no optional document excerpt. Reviewed-context
 qualification remains required, but adding general retrieval or document ownership
 is outside this consumer. PR33 must still produce real qualification evidence and
 review before activation; PR34 owns the broader owned-process crash/rebuild proof.
+
+## Hosted AI review protocol
+
+[ADR-0121](../decisions/0121-define-hosted-ai-explanation-review.md) records the
+maintainer-approved hosted AI alternative to the proposed human reviewers for
+M06-PR33. Recommend OpenAI `gpt-5.4-2026-03-05` and Anthropic `claude-opus-5-5`
+through their direct APIs. Freeze the exact protocol, prompt, account/model/API
+identities, settings and complete packet before graded responses. This measures
+AI-assessed usefulness; it does not establish human preference or statistical
+independence. Distinct reviewer strings alone do not authenticate the judges.
+
+Each judge assesses all thirty original pairs in both orientations, in isolated
+requests without candidate labels, manifests, design history or the other
+judge's responses. Canonical view IDs bind the actual ordered text/task to the
+original presentation. Map the swapped vote back: retain agreement, otherwise a
+tie. Invalid/refused/ambiguous responses make the review incomplete. Before graded
+review, both judges must pass the three unrelated calibration pairs in both
+orientations. This plans at most 132 calls, including calibration, with no
+selective retries or favorable-orientation selection.
+
+The evaluator still receives exactly thirty original-presentation-bound ratings
+per reviewer. Each needs 21 candidate preferences; ties/fallback/failure earn zero.
+All existing deterministic safety checks and four generated adversarial probes
+remain mandatory. The owner's private attestation additionally binds the AI
+review protocol, both view records, normalization and authenticated provenance.
+It cannot claim human review, and approval/disclosure/activation stay separate.
+
+Only invented frozen cases may be disclosed under this decision. Provider account
+access, actual retention settings and a complete cost quote must be verified
+before paid calls; USD 20 is a proposed ceiling, not an authorized spend. Keep
+keys and audit files private. The ADR specifies low effort, bounded final JSON,
+input/output/time/concurrency caps and ambiguity handling. Existing collectors
+and approval importers do not implement hosted API calls or these view checks;
+the opt-in operator tool needs its focused tests before execution. No hosted
+judgment or candidate qualification has occurred merely by recording this ADR.
