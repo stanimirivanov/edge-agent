@@ -69,7 +69,7 @@ impl Options {
                 return Err(format!("unknown or duplicate check ID: {id}"));
             }
         }
-        let selected: Vec<_> = checks
+        let mut selected: Vec<_> = checks
             .iter()
             .filter(|c| {
                 if ids.is_empty() {
@@ -79,6 +79,20 @@ impl Options {
                 }
             })
             .collect();
+        // Advisory exceptions have no native cargo-deny expiry. The policy
+        // preflight is mandatory even for an explicitly selected single audit.
+        if selected.iter().any(|check| {
+            check.command.program == Program::Cargo && check.command.args.first() == Some(&"deny")
+        }) && !selected
+            .iter()
+            .any(|check| check.id == "supply-chain-contracts")
+        {
+            let guard = checks
+                .iter()
+                .find(|check| check.id == "supply-chain-contracts")
+                .ok_or("advisory exception preflight is missing from inventory")?;
+            selected.insert(0, guard);
+        }
         if selected.is_empty() {
             return Err("selection contains no checks".to_owned());
         }

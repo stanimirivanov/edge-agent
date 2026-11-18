@@ -234,3 +234,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0120](0120-compose-guarded-owned-explanations.md) | Accepted | Compose guarded owned explanations. |
 | [ADR-0121](0121-define-hosted-ai-explanation-review.md) | Accepted | Define hosted AI explanation review. |
 | [ADR-0122](0122-retain-payload-free-explanation-diagnostic-replays.md) | Accepted | Retain payload-free explanation diagnostic replays. |
+| [ADR-0123](0123-bound-the-chrono-maintenance-exception.md) | Accepted | Bound the Chrono maintenance exception. |

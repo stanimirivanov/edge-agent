@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -107,7 +108,7 @@ def _load_toml(path: Path) -> dict[str, object]:
 
 
 def check_workspace_locks(root: Path) -> list[Problem]:
-    """Require a lockfile for every source Cargo workspace without invoking Cargo.
+    """Require source workspace locks and enforce reviewed advisory scope without Cargo.
 
     Discover workspaces from manifests rather than existing locks: otherwise a
     new independent workspace could evade dependency maintenance by omitting its
@@ -154,6 +155,7 @@ def check_workspace_locks(root: Path) -> list[Problem]:
                             problems.append(Problem(relative, "Cargo source files must be regular files"))
                         elif entry.name == "Cargo.lock":
                             locks.add(directory)
+                            problems.extend(check_exception_lock(root, path))
                         elif entry_stat.st_size > SOURCE_MANIFEST_MAX_BYTES:
                             problems.append(Problem(relative, "Cargo manifest exceeds the source size limit"))
                         else:
@@ -304,7 +306,83 @@ def load_artifact_specs(path: Path) -> tuple[list[ArtifactSpec], list[Problem]]:
     return specs, problems
 
 
-def check_deny_policy(path: Path) -> list[Problem]:
+# ADR-0123: fixed maintainer-approved records and resolutions, not blanket ignores.
+MAINTENANCE_EXCEPTION_REASON = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518"
+MAINTENANCE_EXCEPTION_EXPIRY = date(2026, 12, 18)
+MAINTENANCE_EXCEPTIONS = {
+    "chrono": ("RUSTSEC-2026-0543", "0.4.45", {
+        "Cargo.lock", "experiments/durable-execution/Cargo.lock",
+        "experiments/event-spine-proof/Cargo.lock", "experiments/temporal-proof/Cargo.lock",
+    }),
+    "chrono-tz": ("RUSTSEC-2026-0555", "0.10.4", {"Cargo.lock"}),
+    "humantime": ("RUSTSEC-2026-0542", "2.4.0", {"Cargo.lock"}),
+}
+AUDIT_GUARD = "      - name: Check bounded advisory exceptions\n        run: python3 scripts/verify_supply_chain.py\n"
+
+
+def check_advisory_policy(path: Path, *, today: date | None = None, proof: bool = False) -> list[Problem]:
+    """Accept only reviewed maintenance records until the exclusive UTC expiry."""
+    relative = path.as_posix()
+    if not path.is_file():
+        return [Problem(relative, "cargo-deny policy is missing")]
+    advisories = _load_toml(path).get("advisories")
+    if not isinstance(advisories, dict):
+        return [Problem(relative, "advisories table is missing")]
+    problems = []
+    for key, expected in {"unmaintained": "all", "unsound": "all", "yanked": "deny"}.items():
+        if advisories.get(key) != expected:
+            problems.append(Problem(relative, f"advisories.{key} must be {expected!r}"))
+    ignored = advisories.get("ignore")
+    allowed = [{"id": record[0], "reason": MAINTENANCE_EXCEPTION_REASON}
+               for name, record in MAINTENANCE_EXCEPTIONS.items() if not proof or name == "chrono"]
+    if (not isinstance(ignored, list) or any(entry not in allowed for entry in ignored)
+            or len(ignored) != len({entry["id"] for entry in ignored})):
+        problems.append(Problem(relative, "advisory exceptions require exact ADR-0123 approval without duplicates"))
+    elif ignored and (today or datetime.now(timezone.utc).date()) >= MAINTENANCE_EXCEPTION_EXPIRY:
+        problems.append(Problem(relative, "ADR-0123 exceptions expired at 2026-12-18T00:00:00Z; retire them or obtain a new reviewed decision"))
+    return problems
+
+
+def check_exception_lock(root: Path, path: Path) -> list[Problem]:
+    """Called only for regular locks found by the bounded source census."""
+    relative = path.relative_to(root).as_posix()
+    try:
+        with path.open("rb") as stream:
+            data = stream.read(8 * 1024**2 + 1)
+        if len(data) > 8 * 1024**2:
+            return [Problem(relative, "Cargo.lock exceeds the advisory scope size limit")]
+        packages = tomllib.loads(data.decode("utf-8")).get("package", [])
+        if not isinstance(packages, list) or any(not isinstance(p, dict) for p in packages):
+            raise ValueError()
+    except (OSError, ValueError, UnicodeDecodeError):
+        return [Problem(relative, "cannot inspect Cargo.lock advisory scope")]
+    for package in packages:
+        name = package.get("name")
+        reviewed = MAINTENANCE_EXCEPTIONS.get(name) if isinstance(name, str) else None
+        if reviewed is not None and (
+            relative not in reviewed[2] or package.get("version") != reviewed[1]
+            or package.get("source") != "registry+" + CRATES_IO_INDEX
+        ):
+            return [Problem(relative, "Dependency resolution is outside the reviewed ADR-0123 exceptions")]
+    return []
+
+
+def check_advisory_audit_guards(root: Path) -> list[Problem]:
+    """Every direct CI cargo-deny action needs the fail-closed expiry preflight."""
+    problems = []
+    for name in ("repository-quality.yml", "m08-durable-execution.yml", "dependency-audit.yml"):
+        path = root / ".github/workflows" / name
+        if not path.is_file():
+            problems.append(Problem(path.as_posix(), "advisory audit workflow is missing"))
+            continue
+        source = path.read_text(encoding="utf-8")
+        guard, audit = source.find(AUDIT_GUARD), source.find("        uses: EmbarkStudios/cargo-deny-action@")
+        if not 0 <= guard < audit:
+            problems.append(Problem(path.as_posix(), "bounded advisory preflight must precede cargo-deny"))
+    return problems
+
+
+def check_deny_policy(path: Path, *, today: date | None = None) -> list[Problem]:
     """Ensure dependency policy remains fail-closed in security-sensitive areas."""
 
     relative = path.as_posix()
@@ -317,19 +395,7 @@ def check_deny_policy(path: Path) -> list[Problem]:
     if not isinstance(graph, dict) or graph.get("all-features") is not True:
         problems.append(Problem(relative, "graph.all-features must be true"))
 
-    advisories = policy.get("advisories")
-    expected_advisories = {
-        "unmaintained": "all",
-        "unsound": "all",
-        "yanked": "deny",
-        "ignore": [],
-    }
-    if not isinstance(advisories, dict):
-        problems.append(Problem(relative, "advisories table is missing"))
-    else:
-        for name, expected in expected_advisories.items():
-            if advisories.get(name) != expected:
-                problems.append(Problem(relative, f"advisories.{name} must be {expected!r}"))
+    problems.extend(check_advisory_policy(path, today=today))
 
     licenses = policy.get("licenses")
     if not isinstance(licenses, dict):
@@ -468,7 +534,7 @@ def check_artifacts(
     return problems
 
 
-def verify(root: Path, artifacts: Path | None = None) -> list[Problem]:
+def verify(root: Path, artifacts: Path | None = None, *, today: date | None = None) -> list[Problem]:
     """Verify checked-in policy and, when supplied, generated artifacts."""
 
     problems: list[Problem] = []
@@ -477,7 +543,9 @@ def verify(root: Path, artifacts: Path | None = None) -> list[Problem]:
     problems.extend(tool_problems)
     problems.extend(spec_problems)
     problems.extend(check_workspace_locks(root))
-    problems.extend(check_deny_policy(root / "deny.toml"))
+    problems.extend(check_deny_policy(root / "deny.toml", today=today))
+    problems.extend(check_advisory_policy(root / "experiments/deny.toml", today=today, proof=True))
+    problems.extend(check_advisory_audit_guards(root))
     if tools is not None:
         problems.extend(
             check_workflow(root / ".github" / "workflows" / "repository-quality.yml", tools)

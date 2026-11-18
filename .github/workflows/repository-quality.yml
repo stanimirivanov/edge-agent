@@ -198,6 +198,8 @@ jobs:
         run: rustup toolchain install 1.98.1 --profile minimal
       - name: Install pinned Cargo SBOM tool
         run: cargo install --locked cargo-cyclonedx --version "$CARGO_CYCLONEDX_VERSION"
+      - name: Check bounded advisory exceptions
+        run: python3 scripts/verify_supply_chain.py
       - name: Enforce dependency, advisory, source, and license policy
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:

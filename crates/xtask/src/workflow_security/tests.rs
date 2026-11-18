@@ -952,3 +952,31 @@ fn release_calls_cannot_be_redirected_skipped_or_granted_secrets() {
         "unreviewed keys",
     );
 }
+
+#[test]
+fn native_audits_require_an_executable_expiry_preflight_before_the_action() {
+    const GUARD: &str = "      - name: Check bounded advisory exceptions\n        run: python3 scripts/verify_supply_chain.py\n";
+    for name in [
+        "repository-quality.yml",
+        "m08-durable-execution.yml",
+        "dependency-audit.yml",
+    ] {
+        let missing = source(name).replace(GUARD, "");
+        assert!(
+            check_source(name, &missing)
+                .iter()
+                .any(|p| p.contains("advisory expiry preflight")),
+            "{name}"
+        );
+        let late = missing.replace(
+            "          command: check\n",
+            &format!("          command: check\n{GUARD}"),
+        );
+        assert!(
+            check_source(name, &late)
+                .iter()
+                .any(|p| p.contains("advisory expiry preflight")),
+            "{name}"
+        );
+    }
+}

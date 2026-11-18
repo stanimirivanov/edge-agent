@@ -84,6 +84,13 @@ branch-protection requirements alongside existing quality checks. A local
 policy sensor cannot establish that setting or stop an authorized reviewer
 changing policy.
 
+The native cargo-deny actions require the exact read-only
+`python3 scripts/verify_supply_chain.py` preflight before execution. The scheduled
+audit permits only this additional policy read, without builds, proofs, downloads,
+credentials or broader command authority. Parsed workflow policy rejects missing
+or reordered preflights. See [ADR-0123](../decisions/0123-bound-the-chrono-maintenance-exception.md)
+for the bounded Chrono maintenance exception and its enforced UTC expiry.
+
 ## Pinned scanner installation
 
 [Security tool policy](../../supply-chain/security-tools.toml) pins the exact

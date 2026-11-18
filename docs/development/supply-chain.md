@@ -26,8 +26,23 @@ valid for workspace members.
 - duplicate versions are reported for review without automatically blocking a
   justified transition.
 
-The repository carries no standing advisory ignores, license exceptions, Git
-source exceptions, or alternate registries. A necessary exception must change
+The temporary maintenance exceptions in [ADR-0123](../decisions/0123-bound-the-chrono-maintenance-exception.md)
+cover only these existing crates.io resolutions: Chrono 0.4.45
+(RUSTSEC-2026-0543), chrono-tz 0.10.4 (RUSTSEC-2026-0555) and humantime 2.4.0
+(RUSTSEC-2026-0542). EdgeAgent maintainers own them; all expire at
+2026-12-18T00:00:00Z. Chrono covers production and the durable-execution,
+event-spine-proof and temporal-proof locks. The other two packages are root-only;
+the experimental policy retains just the Chrono ID. Exact IDs/reasons, versions,
+sources and scopes are checked before every supported audit. Duplicate records
+and expansion into proof policies are rejected. Individual retired entries may
+be removed without accepting a wider exception.
+All other advisory IDs remain blocking. [Issue #518](https://github.com/stanimirivanov/edge-agent/issues/518)
+tracks removal; expiry is not automatically extended. Native cargo-deny has no
+expiry support, so use the canonical runner rather than treating raw cargo-deny
+alone as aggregate acceptance. CI's native cargo-deny actions each have the same
+mandatory preflight. The verifier rejects removed/reordered preflights.
+
+There are no standing license exceptions, Git source exceptions or alternate registries. A necessary exception must change
 both policy and verification in a focused pull request. That review must state
 the package, exact version, current use, license or advisory analysis,
 replacement path, owner, and removal condition. Suppressing a check only in CI

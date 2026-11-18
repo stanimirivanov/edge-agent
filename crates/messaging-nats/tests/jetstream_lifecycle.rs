@@ -57,7 +57,9 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
         let poisoned = durable(&stream, &name, POISON).await?;
         let inspector = poisoned.clone();
         let mut observer = observer_client.subscribe(format!("$JS.API.CONSUMER.MSG.NEXT.{}.{}", stream.cached_info().config.name, name)).await?;
-        observer_client.flush().await?;
+        // flush() only drains the local writer in the pinned SDK. A reply
+        // on THIS connection proves the broker processed the preceding SUB.
+        observer_context.query_account().await?;
         let mut halted = JetStreamConsumer::new(poisoned).await?;
         context_publish(&client, POISON, vec![b'x'; MAX_PORTABLE_MESSAGE_BYTES + 1]).await?;
         let error = tokio::time::timeout(DEADLINE, halted.receive()).await?.err().ok_or("oversized delivery must halt")?;
@@ -71,7 +73,9 @@ async fn protocol_halt_stops_expiry_and_reconnect_pulls() -> TestResult {
         let control = durable(&stream, &control_name, CONTROL).await?;
         let mut active = JetStreamConsumer::new(control).await?;
         let mut control_observer = observer_client.subscribe(format!("$JS.API.CONSUMER.MSG.NEXT.{}.{}", stream.cached_info().config.name, control_name)).await?;
-        observer_client.flush().await?;
+        // flush() only drains the local writer in the pinned SDK. A reply
+        // on THIS connection proves the broker processed the preceding SUB.
+        observer_context.query_account().await?;
         // Observe explicit demand, then cancel it before forcing the reconnect.
         // The SDK uses a coalescing watch channel for connection state: an
         // in-flight stream is not guaranteed to see a distinct Disconnected

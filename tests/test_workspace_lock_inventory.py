@@ -93,7 +93,10 @@ class WorkspaceLockInventoryTests(unittest.TestCase):
     def test_read_is_bounded_even_if_manifest_grows_after_discovery(self) -> None:
         payload = io.BytesIO(b"x" * (verifier.SOURCE_MANIFEST_MAX_BYTES + 2))
         payload.read = Mock(wraps=payload.read)
-        with patch.object(Path, "open", return_value=payload):
+        original_open = Path.open
+        def open_file(path, *args, **kwargs):
+            return payload if path.name == "Cargo.toml" else original_open(path, *args, **kwargs)
+        with patch.object(Path, "open", autospec=True, side_effect=open_file):
             messages = self.messages()
         payload.read.assert_called_once_with(verifier.SOURCE_MANIFEST_MAX_BYTES + 1)
         self.assertTrue(any("exceeds the source size limit" in message for message in messages))
@@ -156,6 +159,8 @@ class WorkspaceLockInventoryTests(unittest.TestCase):
             patch.object(verifier, "load_tool_policy", return_value=(None, [])),
             patch.object(verifier, "load_artifact_specs", return_value=([], [])),
             patch.object(verifier, "check_deny_policy", return_value=[]),
+            patch.object(verifier, "check_advisory_policy", return_value=[]),
+            patch.object(verifier, "check_advisory_audit_guards", return_value=[]),
         ):
             problems = verifier.verify(self.root)
         self.assertEqual(

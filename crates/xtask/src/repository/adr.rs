@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 122] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 123] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -631,6 +631,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 122] = [
         number: 122,
         path: "docs/decisions/0122-retain-payload-free-explanation-diagnostic-replays.md",
         title: "Retain payload-free explanation diagnostic replays",
+    },
+    PublishedIdentity {
+        number: 123,
+        path: "docs/decisions/0123-bound-the-chrono-maintenance-exception.md",
+        title: "Bound the Chrono maintenance exception",
     },
 ];
 

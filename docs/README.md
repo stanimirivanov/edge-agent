@@ -79,6 +79,8 @@ observable behavior, evidence meaning, ownership, or a dependency boundary.
 For M06 explanation authority, compatibility, and model qualification, read
 [ADR-0109](decisions/0109-bound-evidence-grounded-explanations.md) and the
 [frozen explanation protocol](development/explanations.md).
+For opt-in idle-host CPU throughput measurements before another PR33 trial, read
+[CPU benchmark](development/explanation-cpu-benchmark.md). These measurements do not qualify a model.
 For PR33 hosted AI judging, also read
 [ADR-0121](decisions/0121-define-hosted-ai-explanation-review.md).
 

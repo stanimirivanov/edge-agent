@@ -1229,3 +1229,17 @@ fn research_process_wrapper_cannot_drift_from_protected_cargo_discovery() -> Res
     }
     Ok(())
 }
+
+#[test]
+fn direct_dependency_checks_cannot_skip_the_exception_expiry_guard() -> Result<(), String> {
+    let checks = inventory::checks();
+    for id in ["dependency-policy", "m08-duroxide-dependency-policy"] {
+        let options = Options::parse(&["--check".to_owned(), id.to_owned()])?;
+        let selected = options.select(&checks)?;
+        assert_eq!(
+            selected.iter().map(|c| c.id).collect::<Vec<_>>(),
+            ["supply-chain-contracts", id]
+        );
+    }
+    Ok(())
+}
