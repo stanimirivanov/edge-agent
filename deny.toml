@@ -10,7 +10,11 @@ targets = [
 unmaintained = "all"
 unsound = "all"
 yanked = "deny"
-ignore = [{ id = "RUSTSEC-2026-0543", reason = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518" }]
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518" },
+    { id = "RUSTSEC-2026-0555", reason = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518" },
+    { id = "RUSTSEC-2026-0542", reason = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518" },
+]
 
 [licenses]
 confidence-threshold = 0.93

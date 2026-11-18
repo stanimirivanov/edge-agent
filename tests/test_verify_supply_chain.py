@@ -48,6 +48,43 @@ class VerifySupplyChainTests(unittest.TestCase):
                     policy.write_text(mutation)
                     self.assertTrue(verify_supply_chain.check_advisory_policy(policy, today=date(2026, 11, 18)))
 
+    def test_extended_maintenance_records_keep_exact_scope_and_expiry(self) -> None:
+        reason = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518"
+        header = '[advisories]\nunmaintained = "all"\nunsound = "all"\nyanked = "deny"\n'
+        records = ['{ id = "' + id + '", reason = "' + reason + '" }'
+                   for id in ("RUSTSEC-2026-0555", "RUSTSEC-2026-0542")]
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / "deny.toml"
+            for selection in ([records[0]], [records[1]], records):
+                policy.write_text(header + 'ignore = [' + ', '.join(selection) + ']\n')
+                self.assertEqual([], verify_supply_chain.check_advisory_policy(policy, today=date(2026, 12, 17)))
+                self.assertTrue(verify_supply_chain.check_advisory_policy(policy, today=date(2026, 12, 18)))
+                self.assertTrue(verify_supply_chain.check_advisory_policy(policy, today=date(2026, 11, 18), proof=True))
+            for selection in ([records[0], records[0]], [records[0].replace("0555", "0999")],
+                              [records[1].replace("expires 2026-12-18", "expires 2027-12-18")]):
+                policy.write_text(header + 'ignore = [' + ', '.join(selection) + ']\n')
+                self.assertTrue(verify_supply_chain.check_advisory_policy(policy, today=date(2026, 11, 18)))
+
+    def test_timezone_and_humantime_exceptions_are_root_only_and_version_pinned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Cargo.toml").write_text("[workspace]\n")
+            proof = root / "experiments/durable-execution"
+            proof.mkdir(parents=True)
+            (proof / "Cargo.toml").write_text("[workspace]\n")
+            (proof / "Cargo.lock").write_text("version = 4\n")
+            for name, version in (("chrono-tz", "0.10.4"), ("humantime", "2.4.0")):
+                lock = f'[[package]]\nname = "{name}"\nversion = "{version}"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n'
+                (root / "Cargo.lock").write_text(lock)
+                self.assertEqual([], verify_supply_chain.check_workspace_locks(root))
+                for mutation in (lock.replace(version, "99.0.0"), lock.replace("registry+", "git+")):
+                    (root / "Cargo.lock").write_text(mutation)
+                    self.assertTrue(verify_supply_chain.check_workspace_locks(root))
+                (root / "Cargo.lock").write_text(lock)
+                (proof / "Cargo.lock").write_text(lock)
+                self.assertTrue(verify_supply_chain.check_workspace_locks(root))
+                (proof / "Cargo.lock").write_text("version = 4\n")
+
     def test_exception_cannot_cover_other_versions_or_new_proof_scopes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

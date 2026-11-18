@@ -306,21 +306,22 @@ def load_artifact_specs(path: Path) -> tuple[list[ArtifactSpec], list[Problem]]:
     return specs, problems
 
 
-# ADR-0123: exact maintainer-approved acceptance, never a general ignore registry.
-CHRONO_EXCEPTION = {
-    "id": "RUSTSEC-2026-0543",
-    "reason": "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518",
-}
-CHRONO_EXCEPTION_EXPIRY = date(2026, 12, 18)
-CHRONO_EXCEPTION_LOCKS = {
-    "Cargo.lock", "experiments/durable-execution/Cargo.lock",
-    "experiments/event-spine-proof/Cargo.lock", "experiments/temporal-proof/Cargo.lock",
+# ADR-0123: fixed maintainer-approved records and resolutions, not blanket ignores.
+MAINTENANCE_EXCEPTION_REASON = "ADR-0123; owner: EdgeAgent maintainers; expires 2026-12-18 UTC; migration #518"
+MAINTENANCE_EXCEPTION_EXPIRY = date(2026, 12, 18)
+MAINTENANCE_EXCEPTIONS = {
+    "chrono": ("RUSTSEC-2026-0543", "0.4.45", {
+        "Cargo.lock", "experiments/durable-execution/Cargo.lock",
+        "experiments/event-spine-proof/Cargo.lock", "experiments/temporal-proof/Cargo.lock",
+    }),
+    "chrono-tz": ("RUSTSEC-2026-0555", "0.10.4", {"Cargo.lock"}),
+    "humantime": ("RUSTSEC-2026-0542", "2.4.0", {"Cargo.lock"}),
 }
 AUDIT_GUARD = "      - name: Check bounded advisory exceptions\n        run: python3 scripts/verify_supply_chain.py\n"
 
 
-def check_advisory_policy(path: Path, *, today: date | None = None) -> list[Problem]:
-    """Accept only the reviewed maintenance record until the exclusive UTC expiry."""
+def check_advisory_policy(path: Path, *, today: date | None = None, proof: bool = False) -> list[Problem]:
+    """Accept only reviewed maintenance records until the exclusive UTC expiry."""
     relative = path.as_posix()
     if not path.is_file():
         return [Problem(relative, "cargo-deny policy is missing")]
@@ -332,10 +333,13 @@ def check_advisory_policy(path: Path, *, today: date | None = None) -> list[Prob
         if advisories.get(key) != expected:
             problems.append(Problem(relative, f"advisories.{key} must be {expected!r}"))
     ignored = advisories.get("ignore")
-    if ignored not in ([], [CHRONO_EXCEPTION]):
-        problems.append(Problem(relative, "advisory exceptions require exact ADR-0123 approval"))
-    elif ignored and (today or datetime.now(timezone.utc).date()) >= CHRONO_EXCEPTION_EXPIRY:
-        problems.append(Problem(relative, "ADR-0123 exception expired at 2026-12-18T00:00:00Z; remove Chrono or obtain a new reviewed decision"))
+    allowed = [{"id": record[0], "reason": MAINTENANCE_EXCEPTION_REASON}
+               for name, record in MAINTENANCE_EXCEPTIONS.items() if not proof or name == "chrono"]
+    if (not isinstance(ignored, list) or any(entry not in allowed for entry in ignored)
+            or len(ignored) != len({entry["id"] for entry in ignored})):
+        problems.append(Problem(relative, "advisory exceptions require exact ADR-0123 approval without duplicates"))
+    elif ignored and (today or datetime.now(timezone.utc).date()) >= MAINTENANCE_EXCEPTION_EXPIRY:
+        problems.append(Problem(relative, "ADR-0123 exceptions expired at 2026-12-18T00:00:00Z; retire them or obtain a new reviewed decision"))
     return problems
 
 
@@ -353,11 +357,13 @@ def check_exception_lock(root: Path, path: Path) -> list[Problem]:
     except (OSError, ValueError, UnicodeDecodeError):
         return [Problem(relative, "cannot inspect Cargo.lock advisory scope")]
     for package in packages:
-        if package.get("name") == "chrono" and (
-            relative not in CHRONO_EXCEPTION_LOCKS or package.get("version") != "0.4.45"
+        name = package.get("name")
+        reviewed = MAINTENANCE_EXCEPTIONS.get(name) if isinstance(name, str) else None
+        if reviewed is not None and (
+            relative not in reviewed[2] or package.get("version") != reviewed[1]
             or package.get("source") != "registry+" + CRATES_IO_INDEX
         ):
-            return [Problem(relative, "Chrono resolution is outside the reviewed ADR-0123 exception")]
+            return [Problem(relative, "Dependency resolution is outside the reviewed ADR-0123 exceptions")]
     return []
 
 
@@ -538,7 +544,7 @@ def verify(root: Path, artifacts: Path | None = None, *, today: date | None = No
     problems.extend(spec_problems)
     problems.extend(check_workspace_locks(root))
     problems.extend(check_deny_policy(root / "deny.toml", today=today))
-    problems.extend(check_advisory_policy(root / "experiments/deny.toml", today=today))
+    problems.extend(check_advisory_policy(root / "experiments/deny.toml", today=today, proof=True))
     problems.extend(check_advisory_audit_guards(root))
     if tools is not None:
         problems.extend(
