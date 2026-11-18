@@ -436,6 +436,11 @@ pull witness while the halted worker remains stopped. Poison bytes stay in
 the stream with one pending acknowledgement. This timer-specific proof takes
 at least 38 seconds, requires an exclusive broker, and does not establish
 a sustained prefetch bound or broker-server restart durability.
+Its pull observers register on a separate client. After each subscription, an
+account-information request/reply on that observer connection confirms the server
+has processed the preceding subscription before demand starts on the other client.
+The pinned SDK's `flush()` only confirms local writer drainage; it is not this
+server-side readiness barrier.
 The closure proof cancels a polled receive and recovers a delivery, then waits
 for another registered pull before deleting the real durable consumer. It
 verifies the typed terminal error, requires repeated calls to resolve without
