@@ -200,3 +200,22 @@ pub(crate) fn load() -> Result<Suite, EvaluationError> {
         complete: true,
     })
 }
+
+#[cfg(feature = "performance-probe")]
+pub(crate) fn calibration(index: usize) -> Result<Input, EvaluationError> {
+    if !(1..=3).contains(&index) {
+        return Err(INVALID);
+    }
+    let n = 100 + index;
+    let (f, baseline, input, standard) = materialize(n, None)?;
+    Ok(Input {
+        identity: identity(&[b"research.explanation-performance-calibration.v1", &input]),
+        record: f.record,
+        decision: f.decision,
+        baseline,
+        standard,
+        complete_case: None,
+        runtime_case: Some(n),
+        prepared: Some(input),
+    })
+}

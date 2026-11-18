@@ -14,6 +14,7 @@ edgeagent-research-domain.workspace = true
 serde_json.workspace = true
 
 [features]
+performance-probe = []
 map-order-test = ["serde_json/preserve_order"]
 
 [lints]

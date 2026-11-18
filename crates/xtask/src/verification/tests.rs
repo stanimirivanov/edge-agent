@@ -812,6 +812,8 @@ fn inventory_and_default_acceptance_are_complete_and_credential_free() -> Result
             "workflow-security",
             "secret-policy",
             "architecture-graph",
+            "explanation-performance-probe",
+            "explanation-performance-lint",
             "image-contracts",
             "local-stack-contracts",
             "supply-chain-contracts",

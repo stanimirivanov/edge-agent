@@ -29,11 +29,12 @@ def runtime_id(manifest):
     return hashlib.sha256(common.canonical(value)).hexdigest()
 
 
-def preflight(manifest):
+def preflight(manifest, *, performance=False):
     if set(manifest) != common.FIELDS or manifest["version"] != 2:
         raise common.HarnessError("invalid_manifest")
     common.preflight(manifest, version=2, identity=runtime_id)
-    if Path(manifest["helper"]["path"]).name != "edgeagent-research":
+    expected = "probe_explanation" if performance else "edgeagent-research"
+    if Path(manifest["helper"]["path"]).name != expected:
         raise common.HarnessError("service_helper_required")
 
 
@@ -103,13 +104,20 @@ def diagnostic_source(source, source_pin, source_manifest, manifest):
     return source_pin
 
 
-def supervise(manifest_path, manifest_pin, mode, diagnostic=None):
+def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance_observer=None):
     raw = manifest_path.read_bytes()
     if len(raw) > 32768 or hashlib.sha256(raw).hexdigest() != manifest_pin:
         raise common.HarnessError("manifest_pin_mismatch")
     manifest = common.load(manifest_path, 32768)
     if set(manifest) != common.FIELDS or type(manifest["version"]) is not int or manifest["version"] != 2:
         raise common.HarnessError("invalid_manifest")
+    performance = mode in {"performance-P01", "performance-P02", "performance-P03"}
+    if mode.startswith("performance-") and (not performance or diagnostic is not None):
+        raise common.HarnessError("invalid_performance_mode")
+    if not performance and performance_observer is not None:
+        raise common.HarnessError("performance_observer_requires_probe")
+    if performance:
+        preflight(manifest, performance=True)
     # The helper alone is needed for recovery. Runtime/weights are checked only
     # after the helper has recovered the durable job and requested a new runtime.
     common.check_file(manifest["helper"], 512 * 1024**2)
@@ -141,7 +149,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None):
                         break
                     first.extend(part)
         if bytes(first) == REQUEST:
-            preflight(manifest)
+            preflight(manifest, performance=performance)
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
@@ -160,11 +168,15 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None):
             first.clear()
         else:
             child.stdin.close()
-        deadline = time.monotonic() + (1200 if mode.endswith("collect") else 90)
+            if performance:
+                raise common.HarnessError("performance_runtime_required")
+        deadline = time.monotonic() + (190 if performance else 1200 if mode.endswith("collect") else 90)
         tail = bytearray()
         with selectors.DefaultSelector() as ready:
             ready.register(child.stdout, selectors.EVENT_READ)
             while True:
+                if performance_observer is not None:
+                    performance_observer(model.pid, child.pid)
                 if time.monotonic() >= deadline:
                     raise common.HarnessError("helper_timeout")
                 if not ready.select(timeout=0.2):
@@ -178,7 +190,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None):
         child.wait(timeout=5)
         if child.returncode:
             raise common.HarnessError("helper_failed")
-        preflight(manifest) if model is not None else None
+        preflight(manifest, performance=performance) if model is not None else None
         return bytes(first) + bytes(tail)
     finally:
         try:

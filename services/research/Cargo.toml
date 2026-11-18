@@ -38,5 +38,12 @@ opentelemetry-proto.workspace = true
 prost.workspace = true
 futures-util.workspace = true
 
+[features]
+performance-probe = ["edgeagent-research-application/performance-probe"]
+
+[[example]]
+name = "probe_explanation"
+required-features = ["performance-probe"]
+
 [lints]
 workspace = true
