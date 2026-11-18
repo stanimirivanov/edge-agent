@@ -23,7 +23,11 @@ pub(super) struct Fixture {
     pub assertions: serde_json::Value,
 }
 pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
+    let calibration = (101..=103).contains(&n);
     let count = match n {
+        101 => 1,
+        102 => 4,
+        103 => 12,
         1 | 9 | 13..=15 | 17 | 20 | 22 | 23 | 25 | 27..=30 => 1,
         3 | 6 | 26 => 3,
         _ => 2,
@@ -116,14 +120,19 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let expiry = strategy.expiry_ms;
     let bytes = config.canonical_bytes().map_err(|_| INVALID)?;
     let selection = Selection::decode(&bytes).map_err(|_| INVALID)?;
-    let profile = selection.profile("evaluation");
+    let scope = if calibration {
+        "performance"
+    } else {
+        "evaluation"
+    };
+    let profile = selection.profile(scope);
     let mut configuration = [0; 32];
     for (i, b) in configuration.iter_mut().enumerate() {
         *b = u8::from_str_radix(&profile.configuration[i * 2..i * 2 + 2], 16)
             .map_err(|_| INVALID)?;
     }
     let dates = (1..=u32::from(lookback) + 1)
-        .map(|d| SessionDate::new(2026, 10, d))
+        .map(|d| SessionDate::new(2026, if calibration { 11 } else { 10 }, d))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| INVALID)?;
     let universe = (1..=count)
@@ -245,8 +254,12 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
         context: contexts,
     };
     let request = ResearchRequest {
-        request_id: format!("complete-U{n:02}"),
-        scope: "evaluation".into(),
+        request_id: if calibration {
+            format!("performance-P{:02}", n - 100)
+        } else {
+            format!("complete-U{n:02}")
+        },
+        scope: scope.into(),
         implementation: profile.implementation,
         configuration: profile.configuration,
         decision_at_ms: 100,

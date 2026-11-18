@@ -20,6 +20,9 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+#[cfg(feature = "performance-probe")]
+mod performance;
+
 const MAX_RESPONSE_BYTES: usize = 65_536;
 const MAX_PROMPT_BYTES: usize = 4096;
 

@@ -303,6 +303,14 @@ pub struct Suite {
 }
 
 impl Suite {
+    /// Non-grading invented capacity inputs; never part of a frozen census.
+    /// # Errors
+    /// Refuses every index except the fixed three performance sizes.
+    #[cfg(feature = "performance-probe")]
+    pub fn performance_input(index: usize) -> Result<Input, EvaluationError> {
+        complete::runtime::calibration(index)
+    }
+
     /// Load the frozen synthetic fixtures and verify the baseline pins.
     ///
     /// # Errors
