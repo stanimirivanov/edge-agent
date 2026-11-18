@@ -18,6 +18,21 @@ pub(super) fn check(name: &str, root: &Yaml, problems: &mut Vec<String>) {
     else {
         return;
     };
+    let preflights: Vec<_> = steps
+        .iter()
+        .enumerate()
+        .filter(|(_, step)| text(step, "run") == Some("python3 scripts/verify_supply_chain.py"))
+        .map(|(index, _)| index)
+        .collect();
+    let audit = steps.iter().position(|step| {
+        text(step, "uses")
+            .is_some_and(|action| action.starts_with("EmbarkStudios/cargo-deny-action@"))
+    });
+    if preflights.len() != 1 || !audit.is_some_and(|index| preflights[0] < index) {
+        problems.push(format!(
+            "jobs.{job}: advisory expiry preflight must execute exactly once before cargo-deny"
+        ));
+    }
     let denies: Vec<_> = steps
         .iter()
         .filter(|step| action(step) == Some("EmbarkStudios/cargo-deny-action"))

@@ -32,7 +32,7 @@ pub(super) fn triggers(node: &Yaml) -> bool {
 }
 
 pub(super) fn job(id: &str, job: &Yaml, steps: &[Yaml], problems: &mut Vec<String>) {
-    let (timeout, count) = if id == "audit" { (15, 2) } else { (5, 4) };
+    let (timeout, count) = if id == "audit" { (15, 3) } else { (5, 4) };
     if field(job, "timeout-minutes").and_then(Yaml::as_i64) != Some(timeout)
         || steps.len() != count
         || field(job, "outputs").is_some()
@@ -49,7 +49,7 @@ pub(super) fn job(id: &str, job: &Yaml, steps: &[Yaml], problems: &mut Vec<Strin
             "cargo xtask verify --check repository-policy --check architecture-graph",
         ]
     } else {
-        &[]
+        &["python3 scripts/verify_supply_chain.py"]
     };
     let actual_runs: Vec<_> = steps.iter().filter_map(|step| text(step, "run")).collect();
     if actual_runs != expected_runs {
