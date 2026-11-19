@@ -37,8 +37,15 @@ No body/header/schema rejection is bypassed; the outcome remains invalid respons
 Use new `research.explanation-performance.v2` and
 `research.explanation-performance.attempt.v2` kinds. The importer checks the closed
 numeric shape and context/status consistency, rejecting payload-bearing records,
-legacy kinds and malformed counts. Profiles and grading/qualification contracts
+legacy kinds and malformed counts. Profile schemas and grading/qualification contracts
 are unchanged. No automatic context increase, evidence truncation or retry occurs.
+
+The maintainer explicitly approved preparing a separate 32,768-token private
+performance package for this candidate. Preserve the model, runtime, prompt, six
+threads, 1,024-token output budget and 30,000 ms canonical timeout. Rebind the
+changed context and rebuilt helper into a new deployment/profile/manifest rather
+than editing the original 16,384-token package. This is capacity preparation, not
+qualification, approval, activation or evidence of acceptable latency.
 
 ## Alternatives considered
 

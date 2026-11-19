@@ -145,3 +145,12 @@ importer rejects v1 attempts instead of reinterpreting historical evidence. Any
 larger context is a separate explicit profile choice, requiring a new identity
 and fresh measurements. Preserve the 30-second production profile ceiling and
 180-second performance observation cap unless a separate decision changes them.
+
+For the diagnosed Qwen3-4B P03 case, the maintainer approved a new private
+32,768-context package. The observed 24,762-token complete prompt plus the
+unchanged 1,024-token output budget fits with 6,982 tokens remaining. Verify the
+actual runtime context and complete templated prompt token count with the pinned
+runtime before a new capacity/latency trial; input bytes alone cannot establish
+fit. Keep six threads and the original model/prompt/settings, regenerate the
+helper/deployment/profile/manifest pins, and preserve the old 16k package. This
+capacity check does not establish response validity, latency or qualification.
