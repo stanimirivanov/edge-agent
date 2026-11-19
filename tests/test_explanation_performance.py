@@ -37,7 +37,7 @@ class PerformanceTests(unittest.TestCase):
                 case = mode.removeprefix("performance-")
                 return probe.owned.common.canonical({"kind": probe.ATTEMPT, "case": case,
                     "profile": "a"*64, "calibration": case[-1]*64, "input_bytes": 100,
-                    "total_ms": 31_000, "measurement": {"status": "timeout", "stage": "waiting_response", "elapsed_ms": 30_001}})
+                    "total_ms": 31_000, "measurement": {"status": "timeout", "stage": "waiting_response", "elapsed_ms": 30_001,"response":{"http_status":None,"context_capacity":None}}})
             with patch.object(probe.owned, "preflight"), patch.object(probe.cpu, "wait_idle", return_value=True), \
                  patch.object(probe.owned, "supervise", side_effect=attempt):
                 self.assertEqual(probe.run(manifest,pin,report,pin), 0)
@@ -65,7 +65,7 @@ class PerformanceTests(unittest.TestCase):
 
     def test_corrupt_or_payload_bearing_measurements_refuse_import(self):
         value={"kind":probe.ATTEMPT,"case":"P01","profile":"a"*64,"calibration":"b"*64,
-               "input_bytes":10,"total_ms":100,"measurement":{"status":"valid","stage":"complete","elapsed_ms":10}}
+               "input_bytes":10,"total_ms":100,"measurement":{"status":"valid","stage":"complete","elapsed_ms":10,"response":{"http_status":200,"context_capacity":None}}}
         probe.check_attempt(value,"P01")
         for mutation in (dict(value,proposal="PRIVATE"),dict(value,kind="research.explanation-runtime.collection.v2"),
                          dict(value,case="U01"),dict(value,measurement={"status":"PRIVATE","stage":"complete","elapsed_ms":0})):
@@ -125,7 +125,7 @@ class PerformanceTests(unittest.TestCase):
                     # must escape it rather than silently extending the census.
                     return probe.owned.common.canonical({"kind":probe.ATTEMPT,"case":mode.removeprefix("performance-"),
                         "profile":"a"*64,"calibration":"b"*64,"input_bytes":10,"total_ms":10,
-                        "measurement":{"status":"valid","stage":"complete","elapsed_ms":1}})
+                        "measurement":{"status":"valid","stage":"complete","elapsed_ms":1,"response":{"http_status":200,"context_capacity":None}}})
             with patch.object(probe.signal,"signal",side_effect=handler), patch.object(probe.signal,"setitimer"), \
                  patch.object(probe.owned,"preflight"), patch.object(probe.cpu,"wait_idle",return_value=True), \
                  patch.object(probe.owned,"supervise",side_effect=attempt) as launch:
@@ -147,3 +147,26 @@ class PerformanceTests(unittest.TestCase):
                 with self.assertRaises(probe.owned.common.HarnessError):
                     probe.owned.supervise(manifest,hashlib.sha256(manifest.read_bytes()).hexdigest(),"performance-P01",performance_observer=lambda *_: None)
                 command.assert_not_called()
+
+    def test_v2_context_capacity_is_numeric_closed_and_not_an_authority(self):
+        value={"kind":"research.explanation-performance.attempt.v2","case":"P03","profile":"a"*64,"calibration":"b"*64,
+               "input_bytes":39218,"total_ms":20,"measurement":{"status":"invalid_response","stage":"reading_response","elapsed_ms":15,
+               "response":{"http_status":400,"context_capacity":{"prompt_tokens":24762,"context_tokens":16384}}}}
+        probe.check_attempt(value,"P03")
+        import copy
+        mutations=[("http_status",True),("http_status",700),("message","PRIVATE"),
+                   ("context_capacity",{"prompt_tokens":True,"context_tokens":16384}),
+                   ("context_capacity",{"prompt_tokens":16384,"context_tokens":24762}),
+                   ("context_capacity",{"prompt_tokens":2**32,"context_tokens":16384}),
+                   ("context_capacity",{"prompt_tokens":24762,"context_tokens":0})]
+        for key,replacement in mutations:
+            changed=copy.deepcopy(value)
+            changed["measurement"]["response"][key]=replacement
+            with self.subTest(key=key,replacement=replacement), self.assertRaises(probe.owned.common.HarnessError):
+                probe.check_attempt(changed,"P03")
+        changed=copy.deepcopy(value)
+        changed["measurement"]["response"]["http_status"]=200
+        with self.assertRaises(probe.owned.common.HarnessError):probe.check_attempt(changed,"P03")
+        changed=copy.deepcopy(value)
+        changed["kind"]="research.explanation-performance.attempt.v1"
+        with self.assertRaises(probe.owned.common.HarnessError):probe.check_attempt(changed,"P03")
