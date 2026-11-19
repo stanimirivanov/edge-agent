@@ -12,8 +12,8 @@ from pathlib import Path
 import benchmark_explanation_cpu as cpu
 import run_explanation_owned as owned
 
-KIND = "research.explanation-performance.v1"
-ATTEMPT = "research.explanation-performance.attempt.v1"
+KIND = "research.explanation-performance.v2"
+ATTEMPT = "research.explanation-performance.attempt.v2"
 CASES = ("P01", "P02", "P03")
 STATUSES = {"valid", "invalid_proposal", "invalid_request", "unavailable", "timeout", "refused", "budget_exhausted", "deployment_mismatch", "invalid_response"}
 STAGES = {"idle", "checking_deployment", "waiting_response", "reading_response", "decoding_response", "validating_proposal", "complete"}
@@ -31,13 +31,29 @@ def check_attempt(value, case):
         if not isinstance(value[key],str) or len(value[key]) != 64 or any(c not in "0123456789abcdef" for c in value[key]):
             raise owned.common.HarnessError("invalid_measurement")
     m=value["measurement"]
-    if (not isinstance(m,dict) or set(m) != {"status","stage","elapsed_ms"}
+    if (not isinstance(m,dict) or set(m) != {"status","stage","elapsed_ms","response"}
             or not isinstance(m["status"],str) or m["status"] not in STATUSES
             or not isinstance(m["stage"],str) or m["stage"] not in STAGES
             or type(value["input_bytes"]) is not int or not 1 <= value["input_bytes"] <= 65_536
             or any(type(v) is not int or not 0 <= v <= 5_400_000 for v in (value["total_ms"],m["elapsed_ms"]))
             or value["total_ms"] < m["elapsed_ms"]
             or (m["status"] == "valid" and m["elapsed_ms"] > 180_000)):
+        raise owned.common.HarnessError("invalid_measurement")
+
+    response=m["response"]
+    if not isinstance(response,dict) or set(response) != {"http_status","context_capacity"}:
+        raise owned.common.HarnessError("invalid_measurement")
+    status=response["http_status"]
+    capacity=response["context_capacity"]
+    if status is not None and (type(status) is not int or not 100 <= status <= 599):
+        raise owned.common.HarnessError("invalid_measurement")
+    if capacity is not None and (
+            not isinstance(capacity,dict) or set(capacity) != {"prompt_tokens","context_tokens"}
+            or any(type(v) is not int or not 1 <= v <= 2**32-1 for v in capacity.values())
+            or capacity["prompt_tokens"] <= capacity["context_tokens"]
+            or status != 400 or m["status"] != "invalid_response" or m["stage"] != "reading_response"):
+        raise owned.common.HarnessError("invalid_measurement")
+    if m["status"] == "valid" and (status != 200 or m["stage"] != "complete"):
         raise owned.common.HarnessError("invalid_measurement")
 
 

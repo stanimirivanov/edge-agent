@@ -433,7 +433,7 @@ async fn performance_timeouts_release_identity_and_invalid_caps_never_dispatch()
         .await;
     assert_eq!(measurement.status, "timeout");
     assert!(!lease.load(Ordering::SeqCst));
-    let value = serde_json::json!({"kind":"research.explanation-performance.attempt.v1","measurement":measurement});
+    let value = serde_json::json!({"kind":"research.explanation-performance.attempt.v2","measurement":measurement});
     assert!(
         serde_json::from_slice::<edgeagent_contracts::explanation_qualification::Collection>(
             &serde_json::to_vec(&value)?
@@ -480,6 +480,147 @@ async fn performance_validates_rendering_and_drops_unsupported_proposals() -> Re
         )
         .await;
     assert_eq!(result.status, "invalid_proposal");
+    server.await??;
+    Ok(())
+}
+
+#[cfg(feature = "performance-probe")]
+#[tokio::test]
+async fn twelve_instrument_context_rejection_is_payload_free_and_preserves_the_input() -> Result {
+    use edgeagent_research_application::{explanation::Allowlist, explanation_evaluation::Suite};
+    let input = Suite::performance_input(3)?;
+    let bytes = input.prepared_input().ok_or("preparation")?;
+    let (listener, addr) = listener().await?;
+    let mut profile = profile();
+    profile.settings.timeout_ms = 30_000;
+    let binding = Binding {
+        anchor: Allowlist::from_verified(input.artifact(), input.decision())?
+            .standard()?
+            .anchor()
+            .clone(),
+        profile: profile.id()?,
+        evidence: "e".repeat(64),
+    };
+    let lease = Arc::new(AtomicBool::new(false));
+    let server_lease = lease.clone();
+    let body = br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":24762,"n_ctx":16384,"message":"PRIVATE MUST NEVER LEAVE THE TRANSPORT"}}"#;
+    let server =
+        tokio::spawn(
+            async move { serve(listener, server_lease, http("400 Bad Request", body)).await },
+        );
+    let adapter = HttpModel::new(
+        addr,
+        Verifier(addr, profile.deployment.clone(), lease.clone()),
+        PROMPT.into(),
+    )?;
+    let request = Request::new(&profile, &binding, bytes)?;
+    let result = serde_json::to_value(
+        adapter
+            .measure(&request, &input, Duration::from_secs(1))
+            .await,
+    )?;
+    assert_eq!(result["status"], "invalid_response");
+    assert_eq!(result["stage"], "reading_response");
+    assert_eq!(
+        result["response"],
+        json!({"http_status":400,"context_capacity":{"prompt_tokens":24762,"context_tokens":16384}})
+    );
+    assert!(!result.to_string().contains("PRIVATE"));
+    assert_eq!(
+        server.await??["messages"][1]["content"],
+        std::str::from_utf8(bytes)?
+    );
+    assert_eq!(profile.settings.timeout_ms, 30_000);
+    assert!(!lease.load(Ordering::SeqCst));
+    Ok(())
+}
+
+#[cfg(feature = "performance-probe")]
+#[tokio::test]
+async fn context_diagnostics_refuse_malformed_or_unrelated_provider_counts() -> Result {
+    use edgeagent_research_application::{explanation::Allowlist, explanation_evaluation::Suite};
+    let input = Suite::performance_input(3)?;
+    let profile = profile();
+    let binding = Binding {
+        anchor: Allowlist::from_verified(input.artifact(), input.decision())?
+            .standard()?
+            .anchor()
+            .clone(),
+        profile: profile.id()?,
+        evidence: "e".repeat(64),
+    };
+    for (status, body) in [
+        ("400 Bad Request", br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":true,"n_ctx":16384}}"#.to_vec()),
+        ("400 Bad Request", br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":16384,"n_ctx":24762}}"#.to_vec()),
+        ("400 Bad Request", br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":24762,"n_ctx":0}}"#.to_vec()),
+        ("400 Bad Request", br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":4294967296,"n_ctx":16384}}"#.to_vec()),
+        ("400 Bad Request", br#"{"error":{"code":400,"type":"other","n_prompt_tokens":24762,"n_ctx":16384}}"#.to_vec()),
+        ("400 Bad Request", vec![b'x'; 65_537]),
+        ("403 Forbidden", br#"{"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":24762,"n_ctx":16384}}"#.to_vec()),
+    ] {
+        let (listener, addr) = listener().await?;
+        let lease = Arc::new(AtomicBool::new(false));
+        let server_lease = lease.clone();
+        // For a header-only size rejection, avoid racing a large write against
+        // the client's intentional early close.
+        let wire = if body.len() > 65_536 {
+            b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 65537\r\n\r\n".to_vec()
+        } else {
+            http(status, &body)
+        };
+        let server = tokio::spawn(async move { serve(listener, server_lease, wire).await });
+        let model = HttpModel::new(addr, Verifier(addr, profile.deployment.clone(), lease.clone()), PROMPT.into())?;
+        let request = Request::new(&profile, &binding, input.prepared_input().ok_or("input")?)?;
+        let result = serde_json::to_value(model.measure(&request, &input, Duration::from_secs(1)).await)?;
+        assert_eq!(result["status"], "invalid_response");
+        assert!(result["response"]["context_capacity"].is_null());
+        assert!(!lease.load(Ordering::SeqCst));
+        server.await??;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn production_rejects_400_without_waiting_for_a_diagnostic_body() -> Result {
+    let (listener, addr) = listener().await?;
+    let profile = profile();
+    let binding = binding(&profile)?;
+    let lease = Arc::new(AtomicBool::new(false));
+    let server_lease = lease.clone();
+    let (release, hold) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await?;
+        let mut socket = BufReader::new(socket);
+        let mut line = String::new();
+        let mut length = 0;
+        loop {
+            line.clear();
+            socket.read_line(&mut line).await?;
+            if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                length = value.trim().parse::<usize>()?;
+            }
+            if line == "\r\n" {
+                break;
+            }
+        }
+        let mut body = vec![0; length];
+        socket.read_exact(&mut body).await?;
+        assert!(server_lease.load(Ordering::SeqCst));
+        socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 2000\r\n\r\n").await?;
+        let _ = hold.await;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    });
+    let model = HttpModel::new(
+        addr,
+        Verifier(addr, profile.deployment.clone(), lease.clone()),
+        PROMPT.into(),
+    )?;
+    let result = model
+        .propose(&Request::new(&profile, &binding, b"input")?)
+        .await;
+    let _ = release.send(());
+    assert!(matches!(result, Err(Failure::InvalidResponse)));
+    assert!(!lease.load(Ordering::SeqCst));
     server.await??;
     Ok(())
 }

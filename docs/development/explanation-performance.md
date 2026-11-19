@@ -2,6 +2,7 @@
 
 ## TL;DR
 
+- Performance v2 records only bounded HTTP status and optional context-capacity counts; historical v1 reports remain unchanged.
 - This separate opt-in Linux probe observes complete local responses for up to 180 seconds, without changing the production 30-second ceiling.
 - It uses the production preparation, identity-checked HTTP exchange, schema/proposal validation and deterministic renderer. No proposal/text leaves the helper.
 - It runs three invented sizes, three times each, with a fresh owned model process for every attempt. All outcomes are retained; cleanup completes before the next attempt.
@@ -120,3 +121,36 @@ diagnostic replays retain their original settings and cannot use this protocol's
 ceiling. After a real idle-host run, review valid completion latency, interference,
 output truncation/refusal and headroom before proposing a separate production
 budget/profile change or fresh M06-PR33 qualification.
+
+## Diagnose context-capacity failures
+
+A byte-valid input is not necessarily a token-valid prompt for the selected
+runtime. The twelve-instrument P03 input (39,218 bytes) reproduced an upstream
+HTTP 400 with 24,762 complete prompt tokens against the original 16,384-token
+context. Increasing the timeout cannot fix that rejection. Do not truncate the
+verified evidence or alter the frozen grading suite to make a case fit.
+
+[ADR-0125](../decisions/0125-report-explanation-context-capacity.md) defines the
+v2 report/attempt kinds. Each measurement adds `response.http_status` (null before
+headers) and optional `response.context_capacity` with positive `prompt_tokens`
+and `context_tokens` counts. Counts describe an untrusted upstream report, not
+independently measured capacity or qualification evidence. They appear only for
+a bounded, recognized HTTP 400 context error; other rejections remain generic.
+No error message, token array or response body is exported. The outcome stays
+`invalid_response`; the context pair explains the refusal without granting rights.
+
+Rebuild/pin the helper and use the matching v2 probe in a new private package;
+rebind its deployment/profile/manifest and create new exclusive reports. The v2
+importer rejects v1 attempts instead of reinterpreting historical evidence. Any
+larger context is a separate explicit profile choice, requiring a new identity
+and fresh measurements. Preserve the 30-second production profile ceiling and
+180-second performance observation cap unless a separate decision changes them.
+
+For the diagnosed Qwen3-4B P03 case, the maintainer approved a new private
+32,768-context package. The observed 24,762-token complete prompt plus the
+unchanged 1,024-token output budget fits with 6,982 tokens remaining. Verify the
+actual runtime context and complete templated prompt token count with the pinned
+runtime before a new capacity/latency trial; input bytes alone cannot establish
+fit. Keep six threads and the original model/prompt/settings, regenerate the
+helper/deployment/profile/manifest pins, and preserve the old 16k package. This
+capacity check does not establish response validity, latency or qualification.

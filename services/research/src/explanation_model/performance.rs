@@ -11,6 +11,8 @@ pub struct Measurement {
     pub stage: ModelStage,
     /// HTTP/identity/validation/render duration; excludes model startup.
     pub elapsed_ms: u64,
+    /// Bounded status/capacity metadata; never provider messages or response bytes.
+    pub response: ResponseDiagnostic,
 }
 
 impl<V: DeploymentVerifier> HttpModel<V> {
@@ -24,6 +26,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
         ceiling: Duration,
     ) -> Measurement {
         let started = Instant::now();
+        let mut response = ResponseDiagnostic::default();
         let status = async {
             let Ok(_slot) = self.busy.try_lock() else {
                 return "unavailable";
@@ -39,7 +42,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
             }
             self.stage.store(1, Ordering::Relaxed);
             match tokio::time::timeout(ceiling, async {
-                self.exchange(request).await.map(|reply| {
+                self.exchange(request, Some(&mut response)).await.map(|reply| {
                     // The model reply and deterministic presentation cannot leave here.
                     if input.render_candidate(reply.proposal()).is_ok() {
                         "valid"
@@ -68,6 +71,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
         };
         Measurement {
             status,
+            response,
             stage: self.diagnostic_stage(),
             elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         }
