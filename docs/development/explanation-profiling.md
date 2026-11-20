@@ -30,8 +30,9 @@ and its [slot implementation](https://github.com/ggml-org/llama.cpp/blob/9d25e00
 
 Host snapshots retain existing external CPU estimates, frequency/governor/thermal
 values, plus optional per-CPU throttle counters and RAPL energy/range/power limits.
-Missing or permission-denied values are unknown. Compare counter changes per
-CPU; package counters can be duplicated across CPUs and must not be summed as
+Missing or permission-denied values are unknown. Throttle arrays follow lexical
+`cpuN` directory order; compare corresponding entries across snapshots. Package
+counters can be duplicated across CPUs and must not be summed as
 independent events. Energy counters can wrap at their reported range. No governor,
 affinity, power limit or unrelated process is modified. These observations do not
 establish causality or certify an uncontended host.
