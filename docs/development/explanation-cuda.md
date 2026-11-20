@@ -93,3 +93,36 @@ cargo xtask verify --python python3
 Default tests use synthetic hardware facts and require no CUDA device or weights.
 Report actual optional hardware checks separately. Old CPU replay settings remain
 frozen, and failed or incomplete GPU reports cannot enable generation.
+
+## Joint GPU admission
+
+[ADR-0128](../decisions/0128-require-gpu-admission-for-performance-probes.md)
+adds GPU-v4 measurement records to the bounded performance probe. Prepare a new
+matching private tooling snapshot; retain the old packages and reports. With the
+actual manifest digest substituted, use:
+
+```text
+python3 scripts/probe_explanation_performance.py --manifest /absolute/private/performance.manifest.v3.json --manifest-sha256 ACTUAL_SHA256 --execute-manifest ACTUAL_SHA256 --report /absolute/private/new-gpu-probe.jsonl --gpu-required-free-mib 3656
+```
+
+The operator must select the free-VRAM requirement from actual fit evidence.
+3,656 MiB is the retained candidate's 3,528 MiB startup plus a 128 MiB reserve,
+not a proof of P03 fit. CUDA requires this flag; CPU refuses it. Each CUDA attempt
+requires five continuous minutes passing the original CPU/memory/I/O gate and
+GPU/memory utilization at most 5%, zero compute clients and sufficient free VRAM.
+Unknown telemetry resets admission. Repeated admission counts against the same
+90-minute whole-run budget and can leave a partial census. No process is killed
+to achieve idleness and the tool does not reserve GPU resources.
+
+Read-only queries use the installed `/usr/bin/nvidia-smi`, selected manifest GPU,
+500 ms per-query bound and 4 KiB output cap. The report binds source/tool digests
+and numeric telemetry without UUIDs, PIDs, process names or raw stderr. During
+requests, the owned model PID is excluded from foreign compute counts. Unknown,
+missing or foreign-compute observations contaminate the retained result and stop
+later attempts. Aggregate GPU usage does not identify competing graphics work;
+short-lived clients between samples may be missed. Completed means the census
+was collected, not that the latency target or qualification passed.
+
+The older thread-comparison tool has no GPU admission claim and is outside this
+increment. No new real campaign is implied by tests or a single hardware sample.
+The 30-second production limit, frozen qualification and #508 remain unchanged.

@@ -18,6 +18,46 @@ class PerformanceTests(unittest.TestCase):
         manifest.write_text(json.dumps({"weights": {"path": str(weights)}, "profile": {"sha256": "a"*64}}))
         return manifest, hashlib.sha256(manifest.read_bytes()).hexdigest()
 
+    def test_cuda_attempts_require_repeated_admission_and_stop_on_contamination(self):
+        import explanation_gpu_metrics as gpu
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);manifest,pin=self.fixture(root)
+            data=json.loads(manifest.read_text());data.update(version=3,cuda={'invented':True})
+            manifest.write_text(json.dumps(data));pin=hashlib.sha256(manifest.read_bytes()).hexdigest()
+            value={'kind':probe.ATTEMPT,'case':'P01','profile':'a'*64,'calibration':'1'*64,'input_bytes':100,'total_ms':1,
+                   'measurement':{'status':'valid','stage':'complete','elapsed_ms':1,'response':{'http_status':200,'context_capacity':None,'timings':None,'finish_reason':'stop'}}}
+            def attempt(path,pin,mode,**kwargs):
+                kwargs['performance_observer'](42,99,1234)
+                return probe.owned.common.canonical(dict(value,case=mode.removeprefix("performance-")))
+            with patch.object(probe.owned,'preflight'),patch.object(gpu,'Monitor') as monitor, \
+                 patch.object(probe.cpu,'wait_idle',return_value=True) as gate, \
+                 patch.object(probe.profiling,'Observer'),patch.object(probe.owned,'supervise',side_effect=attempt) as run:
+                monitor.return_value.policy.return_value={}
+                monitor.return_value.sample.return_value=None
+                monitor.side_effect=probe.owned.common.HarnessError('gpu_headroom_required')
+                self.assertEqual(probe.run(manifest,pin,root/'missing.jsonl',pin),2)
+                monitor.side_effect=None
+                run.assert_not_called()
+                self.assertEqual(probe.run(manifest,pin,root/'observed.jsonl',pin,gpu_required_free_mib=3656),2)
+                self.assertEqual(run.call_count,1)
+                self.assertIsNotNone(gate.call_args.kwargs['additional_idle'])
+                run.reset_mock();gate.reset_mock()
+                monitor.return_value.sample.return_value={'gpu_percent':100,'memory_percent':100,'total_mib':4096,'free_mib':100,'foreign_compute':0}
+                self.assertEqual(probe.run(manifest,pin,root/'clean.jsonl',pin,gpu_required_free_mib=3656),0)
+                self.assertEqual(run.call_count,9)
+                self.assertEqual(gate.call_count,9)
+                self.assertTrue(all(call.kwargs['additional_idle'] is not None for call in gate.call_args_list))
+                run.reset_mock();gate.reset_mock();gate.side_effect=[True,False]
+                self.assertEqual(probe.run(manifest,pin,root/'readmission.jsonl',pin,gpu_required_free_mib=3656),2)
+                self.assertEqual(run.call_count,1)
+                gate.side_effect=None
+                run.side_effect=lambda *args,**kwargs:probe.owned.common.canonical(value)
+                self.assertEqual(probe.run(manifest,pin,root/'unobserved.jsonl',pin,gpu_required_free_mib=3656),2)
+            rows=[json.loads(line) for line in (root/'observed.jsonl').read_text().splitlines()]
+            self.assertEqual(rows[0]['kind'],'research.explanation-performance.v4')
+            self.assertEqual(rows[-1]['reason'],'gpu_observation_contaminated')
+            self.assertTrue(next(r for r in rows if r.get('event')=='attempt_finished')['gpu_contaminated'])
+
     def test_ordinary_supervisor_rejects_performance_helper(self):
         manifest = {key: None for key in probe.owned.common.FIELDS}
         manifest.update(version=2, helper={"path": "/invented/probe_explanation"})

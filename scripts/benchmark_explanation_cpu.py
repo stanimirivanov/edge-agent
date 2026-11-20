@@ -84,12 +84,14 @@ def is_idle(before, after, memory):
                for key in ("cpu", "memory", "io"))
 
 
-def wait_idle(read, clock, sleep, emit, deadline, memory, window=300):
+def wait_idle(read, clock, sleep, emit, deadline, memory, window=300, *, additional_idle=None):
     previous, since = read(), None
     while clock() < deadline:
         sleep(min(1, deadline - clock()))
         current, now = read(), clock()
         idle = is_idle(previous, current, memory)
+        if additional_idle is not None:
+            idle = additional_idle() and idle
         since = (now if since is None else since) if idle else None
         emit({"event": "idle_sample", "idle": idle, "host": current})
         if since is not None and now - since >= window:
