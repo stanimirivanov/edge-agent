@@ -68,7 +68,7 @@ def check_attempt(value, case):
         raise owned.common.HarnessError("invalid_measurement")
 
 
-def run(manifest_path,pin,report_path,execute):
+def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None):
     if len(pin) != 64 or any(c not in "0123456789abcdef" for c in pin):
         raise owned.common.HarnessError("invalid_manifest_pin")
     if signal.getitimer(signal.ITIMER_REAL)[0]:
@@ -77,7 +77,7 @@ def run(manifest_path,pin,report_path,execute):
         started=time.monotonic()
         def emit(value):
             cpu.record(stream,dict(value,journal_ms=round((time.monotonic()-started)*1000)))
-        emit({"kind":KIND,"permission_granted":False,"manifest":pin,
+        emit({"kind":("research.explanation-performance.v4" if gpu_required_free_mib is not None else KIND),"permission_granted":False,"manifest":pin,
               "launcher":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "profiling":hashlib.sha256(Path(profiling.__file__).read_bytes()).hexdigest(),
               "cpu":hashlib.sha256(Path(cpu.__file__).read_bytes()).hexdigest(),
@@ -94,25 +94,47 @@ def run(manifest_path,pin,report_path,execute):
             owned.common.check_file({"path":str(manifest_path),"sha256":pin},32768)
             manifest=owned.common.load(manifest_path,32768)
             owned.preflight(manifest,performance=True)
+            monitor=None
+            if manifest.get('version')==3:
+                import explanation_gpu_metrics as gpu
+                monitor=gpu.Monitor(manifest['cuda'],gpu_required_free_mib)
+                emit({'event':'gpu_policy',**monitor.policy()})
+            elif gpu_required_free_mib is not None:
+                raise owned.common.HarnessError('cuda_manifest_required')
             memory=Path(manifest["weights"]["path"]).stat().st_size+2*1024**3
-            if not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,min(started+5400,time.monotonic()+3600),memory):
+            if monitor is None and not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,min(started+5400,time.monotonic()+3600),memory):
                 emit({"event":"complete","status":"not_run","reason":"idle_wait_expired"})
                 return 2
             identities={}
             for case in CASES:
                 for repetition in range(1,4):
+                    if monitor is not None and not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,
+                            min(started+5400,time.monotonic()+3600),memory,
+                            additional_idle=lambda:monitor.admission(emit)):
+                        emit({'event':'complete','status':'incomplete' if launched else 'not_run','reason':'idle_wait_expired'})
+                        return 2
                     emit({"event":"attempt_started","case":case,"repetition":repetition})
                     launched=True
                     attempt_start=time.monotonic()
                     observe=profiling.Observer(lambda value:emit(dict(value,case=case,repetition=repetition)))
-                    raw=owned.supervise(manifest_path,pin,"performance-"+case,performance_observer=observe)
+                    gpu_observer=None
+                    if monitor is not None:
+                        gpu_observer=gpu.Observer(monitor,lambda value:emit(dict(value,case=case,repetition=repetition)))
+                    def observe_both(model,helper,port):
+                        observe(model,helper,port)
+                        if gpu_observer is not None:gpu_observer(model,helper,port)
+                    raw=owned.supervise(manifest_path,pin,"performance-"+case,performance_observer=observe_both)
                     value=json.loads(raw)
                     check_attempt(value,case)
                     identity=(value["calibration"],value["input_bytes"])
                     if (value["profile"] != manifest["profile"]["sha256"] or identities.setdefault(case,identity) != identity):
                         raise owned.common.HarnessError("measurement_identity_changed")
+                    extra={} if gpu_observer is None else {'gpu_contaminated':gpu_observer.contaminated or gpu_observer.observations==0}
                     emit({"event":"attempt_finished","case":case,"repetition":repetition,
-                          "measurement":value,"orchestration_ms":round((time.monotonic()-attempt_start)*1000)})
+                          "measurement":value,"orchestration_ms":round((time.monotonic()-attempt_start)*1000),**extra})
+                    if extra.get('gpu_contaminated',False):
+                        emit({'event':'complete','status':'incomplete','reason':'gpu_observation_contaminated'})
+                        return 2
             emit({"event":"complete","status":"completed","attempts":9})
             return 0
         except BudgetExpired:
@@ -132,12 +154,13 @@ def main():
     parser.add_argument("--manifest-sha256",required=True)
     parser.add_argument("--execute-manifest")
     parser.add_argument("--report",type=Path,required=True)
+    parser.add_argument("--gpu-required-free-mib",type=int)
     args=parser.parse_args()
     def cancelled(_signal,_frame):
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM,cancelled)
     try:
-        return run(args.manifest,args.manifest_sha256,args.report,args.execute_manifest)
+        return run(args.manifest,args.manifest_sha256,args.report,args.execute_manifest,gpu_required_free_mib=args.gpu_required_free_mib)
     except (OSError,owned.common.HarnessError):
         print("performance report refused",file=sys.stderr)
         return 2

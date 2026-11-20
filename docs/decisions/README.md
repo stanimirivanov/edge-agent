@@ -239,3 +239,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0125](0125-report-explanation-context-capacity.md) | Accepted | Report explanation context capacity. |
 | [ADR-0126](0126-bound-exploratory-explanation-profiling.md) | Accepted | Bound exploratory explanation profiling. |
 | [ADR-0127](0127-pin-owned-cuda-explanation-runtime.md) | Accepted | Pin an owned CUDA explanation runtime. |
+| [ADR-0128](0128-require-gpu-admission-for-performance-probes.md) | Accepted | Require GPU admission for performance probes. |
