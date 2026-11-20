@@ -218,6 +218,16 @@ const ROUTES: &[Route] = &[
         checks: &["harness-tests", "explanation-performance-probe"],
     },
     Route {
+        matcher: Matcher::Exact("scripts/profile_explanation.py"),
+        guides: &["docs/development/explanation-profiling.md"],
+        checks: &["harness-tests", "explanation-performance-probe"],
+    },
+    Route {
+        matcher: Matcher::Exact("scripts/compare_explanation_profiles.py"),
+        guides: &["docs/development/explanation-profiling.md"],
+        checks: &["harness-tests", "explanation-performance-probe"],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/research-application/src/explanation_evaluation"),
         guides: &["docs/development/explanations.md"],
         checks: &["explanation-complete-evaluation"],

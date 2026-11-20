@@ -288,6 +288,23 @@ async fn read_proposal(
     stage.store(4, Ordering::Relaxed);
     let response: Response = serde_json::from_slice(&body).map_err(|_| Failure::InvalidResponse)?;
     let [choice] = response.choices;
+    if let Some(value) = diagnostic {
+        #[derive(Deserialize)]
+        struct Timings {
+            timings: RuntimeTimings,
+        }
+        value.timings = serde_json::from_slice::<Timings>(&body)
+            .ok()
+            .map(|v| v.timings)
+            .filter(RuntimeTimings::valid);
+        value.finish_reason = Some(match choice.finish_reason.as_str() {
+            "stop" => "stop",
+            "length" => "length",
+            "content_filter" => "content_filter",
+            _ => "other",
+        });
+    }
+
     if response.model != model || choice.message.role != "assistant" {
         return Err(Failure::InvalidResponse);
     }
@@ -323,6 +340,32 @@ pub struct ResponseDiagnostic {
     pub http_status: Option<u16>,
     /// Provider-reported context shortfall, admitted only from a bounded HTTP 400.
     pub context_capacity: Option<ContextCapacity>,
+    /// Optional untrusted numeric runtime timings; malformed data stays unknown.
+    pub timings: Option<RuntimeTimings>,
+    /// Closed stop/length/content_filter/other label; never provider text.
+    pub finish_reason: Option<&'static str>,
+}
+
+/// Untrusted llama.cpp timings, never independent timing or acceptance evidence.
+#[derive(Deserialize, serde::Serialize)]
+pub struct RuntimeTimings {
+    /// Cached prompt tokens.
+    pub cache_n: u32,
+    /// Evaluated prompt tokens.
+    pub prompt_n: u32,
+    /// Generated tokens.
+    pub predicted_n: u32,
+    /// Reported prompt evaluation milliseconds.
+    pub prompt_ms: f64,
+    /// Reported generation milliseconds.
+    pub predicted_ms: f64,
+}
+impl RuntimeTimings {
+    fn valid(&self) -> bool {
+        [self.prompt_ms, self.predicted_ms]
+            .iter()
+            .all(|v| v.is_finite() && (0.0..=5_400_000.0).contains(v))
+    }
 }
 
 /// Untrusted runtime capacity counts, used only to explain a rejected measurement.

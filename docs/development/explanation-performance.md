@@ -8,6 +8,11 @@
 - It runs three invented sizes, three times each, with a fresh owned model process for every attempt. All outcomes are retained; cleanup completes before the next attempt.
 - A completed census is not a passing qualification. No grading tasks, hosted judges, approval, publication or activation participate.
 
+Current v3 measurements also retain optional numeric timings and closed finish
+labels. See the [profiling and bounded comparison guide](explanation-profiling.md)
+for progress sampling and an explicitly exploratory mode. Historical v1/v2
+reports remain immutable; they are not imported as v3.
+
 ## Prepare a new private package
 
 First use the [idle CPU benchmark](explanation-cpu-benchmark.md) to inspect the

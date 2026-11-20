@@ -320,7 +320,8 @@ async fn performance_probe_observes_late_valid_responses_without_exporting_a_rep
         profile: profile.id()?,
         evidence: "e".repeat(64),
     };
-    let body = json!({"model":profile.deployment.weights,"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":std::str::from_utf8(input.standard_proposal())?}}]});
+    let mut body = json!({"model":profile.deployment.weights,"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":std::str::from_utf8(input.standard_proposal())?}}]});
+    body["timings"] = json!({"cache_n":0,"prompt_n":4000,"predicted_n":100,"prompt_ms":600.5,"predicted_ms":200.25,"provider_text":"PRIVATE"});
     let lease = Arc::new(AtomicBool::new(false));
     let server_lease = lease.clone();
     let server = tokio::spawn(async move {
@@ -343,6 +344,12 @@ async fn performance_probe_observes_late_valid_responses_without_exporting_a_rep
         .await;
     let value = serde_json::to_value(measurement)?;
     assert_eq!(value["status"], "valid");
+    assert_eq!(
+        value["response"]["timings"],
+        json!({"cache_n":0,"prompt_n":4000,"predicted_n":100,"prompt_ms":600.5,"predicted_ms":200.25})
+    );
+    assert_eq!(value["response"]["finish_reason"], "stop");
+    assert!(!value.to_string().contains("PRIVATE"));
     assert!(value["elapsed_ms"].as_u64().is_some_and(|ms| ms >= 20));
     assert!(value.get("proposal").is_none());
     assert!(value.get("rendered").is_none());
@@ -433,7 +440,7 @@ async fn performance_timeouts_release_identity_and_invalid_caps_never_dispatch()
         .await;
     assert_eq!(measurement.status, "timeout");
     assert!(!lease.load(Ordering::SeqCst));
-    let value = serde_json::json!({"kind":"research.explanation-performance.attempt.v2","measurement":measurement});
+    let value = serde_json::json!({"kind":"research.explanation-performance.attempt.v3","measurement":measurement});
     assert!(
         serde_json::from_slice::<edgeagent_contracts::explanation_qualification::Collection>(
             &serde_json::to_vec(&value)?
@@ -523,7 +530,7 @@ async fn twelve_instrument_context_rejection_is_payload_free_and_preserves_the_i
     assert_eq!(result["stage"], "reading_response");
     assert_eq!(
         result["response"],
-        json!({"http_status":400,"context_capacity":{"prompt_tokens":24762,"context_tokens":16384}})
+        json!({"http_status":400,"context_capacity":{"prompt_tokens":24762,"context_tokens":16384},"timings":null,"finish_reason":null})
     );
     assert!(!result.to_string().contains("PRIVATE"));
     assert_eq!(
@@ -622,5 +629,59 @@ async fn production_rejects_400_without_waiting_for_a_diagnostic_body() -> Resul
     assert!(matches!(result, Err(Failure::InvalidResponse)));
     assert!(!lease.load(Ordering::SeqCst));
     server.await??;
+    Ok(())
+}
+
+#[cfg(feature = "performance-probe")]
+#[tokio::test]
+async fn malformed_optional_timings_do_not_change_proposal_acceptance() -> Result {
+    use edgeagent_research_application::{explanation::Allowlist, explanation_evaluation::Suite};
+    let input = Suite::performance_input(1)?;
+    let profile = profile();
+    let binding = Binding {
+        anchor: Allowlist::from_verified(input.artifact(), input.decision())?
+            .standard()?
+            .anchor()
+            .clone(),
+        profile: profile.id()?,
+        evidence: "e".repeat(64),
+    };
+    for timing in [
+        json!({"cache_n":0,"prompt_n":true,"predicted_n":1,"prompt_ms":1,"predicted_ms":2}),
+        json!({"cache_n":0,"prompt_n":1,"predicted_n":1,"prompt_ms":-1,"predicted_ms":2}),
+        json!({"cache_n":0,"prompt_n":1,"predicted_n":1,"prompt_ms":5400001,"predicted_ms":2}),
+        json!("PRIVATE"),
+    ] {
+        let (listener, addr) = listener().await?;
+        let lease = Arc::new(AtomicBool::new(false));
+        let server_lease = lease.clone();
+        let body = json!({"model":profile.deployment.weights,"timings":timing,"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":std::str::from_utf8(input.standard_proposal())?}}]});
+        let server = tokio::spawn(async move {
+            serve(
+                listener,
+                server_lease,
+                http("200 OK", &serde_json::to_vec(&body)?),
+            )
+            .await
+        });
+        let model = HttpModel::new(
+            addr,
+            Verifier(addr, profile.deployment.clone(), lease.clone()),
+            PROMPT.into(),
+        )?;
+        let result = serde_json::to_value(
+            model
+                .measure(
+                    &Request::new(&profile, &binding, input.prepared_input().ok_or("input")?)?,
+                    &input,
+                    Duration::from_secs(1),
+                )
+                .await,
+        )?;
+        assert_eq!(result["status"], "valid");
+        assert!(result["response"]["timings"].is_null());
+        assert!(!result.to_string().contains("PRIVATE"));
+        server.await??;
+    }
     Ok(())
 }

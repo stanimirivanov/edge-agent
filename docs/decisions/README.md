@@ -237,3 +237,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0123](0123-bound-the-chrono-maintenance-exception.md) | Accepted | Bound the Chrono maintenance exception. |
 | [ADR-0124](0124-measure-bounded-explanation-performance.md) | Accepted | Measure bounded explanation performance. |
 | [ADR-0125](0125-report-explanation-context-capacity.md) | Accepted | Report explanation context capacity. |
+| [ADR-0126](0126-bound-exploratory-explanation-profiling.md) | Accepted | Bound exploratory explanation profiling. |
