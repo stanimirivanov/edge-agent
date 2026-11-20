@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 126] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 127] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -651,6 +651,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 126] = [
         number: 126,
         path: "docs/decisions/0126-bound-exploratory-explanation-profiling.md",
         title: "Bound exploratory explanation profiling",
+    },
+    PublishedIdentity {
+        number: 127,
+        path: "docs/decisions/0127-pin-owned-cuda-explanation-runtime.md",
+        title: "Pin an owned CUDA explanation runtime",
     },
 ];
 

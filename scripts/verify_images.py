@@ -21,6 +21,10 @@ EXPECTED_SERVICES = {
     "market-data",
     "research",
 }
+EXPLANATION_INPUTS = (
+    "run_explanation_owned.py", "qualify_explanation_model.py",
+    "qualify_daily.py", "explanation_cuda.py",
+)
 TOKEN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -193,7 +197,7 @@ def check_descriptor(spec: ImageSpec, output: str) -> list[Problem]:
     return problems
 
 
-def check_sqlx_build_inputs(dockerfile: str) -> list[Problem]:
+def check_build_inputs(dockerfile: str) -> list[Problem]:
     """Protect the canonical builder recipe, not arbitrary Dockerfile semantics.
 
     A comment or a COPY in the final stage cannot supply a compiler input.
@@ -225,6 +229,7 @@ def check_sqlx_build_inputs(dockerfile: str) -> list[Problem]:
         "COPY .cargo/config.toml ./.cargo/config.toml": "Cargo config",
         "COPY .sqlx ./.sqlx": "SQLx query cache",
         "ENV SQLX_OFFLINE=true": "SQLx offline mode",
+        "COPY " + " ".join("scripts/" + name for name in EXPLANATION_INPUTS) + " ./scripts/": "embedded explanation sources",
     }
     problems = [
         Problem("Dockerfile", f"{purpose} must be supplied in the builder before compilation: {instruction}")
@@ -251,7 +256,7 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
         return contract, specs, problems + [Problem("Dockerfile", "file is missing")]
 
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
-    problems.extend(check_sqlx_build_inputs(dockerfile))
+    problems.extend(check_build_inputs(dockerfile))
     runtime_lines: set[str] = set()
     in_runtime = False
     for line in dockerfile.splitlines():
@@ -331,6 +336,7 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
             "!services/",
             "!services/**",
         }
+        required_patterns.update({"!scripts/", "scripts/*", *("!scripts/" + name for name in EXPLANATION_INPUTS)})
         for pattern in sorted(required_patterns - patterns):
             problems.append(
                 Problem(".dockerignore", f"required build-context pattern is missing: {pattern}")
@@ -338,8 +344,8 @@ def verify(root: Path) -> tuple[BuildContract | None, list[ImageSpec], list[Prob
 
         # Re-including a parent directory re-includes its children in Docker.
         # Exclude those children again before the exact compiler-input exception.
-        for directory, filename in [(".cargo", "config.toml"), (".sqlx", "query-*.json")]:
-            rules = [f"!{directory}/", f"{directory}/*", f"!{directory}/{filename}"]
+        for directory, filenames in [(".cargo", ("config.toml",)), (".sqlx", ("query-*.json",)), ("scripts", EXPLANATION_INPUTS)]:
+            rules = [f"!{directory}/", f"{directory}/*", *(f"!{directory}/{name}" for name in filenames)]
             actual = [pattern for pattern in ordered_patterns if pattern in rules]
             if actual != rules:
                 problems.append(Problem(".dockerignore", f"{directory} compiler-input exclusions must appear once in parent/exclude/allow order"))

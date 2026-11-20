@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 pub mod explanation_authority;
 mod explanation_collection;
+pub mod explanation_cuda;
 pub mod explanation_deployment;
 mod explanation_guarded;
 mod explanation_jobs;

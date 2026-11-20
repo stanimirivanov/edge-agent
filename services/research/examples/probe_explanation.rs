@@ -1,7 +1,6 @@
 //! Invented capacity calibration, never a qualification collector or worker.
 use edgeagent_contracts::explanation::Binding;
 use edgeagent_research::{
-    explanation_deployment::Verifier,
     explanation_model::HttpModel,
     explanation_owned::{Manifest, digest},
 };
@@ -36,7 +35,7 @@ async fn run() -> Result<()> {
     }
     let observation = manifest.observation()?;
     let endpoint = SocketAddrV4::new(Ipv4Addr::LOCALHOST, observation.port);
-    let verifier = Verifier::new(observation, profile.deployment.clone())?;
+    let verifier = manifest.verifier(observation, profile.deployment.clone())?;
     let model = HttpModel::new(endpoint, verifier.clone(), prompt)?;
     let started = Instant::now();
     let input = Suite::performance_input(index)?;

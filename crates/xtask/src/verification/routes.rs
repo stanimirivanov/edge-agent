@@ -228,6 +228,33 @@ const ROUTES: &[Route] = &[
         checks: &["harness-tests", "explanation-performance-probe"],
     },
     Route {
+        matcher: Matcher::Exact("scripts/explanation_cuda.py"),
+        guides: &["docs/development/explanation-cuda.md"],
+        checks: &[
+            "harness-tests",
+            "explanation-performance-probe",
+            "explanation-performance-lint",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("services/research/src/explanation_cuda.rs"),
+        guides: &["docs/development/explanation-cuda.md"],
+        checks: &[
+            "harness-tests",
+            "explanation-performance-probe",
+            "explanation-performance-lint",
+        ],
+    },
+    Route {
+        matcher: Matcher::Exact("services/research/src/explanation_owned.rs"),
+        guides: &["docs/development/explanation-cuda.md"],
+        checks: &[
+            "harness-tests",
+            "explanation-performance-probe",
+            "explanation-performance-lint",
+        ],
+    },
+    Route {
         matcher: Matcher::Prefix("crates/research-application/src/explanation_evaluation"),
         guides: &["docs/development/explanations.md"],
         checks: &["explanation-complete-evaluation"],

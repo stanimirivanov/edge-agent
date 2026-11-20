@@ -29,6 +29,27 @@ class VerifyImagesTests(unittest.TestCase):
             shutil.copyfile(source / relative, target)
         return root
 
+    def test_embedded_explanation_sources_must_reach_builder_before_compilation(self) -> None:
+        recipe = (MODULE_PATH.parents[1] / "Dockerfile").read_text()
+        instruction = next(line for line in recipe.splitlines() if line.startswith("COPY scripts/"))
+        for mutation in ("remove", "comment", "runtime", "wrong-source"):
+            replacement = {"remove": "", "comment": "# " + instruction, "runtime": "", "wrong-source": instruction.replace("scripts/explanation_cuda.py", "scripts/not-the-source.py")}[mutation]
+            changed = recipe.replace(instruction, replacement)
+            if mutation == "runtime":
+                changed += "\n" + instruction + "\n"
+            with self.subTest(mutation=mutation):
+                problems = verify_images.check_build_inputs(changed)
+                self.assertTrue(any("explanation" in p.message for p in problems), problems)
+
+    def test_embedded_explanation_context_exceptions_cannot_be_removed(self) -> None:
+        for name in ("run_explanation_owned.py", "qualify_explanation_model.py", "qualify_daily.py", "explanation_cuda.py"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = self.fixture(directory)
+                path = root / ".dockerignore"
+                path.write_text(path.read_text().replace("!scripts/" + name, "# omitted"))
+                _, _, problems = verify_images.verify(root)
+                self.assertTrue(any("scripts" in p.message for p in problems), problems)
+
     def test_sqlx_build_inputs_cannot_be_removed_commented_or_copied_after_compilation(self) -> None:
         for instruction, reason in [
             ("COPY .cargo/config.toml ./.cargo/config.toml", "Cargo config"),

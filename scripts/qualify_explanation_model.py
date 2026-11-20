@@ -58,7 +58,7 @@ def load(path, limit=LIMIT):
 
 def preflight(manifest, *, version=1, identity=None):
     """Check every local pin before executing any process."""
-    if set(manifest) != FIELDS or type(manifest["version"]) is not int or manifest["version"] != version:
+    if set(manifest) != (FIELDS | ({"cuda"} if version == 3 else set())) or type(manifest["version"]) is not int or manifest["version"] != version:
         raise HarnessError("invalid_manifest")
     if (type(manifest["threads"]) is not int or not 1 <= manifest["threads"] <= 256
             or type(manifest["context"]) is not int or not 512 <= manifest["context"] <= 32768
@@ -70,7 +70,7 @@ def preflight(manifest, *, version=1, identity=None):
                  "helper": 512 * 1024**2, "prompt": 4096, "profile": 2048}.get(key, LIMIT)
         check_file(manifest[key], limit)
     for library in manifest["libraries"]:
-        check_file(library, 512 * 1024**2)
+        check_file(library, (2 * 1024**3 if version == 3 else 512 * 1024**2))
     profile = load(Path(manifest["profile"]["path"]), 2048)
     if Path(manifest["profile"]["path"]).read_bytes() != canonical(profile):
         raise HarnessError("noncanonical_profile")
@@ -112,10 +112,14 @@ def helper(manifest, mode, value):
 
 
 def command(manifest, port):
+    execution = ["--device", "none", "--n-gpu-layers", "0"]
+    if manifest.get("version") == 3:
+        import explanation_cuda
+        execution = explanation_cuda.arguments(manifest["cuda"])
     return [manifest["runtime"]["path"], "--host", "127.0.0.1", "--port", str(port),
             "--model", manifest["weights"]["path"], "--alias", manifest["weights"]["sha256"],
             "--threads", str(manifest["threads"]), "--ctx-size", str(manifest["context"]),
-            "--parallel", "1", "--device", "none", "--n-gpu-layers", "0", "--log-disable"]
+            "--parallel", "1", *execution, "--log-disable"]
 
 
 def wait_ready(process, port):

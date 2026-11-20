@@ -1,6 +1,5 @@
 //! Private runtime-parity qualification collection; never installs approval.
 use crate::{
-    explanation_deployment::Verifier,
     explanation_model::{HttpModel, ModelStage},
     explanation_owned::{Manifest, digest},
     runtime::Result,
@@ -115,7 +114,7 @@ pub(crate) async fn collect() -> Result<()> {
     }
     let observation = manifest.observation()?;
     let port = observation.port;
-    let verifier = Verifier::new(observation, profile.deployment.clone())?;
+    let verifier = manifest.verifier(observation, profile.deployment.clone())?;
     let model = HttpModel::new(
         SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
         verifier.clone(),
