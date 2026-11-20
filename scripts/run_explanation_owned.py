@@ -41,13 +41,21 @@ def preflight(manifest, *, performance=False):
 def stop(process):
     if process is None:
         return
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
+    try:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        process.wait(timeout=5)
+    except BaseException:
+        # A whole-run budget/cancellation can interrupt wait itself. Reap this
+        # owned child before propagating; no later request may outrun cleanup.
+        if process.poll() is None:
             process.kill()
-    process.wait(timeout=5)
+        process.wait(timeout=5)
+        raise
 
 
 def owned_command(argv):
@@ -176,7 +184,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
             ready.register(child.stdout, selectors.EVENT_READ)
             while True:
                 if performance_observer is not None:
-                    performance_observer(model.pid, child.pid)
+                    performance_observer(model.pid, child.pid, port)
                 if time.monotonic() >= deadline:
                     raise common.HarnessError("helper_timeout")
                 if not ready.select(timeout=0.2):

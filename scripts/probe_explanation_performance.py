@@ -11,9 +11,11 @@ import time
 from pathlib import Path
 import benchmark_explanation_cpu as cpu
 import run_explanation_owned as owned
+import profile_explanation as profiling
+import math
 
-KIND = "research.explanation-performance.v2"
-ATTEMPT = "research.explanation-performance.attempt.v2"
+KIND = "research.explanation-performance.v3"
+ATTEMPT = "research.explanation-performance.attempt.v3"
 CASES = ("P01", "P02", "P03")
 STATUSES = {"valid", "invalid_proposal", "invalid_request", "unavailable", "timeout", "refused", "budget_exhausted", "deployment_mismatch", "invalid_response"}
 STAGES = {"idle", "checking_deployment", "waiting_response", "reading_response", "decoding_response", "validating_proposal", "complete"}
@@ -41,7 +43,7 @@ def check_attempt(value, case):
         raise owned.common.HarnessError("invalid_measurement")
 
     response=m["response"]
-    if not isinstance(response,dict) or set(response) != {"http_status","context_capacity"}:
+    if not isinstance(response,dict) or set(response) != {"http_status","context_capacity","timings","finish_reason"}:
         raise owned.common.HarnessError("invalid_measurement")
     status=response["http_status"]
     capacity=response["context_capacity"]
@@ -56,6 +58,15 @@ def check_attempt(value, case):
     if m["status"] == "valid" and (status != 200 or m["stage"] != "complete"):
         raise owned.common.HarnessError("invalid_measurement")
 
+    if response["finish_reason"] not in (None,"stop","length","content_filter","other"):
+        raise owned.common.HarnessError("invalid_measurement")
+    timings=response["timings"]
+    if timings is not None and (not isinstance(timings,dict)
+            or set(timings)!={"cache_n","prompt_n","predicted_n","prompt_ms","predicted_ms"}
+            or any(type(timings[k]) is not int or not 0 <= timings[k] < 2**32 for k in ("cache_n","prompt_n","predicted_n"))
+            or any(type(timings[k]) not in (int,float) or not math.isfinite(timings[k]) or not 0 <= timings[k] <= 5_400_000 for k in ("prompt_ms","predicted_ms"))):
+        raise owned.common.HarnessError("invalid_measurement")
+
 
 def run(manifest_path,pin,report_path,execute):
     if len(pin) != 64 or any(c not in "0123456789abcdef" for c in pin):
@@ -68,6 +79,8 @@ def run(manifest_path,pin,report_path,execute):
             cpu.record(stream,dict(value,journal_ms=round((time.monotonic()-started)*1000)))
         emit({"kind":KIND,"permission_granted":False,"manifest":pin,
               "launcher":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "profiling":hashlib.sha256(Path(profiling.__file__).read_bytes()).hexdigest(),
+              "cpu":hashlib.sha256(Path(cpu.__file__).read_bytes()).hexdigest(),
               "observation_ceiling_ms":180_000,"run_budget_ms":5_400_000,"census":[[c,r] for c in CASES for r in range(1,4)]})
         launched=False
         previous_handler=signal.getsignal(signal.SIGALRM)
@@ -91,32 +104,7 @@ def run(manifest_path,pin,report_path,execute):
                     emit({"event":"attempt_started","case":case,"repetition":repetition})
                     launched=True
                     attempt_start=time.monotonic()
-                    previous = None
-                    sampled_at = 0
-                    def observe(model_pid,helper_pid):
-                        nonlocal previous,sampled_at
-                        now=time.monotonic()
-                        if now-sampled_at < 1:
-                            return
-                        sampled_at=now
-                        host=cpu.sample()
-                        try:
-                            own=sum(cpu.process_ticks(pid) for pid in (os.getpid(),model_pid,helper_pid))
-                        except (OSError,ValueError,IndexError):
-                            own=None
-                        external=None
-                        if previous is not None and own is not None and previous[1] is not None:
-                            dt=host["cpu"]["cpu"][0]-previous[0]["cpu"]["cpu"][0]
-                            busy=host["cpu"]["cpu"][1]-previous[0]["cpu"]["cpu"][1]
-                            if dt > 0 and own >= previous[1] and busy >= 0:
-                                external=max(0,busy-(own-previous[1]))/dt
-                        previous=host,own
-                        try:
-                            hardware=cpu.hardware()
-                        except (OSError,ValueError):
-                            hardware=None
-                        emit({"event":"load","case":case,"repetition":repetition,
-                              "external_busy_fraction":external,"host":host,"hardware":hardware})
+                    observe=profiling.Observer(lambda value:emit(dict(value,case=case,repetition=repetition)))
                     raw=owned.supervise(manifest_path,pin,"performance-"+case,performance_observer=observe)
                     value=json.loads(raw)
                     check_attempt(value,case)

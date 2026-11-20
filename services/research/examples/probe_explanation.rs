@@ -54,7 +54,7 @@ async fn run() -> Result<()> {
         .measure(&request, &input, Duration::from_secs(180))
         .await;
     verifier.verify()?;
-    let report = serde_json::json!({"kind":"research.explanation-performance.attempt.v2","case":id,"profile":profile.id()?,"calibration":digest(bytes),"input_bytes":bytes.len(),"total_ms":started.elapsed().as_millis(),"measurement":measurement});
+    let report = serde_json::json!({"kind":"research.explanation-performance.attempt.v3","case":id,"profile":profile.id()?,"calibration":digest(bytes),"input_bytes":bytes.len(),"total_ms":started.elapsed().as_millis(),"measurement":measurement});
     std::io::stdout().write_all(&edgeagent_contracts::canonical_json_bytes(&report)?)?;
     Ok(())
 }
