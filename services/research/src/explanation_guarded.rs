@@ -1,6 +1,5 @@
 //! Opt-in owned execution. No synthetic verifier, arbitrary URL or enable flag.
 use crate::{
-    explanation_deployment::Verifier,
     explanation_model::HttpModel,
     explanation_owned::{Manifest, digest},
     explanation_worker::{authorize, commit},
@@ -224,7 +223,7 @@ async fn execute_inner(
     let prompt = manifest.verify(&profile)?;
     let observation = manifest.observation()?;
     let port = observation.port;
-    let verifier = Verifier::new(observation, profile.deployment.clone())?;
+    let verifier = manifest.verifier(observation, profile.deployment.clone())?;
     let model = HttpModel::new(
         SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
         verifier.clone(),

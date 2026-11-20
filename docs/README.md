@@ -82,6 +82,8 @@ For M06 explanation authority, compatibility, and model qualification, read
 For opt-in idle-host CPU throughput measurements before another PR33 trial, read
 [CPU benchmark](development/explanation-cpu-benchmark.md) and the
 [bounded end-to-end probe](development/explanation-performance.md). These measurements do not qualify a model.
+For the separately pinned local GPU candidate prerequisite, read the
+[owned CUDA guide](development/explanation-cuda.md).
 For PR33 hosted AI judging, also read
 [ADR-0121](decisions/0121-define-hosted-ai-explanation-review.md).
 

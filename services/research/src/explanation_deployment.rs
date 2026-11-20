@@ -110,6 +110,7 @@ pub struct Verifier {
     stamp: [i128; 7],
     observation: Observation,
     identity: Deployment,
+    cuda: Option<crate::explanation_cuda::Cuda>,
 }
 fn stamp(path: &str) -> Result<[i128; 7]> {
     let metadata = fs::metadata(path)?;
@@ -133,12 +134,22 @@ impl Verifier {
             stamp: observation.executable_stamp()?,
             observation,
             identity,
+            cuda: None,
         })
+    }
+    /// Add an independently checked CUDA hardware/environment guard.
+    pub fn with_cuda(mut self, cuda: crate::explanation_cuda::Cuda) -> Result<Self> {
+        cuda.verify_process(self.observation.pid)?;
+        self.cuda = Some(cuda);
+        Ok(self)
     }
     /// Recheck process/listener ownership and the initially hashed executable's
     /// metadata stamp. This does not replace the supervisor's file/weights pins.
     pub fn verify(&self) -> Result<()> {
         self.observation.verify()?;
+        if let Some(cuda) = &self.cuda {
+            cuda.verify_process(self.observation.pid)?;
+        }
         if stamp(&format!("/proc/{}/exe", self.observation.pid))? != self.stamp {
             return Err("runtime executable changed".into());
         }

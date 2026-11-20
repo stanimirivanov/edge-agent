@@ -26,13 +26,21 @@ def runtime_id(manifest):
                  launcher_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                  support_sha256=hashlib.sha256(Path(common.__file__).read_bytes()).hexdigest(),
                  hashing_sha256=hashlib.sha256(Path(qualify_daily.__file__).read_bytes()).hexdigest())
+    if manifest.get("version") == 3:
+        import explanation_cuda as cuda
+        value.update(launcher="owned-explanation-cuda-v3",cuda=manifest["cuda"],
+                     gpu_support_sha256=hashlib.sha256(Path(cuda.__file__).read_bytes()).hexdigest())
     return hashlib.sha256(common.canonical(value)).hexdigest()
 
 
 def preflight(manifest, *, performance=False):
-    if set(manifest) != common.FIELDS or manifest["version"] != 2:
-        raise common.HarnessError("invalid_manifest")
-    common.preflight(manifest, version=2, identity=runtime_id)
+    if not isinstance(manifest,dict):raise common.HarnessError("invalid_manifest")
+    version=manifest.get("version")
+    if type(version) is not int or version not in (2,3):raise common.HarnessError("invalid_manifest")
+    common.preflight(manifest, version=version, identity=runtime_id)
+    if version == 3:
+        import explanation_cuda as cuda
+        cuda.observe(manifest["cuda"])
     expected = "probe_explanation" if performance else "edgeagent-research"
     if Path(manifest["helper"]["path"]).name != expected:
         raise common.HarnessError("service_helper_required")
@@ -117,8 +125,13 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
     if len(raw) > 32768 or hashlib.sha256(raw).hexdigest() != manifest_pin:
         raise common.HarnessError("manifest_pin_mismatch")
     manifest = common.load(manifest_path, 32768)
-    if set(manifest) != common.FIELDS or type(manifest["version"]) is not int or manifest["version"] != 2:
+    if not isinstance(manifest,dict):raise common.HarnessError("invalid_manifest")
+    version=manifest.get("version")
+    if type(version) is not int or version not in (2,3) or set(manifest) != common.FIELDS | ({"cuda"} if version==3 else set()):
         raise common.HarnessError("invalid_manifest")
+    if version == 3:
+        import explanation_cuda as cuda
+    if diagnostic is not None and version != 2:raise common.HarnessError("cpu_diagnostic_required")
     performance = mode in {"performance-P01", "performance-P02", "performance-P03"}
     if mode.startswith("performance-") and (not performance or diagnostic is not None):
         raise common.HarnessError("invalid_performance_mode")
@@ -165,9 +178,11 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
             model_environment = {"PATH": "/usr/bin:/bin", "LANG": "C"}
             if manifest["libraries"]:
                 model_environment["LD_LIBRARY_PATH"] = ":".join(sorted({str(Path(p["path"]).parent) for p in manifest["libraries"]}))
+            if version == 3:model_environment.update(cuda.environment(manifest["cuda"]))
             model = subprocess.Popen(owned_command(argv), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      env=model_environment)
             common.wait_ready(model, port)
+            if version == 3:cuda.check_process(manifest["cuda"],model.pid)
             observation = {"pid": model.pid, "port": port, "command": argv,
                            "start": Path(f"/proc/{model.pid}/stat").read_text().rsplit(")", 1)[1].split()[19],
                            "executable": manifest["runtime"]["sha256"]}
@@ -199,6 +214,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
         if child.returncode:
             raise common.HarnessError("helper_failed")
         preflight(manifest, performance=performance) if model is not None else None
+        if model is not None and version == 3:cuda.check_process(manifest["cuda"],model.pid)
         return bytes(first) + bytes(tail)
     finally:
         try:

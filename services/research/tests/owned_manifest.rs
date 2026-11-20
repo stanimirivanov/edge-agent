@@ -72,3 +72,29 @@ fn rust_and_supervisor_bind_the_same_files_hardware_and_deployment()
     fs::remove_dir_all(root)?;
     result
 }
+
+#[test]
+fn cuda_manifest_is_explicit_and_command_is_closed()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use serde_json::json;
+    let pin = json!({"path":"/invented/file","sha256":"a".repeat(64)});
+    let mut value = json!({"version":3,"runtime":pin,"weights":pin,"license":pin,"helper":pin,"prompt":pin,"profile":pin,"libraries":[],"threads":6,"context":32768,"hardware":{},
+        "cuda":{"pci":"0000:01:00.0","uuid":"GPU-11111111-1111-1111-1111-111111111111","driver":"a".repeat(64),"layers":32,"cache":"q4_0"}});
+    let manifest = Manifest::decode(&serde_json::to_vec(&value)?)?;
+    let command = manifest.command(1234);
+    assert!(command.windows(2).any(|v| v == ["--device", "CUDA0"]));
+    assert!(command.windows(2).any(|v| v == ["--n-gpu-layers", "32"]));
+    assert!(command.windows(2).any(|v| v == ["--cache-type-v", "q4_0"]));
+    value["version"] = 2.into();
+    assert!(Manifest::decode(&serde_json::to_vec(&value)?).is_err());
+    let descriptor = value["cuda"].take();
+    assert!(Manifest::decode(&serde_json::to_vec(&value)?).is_err());
+    value["cuda"] = descriptor;
+    value["version"] = 3.into();
+    value["cuda"]["cache"] = "arbitrary".into();
+    assert!(Manifest::decode(&serde_json::to_vec(&value)?).is_err());
+    value["cuda"]["cache"] = "q4_0".into();
+    value["cuda"]["pci"] = "../../other".into();
+    assert!(Manifest::decode(&serde_json::to_vec(&value)?).is_err());
+    Ok(())
+}
