@@ -335,3 +335,43 @@ The private report digests in case order are
 `92429d4e29d8823bed3c48e5220781ece236a1860e5275c81e915cef80ea3e24`,
 `6ef5234d8e9af5d1f6f34f214db73b561e9cca34b45128b9bbe77b73fc8c23cc`, and
 `0af8a183d5e85c2fac65e30dbdef914ad15f89b410f8aff1154770595b6da3a9`.
+
+### Deterministic reader-first eligibility
+
+The development selector checks whether the verified opening covers the
+fixture's task before asking the model to choose a layout. D01 asks for score
+comparison and units, which the opening omits, so only `standard` is eligible.
+D02 can offer `reader_first` because the opening contains an observed
+below-floor instrument, its turnover and its applicable minimum. D03 can
+offer it because the opening includes the leader's evidence and labeled
+event, observation and availability times.
+
+The request includes only eligible presentations, and its response schema
+lists exactly those layouts. The independent selector also rejects an
+ineligible choice with an otherwise valid binding. The new choice-input
+binding includes eligibility, so historical responses remain tied to the
+previous experiment. All offline renderings matched the previous export
+byte for byte. The frozen baseline, census and rubric are unchanged.
+
+The CUDA run reused the task-aware prompt and the same runtime, weights,
+libraries, device, context and settings. The only manifest entries re-pinned
+were the helper and its derived profile. The manifest SHA-256 is
+`e4e52e65a0f8f6a7e44dd0785f56311778a2916e640e7a5b9df02ea72b0b5714`.
+The profile SHA-256 is
+`d57310dbf2e510f3847d3be8a49d79bb00aca737e50bcb9ae6cf514b810b93e9`.
+The private preparation SHA-256 is
+`bb0dbe882132fe0302b1d8e4c029171c66579927e209721bd6758c2a17603d30`.
+
+| Case | Eligible layouts | Validated choice | Request time |
+| --- | --- | --- | ---: |
+| D01 | `standard` | `standard` | 56.251 s |
+| D02 | `standard`, `reader_first` | `reader_first` | 132.328 s |
+| D03 | `standard`, `reader_first` | `reader_first` | 95.900 s |
+
+Each case ran once. All selected presentation digests matched the offline
+exports. The private report digests in case order are
+`13408b4a350fe6760dcd3fa135a36e61ed0b81d388fd8b2d3f6ea704d3aa5d21`,
+`01788763c546ef22c4e5e80f581f08e360c757e26dbb0022a702b91b9c5b8250`, and
+`9c9a9fceb7a50e98cd98bf77231b332ef8494684762276ff153aed9c28528cdb`.
+This verifies layout eligibility and selection on the three development
+tasks. Reader preference and frozen-suite qualification remain open on #508.

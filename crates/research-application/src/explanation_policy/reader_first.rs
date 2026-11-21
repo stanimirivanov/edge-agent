@@ -50,15 +50,19 @@ impl ReaderFirst {
         Ok(())
     }
 
-    pub(super) fn summary(&self) -> Result<String, Error> {
-        let policy = if self.policy.is_empty() {
+    pub(super) fn summary(&self) -> Result<(String, bool), Error> {
+        let has_liquidity_finding = !self.policy.is_empty();
+        let policy = if !has_liquidity_finding {
             "No instrument is below the liquidity floor.\n"
         } else {
             &self.policy
         };
         let source = self.source.as_deref().ok_or(Error)?;
-        Ok(format!(
-            "research-explanation-reader-first.v1\n\nLiquidity policy\n{policy}\nSource and timing\n{source}"
+        Ok((
+            format!(
+                "research-explanation-reader-first.v1\n\nLiquidity policy\n{policy}\nSource and timing\n{source}"
+            ),
+            has_liquidity_finding,
         ))
     }
 }

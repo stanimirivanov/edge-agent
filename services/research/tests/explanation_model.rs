@@ -696,6 +696,14 @@ async fn malformed_optional_timings_do_not_change_proposal_acceptance() -> Resul
 #[cfg(feature = "performance-probe")]
 #[tokio::test]
 async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Result {
+    check_development_layout("D01", "standard", json!(["standard"])).await?;
+    check_development_layout("D02", "reader_first", json!(["standard", "reader_first"])).await?;
+    check_development_layout("D03", "reader_first", json!(["standard", "reader_first"])).await?;
+    Ok(())
+}
+
+#[cfg(feature = "performance-probe")]
+async fn check_development_layout(case: &str, layout: &str, eligible: Value) -> Result {
     const TASK_AWARE: &str =
         include_str!("../fixtures/explanations/development-layout-task-aware-v2.txt");
     const OLD: &str = include_str!("../fixtures/explanations/development-layout-prompt.txt");
@@ -704,7 +712,7 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     profile.prompt = edgeagent_research::explanation_owned::digest(TASK_AWARE.as_bytes());
     let (anchor, prepared) =
         edgeagent_research_application::explanation_evaluation::Suite::development_model_case(
-            "D02",
+            case,
         )?;
     let mut binding = binding(&profile)?;
     binding.anchor = anchor;
@@ -717,7 +725,7 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     let request = Request::new(&profile, &binding, &input)?;
     let selection = json!({
         "kind": "research.explanation-development-choice.v1",
-        "case": "D02", "input": choice_binding, "layout": "reader_first"
+        "case": case, "input": choice_binding, "layout": layout
     });
     let body = serde_json::to_vec(&json!({"model":profile.deployment.weights,
         "choices":[{"finish_reason":"stop","message":{"role":"assistant","content":selection.to_string()}}]}))?;
@@ -744,12 +752,12 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     let foreign_request = Request::new(&profile, &foreign_binding, &foreign)?;
     assert!(matches!(
         model
-            .choose_development_layout(&foreign_request, "D02", &choice_binding)
+            .choose_development_layout(&foreign_request, case, &choice_binding)
             .await,
         Err(Failure::InvalidRequest)
     ));
     let reply = model
-        .choose_development_layout(&request, "D02", &choice_binding)
+        .choose_development_layout(&request, case, &choice_binding)
         .await?;
     assert_eq!(
         serde_json::from_slice::<Value>(reply.proposal())?,
@@ -758,12 +766,9 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     let sent = server.await??;
     assert_eq!(sent["messages"][0]["content"], TASK_AWARE);
     let schema = &sent["response_format"]["schema"];
-    assert_eq!(schema["properties"]["case"]["const"], "D02");
+    assert_eq!(schema["properties"]["case"]["const"], case);
     assert_eq!(schema["properties"]["input"]["const"], choice_binding);
-    assert_eq!(
-        schema["properties"]["layout"]["enum"],
-        json!(["standard", "reader_first"])
-    );
+    assert_eq!(schema["properties"]["layout"]["enum"], eligible, "{case}");
     assert_eq!(schema["additionalProperties"], false);
     let mut historical_profile = profile.clone();
     historical_profile.prompt = edgeagent_research::explanation_owned::digest(OLD.as_bytes());
@@ -779,7 +784,7 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     )?;
     assert!(matches!(
         historical
-            .choose_development_layout(&historical_request, "D02", &choice_binding)
+            .choose_development_layout(&historical_request, case, &choice_binding)
             .await,
         Err(Failure::InvalidRequest)
     ));

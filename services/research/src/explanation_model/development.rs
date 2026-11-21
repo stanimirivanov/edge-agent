@@ -40,7 +40,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
                 "kind":{"const":"research.explanation-development-choice.v1"},
                 "case":{"const":case},
                 "input":{"const":binding},
-                "layout":{"enum":["standard","reader_first"]}
+                "layout":{"enum":prepared["eligible_layouts"]}
             }
         });
         let _slot = self.busy.try_lock().map_err(|_| Failure::Unavailable)?;
