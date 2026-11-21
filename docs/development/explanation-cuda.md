@@ -154,3 +154,47 @@ The private report SHA-256 is
 `8485f02c50071465d7e9a4bafb7ddbf4b32ec4df814da8c9d64d9b538ef93583`.
 The exploratory journal does not establish idle-host latency, P03 completion or
 qualification.
+
+## GPU-v4 campaign preparation — 2026-11-20
+
+Issue #537 prepares the first campaign using joint CPU/GPU admission. The private
+tooling snapshot matches merged source `2e23c7a26bc3d6a88ecb828966aebb60db0ec4ac`
+and includes eight source files. The manifest SHA-256 is
+`2d2e0d331ea83c49747eae111bbdf7d663678ab84dd9b65ca3b48872e1d3a246`;
+the preparation record SHA-256 is
+`29ec81b0f4bcdd636d185400e02573a0fe5f369c807f78a5b2fde2c5aecca63d`.
+Preflight passed. Helper/profile bytes, weights, runtime, library pins, prompt,
+thread count, 32k context and 30,000 ms canonical timeout match the retained CUDA
+candidate. Only the private package paths and measurement tooling snapshot are
+fresh; all historical artifacts remain unchanged.
+
+The planned census remains P01/P02/P03 three times each, with 3,656 MiB explicit
+prelaunch headroom and five continuous idle minutes before each attempt. The
+maintainer explicitly deferred measurements; no idle window or campaign started.
+No measurement result, qualification, hosted review, owner approval or activation
+is claimed by this preparation record.
+
+The frozen private CLI was invoked without `--execute-manifest`. It returned
+exit 2 before admission or attempt dispatch and wrote exactly a v4 header and
+`complete/not_run` record to a new mode-0600 report. This checks refusal, not
+performance. The dry-run report SHA-256 is
+`5acdd994ab2991ab7416b8f55172f0be20f34cd8afb9c80b42aa540bfe659bc8`.
+
+The copied Rust helper also accepted the manifest/profile/source binding and
+requested its runtime control observation. It was stopped and reaped at that
+handshake, before a model process or request. The private binding-check record
+SHA-256 is `64bdc668243edad34217b5160566f3c634d93ae6636759ae7b3fe8429fbeafb8`.
+
+For the later operator-requested campaign, substitute paths to this private
+snapshot and a new report; use its frozen script rather than a future checkout:
+
+```text
+python3 /absolute/private/package/tooling/scripts/probe_explanation_performance.py --manifest /absolute/private/package/performance.manifest.v3.json --manifest-sha256 2d2e0d331ea83c49747eae111bbdf7d663678ab84dd9b65ca3b48872e1d3a246 --execute-manifest 2d2e0d331ea83c49747eae111bbdf7d663678ab84dd9b65ca3b48872e1d3a246 --report /absolute/private/package/reports/new-campaign.jsonl --gpu-required-free-mib 3656
+```
+
+Allow at least 45 minutes of admission plus startup/inference within the existing
+90-minute budget; busy/unknown observations can extend waiting or leave the
+census incomplete. Revalidate artifact/device/tool pins at execution time. Do
+not reuse the dry-run path, relax gates, or reinterpret preparation as passing
+latency, maximum-input fit, qualification or operator rights review. The real
+campaign and full qualification/reviews remain pending on #508.
