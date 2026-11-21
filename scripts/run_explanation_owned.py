@@ -37,13 +37,14 @@ def preflight(manifest, *, performance=False):
     if not isinstance(manifest,dict):raise common.HarnessError("invalid_manifest")
     version=manifest.get("version")
     if type(version) is not int or version not in (2,3):raise common.HarnessError("invalid_manifest")
-    common.preflight(manifest, version=version, identity=runtime_id)
+    profile = common.preflight(manifest, version=version, identity=runtime_id)
     if version == 3:
         import explanation_cuda as cuda
         cuda.observe(manifest["cuda"])
     expected = "probe_explanation" if performance else "edgeagent-research"
     if Path(manifest["helper"]["path"]).name != expected:
         raise common.HarnessError("service_helper_required")
+    return profile
 
 
 def stop(process):
@@ -120,6 +121,15 @@ def diagnostic_source(source, source_pin, source_manifest, manifest):
     return source_pin
 
 
+def helper_budget(mode, timeout_ms):
+    if mode.startswith("performance-"):
+        return 190
+    extended_seconds = max(0, (timeout_ms + 999) // 1000 - 30)
+    if mode.endswith("collect"):
+        return 1200 + 34 * extended_seconds
+    return 90 + extended_seconds
+
+
 def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance_observer=None):
     raw = manifest_path.read_bytes()
     if len(raw) > 32768 or hashlib.sha256(raw).hexdigest() != manifest_pin:
@@ -153,6 +163,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
         source_pin, report = diagnostic
         environment.update(EDGEAGENT_EXPLANATION_DIAGNOSTIC_SOURCE=source_pin,
                            EDGEAGENT_EXPLANATION_DIAGNOSTIC_REPORT=str(report))
+    timeout_ms = 30_000
     try:
         child = subprocess.Popen(owned_command([manifest["helper"]["path"], mode]), stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=environment)
@@ -170,7 +181,8 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
                         break
                     first.extend(part)
         if bytes(first) == REQUEST:
-            preflight(manifest, performance=performance)
+            profile = preflight(manifest, performance=performance)
+            timeout_ms = profile["data"]["settings"]["timeout_ms"]
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
@@ -193,7 +205,7 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
             child.stdin.close()
             if performance:
                 raise common.HarnessError("performance_runtime_required")
-        deadline = time.monotonic() + (190 if performance else 1200 if mode.endswith("collect") else 90)
+        deadline = time.monotonic() + helper_budget(mode, timeout_ms)
         tail = bytearray()
         with selectors.DefaultSelector() as ready:
             ready.register(child.stdout, selectors.EVENT_READ)

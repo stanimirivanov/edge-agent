@@ -1,6 +1,9 @@
 //! One durable send permit per explanation job.
 use super::{PostgresResearchStore, storage, transaction};
-use edgeagent_contracts::explanation::{Binding, Job};
+use edgeagent_contracts::{
+    explanation::{Binding, Job},
+    explanation_profile::LEGACY_TIMEOUT_MS,
+};
 use edgeagent_research_application::{
     explanation_context::{Purpose, Request},
     publication::{PublicationError as Error, PublicationErrorKind as Kind},
@@ -9,6 +12,9 @@ use sqlx::{Postgres, Transaction};
 
 /// Apply after the Research disclosure grants migration.
 pub const MIGRATION: &str = include_str!("../migrations/0009_explanation_attempts.sql");
+
+/// Apply after the qualification migration before using extended profile deadlines.
+pub const DEADLINE_MIGRATION: &str = include_str!("../migrations/0013_explanation_deadlines.sql");
 
 /// Exact prepared model input. Deadline and digest cannot change on a retry.
 #[derive(Clone)]
@@ -257,12 +263,15 @@ impl PostgresResearchStore {
         if let Some(authority) = &authority {
             authority.check(&mut tx, intent).await?;
         }
+        let timeout_ms = authority.as_ref().map_or(LEGACY_TIMEOUT_MS, |a| {
+            a.owner.request.profile.settings.timeout_ms
+        });
         let now_ms = clock_ms();
         if now_ms < 0
             || !intent
                 .deadline_ms
                 .checked_sub(now_ms)
-                .is_some_and(|ms| (1..=30_000).contains(&ms))
+                .is_some_and(|ms| (1..=i64::from(timeout_ms)).contains(&ms))
         {
             return Err(Error::new(Kind::Invalid));
         }

@@ -9,12 +9,15 @@ use edgeagent_research_application::{
     explanation_qualification::protocol,
 };
 pub fn approved() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
-    build(false)
+    build(false, 1000)
 }
-pub fn runtime() -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
-    build(true)
+pub fn runtime(timeout_ms: u32) -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
+    build(true, timeout_ms)
 }
-fn build(runtime: bool) -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
+fn build(
+    runtime: bool,
+    timeout_ms: u32,
+) -> Result<Command, Box<dyn std::error::Error + Send + Sync>> {
     let suite = if runtime {
         Suite::runtime()?
     } else {
@@ -34,7 +37,7 @@ fn build(runtime: bool) -> Result<Command, Box<dyn std::error::Error + Send + Sy
             seed: 1,
             temperature_milli: 0,
             max_output_tokens: 512,
-            timeout_ms: 1000,
+            timeout_ms,
         },
         prompt: "c".repeat(64),
         validator,

@@ -70,6 +70,26 @@ class QualificationTests(unittest.TestCase):
         with self.assertRaises(harness.HarnessError):
             harness.preflight(self.manifest)
 
+    def test_extended_timeout_requires_canonical_owned_profile(self):
+        path = Path(self.manifest["profile"]["path"])
+
+        def set_profile(kind, timeout):
+            self.profile["kind"] = "research.explanation.profile." + kind
+            self.profile["data"]["settings"]["timeout_ms"] = timeout
+            content = harness.canonical(self.profile)
+            path.write_bytes(content)
+            self.manifest["profile"]["sha256"] = hashlib.sha256(content).hexdigest()
+
+        set_profile("v2", 600_000)
+        with self.assertRaises(harness.HarnessError):
+            harness.preflight(self.manifest)
+        self.manifest["version"] = 2
+        harness.preflight(self.manifest, version=2)
+        for kind, timeout in (("v1", 30_001), ("v2", 30_000), ("v2", 600_001), ("v1", True)):
+            with self.subTest(kind=kind, timeout=timeout), self.assertRaises(harness.HarnessError):
+                set_profile(kind, timeout)
+                harness.preflight(self.manifest, version=2)
+
     def test_missing_fields_symlinks_and_unbounded_launch_settings_are_refused(self):
         changed = copy.deepcopy(self.manifest)
         del changed["license"]

@@ -6,6 +6,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_explanation_owned as owned
 
 class OwnedLauncherTests(unittest.TestCase):
+    def test_extended_timeout_budgets_keep_legacy_and_probe_bounds(self):
+        worker = "offline-explanation-worker-owned"
+        collector = "offline-explanation-runtime-collect"
+        self.assertEqual(owned.helper_budget(worker, 30_000), 90)
+        self.assertEqual(owned.helper_budget(collector, 30_000), 1200)
+        self.assertEqual(owned.helper_budget(worker, 600_000), 660)
+        self.assertEqual(owned.helper_budget(collector, 600_000), 20_580)
+        self.assertEqual(owned.helper_budget("performance-P03", 600_000), 190)
+
     def test_inherited_diagnostic_flags_cannot_change_normal_execution(self):
         import hashlib
         import os
@@ -145,7 +154,7 @@ class OwnedLauncherTests(unittest.TestCase):
                         "exec('class Handler(http.server.BaseHTTPRequestHandler):\\n def do_GET(self): self.send_response(200); self.end_headers()\\n def log_message(self,*args): pass'); "
                         f"http.server.HTTPServer(('127.0.0.1',{port}),Handler).serve_forever()")
                 return [sys.executable, "-c", code]
-            with patch.object(owned, "preflight", return_value=None), patch.object(owned.common, "command", side_effect=command):
+            with patch.object(owned, "preflight", return_value={"data":{"settings":{"timeout_ms":30_000}}}), patch.object(owned.common, "command", side_effect=command):
                 with self.assertRaises(owned.common.HarnessError):
                     owned.supervise(path, hashlib.sha256(path.read_bytes()).hexdigest(), "offline-explanation-worker-owned")
             with self.assertRaises(ProcessLookupError):

@@ -243,7 +243,10 @@ explicitly set to `none`.
 
 Settings are explicit integers. The seed is an unsigned 32-bit value,
 temperature is in thousandths from 0 through 2000, the output budget is
-1 through 2048 tokens, and the timeout is 1 through 30000 milliseconds.
+1 through 2048 tokens. The explicit `settings.timeout_ms` value is
+1–30,000 milliseconds for v1. Values from 30,001 through 600,000 milliseconds
+use `research.explanation.profile.v2` and require a fresh pinned, qualified
+profile. See [ADR-0129](../decisions/0129-configure-qualified-explanation-deadlines.md).
 Adapters must honor these settings and any additional runtime defaults must
 be fixed by the reviewed deployment manifest.
 
@@ -321,8 +324,10 @@ Apply Research migration 0009 after the disclosure-grant migration. The
 attempt ledger uses the canonical explanation job ID. Before model I/O,
 Research commits one reservation with the profile, evidence identity,
 prepared-input digest, model audience, grant revision, and deadline.
-The deadline must be within 30 seconds of reservation and within the
-observed grant. A retry with identical intent reports that the attempt is
+The deadline must be within the exact qualified profile timeout and the
+observed owner permit and grant. Unqualified reservations retain the
+30-second bound. Apply [migration 0013](../../crates/research-postgres/migrations/0013_explanation_deadlines.sql)
+before deploying an extended profile. A retry with identical intent reports that the attempt is
 already spent. Changed input, profile, audience, evidence, or deadline
 conflicts with the original reservation.
 

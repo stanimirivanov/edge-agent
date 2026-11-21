@@ -21,7 +21,7 @@ struct PublishedIdentity {
     title: &'static str,
 }
 
-const PUBLISHED_ADRS: [PublishedIdentity; 128] = [
+const PUBLISHED_ADRS: [PublishedIdentity; 129] = [
     PublishedIdentity {
         number: 1,
         path: "docs/decisions/0001-use-a-rust-workspace-with-multiple-deployables.md",
@@ -661,6 +661,11 @@ const PUBLISHED_ADRS: [PublishedIdentity; 128] = [
         number: 128,
         path: "docs/decisions/0128-require-gpu-admission-for-performance-probes.md",
         title: "Require GPU admission for performance probes",
+    },
+    PublishedIdentity {
+        number: 129,
+        path: "docs/decisions/0129-configure-qualified-explanation-deadlines.md",
+        title: "Configure qualified explanation deadlines",
     },
 ];
 
