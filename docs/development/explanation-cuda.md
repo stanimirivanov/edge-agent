@@ -198,3 +198,42 @@ census incomplete. Revalidate artifact/device/tool pins at execution time. Do
 not reuse the dry-run path, relax gates, or reinterpret preparation as passing
 latency, maximum-input fit, qualification or operator rights review. The real
 campaign and full qualification/reviews remain pending on #508.
+
+## Extended P03 feasibility probe
+
+Use the short probe command with `--gpu-p03-extended` in place of
+`--gpu-feasibility`. Build the matching release helper with
+`cargo build --release --locked -p edgeagent-research --features performance-probe --example probe_explanation`.
+Pin the helper and matching supervisor sources in a fresh private snapshot and
+recompute the derived deployment, profile and manifest digests. Keep the
+candidate runtime, weights, libraries, prompt, device and inference settings
+pinned to the source package. Pass the new manifest digest and a fresh private
+report path.
+
+This mode runs one P03 request using the same GPU admission and observation
+checks as the short probe. It has a 600-second observation ceiling, a
+610-second supervisor allowance after readiness and a 15-minute whole-run
+budget. Its report kind is `research.explanation-gpu-p03-feasibility.v1`.
+The existing short and idle-gated modes retain their 180-second observation
+ceiling. These observations are exploratory evidence for #508.
+
+The extended run preserved the P03 calibration identity and the retained
+30,000 ms production profile setting. Its initial tooling invocation refused
+the observation cap locally before HTTP dispatch. The private refusal report
+SHA-256 is `56769b3fe829fa9ebff6e8aae26edb0142d2e66efd8c3892ccebd52bf26b3690`.
+After correcting the adapter boundary and verifying dispatch on loopback,
+the final snapshot dispatched one real P03 request and completed cleanup.
+
+The server returned HTTP 200 in 512.018 seconds under the 600-second limit.
+Prompt evaluation took 398.955 seconds for 24,762 tokens. Generation took
+113.044 seconds and stopped at 1,024 tokens with finish reason `length`.
+The adapter reported `invalid_response` at `decoding_response`. The result
+establishes input fit for this run and an HTTP response with about 88 seconds
+of observation headroom. It leaves valid proposal completion unresolved.
+The probe recorded host swap activity, no detected foreign GPU compute and a
+minimum of 176 MiB free VRAM.
+
+The final private report SHA-256 is
+`2ffa845af874eb4b6fb2cc6f14a8c74eaa6864c07e4e31d044c24dc9a782c298`.
+The final private preparation record SHA-256 is
+`5688aa51505de6033108d872cb6afc28fa82b4061b9a2627ebe412cdb0817583`.

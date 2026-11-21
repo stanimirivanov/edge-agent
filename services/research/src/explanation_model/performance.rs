@@ -32,24 +32,36 @@ impl<V: DeploymentVerifier> HttpModel<V> {
                 return "unavailable";
             };
             self.stage.store(0, Ordering::Relaxed);
-            let calibration = matches!(input.artifact(), edgeagent_contracts::research::ResearchRecord::Artifact(a)
-                if a.request.scope == "performance" && ["performance-P01", "performance-P02", "performance-P03"].contains(&a.request.request_id.as_str()));
-            if !calibration || ceiling.is_zero()
-                || ceiling > Duration::from_secs(180)
+            let maximum_seconds = match input.artifact() {
+                edgeagent_contracts::research::ResearchRecord::Artifact(artifact)
+                    if artifact.request.scope == "performance" =>
+                {
+                    match artifact.request.request_id.as_str() {
+                        "performance-P01" | "performance-P02" => 180,
+                        "performance-P03" => 600,
+                        _ => return "invalid_request",
+                    }
+                }
+                _ => return "invalid_request",
+            };
+            if ceiling.is_zero()
+                || ceiling > Duration::from_secs(maximum_seconds)
                 || input.prepared_input() != Some(request.input())
             {
                 return "invalid_request";
             }
             self.stage.store(1, Ordering::Relaxed);
             match tokio::time::timeout(ceiling, async {
-                self.exchange(request, Some(&mut response)).await.map(|reply| {
-                    // The model reply and deterministic presentation cannot leave here.
-                    if input.render_candidate(reply.proposal()).is_ok() {
-                        "valid"
-                    } else {
-                        "invalid_proposal"
-                    }
-                })
+                self.exchange(request, Some(&mut response))
+                    .await
+                    .map(|reply| {
+                        // The model reply and deterministic presentation cannot leave here.
+                        if input.render_candidate(reply.proposal()).is_ok() {
+                            "valid"
+                        } else {
+                            "invalid_proposal"
+                        }
+                    })
             })
             .await
             {

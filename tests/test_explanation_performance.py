@@ -18,6 +18,47 @@ class PerformanceTests(unittest.TestCase):
         manifest.write_text(json.dumps({"weights": {"path": str(weights)}, "profile": {"sha256": "a"*64}}))
         return manifest, hashlib.sha256(manifest.read_bytes()).hexdigest()
 
+    def test_extended_gpu_feasibility_retains_one_late_p03_result(self):
+        import explanation_gpu_metrics as gpu
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, _ = self.fixture(root)
+            data = json.loads(manifest.read_text())
+            data.update(version=3, cuda={})
+            manifest.write_text(json.dumps(data))
+            pin = hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+            def attempt(path, digest, mode, **kwargs):
+                kwargs["performance_observer"](42, 99, 1234)
+                return probe.owned.common.canonical({
+                    "kind": probe.ATTEMPT, "case": "P03", "profile": "a" * 64,
+                    "calibration": "1" * 64, "input_bytes": 39218, "total_ms": 510_001,
+                    "measurement": {"status": "valid", "stage": "complete", "elapsed_ms": 510_000,
+                                    "response": {"http_status": 200, "context_capacity": None,
+                                                 "timings": None, "finish_reason": "stop"}},
+                })
+
+            report = root / "result"
+            with patch.object(probe.owned, "preflight"), patch.object(gpu, "Monitor") as monitor, \
+                 patch.object(probe.profiling, "Observer"), patch.object(probe.cpu, "wait_idle") as wait, \
+                 patch.object(probe.owned, "supervise", side_effect=attempt) as launch:
+                monitor.return_value.policy.return_value = {}
+                monitor.return_value.admission.return_value = True
+                monitor.return_value.sample.return_value = {"foreign_compute": 0}
+                options = {"gpu_required_free_mib": 3656, "gpu_p03_extended": True}
+                self.assertEqual(probe.run(manifest, pin, root / "no-consent", None, **options), 2)
+                launch.assert_not_called()
+                self.assertEqual(probe.run(manifest, pin, report, pin, **options), 0)
+                self.assertEqual([call.args[2] for call in launch.call_args_list],
+                                 ["performance-P03-extended"])
+                wait.assert_not_called()
+            rows = [json.loads(line) for line in report.read_text().splitlines()]
+            self.assertEqual(rows[0]["kind"], "research.explanation-gpu-p03-feasibility.v1")
+            self.assertEqual(rows[0]["census"], [["P03", 1]])
+            self.assertEqual(rows[0]["observation_ceiling_ms"], 600_000)
+            self.assertEqual(rows[-1]["attempts"], 1)
+            self.assertEqual(probe.owned.helper_budget("performance-P03-extended", 30_000), 610)
+
     def test_gpu_feasibility_is_an_explicit_two_case_run(self):
         import explanation_gpu_metrics as gpu
         with tempfile.TemporaryDirectory() as directory:

@@ -17,14 +17,20 @@ use std::{
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-async fn run() -> Result<()> {
-    let mode = std::env::args().nth(1).ok_or("case required")?;
-    let (index, id) = match mode.as_str() {
-        "performance-P01" => (1, "P01"),
-        "performance-P02" => (2, "P02"),
-        "performance-P03" => (3, "P03"),
+fn calibration(mode: &str) -> Result<(usize, &'static str, Duration)> {
+    let (index, case, seconds) = match mode {
+        "performance-P01" => (1, "P01", 180),
+        "performance-P02" => (2, "P02", 180),
+        "performance-P03" => (3, "P03", 180),
+        "performance-P03-extended" => (3, "P03", 600),
         _ => return Err("invalid calibration".into()),
     };
+    Ok((index, case, Duration::from_secs(seconds)))
+}
+
+async fn run() -> Result<()> {
+    let mode = std::env::args().nth(1).ok_or("case required")?;
+    let (index, id, observation_limit) = calibration(&mode)?;
     let (manifest, _) = Manifest::environment()?;
     let profile = manifest.profile()?;
     let prompt = manifest.verify(&profile)?;
@@ -49,9 +55,7 @@ async fn run() -> Result<()> {
         evidence: digest(bytes),
     };
     let request = Request::new(&profile, &binding, bytes)?;
-    let measurement = model
-        .measure(&request, &input, Duration::from_secs(180))
-        .await;
+    let measurement = model.measure(&request, &input, observation_limit).await;
     verifier.verify()?;
     let report = serde_json::json!({"kind":"research.explanation-performance.attempt.v3","case":id,"profile":profile.id()?,"calibration":digest(bytes),"input_bytes":bytes.len(),"total_ms":started.elapsed().as_millis(),"measurement":measurement});
     std::io::stdout().write_all(&edgeagent_contracts::canonical_json_bytes(&report)?)?;
@@ -62,5 +66,26 @@ async fn main() {
     if run().await.is_err() {
         eprintln!("performance probe refused");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_extended_p03_gets_the_longer_observation_window() -> Result<()> {
+        assert_eq!(
+            calibration("performance-P03-extended")?,
+            (3, "P03", Duration::from_secs(600))
+        );
+        for (index, case) in [(1, "P01"), (2, "P02"), (3, "P03")] {
+            assert_eq!(
+                calibration(&format!("performance-{case}"))?,
+                (index, case, Duration::from_secs(180))
+            );
+        }
+        assert!(calibration("performance-P01-extended").is_err());
+        Ok(())
     }
 }
