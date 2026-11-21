@@ -92,6 +92,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reader_first_places_verified_policy_and_sources_before_unchanged_details() -> Result<()> {
+        let report = Suite::development_presentation_comparison()?;
+        let rows = report["cases"].as_array().ok_or("cases")?;
+        for row in rows {
+            let reader_first = row["reader_first"].as_str().ok_or("reader-first layout")?;
+            let (summary, details) = reader_first
+                .split_once("\nFull validated presentation\n")
+                .ok_or("missing detail boundary")?;
+            assert!(summary.starts_with("research-explanation-reader-first.v1\n"));
+            assert_eq!(details, row["standard"].as_str().ok_or("standard")?);
+        }
+        let exclusion = rows[1]["reader_first"].as_str().ok_or("D02")?;
+        let summary = exclusion
+            .split_once("\nFull validated presentation\n")
+            .ok_or("details")?
+            .0;
+        assert!(summary.contains(&format!(
+            "Instrument {:032x} is below the liquidity floor: 10025 USD cents observed; inclusive minimum 500000 USD cents.\nEvidence: {}",
+            2, "06".repeat(32)
+        )));
+        assert_eq!(summary.matches("is below the liquidity floor").count(), 1);
+        let source = rows[2]["reader_first"].as_str().ok_or("D03")?;
+        let summary = source
+            .split_once("\nFull validated presentation\n")
+            .ok_or("details")?
+            .0;
+        assert!(summary.contains(&format!(
+            "Leading instrument {:032x}, latest selected close\nEvidence: {}\nEvent time: 91 ms. Observation time: 95 ms. Availability time: 100 ms.",
+            1, "05".repeat(32)
+        )));
+        Ok(())
+    }
+
+    #[test]
     fn development_comparison_is_separate_and_exposes_the_actual_render_delta() -> Result<()> {
         let report = Suite::development_presentation_comparison()?;
         assert_eq!(
