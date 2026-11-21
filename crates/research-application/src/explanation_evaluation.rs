@@ -329,6 +329,18 @@ impl Suite {
         complete::runtime::development::development_comparison()
     }
 
+    /// Prepare the exact input and anchor for one invented development layout choice.
+    ///
+    /// # Errors
+    /// Refuses unknown cases and unrenderable fixtures.
+    #[cfg(feature = "performance-probe")]
+    pub fn development_model_case(
+        case: &str,
+    ) -> Result<(edgeagent_contracts::explanation::Anchor, serde_json::Value), EvaluationError>
+    {
+        complete::runtime::development::model_case(case)
+    }
+
     /// Validate a fixture-bound candidate response and render its selected development layout.
     ///
     /// # Errors

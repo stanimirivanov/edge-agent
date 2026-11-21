@@ -244,3 +244,51 @@ different cases were refused. The existing comparison outputs matched their
 previous values apart from the new binding field. This command exercises
 candidate selection in the development harness. Model transport, reviewer
 preferences and frozen qualification remain separate.
+
+### Owned CUDA development choices
+
+Issue #554 connects the pinned model to the offline selector. Build the release
+`probe_explanation` example with `--features performance-probe`. Prepare a new
+private CUDA manifest with that helper and the exact checked-in
+`development-layout-prompt.txt` file in the Research explanation fixtures.
+Recompute the prompt, helper, deployment, profile and manifest pins. The
+development package reuses the runtime, weights, libraries, device, context and
+profile settings from the CUDA qualification candidate.
+
+Run each of D01, D02 and D03 once with its own report path. Use the frozen
+supervisor snapshot and substitute the exact manifest digest:
+
+```text
+python3 scripts/run_explanation_owned.py --manifest /private/development.manifest.v3.json --execute-manifest MANIFEST_SHA256 --development-layout-case D01 --output /private/D01.json
+```
+
+The example independently prepares the invented task and both verified
+presentations. The transport rechecks the precise input bytes, anchor and
+choice binding before using the existing loopback transport and owned deployment
+verifier. A closed response schema admits only `standard` or `reader_first`
+for that case. The offline selector independently verifies the response and
+renders the choice. Each model wait is capped at 180 seconds and the report
+stores only outcome, layout, digests, timing and closed diagnostics. This is a
+development model selection experiment rather than a reader preference study.
+
+The owned CUDA run attempted each case once on manifest
+`9bc68784033ee315d0fc206e5edd037153963e7b108e3c02cc3b54a260698b37`.
+The profile SHA-256 is
+`67b6d4b7450ce4e9e3625da77c0f7045b299f1309159f4e742af2a74c07e0959`.
+The private preparation record SHA-256 is
+`e35762b3ae01f3c9a207c8e754d6373759453f6fd1799cc3aec7bd38225c616c`.
+
+| Case | Validated choice | Request time |
+| --- | --- | ---: |
+| D01 | `standard` | 92.832 s |
+| D02 | `standard` | 131.623 s |
+| D03 | `standard` | 96.306 s |
+
+Each rendered digest matched the selected offline presentation. The three
+private report digests in case order are
+`f7fbfac8db88051a97870c94c9b1cf62cf433c87fd3c128123c4ca0694c6790a`,
+`629ecae09c6b7fe40e2abea757c36ad66ae0a4111779560b025e603e035dd6b5`, and
+`04f0cb0e736e2879c802018e639d02cf1ee86be15be76d04296313673f7198e4`.
+The wiring accepted real model choices on all three fixtures. The model
+continued to select the standard layout even for the policy and source tasks.
+This run leaves the usefulness blocker open on #508.

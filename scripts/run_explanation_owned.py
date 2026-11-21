@@ -121,6 +121,8 @@ def diagnostic_source(source, source_pin, source_manifest, manifest):
     return source_pin
 
 
+DEVELOPMENT_CASES = ("D01", "D02", "D03")
+DEVELOPMENT_PREFIX = "development-layout-"
 EXTENDED_P03 = "performance-P03-extended"
 DEFAULT_OBSERVATION_SECONDS = 180
 EXTENDED_P03_SECONDS = 600
@@ -129,7 +131,7 @@ EXTENDED_P03_SECONDS = 600
 def helper_budget(mode, timeout_ms):
     if mode == EXTENDED_P03:
         return EXTENDED_P03_SECONDS + 10
-    if mode.startswith("performance-"):
+    if mode.startswith(("performance-", DEVELOPMENT_PREFIX)):
         return DEFAULT_OBSERVATION_SECONDS + 10
     extended_seconds = max(0, (timeout_ms + 999) // 1000 - 30)
     if mode.endswith("collect"):
@@ -149,9 +151,12 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
     if version == 3:
         import explanation_cuda as cuda
     if diagnostic is not None and version != 2:raise common.HarnessError("cpu_diagnostic_required")
-    if mode == EXTENDED_P03 and version != 3:
+    development = mode.startswith(DEVELOPMENT_PREFIX)
+    if development and (mode.removeprefix(DEVELOPMENT_PREFIX) not in DEVELOPMENT_CASES or diagnostic is not None):
+        raise common.HarnessError("invalid_development_layout_mode")
+    if (mode == EXTENDED_P03 or development) and version != 3:
         raise common.HarnessError("cuda_manifest_required")
-    performance = mode in {"performance-P01", "performance-P02", "performance-P03", EXTENDED_P03}
+    performance = development or mode in {"performance-P01", "performance-P02", "performance-P03", EXTENDED_P03}
     if mode.startswith("performance-") and (not performance or diagnostic is not None):
         raise common.HarnessError("invalid_performance_mode")
     if not performance and performance_observer is not None:
@@ -262,6 +267,7 @@ def main():
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--collect", action="store_true")
     selection.add_argument("--diagnose", action="store_true")
+    selection.add_argument("--development-layout-case", choices=DEVELOPMENT_CASES)
     parser.add_argument("--source-collection", type=Path)
     parser.add_argument("--source-collection-sha256")
     parser.add_argument("--source-manifest", type=Path)
@@ -279,11 +285,14 @@ def main():
             diagnostic = source_pin, options.diagnostic_report.resolve()
         elif any(inputs):
             raise common.HarnessError("diagnostic_mode_required")
+        mode = "offline-explanation-worker-owned"
+        if options.collect or options.diagnose:
+            mode = "offline-explanation-runtime-collect"
+        elif options.development_layout_case:
+            mode = DEVELOPMENT_PREFIX + options.development_layout_case
         # Never overwrite a private report or expose proposal/reader material on stdout.
         with os.fdopen(os.open(options.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as target:
-            target.write(supervise(options.manifest, options.execute_manifest,
-                                   "offline-explanation-runtime-collect" if options.collect or options.diagnose else "offline-explanation-worker-owned",
-                                   diagnostic=diagnostic))
+            target.write(supervise(options.manifest, options.execute_manifest, mode, diagnostic=diagnostic))
         return 0
     except (OSError, ValueError, KeyError, subprocess.SubprocessError, common.HarnessError, KeyboardInterrupt):
         print("owned explanation execution failed closed", file=sys.stderr)

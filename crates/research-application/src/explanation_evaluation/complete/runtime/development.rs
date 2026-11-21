@@ -60,6 +60,32 @@ impl DevelopmentCase {
     }
 }
 
+pub(crate) fn model_case(
+    case: &str,
+) -> Result<(edgeagent_contracts::explanation::Anchor, Value), EvaluationError> {
+    let &(n, id, task) = CASES
+        .iter()
+        .find(|row| row.1 == case)
+        .ok_or(EvaluationError::Census)?;
+    let prepared = DevelopmentCase::load(n, id, task)?;
+    let anchor = crate::explanation::Allowlist::from_verified(
+        &prepared.fixture.record,
+        &prepared.fixture.decision,
+    )
+    .map_err(|_| INVALID)?
+    .standard()
+    .map_err(|_| INVALID)?
+    .anchor()
+    .clone();
+    Ok((
+        anchor,
+        json!({
+            "case":id, "input":prepared.binding, "task":task,
+            "standard":prepared.standard, "reader_first":prepared.reader_first
+        }),
+    ))
+}
+
 pub(crate) fn render_choice(
     expected_case: &str,
     case: &str,
