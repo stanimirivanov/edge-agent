@@ -28,8 +28,19 @@ fn calibration(mode: &str) -> Result<(usize, &'static str, Duration)> {
     Ok((index, case, Duration::from_secs(seconds)))
 }
 
+fn p03_tokenizer_reference() -> Result<Vec<u8>> {
+    let input = Suite::performance_input(3)?;
+    let bytes = input.standard_proposal();
+    input.render_candidate(bytes)?;
+    Ok(bytes.to_vec())
+}
+
 async fn run() -> Result<()> {
     let mode = std::env::args().nth(1).ok_or("case required")?;
+    if mode == "export-p03-tokenizer-reference" {
+        std::io::stdout().write_all(&p03_tokenizer_reference()?)?;
+        return Ok(());
+    }
     let (index, id, observation_limit) = calibration(&mode)?;
     let (manifest, _) = Manifest::environment()?;
     let profile = manifest.profile()?;
@@ -72,6 +83,16 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tokenizer_reference_is_the_validated_p03_proposal() -> Result<()> {
+        let bytes = p03_tokenizer_reference()?;
+        let input = Suite::performance_input(3)?;
+        assert_eq!(bytes, input.standard_proposal());
+        assert!(!input.render_candidate(&bytes)?.is_empty());
+        assert!(edgeagent_contracts::explanation::Proposal::decode(&bytes).is_ok());
+        Ok(())
+    }
 
     #[test]
     fn only_extended_p03_gets_the_longer_observation_window() -> Result<()> {

@@ -237,3 +237,48 @@ The final private report SHA-256 is
 `2ffa845af874eb4b6fb2cc6f14a8c74eaa6864c07e4e31d044c24dc9a782c298`.
 The final private preparation record SHA-256 is
 `5688aa51505de6033108d872cb6afc28fa82b4061b9a2627ebe412cdb0817583`.
+
+## P03 output budget check
+
+Export the invented P03 reference with
+`cargo run --locked -p edgeagent-research --features performance-probe --example probe_explanation -- export-p03-tokenizer-reference`.
+The export renders the standard proposal through the existing validator before
+writing its canonical JSON. Feed the compact JSON, with the final framing LF
+removed, to the [retained server's tokenizer](https://github.com/ggml-org/llama.cpp/blob/9d25e0014c4b4b316873c01f4938c0e3c687287d/tools/server/README.md#post-tokenize-tokenize-a-given-text)
+using `POST /tokenize` with `add_special`, `parse_special` and `with_pieces` all
+false. Use an owned, manifest-verified local listener. Record the count and
+digests privately and reap the runtime. The tokenizer call sends no generation
+request.
+
+The reference contains 12 ranked claims and the research-only disclosure. Its
+compact representation uses **1,450 tokens** with the retained CUDA package's
+tokenizer, 426 more than the original 1,024-token output budget. This is the
+count for the exact validated reference encoding. The token-count record
+SHA-256 is `e5aa813311e44a36928c23d6c7fdd7034e1371c024f4ae461fd3d54154b71183`.
+
+The single candidate changes `settings.max_output_tokens` from 1,024 to 1,600
+and re-pins the canonical profile and manifest. The runtime, model, helper,
+system prompt, validator, renderer, other settings and CUDA configuration remain
+bound to the preceding package. At the preceding generation rate, its full
+budget would use roughly 576 seconds including prefill, leaving about 24
+seconds under the existing 600-second exploratory cutoff. Run the extended
+P03 mode once with the new manifest and a fresh private report.
+
+The candidate returned a valid proposal in **563.319 seconds**, leaving
+36.681 seconds before the observation cutoff. Prefill took 400.684 seconds
+for 24,762 tokens. Generation took 162.616 seconds, produced 1,451 tokens and
+ended with finish reason `stop`. The adapter decoded and validated the proposal.
+The complete probe, including runtime startup, took 597.573 seconds. The GPU
+monitor observed no foreign compute, at least 176 MiB of free VRAM, and no
+unknown samples. The host recorded swap activity. Cleanup completed.
+
+The initial launch command was refused by the report-path guard before runtime
+startup. The corrected tooling layout used the same pinned candidate and
+dispatched exactly one generation request. The candidate manifest digest is
+`39aed8428209278a582052e119175ecb40d794c1c3d5a7903476f8010d198fa6`.
+The private preparation and probe report SHA-256 values are
+`448bcbd19feadd139333e6608fa6824608a868e23c1f4d22882d682f6f2bb30a` and
+`300546756b5ff3a4bebd2cd407c7aa3e271379a09de705eab15d4aea9874f7ac`.
+This run establishes P03 feasibility for the tested candidate. A production
+profile still needs its own deadline pin, frozen qualification and owner review
+under #508.
