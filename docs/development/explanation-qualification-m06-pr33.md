@@ -292,3 +292,46 @@ private report digests in case order are
 The wiring accepted real model choices on all three fixtures. The model
 continued to select the standard layout even for the policy and source tasks.
 This run leaves the usefulness blocker open on #508.
+
+### Task-aware CUDA prompt
+
+Issue #556 tests one prompt revision on the same three development tasks.
+`development-layout-task-aware-v2.txt` directs the model to look for the
+task's concrete answer and its evidence together in the reader-first opening.
+It distinguishes evidence or policy questions from score comparisons. The
+helper admits the new prompt bytes for development selection. The historical
+run retains its matched helper and prompt. The development response schema,
+case bindings and both renderings are identical to those from #554, as
+verified by comparing the two helper exports before inference.
+
+The private package reuses the previous runtime, weights, libraries, device,
+context and settings. It re-pins the prompt, rebuilt helper and derived
+deployment, profile and manifest. The manifest SHA-256 is
+`c26b2fb25daf93020006f7c64d869e2525845f86ce34305e6336c40e11bc2a70`.
+The prompt SHA-256 is
+`80d1f36c741ac00e7b39e0bc399e647d3b11a56c5f1785dc04e023cd2373cc05`.
+The private preparation SHA-256 is
+`6c5bffeb297656caca8854d16cbca97aa04dd14a2bce601638f19391bb07f99c`.
+The expected engineering choices are standard for D01 and reader-first for
+D02 and D03. The prompt itself contains no fixture IDs or answer mapping.
+
+| Case | Expected | Validated choice | Request time |
+| --- | --- | --- | ---: |
+| D01 | `standard` | `reader_first` | 93.323 s |
+| D02 | `reader_first` | `reader_first` | 132.567 s |
+| D03 | `reader_first` | `reader_first` | 96.118 s |
+
+Each case ran once and returned a valid, fixture-bound choice. Every selected
+presentation digest matched the offline export. The model selected the
+intended opening on the policy and source tasks, but it also selected that
+opening for the rank and score task, where it does not supply the requested
+score comparison. This result shows that the prompt changes model choices.
+It does not establish reliable task discrimination or reader preference.
+Issue #508 remains open.
+
+The private profile SHA-256 is
+`b44887c4b2361a38c35f9092ce9ce3ee3a8f2db2f2067ce8aeb360ab2f37b521`.
+The private report digests in case order are
+`92429d4e29d8823bed3c48e5220781ece236a1860e5275c81e915cef80ea3e24`,
+`6ef5234d8e9af5d1f6f34f214db73b561e9cca34b45128b9bbe77b73fc8c23cc`, and
+`0af8a183d5e85c2fac65e30dbdef914ad15f89b410f8aff1154770595b6da3a9`.

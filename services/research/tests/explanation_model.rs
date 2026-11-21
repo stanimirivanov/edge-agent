@@ -696,11 +696,12 @@ async fn malformed_optional_timings_do_not_change_proposal_acceptance() -> Resul
 #[cfg(feature = "performance-probe")]
 #[tokio::test]
 async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Result {
-    use edgeagent_research::explanation_model::DEVELOPMENT_LAYOUT_PROMPT;
+    const TASK_AWARE: &str =
+        include_str!("../fixtures/explanations/development-layout-task-aware-v2.txt");
+    const OLD: &str = include_str!("../fixtures/explanations/development-layout-prompt.txt");
     let (listener, addr) = listener().await?;
     let mut profile = profile();
-    profile.prompt =
-        edgeagent_research::explanation_owned::digest(DEVELOPMENT_LAYOUT_PROMPT.as_bytes());
+    profile.prompt = edgeagent_research::explanation_owned::digest(TASK_AWARE.as_bytes());
     let (anchor, prepared) =
         edgeagent_research_application::explanation_evaluation::Suite::development_model_case(
             "D02",
@@ -727,7 +728,7 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
     let model = HttpModel::new(
         addr,
         Verifier(addr, profile.deployment.clone(), lease.clone()),
-        DEVELOPMENT_LAYOUT_PROMPT.into(),
+        TASK_AWARE.into(),
     )?;
     assert!(matches!(
         model
@@ -755,7 +756,7 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
         selection
     );
     let sent = server.await??;
-    assert_eq!(sent["messages"][0]["content"], DEVELOPMENT_LAYOUT_PROMPT);
+    assert_eq!(sent["messages"][0]["content"], TASK_AWARE);
     let schema = &sent["response_format"]["schema"];
     assert_eq!(schema["properties"]["case"]["const"], "D02");
     assert_eq!(schema["properties"]["input"]["const"], choice_binding);
@@ -764,6 +765,24 @@ async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Resul
         json!(["standard", "reader_first"])
     );
     assert_eq!(schema["additionalProperties"], false);
+    let mut historical_profile = profile.clone();
+    historical_profile.prompt = edgeagent_research::explanation_owned::digest(OLD.as_bytes());
+    let historical_binding = Binding {
+        profile: historical_profile.id()?,
+        ..binding.clone()
+    };
+    let historical_request = Request::new(&historical_profile, &historical_binding, &input)?;
+    let historical = HttpModel::new(
+        addr,
+        Verifier(addr, historical_profile.deployment.clone(), lease.clone()),
+        OLD.into(),
+    )?;
+    assert!(matches!(
+        historical
+            .choose_development_layout(&historical_request, "D02", &choice_binding)
+            .await,
+        Err(Failure::InvalidRequest)
+    ));
     assert!(!lease.load(Ordering::SeqCst));
     Ok(())
 }
