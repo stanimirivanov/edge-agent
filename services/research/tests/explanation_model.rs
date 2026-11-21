@@ -521,9 +521,16 @@ async fn twelve_instrument_context_rejection_is_payload_free_and_preserves_the_i
         PROMPT.into(),
     )?;
     let request = Request::new(&profile, &binding, bytes)?;
+    assert_eq!(
+        adapter
+            .measure(&request, &input, Duration::from_secs(601))
+            .await
+            .status,
+        "invalid_request"
+    );
     let result = serde_json::to_value(
         adapter
-            .measure(&request, &input, Duration::from_secs(1))
+            .measure(&request, &input, Duration::from_secs(600))
             .await,
     )?;
     assert_eq!(result["status"], "invalid_response");

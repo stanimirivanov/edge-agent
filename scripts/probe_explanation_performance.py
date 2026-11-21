@@ -25,7 +25,7 @@ class BudgetExpired(BaseException):
     """Cancellation must escape readiness/telemetry OSError recovery loops."""
 
 
-def check_attempt(value, case):
+def check_attempt(value, case, *, observation_ceiling_ms=owned.DEFAULT_OBSERVATION_SECONDS * 1000):
     if (not isinstance(value,dict) or set(value) != {"kind","case","profile","calibration","input_bytes","total_ms","measurement"}
             or value["kind"] != ATTEMPT or value["case"] != case):
         raise owned.common.HarnessError("invalid_measurement")
@@ -39,7 +39,7 @@ def check_attempt(value, case):
             or type(value["input_bytes"]) is not int or not 1 <= value["input_bytes"] <= 65_536
             or any(type(v) is not int or not 0 <= v <= 5_400_000 for v in (value["total_ms"],m["elapsed_ms"]))
             or value["total_ms"] < m["elapsed_ms"]
-            or (m["status"] == "valid" and m["elapsed_ms"] > 180_000)):
+            or (m["status"] == "valid" and m["elapsed_ms"] > observation_ceiling_ms)):
         raise owned.common.HarnessError("invalid_measurement")
 
     response=m["response"]
@@ -68,9 +68,12 @@ def check_attempt(value, case):
         raise owned.common.HarnessError("invalid_measurement")
 
 
-def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_feasibility=False):
+def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_feasibility=False, gpu_p03_extended=False):
     if len(pin) != 64 or any(c not in "0123456789abcdef" for c in pin):
         raise owned.common.HarnessError("invalid_manifest_pin")
+    if gpu_feasibility and gpu_p03_extended:
+        raise owned.common.HarnessError("conflicting_feasibility_modes")
+    exploratory = gpu_feasibility or gpu_p03_extended
     if signal.getitimer(signal.ITIMER_REAL)[0]:
         raise owned.common.HarnessError("existing_timer_refused")
     with cpu.open_report(report_path) as stream:
@@ -78,15 +81,20 @@ def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_
         def emit(value):
             cpu.record(stream,dict(value,journal_ms=round((time.monotonic()-started)*1000)))
         census = [("P01", 1), ("P03", 1)] if gpu_feasibility else [(c, r) for c in CASES for r in range(1, 4)]
-        budget = 900 if gpu_feasibility else 5400
+        budget = 900 if exploratory else 5400
+        ceiling_ms = owned.DEFAULT_OBSERVATION_SECONDS * 1000
         kind = "research.explanation-performance.v4" if gpu_required_free_mib is not None else KIND
         if gpu_feasibility:
             kind = "research.explanation-gpu-feasibility.v1"
+        if gpu_p03_extended:
+            census = [("P03", 1)]
+            ceiling_ms = owned.EXTENDED_P03_SECONDS * 1000
+            kind = "research.explanation-gpu-p03-feasibility.v1"
         emit({"kind":kind,"permission_granted":False,"manifest":pin,
               "launcher":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "profiling":hashlib.sha256(Path(profiling.__file__).read_bytes()).hexdigest(),
               "cpu":hashlib.sha256(Path(cpu.__file__).read_bytes()).hexdigest(),
-              "observation_ceiling_ms":180_000,"run_budget_ms":budget * 1000,"census":census})
+              "observation_ceiling_ms":ceiling_ms,"run_budget_ms":budget * 1000,"census":census})
         launched=False
         previous_handler=signal.getsignal(signal.SIGALRM)
         def expired(_signal,_frame):
@@ -104,10 +112,10 @@ def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_
                 import explanation_gpu_metrics as gpu
                 monitor=gpu.Monitor(manifest['cuda'],gpu_required_free_mib)
                 policy = monitor.policy()
-                if gpu_feasibility:
+                if exploratory:
                     policy = dict(policy, window_seconds=0)
                 emit({'event':'gpu_policy',**policy})
-            elif gpu_required_free_mib is not None or gpu_feasibility:
+            elif gpu_required_free_mib is not None or exploratory:
                 raise owned.common.HarnessError('cuda_manifest_required')
             memory=Path(manifest["weights"]["path"]).stat().st_size+2*1024**3
             if monitor is None and not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,min(started+5400,time.monotonic()+3600),memory):
@@ -115,15 +123,15 @@ def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_
                 return 2
             identities={}
             for case, repetition in census:
-                if gpu_feasibility and not monitor.admission(emit):
+                if exploratory and not monitor.admission(emit):
                     emit({"event":"complete","status":"incomplete" if launched else "not_run","reason":"gpu_admission_refused"})
                     return 2
-                if monitor is not None and not gpu_feasibility and not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,
+                if monitor is not None and not exploratory and not cpu.wait_idle(cpu.sample,time.monotonic,time.sleep,emit,
                         min(started+5400,time.monotonic()+3600),memory,
                         additional_idle=lambda:monitor.admission(emit)):
                     emit({'event':'complete','status':'incomplete' if launched else 'not_run','reason':'idle_wait_expired'})
                     return 2
-                if gpu_feasibility:
+                if exploratory:
                     emit({"event":"host_before_attempt","case":case,"host":cpu.sample()})
                 emit({"event":"attempt_started","case":case,"repetition":repetition})
                 launched=True
@@ -135,9 +143,10 @@ def run(manifest_path,pin,report_path,execute,*,gpu_required_free_mib=None, gpu_
                 def observe_both(model,helper,port):
                     observe(model,helper,port)
                     if gpu_observer is not None:gpu_observer(model,helper,port)
-                raw=owned.supervise(manifest_path,pin,"performance-"+case,performance_observer=observe_both)
+                mode = owned.EXTENDED_P03 if gpu_p03_extended else "performance-" + case
+                raw=owned.supervise(manifest_path,pin,mode,performance_observer=observe_both)
                 value=json.loads(raw)
-                check_attempt(value,case)
+                check_attempt(value,case,observation_ceiling_ms=ceiling_ms)
                 identity=(value["calibration"],value["input_bytes"])
                 if (value["profile"] != manifest["profile"]["sha256"] or identities.setdefault(case,identity) != identity):
                     raise owned.common.HarnessError("measurement_identity_changed")
@@ -167,13 +176,15 @@ def main():
     parser.add_argument("--execute-manifest")
     parser.add_argument("--report",type=Path,required=True)
     parser.add_argument("--gpu-required-free-mib",type=int)
-    parser.add_argument("--gpu-feasibility",action="store_true",help="Run P01 and P03 once with a single GPU admission sample per attempt")
+    feasibility = parser.add_mutually_exclusive_group()
+    feasibility.add_argument("--gpu-feasibility",action="store_true",help="Run P01 and P03 once with a single GPU admission sample per attempt")
+    feasibility.add_argument("--gpu-p03-extended", action="store_true", help="Observe one CUDA P03 request for up to ten minutes")
     args=parser.parse_args()
     def cancelled(_signal,_frame):
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM,cancelled)
     try:
-        return run(args.manifest,args.manifest_sha256,args.report,args.execute_manifest,gpu_required_free_mib=args.gpu_required_free_mib,gpu_feasibility=args.gpu_feasibility)
+        return run(args.manifest,args.manifest_sha256,args.report,args.execute_manifest,gpu_required_free_mib=args.gpu_required_free_mib,gpu_feasibility=args.gpu_feasibility,gpu_p03_extended=args.gpu_p03_extended)
     except (OSError,owned.common.HarnessError):
         print("performance report refused",file=sys.stderr)
         return 2

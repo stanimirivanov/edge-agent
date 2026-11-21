@@ -121,9 +121,16 @@ def diagnostic_source(source, source_pin, source_manifest, manifest):
     return source_pin
 
 
+EXTENDED_P03 = "performance-P03-extended"
+DEFAULT_OBSERVATION_SECONDS = 180
+EXTENDED_P03_SECONDS = 600
+
+
 def helper_budget(mode, timeout_ms):
+    if mode == EXTENDED_P03:
+        return EXTENDED_P03_SECONDS + 10
     if mode.startswith("performance-"):
-        return 190
+        return DEFAULT_OBSERVATION_SECONDS + 10
     extended_seconds = max(0, (timeout_ms + 999) // 1000 - 30)
     if mode.endswith("collect"):
         return 1200 + 34 * extended_seconds
@@ -142,7 +149,9 @@ def supervise(manifest_path, manifest_pin, mode, diagnostic=None, *, performance
     if version == 3:
         import explanation_cuda as cuda
     if diagnostic is not None and version != 2:raise common.HarnessError("cpu_diagnostic_required")
-    performance = mode in {"performance-P01", "performance-P02", "performance-P03"}
+    if mode == EXTENDED_P03 and version != 3:
+        raise common.HarnessError("cuda_manifest_required")
+    performance = mode in {"performance-P01", "performance-P02", "performance-P03", EXTENDED_P03}
     if mode.startswith("performance-") and (not performance or diagnostic is not None):
         raise common.HarnessError("invalid_performance_mode")
     if not performance and performance_observer is not None:
