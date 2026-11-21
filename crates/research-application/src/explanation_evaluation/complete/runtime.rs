@@ -219,3 +219,61 @@ pub(crate) fn calibration(index: usize) -> Result<Input, EvaluationError> {
         prepared: Some(input),
     })
 }
+
+#[cfg(feature = "performance-probe")]
+pub(crate) fn development_comparison() -> Result<serde_json::Value, EvaluationError> {
+    use edgeagent_contracts::explanation::Claim;
+    use serde_json::json;
+
+    let cases = [
+        (
+            201,
+            "D01",
+            "Find the leader, distinguish positive and negative scores, and identify the unit.",
+        ),
+        (
+            202,
+            "D02",
+            "Find the excluded instrument, its observed turnover, and the applicable floor.",
+        ),
+        (
+            203,
+            "D03",
+            "Find the source for the leader and distinguish event, observation, and availability times.",
+        ),
+    ];
+    let mut rows = Vec::with_capacity(cases.len());
+    for (n, id, task) in cases {
+        let (fixture, standard, _, proposal) = materialize(n, None)?;
+        let mut choice = Proposal::decode(&proposal).map_err(|_| INVALID)?;
+        for selection in &mut choice.claims {
+            if matches!(selection.claim, Claim::Ranked { .. }) {
+                selection.variant = Variant::PlainLanguage;
+            }
+        }
+        let candidate = choice.canonical_bytes().map_err(|_| INVALID)?;
+        let (plain, _, _) = prepare(&fixture, Some(&candidate), None)?;
+
+        let mut changed_rank_lines = 0;
+        let mut changed_other_lines = 0;
+        if standard.lines().count() != plain.lines().count() {
+            return Err(INVALID);
+        }
+        for (before, after) in standard.lines().zip(plain.lines()) {
+            if before == after {
+                continue;
+            }
+            if before.starts_with("rank=") && after.starts_with("Rank ") {
+                changed_rank_lines += 1;
+            } else {
+                changed_other_lines += 1;
+            }
+        }
+        rows.push(
+            json!({"id":id,"scope":fixture.decision.request.scope,"task":task,
+            "standard":standard,"plain_language":plain,"changed_rank_lines":changed_rank_lines,
+            "changed_other_lines":changed_other_lines}),
+        );
+    }
+    Ok(json!({"kind":"research.explanation-development-comparison.v1","cases":rows}))
+}

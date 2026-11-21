@@ -24,10 +24,12 @@ pub(super) struct Fixture {
 }
 pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let calibration = (101..=103).contains(&n);
+    let development = (201..=203).contains(&n);
     let count = match n {
         101 => 1,
         102 => 4,
         103 => 12,
+        202 => 3,
         1 | 9 | 13..=15 | 17 | 20 | 22 | 23 | 25 | 27..=30 => 1,
         3 | 6 | 26 => 3,
         _ => 2,
@@ -109,6 +111,14 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
             policy.min_daily_turnover_cents = 1;
         }
         28 => strategy.horizon_sessions = 3,
+        201 => {
+            prices[0] = [1_000_000, 1_010_000, 1_020_000];
+            prices[1] = [1_000_000, 995_000, 990_000];
+        }
+        202 => {
+            volumes[1] = 1;
+            policy.min_daily_turnover_cents = 500_000;
+        }
         _ => {}
     }
     let mut opens: Vec<_> = prices.iter().map(|p| [p[0], p[0], p[1]]).collect();
@@ -122,6 +132,8 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let selection = Selection::decode(&bytes).map_err(|_| INVALID)?;
     let scope = if calibration {
         "performance"
+    } else if development {
+        "presentation-development"
     } else {
         "evaluation"
     };
@@ -131,8 +143,15 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
         *b = u8::from_str_radix(&profile.configuration[i * 2..i * 2 + 2], 16)
             .map_err(|_| INVALID)?;
     }
+    let month = if development {
+        12
+    } else if calibration {
+        11
+    } else {
+        10
+    };
     let dates = (1..=u32::from(lookback) + 1)
-        .map(|d| SessionDate::new(2026, if calibration { 11 } else { 10 }, d))
+        .map(|d| SessionDate::new(2026, month, d))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| INVALID)?;
     let universe = (1..=count)
@@ -167,7 +186,11 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
                 implementation: [2; 32],
                 configuration,
                 calendar: [4; 32],
-                known_at_ms: if n == 21 && i == 0 { 91 } else { 90 },
+                known_at_ms: if matches!(n, 21 | 203) && i == 0 {
+                    91
+                } else {
+                    90
+                },
                 rights_until_ms: 110,
                 entitled: true,
                 quality_accepted: true,
@@ -180,7 +203,9 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
                             session: *date,
                             close: UsdPrice::new(prices[i][j], 4).map_err(|_| INVALID)?,
                             event_at_ms: 90 - (i64::from(lookback) - j as i64) * 10
-                                + i64::from(n == 21 && i == 0 && j == usize::from(lookback)),
+                                + i64::from(
+                                    matches!(n, 21 | 203) && i == 0 && j == usize::from(lookback),
+                                ),
                             observed_at_ms: 95,
                             available_at_ms: 100,
                         })
@@ -237,7 +262,11 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
             evidence: s.evidence,
             coverage: context::Coverage::Complete {
                 source: [9; 32],
-                known_at_ms: if n == 21 && i == 0 { 91 } else { 90 },
+                known_at_ms: if matches!(n, 21 | 203) && i == 0 {
+                    91
+                } else {
+                    90
+                },
                 interval: [0, 110],
                 events: events[i].clone(),
             },
@@ -256,6 +285,8 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let request = ResearchRequest {
         request_id: if calibration {
             format!("performance-P{:02}", n - 100)
+        } else if development {
+            format!("presentation-D{:02}", n - 200)
         } else {
             format!("complete-U{n:02}")
         },

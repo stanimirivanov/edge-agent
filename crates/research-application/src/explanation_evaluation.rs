@@ -311,6 +311,15 @@ impl Suite {
         complete::runtime::calibration(index)
     }
 
+    /// Compare existing presentation choices on three invented development cases.
+    ///
+    /// # Errors
+    /// Refuses a fixture or proposal rejected by the production renderer.
+    #[cfg(feature = "performance-probe")]
+    pub fn development_presentation_comparison() -> Result<serde_json::Value, EvaluationError> {
+        complete::runtime::development_comparison()
+    }
+
     /// Load the frozen synthetic fixtures and verify the baseline pins.
     ///
     /// # Errors

@@ -158,3 +158,36 @@ The collection SHA-256 is
 `a442ec5e1c461a59e151d6735fb0b7d23d70d96806880de16118fea7d41ca8d2`.
 The independent verifier SHA-256 is
 `e93781d77aa0152068c08d3fe124693beb86c43ac32e323bd19cfc137f21f934`.
+
+## Offline presentation comparison
+
+Issue #548 compares the existing `standard` and `plain_language` choices on
+three invented development cases with separate identities. Run the JSON exporter
+locally:
+
+```text
+cargo run --locked -p edgeagent-research --features performance-probe --example probe_explanation -- compare-development-presentations
+```
+
+Both proposals pass the production preparation, validation and rendering path.
+The plain-language proposal changes only the variant of ranked selections in
+the validated standard proposal. The same facts, claim order, citations,
+chronology and disclosures are present in both renders. Each report row holds
+the reader task, both complete renders and counts of changed rank and other
+lines.
+
+| Case | Reader task | Observed difference |
+| --- | --- | --- |
+| D01 | Find the leader, compare positive and negative scores, and identify the unit | Two rank lines become sentences. The unit is spelled out as parts per million for the 20,000 and −10,000 scores. |
+| D02 | Find the excluded instrument, observed turnover, and floor | The rank lines for the eligible instruments change. The 10,025-cent turnover, inclusive 500,000-cent floor, reason and source remain in their original positions. |
+| D03 | Trace the leader to its source and distinguish the timestamps | The rank lines become sentences. Citation suffixes and the source row containing event time 91, observation time 95, and availability time 100 are identical. |
+
+The observed total is six changed rank lines and zero changed lines elsewhere.
+The explicit unit is a concrete readability improvement for score tasks.
+The alternative does not move or rephrase the policy or chronology answers,
+or shorten the path from a claim to its source. These are engineering
+observations about the rendered output. The comparison collected no reader
+preferences and provides no estimate of the frozen 21-of-30 pass rate. Keep the
+frozen census and rubric for qualification; development work on policy or
+source findability needs a presentation choice that actually changes those
+parts of the render.
