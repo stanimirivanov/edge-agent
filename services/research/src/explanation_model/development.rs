@@ -4,7 +4,7 @@ use crate::explanation_owned::digest;
 
 /// Exact system prompt for the development layout experiment.
 pub const DEVELOPMENT_LAYOUT_PROMPT: &str =
-    include_str!("../../fixtures/explanations/development-layout-prompt.txt");
+    include_str!("../../fixtures/explanations/development-layout-task-aware-v2.txt");
 
 impl<V: DeploymentVerifier> HttpModel<V> {
     /// Request a layout choice for one invented case. The caller independently
