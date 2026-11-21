@@ -126,3 +126,31 @@ was collected, not that the latency target or qualification passed.
 The older thread-comparison tool has no GPU admission claim and is outside this
 increment. No new real campaign is implied by tests or a single hardware sample.
 The 30-second production limit, frozen qualification and #508 remain unchanged.
+
+## Short CUDA feasibility probe
+
+Use the same pinned performance manifest, a fresh private report, and a tooling
+snapshot containing the current performance probe. Add `--gpu-feasibility` to
+the command above to run P01 then P03 once each. Each case starts a fresh owned
+runtime after a single GPU admission sample. The sample must pass the same GPU
+utilization, compute-client and free-VRAM checks as the full probe.
+
+The exploratory report has kind `research.explanation-gpu-feasibility.v1`.
+It records host and GPU conditions, an independent 180-second per-request
+observation ceiling and a 15-minute whole-run budget. The run stops if admission
+fails or GPU observations are missing, unknown or contaminated by foreign
+compute. The full idle-gated benchmark remains the way to collect idle-host
+evidence. This mode grants no qualification or activation authority.
+
+The exploratory run used the retained 32k CUDA package and 3,656 MiB admission
+threshold. P01 returned a valid proposal in 57.528 seconds, including 45.457
+seconds of prompt evaluation and 12.057 seconds of generation. P03 timed out at
+180.003 seconds waiting for response headers. The probe observed neither a
+context-capacity response nor a valid P03 proposal. GPU admission passed both
+attempts and the monitor detected no foreign compute clients or unknown samples.
+The owned processes were cleaned up and the census ended after 306.944 seconds.
+
+The private report SHA-256 is
+`8485f02c50071465d7e9a4bafb7ddbf4b32ec4df814da8c9d64d9b538ef93583`.
+The exploratory journal does not establish idle-host latency, P03 completion or
+qualification.

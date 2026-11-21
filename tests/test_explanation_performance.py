@@ -18,6 +18,48 @@ class PerformanceTests(unittest.TestCase):
         manifest.write_text(json.dumps({"weights": {"path": str(weights)}, "profile": {"sha256": "a"*64}}))
         return manifest, hashlib.sha256(manifest.read_bytes()).hexdigest()
 
+    def test_gpu_feasibility_is_an_explicit_two_case_run(self):
+        import explanation_gpu_metrics as gpu
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, _ = self.fixture(root)
+            data = json.loads(manifest.read_text())
+            data.update(version=3, cuda={})
+            manifest.write_text(json.dumps(data))
+            pin = hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+            def attempt(path, digest, mode, **kwargs):
+                kwargs["performance_observer"](42, 99, 1234)
+                return probe.owned.common.canonical({
+                    "kind": probe.ATTEMPT, "case": mode[-3:], "profile": "a" * 64,
+                    "calibration": "1" * 64, "input_bytes": 100, "total_ms": 1,
+                    "measurement": {"status": "timeout", "stage": "waiting_response", "elapsed_ms": 1,
+                                    "response": {"http_status": None, "context_capacity": None,
+                                                 "timings": None, "finish_reason": None}},
+                })
+
+            with patch.object(probe.owned, "preflight"), patch.object(gpu, "Monitor") as monitor, \
+                 patch.object(probe.profiling, "Observer"), patch.object(probe.cpu, "wait_idle") as wait, \
+                 patch.object(probe.owned, "supervise", side_effect=attempt) as launch:
+                monitor.return_value.policy.return_value = {}
+                monitor.return_value.sample.return_value = {"foreign_compute": 0}
+                opts = {"gpu_required_free_mib": 3656, "gpu_feasibility": True}
+                self.assertEqual(probe.run(manifest, pin, root / "no-consent", None, **opts), 2)
+                monitor.return_value.admission.return_value = False
+                self.assertEqual(probe.run(manifest, pin, root / "blocked", pin, **opts), 2)
+                launch.assert_not_called()
+                monitor.return_value.admission.return_value = True
+                report = root / "result"
+                self.assertEqual(probe.run(manifest, pin, report, pin, **opts), 0)
+                self.assertEqual([call.args[2] for call in launch.call_args_list],
+                                 ["performance-P01", "performance-P03"])
+                self.assertEqual(monitor.return_value.admission.call_count, 3)
+                wait.assert_not_called()
+            rows = [json.loads(line) for line in report.read_text().splitlines()]
+            self.assertEqual(rows[0]["kind"], "research.explanation-gpu-feasibility.v1")
+            self.assertEqual(rows[0]["census"], [["P01", 1], ["P03", 1]])
+            self.assertEqual(rows[-1]["attempts"], 2)
+
     def test_cuda_attempts_require_repeated_admission_and_stop_on_contamination(self):
         import explanation_gpu_metrics as gpu
         with tempfile.TemporaryDirectory() as directory:
