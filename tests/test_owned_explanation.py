@@ -6,6 +6,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_explanation_owned as owned
 
 class OwnedLauncherTests(unittest.TestCase):
+    def test_development_layout_modes_require_cuda_and_exact_case(self):
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = dict.fromkeys(owned.common.FIELDS)
+            manifest["version"] = 2
+            path = Path(directory) / "manifest.json"
+            raw = owned.common.canonical(manifest)
+            path.write_bytes(raw)
+            pin = owned.hashlib.sha256(raw).hexdigest()
+            with patch.object(owned.subprocess, "Popen") as spawn:
+                for mode in ("development-layout-D01", "development-layout-D04"):
+                    with self.assertRaises(owned.common.HarnessError):
+                        owned.supervise(path, pin, mode)
+                spawn.assert_not_called()
+            self.assertEqual(owned.helper_budget("development-layout-D02", 600_000), 190)
+
     def test_extended_timeout_budgets_keep_legacy_and_probe_bounds(self):
         worker = "offline-explanation-worker-owned"
         collector = "offline-explanation-runtime-collect"

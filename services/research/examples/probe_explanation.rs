@@ -1,7 +1,7 @@
 //! Invented capacity calibration, never a qualification collector or worker.
 use edgeagent_contracts::explanation::Binding;
 use edgeagent_research::{
-    explanation_model::HttpModel,
+    explanation_model::{DEVELOPMENT_LAYOUT_PROMPT, HttpModel},
     explanation_owned::{Manifest, digest},
 };
 use edgeagent_research_application::{
@@ -76,8 +76,66 @@ fn select_development(expected_case: &str, response: &[u8]) -> Result<serde_json
     )?)
 }
 
+async fn choose_layout(case: &str) -> Result<()> {
+    let (anchor, input) = Suite::development_model_case(case)?;
+    let choice_binding = input["input"].as_str().ok_or("development input binding")?;
+    let prepared = edgeagent_contracts::canonical_json_bytes(&input)?;
+    let (manifest, pin) = Manifest::environment()?;
+    let profile = manifest.profile()?;
+    let prompt = manifest.verify(&profile)?;
+    if prompt != DEVELOPMENT_LAYOUT_PROMPT
+        || profile.renderer != digest(RENDERER_REVISION.as_bytes())
+        || profile.validator != digest(VALIDATOR_REVISION.as_bytes())
+    {
+        return Err("development protocol required".into());
+    }
+    let observed = manifest.observation()?;
+    let endpoint = SocketAddrV4::new(Ipv4Addr::LOCALHOST, observed.port);
+    let verifier = manifest.verifier(observed, profile.deployment.clone())?;
+    let model = HttpModel::new(endpoint, verifier.clone(), prompt)?;
+    let binding = Binding {
+        anchor,
+        profile: profile.id()?,
+        evidence: digest(&prepared),
+    };
+    let request = Request::new(&profile, &binding, &prepared)?;
+    let started = Instant::now();
+    let response = model
+        .choose_development_layout(&request, case, choice_binding)
+        .await;
+    let elapsed_ms = started.elapsed().as_millis();
+    verifier.verify()?;
+    let mut report = serde_json::json!({
+        "kind":"research.explanation-development-model-attempt.v1",
+        "case":case,"input":choice_binding,"manifest":pin,"profile":binding.profile,
+        "elapsed_ms":elapsed_ms,"stage":model.diagnostic_stage()
+    });
+    match response {
+        Ok(reply) => match select_development(case, reply.proposal()) {
+            Ok(selection) => {
+                let presentation = selection["presentation"]
+                    .as_str()
+                    .ok_or("rendered presentation")?;
+                report["status"] = "selected".into();
+                report["layout"] = selection["layout"].clone();
+                report["presentation_sha256"] = digest(presentation.as_bytes()).into();
+            }
+            Err(_) => report["status"] = "invalid_choice".into(),
+        },
+        Err(failure) => {
+            report["status"] = "model_failed".into();
+            report["failure"] = failure.to_string().into();
+        }
+    }
+    std::io::stdout().write_all(&edgeagent_contracts::canonical_json_bytes(&report)?)?;
+    Ok(())
+}
+
 async fn run() -> Result<()> {
     let mode = std::env::args().nth(1).ok_or("case required")?;
+    if let Some(case) = mode.strip_prefix("development-layout-") {
+        return choose_layout(case).await;
+    }
     if mode == "export-p03-tokenizer-reference" {
         std::io::stdout().write_all(&p03_tokenizer_reference()?)?;
         return Ok(());

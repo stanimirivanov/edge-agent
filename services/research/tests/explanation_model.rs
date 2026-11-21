@@ -692,3 +692,78 @@ async fn malformed_optional_timings_do_not_change_proposal_acceptance() -> Resul
     }
     Ok(())
 }
+
+#[cfg(feature = "performance-probe")]
+#[tokio::test]
+async fn development_layout_uses_bound_schema_and_the_owned_transport() -> Result {
+    use edgeagent_research::explanation_model::DEVELOPMENT_LAYOUT_PROMPT;
+    let (listener, addr) = listener().await?;
+    let mut profile = profile();
+    profile.prompt =
+        edgeagent_research::explanation_owned::digest(DEVELOPMENT_LAYOUT_PROMPT.as_bytes());
+    let (anchor, prepared) =
+        edgeagent_research_application::explanation_evaluation::Suite::development_model_case(
+            "D02",
+        )?;
+    let mut binding = binding(&profile)?;
+    binding.anchor = anchor;
+    let choice_binding = prepared["input"]
+        .as_str()
+        .ok_or("choice binding")?
+        .to_owned();
+    let input = edgeagent_contracts::canonical_json_bytes(&prepared)?;
+    binding.evidence = edgeagent_research::explanation_owned::digest(&input);
+    let request = Request::new(&profile, &binding, &input)?;
+    let selection = json!({
+        "kind": "research.explanation-development-choice.v1",
+        "case": "D02", "input": choice_binding, "layout": "reader_first"
+    });
+    let body = serde_json::to_vec(&json!({"model":profile.deployment.weights,
+        "choices":[{"finish_reason":"stop","message":{"role":"assistant","content":selection.to_string()}}]}))?;
+    let lease = Arc::new(AtomicBool::new(false));
+    let server_lease = lease.clone();
+    let server =
+        tokio::spawn(async move { serve(listener, server_lease, http("200 OK", &body)).await });
+    let model = HttpModel::new(
+        addr,
+        Verifier(addr, profile.deployment.clone(), lease.clone()),
+        DEVELOPMENT_LAYOUT_PROMPT.into(),
+    )?;
+    assert!(matches!(
+        model
+            .choose_development_layout(&request, "U01", &choice_binding)
+            .await,
+        Err(Failure::InvalidRequest)
+    ));
+    let mut foreign = prepared;
+    foreign["task"] = "Altered task".into();
+    let foreign = edgeagent_contracts::canonical_json_bytes(&foreign)?;
+    let mut foreign_binding = binding.clone();
+    foreign_binding.evidence = edgeagent_research::explanation_owned::digest(&foreign);
+    let foreign_request = Request::new(&profile, &foreign_binding, &foreign)?;
+    assert!(matches!(
+        model
+            .choose_development_layout(&foreign_request, "D02", &choice_binding)
+            .await,
+        Err(Failure::InvalidRequest)
+    ));
+    let reply = model
+        .choose_development_layout(&request, "D02", &choice_binding)
+        .await?;
+    assert_eq!(
+        serde_json::from_slice::<Value>(reply.proposal())?,
+        selection
+    );
+    let sent = server.await??;
+    assert_eq!(sent["messages"][0]["content"], DEVELOPMENT_LAYOUT_PROMPT);
+    let schema = &sent["response_format"]["schema"];
+    assert_eq!(schema["properties"]["case"]["const"], "D02");
+    assert_eq!(schema["properties"]["input"]["const"], choice_binding);
+    assert_eq!(
+        schema["properties"]["layout"]["enum"],
+        json!(["standard", "reader_first"])
+    );
+    assert_eq!(schema["additionalProperties"], false);
+    assert!(!lease.load(Ordering::SeqCst));
+    Ok(())
+}

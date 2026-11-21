@@ -21,7 +21,11 @@ use std::{
 use tokio::sync::Mutex;
 
 #[cfg(feature = "performance-probe")]
+mod development;
+#[cfg(feature = "performance-probe")]
 mod performance;
+#[cfg(feature = "performance-probe")]
+pub use development::DEVELOPMENT_LAYOUT_PROMPT;
 
 const MAX_RESPONSE_BYTES: usize = 65_536;
 const MAX_PROMPT_BYTES: usize = 4096;
@@ -153,7 +157,20 @@ impl<V: DeploymentVerifier> HttpModel<V> {
     async fn exchange(
         &self,
         request: &Request<'_>,
+        diagnostic: Option<&mut ResponseDiagnostic>,
+    ) -> Result<Reply, Failure> {
+        self.exchange_with(request, diagnostic, &self.schema, |content| {
+            Proposal::from_model_json(content.as_bytes()).map_err(|_| Failure::InvalidResponse)
+        })
+        .await
+    }
+
+    async fn exchange_with(
+        &self,
+        request: &Request<'_>,
         mut diagnostic: Option<&mut ResponseDiagnostic>,
+        schema: &serde_json::Value,
+        decode: fn(String) -> Result<Vec<u8>, Failure>,
     ) -> Result<Reply, Failure> {
         let profile = request.profile();
         if self.prompt_id != profile.prompt {
@@ -177,7 +194,7 @@ impl<V: DeploymentVerifier> HttpModel<V> {
             "n": 1,
             "stream": false,
             "reasoning_effort": "none",
-            "response_format": {"type": "json_schema", "schema": self.schema},
+            "response_format": {"type": "json_schema", "schema": schema},
         }))
         .map_err(|_| Failure::InvalidRequest)?;
         self.stage.store(2, Ordering::Relaxed);
@@ -193,14 +210,14 @@ impl<V: DeploymentVerifier> HttpModel<V> {
         if let Some(value) = diagnostic.as_mut() {
             value.http_status = Some(response.status().as_u16());
         }
-        let proposal = read_proposal(
+        let content = read_content(
             response,
             &profile.deployment.weights,
             &self.stage,
             diagnostic,
         )
         .await?;
-        let reply = request.accept(lease.identity().clone(), proposal);
+        let reply = request.accept(lease.identity().clone(), decode(content)?);
         if reply.is_ok() {
             self.stage.store(6, Ordering::Relaxed);
         }
@@ -253,12 +270,12 @@ struct Message {
     content: Option<String>,
 }
 
-async fn read_proposal(
+async fn read_content(
     response: reqwest::Response,
     model: &str,
     stage: &AtomicU8,
     diagnostic: Option<&mut ResponseDiagnostic>,
-) -> Result<Vec<u8>, Failure> {
+) -> Result<String, Failure> {
     if response.status().is_server_error() {
         return Err(Failure::Unavailable);
     }
@@ -315,7 +332,7 @@ async fn read_proposal(
     }
     let content = choice.message.content.ok_or(Failure::InvalidResponse)?;
     stage.store(5, Ordering::Relaxed);
-    Proposal::from_model_json(content.as_bytes()).map_err(|_| Failure::InvalidResponse)
+    Ok(content)
 }
 
 async fn read_body(mut response: reqwest::Response) -> Result<Vec<u8>, Failure> {
