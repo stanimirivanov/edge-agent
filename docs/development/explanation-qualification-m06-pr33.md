@@ -114,3 +114,47 @@ No deadline, prompt, output budget, corpus, qualification threshold or productio
 setting was changed. No fresh qualification, hosted judgment, owner approval or
 activation was performed. Diagnostic formats are rejected by hosted preparation;
 the campaign and issue #508 remain incomplete.
+
+## CUDA frozen census
+
+The candidate from #546 uses 1,600 output tokens. This collection pins a fresh
+`research.explanation.profile.v2` with a 600,000 ms per-request deadline and
+keeps the exact model weights, runtime, prompt, library pins, CUDA configuration
+and other inference settings from the feasibility package. The release
+`edgeagent-research` collector and independent `qualify_explanation` verifier
+were built from merged source `31962fc2d484960bfb03ad17a9d4d1b712bf8599`.
+The canonical profile and deployment identity bind the new collector.
+
+The manifest SHA-256 is
+`104fcdf61b971cb4240147d73d0e0aa696ac4b834a61fa0ddbb253746a40f368`.
+The profile SHA-256 is
+`f4c6c7727d0f09e67af5768bafbef0391d9d63a42c6db21bc5658c61e92b0c7e`.
+The private preparation record SHA-256 is
+`12fd90ad589301d34eb099a6ccc64806880fb697cfa9f72e1016fc4025139804`.
+The Python preflight and Rust binding handshake accepted the exact package.
+The preflight helper was reaped before model startup.
+
+The owned collector runs the existing `Suite::runtime()` census of 30 reader
+cases and four adversarial probes. The collection stays private and carries
+no permission grant. Earlier CPU and CUDA records remain available as separate
+evidence.
+
+The supervisor exited successfully after about 27 minutes. All 30 reader
+cases and all four adversarial probes had outcome `generated`. The independent
+local `verify-runtime` check validated every ordered case and probe identity,
+rendered every generated proposal, and reconstructed all 30 presentation
+bindings and paired texts. Cleanup left no GPU compute client.
+
+All 30 generated reader presentations were byte-identical to the deterministic
+baseline. Under [ADR-0121](../decisions/0121-define-hosted-ai-explanation-review.md),
+identical presentations are ties. This leaves zero possible preferences under
+the review rubric, below the required 21 per judge. The collection establishes
+complete local generation and validation for the pinned profile. The usefulness
+requirement remains unmet. No hosted token-count or judgment request was made,
+and owner attestation, qualification approval and activation remain pending.
+Issue #508 stays open.
+
+The collection SHA-256 is
+`a442ec5e1c461a59e151d6735fb0b7d23d70d96806880de16118fea7d41ca8d2`.
+The independent verifier SHA-256 is
+`e93781d77aa0152068c08d3fe124693beb86c43ac32e323bd19cfc137f21f934`.
