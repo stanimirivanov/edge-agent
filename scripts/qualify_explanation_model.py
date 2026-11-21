@@ -75,7 +75,11 @@ def preflight(manifest, *, version=1, identity=None):
     if Path(manifest["profile"]["path"]).read_bytes() != canonical(profile):
         raise HarnessError("noncanonical_profile")
     data = profile["data"]
-    if (profile["kind"] != "research.explanation.profile.v1"
+    timeout_ms = data["settings"]["timeout_ms"]
+    if type(timeout_ms) is not int or not 1 <= timeout_ms <= 600_000:
+        raise HarnessError("invalid_profile_timeout")
+    kind = "research.explanation.profile.v2" if timeout_ms > 30_000 else "research.explanation.profile.v1"
+    if (profile["kind"] != kind or (version == 1 and timeout_ms > 30_000)
             or data["deployment"] != {"runtime": (identity or runtime_id)(manifest), "weights": manifest["weights"]["sha256"]}
             or data["prompt"] != manifest["prompt"]["sha256"]):
         raise HarnessError("profile_binding_mismatch")

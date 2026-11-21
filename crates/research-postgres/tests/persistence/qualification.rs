@@ -50,14 +50,16 @@ async fn qualification_approvals_are_exact_audited_revocable_and_fenced() -> Res
         // durable attempt through revocation without upgrading historical reviews.
         for migration in [edgeagent_research_postgres::explanation_grants::MIGRATION,
             edgeagent_research_postgres::explanation_attempts::MIGRATION,
-            edgeagent_research_postgres::explanation_completion::MIGRATION] {
+            edgeagent_research_postgres::explanation_completion::MIGRATION,
+            edgeagent_research_postgres::explanation_attempts::DEADLINE_MIGRATION] {
             sqlx::raw_sql(migration).execute(&h.pool).await?;
         }
-        let runtime=fixture::runtime()?;
+        let runtime=fixture::runtime(300_000)?;
         let runtime_profile=runtime.profile().clone();
         store.review_qualification(&VerifiedReview::decode(&runtime.bytes()?)?).await?;
         let approval=store.qualification_approval("scope",&runtime_profile).await?.ok_or("runtime approval")?;
-        let grant=super::explanation_grants::grant(edgeagent_research_application::explanation_context::Purpose::ModelDisclosure);
+        let mut grant=super::explanation_grants::grant(edgeagent_research_application::explanation_context::Purpose::ModelDisclosure);
+        grant.expires_at_ms=600_100;
         store.set_explanation_grant(&grant,1).await?;
         let request=edgeagent_contracts::model_disclosure::Request {
             operation:edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000001")?,
@@ -70,18 +72,26 @@ async fn qualification_approvals_are_exact_audited_revocable_and_fenced() -> Res
         let owner=edgeagent_contracts::model_disclosure::Permit {
             review_key:request.review_key(&"d".repeat(64))?,rights_scope:"d".repeat(64),request,
             review_revision:1,agreement:edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000003")?,
-            checked_at_ms:100,expires_at_ms:200,review_until_ms:200,retention_until_ms:200,
+            checked_at_ms:100,expires_at_ms:600_100,review_until_ms:600_100,retention_until_ms:600_100,
         };
         let intent=edgeagent_research_postgres::explanation_attempts::Intent {
             binding:edgeagent_contracts::explanation::Binding {anchor:grant.request.anchor.clone(),profile:runtime_profile.id()?,evidence:"c".repeat(64)},
-            input_digest:"c".repeat(64),audience:grant.request.audience.clone(),deadline_ms:150,
+            input_digest:"c".repeat(64),audience:grant.request.audience.clone(),deadline_ms:300_100,
         };
         let mut refreshed=owner.clone();
         refreshed.request.operation=edgeagent_contracts::evidence::EvidenceId::new("00000000000000000000000000000004")?;
-        let authority=edgeagent_research_postgres::explanation_attempts::QualifiedAuthority {
-            owner,manifest:approval.manifest,helper:approval.helper,revision:approval.revision,assessment:approval.assessment,
+        let authority=|| edgeagent_research_postgres::explanation_attempts::QualifiedAuthority {
+            owner:owner.clone(),manifest:approval.manifest.clone(),helper:approval.helper.clone(),
+            revision:approval.revision,assessment:approval.assessment.clone(),
         };
-        let edgeagent_research_postgres::explanation_attempts::ReservationOutcome::Reserved(mut permit)=store.reserve_qualified_explanation_attempt(&intent,authority,||100).await? else { return Err("fresh attempt".into()); };
+        let over_profile = edgeagent_research_postgres::explanation_attempts::Intent {
+            deadline_ms: intent.deadline_ms + 1, ..intent.clone()
+        };
+        assert_eq!(store.reserve_qualified_explanation_attempt(&over_profile,authority(),||100)
+            .await.err().ok_or("accepted beyond approved timeout")?.kind(),Kind::Invalid);
+        assert_eq!(store.reserve_explanation_attempt(&intent,||100)
+            .await.err().ok_or("legacy reservation accepted extended deadline")?.kind(),Kind::Invalid);
+        let edgeagent_research_postgres::explanation_attempts::ReservationOutcome::Reserved(mut permit)=store.reserve_qualified_explanation_attempt(&intent,authority(),||100).await? else { return Err("fresh attempt".into()); };
         let mut foreign=refreshed.clone(); foreign.request.input="e".repeat(64);
         assert!(permit.refresh_owner(foreign,110).is_err());
         permit.refresh_owner(refreshed,110)?;

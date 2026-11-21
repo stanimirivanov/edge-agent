@@ -120,7 +120,7 @@ fn qualification_keeps_the_historical_context_corpus_unchanged() {
 
 #[test]
 fn runtime_approval_is_versioned_and_independently_rescored() -> Result {
-    let command = fixture::runtime()?;
+    let command = fixture::runtime(1000)?;
     let bytes = command.bytes()?;
     assert!(String::from_utf8(bytes.clone())?.contains("review.v2"));
     let verified = VerifiedReview::decode(&bytes)?;

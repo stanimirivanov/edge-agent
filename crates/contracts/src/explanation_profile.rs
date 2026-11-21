@@ -5,6 +5,10 @@ use sha2::{Digest, Sha256};
 
 /// Profile size limit, checked before parsing.
 pub const MAX_PROFILE_BYTES: usize = 2048;
+/// Maximum duration encoded by the historical v1 profile.
+pub const LEGACY_TIMEOUT_MS: u32 = 30_000;
+/// Maximum configurable request duration for newly qualified profiles.
+pub const MAX_TIMEOUT_MS: u32 = 600_000;
 
 /// Requested runtime and model artifact identities. A profile does not attest
 /// that a deployment matches them.
@@ -24,7 +28,8 @@ pub struct Settings {
     pub seed: u32,
     pub temperature_milli: u16,
     pub max_output_tokens: u16,
-    pub timeout_ms: u16,
+    /// Model request deadline in milliseconds, part of the approved identity.
+    pub timeout_ms: u32,
 }
 
 /// The only supported tool configuration.
@@ -54,6 +59,8 @@ pub struct Profile {
 enum Wire<T> {
     #[serde(rename = "research.explanation.profile.v1")]
     V1(T),
+    #[serde(rename = "research.explanation.profile.v2")]
+    V2(T),
 }
 
 impl Profile {
@@ -70,11 +77,16 @@ impl Profile {
         .any(|pin| !digest(pin) || pin.bytes().all(|b| b == b'0'))
             || self.settings.temperature_milli > 2000
             || !(1..=2048).contains(&self.settings.max_output_tokens)
-            || !(1..=30_000).contains(&self.settings.timeout_ms)
+            || !(1..=MAX_TIMEOUT_MS).contains(&self.settings.timeout_ms)
         {
             return Err(Error);
         }
-        let mut bytes = canonical_json::to_vec(&Wire::V1(self)).map_err(|_| Error)?;
+        let wire = if self.settings.timeout_ms > LEGACY_TIMEOUT_MS {
+            Wire::V2(self)
+        } else {
+            Wire::V1(self)
+        };
+        let mut bytes = canonical_json::to_vec(&wire).map_err(|_| Error)?;
         bytes.push(b'\n');
         Ok(bytes)
     }
@@ -84,7 +96,8 @@ impl Profile {
         if bytes.len() > MAX_PROFILE_BYTES {
             return Err(Error);
         }
-        let Wire::V1(profile): Wire<Self> = serde_json::from_slice(bytes).map_err(|_| Error)?;
+        let (Wire::V1(profile) | Wire::V2(profile)): Wire<Self> =
+            serde_json::from_slice(bytes).map_err(|_| Error)?;
         if profile.canonical_bytes()? != bytes {
             return Err(Error);
         }
@@ -162,6 +175,35 @@ mod tests {
         }
         assert!(Profile::decode(&bytes[..bytes.len() - 1]).is_err());
         assert!(Profile::decode(&vec![b' '; MAX_PROFILE_BYTES + 1]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn extended_timeout_has_distinct_canonical_identity_and_bounds() -> Result<(), Error> {
+        let mut profile = fixture();
+        let old_bytes = profile.canonical_bytes()?;
+        let old_id = profile.id()?;
+        for timeout in [30_001, 60_000, 600_000] {
+            profile.settings.timeout_ms = timeout;
+            let bytes = profile.canonical_bytes()?;
+            let wire = std::str::from_utf8(&bytes).map_err(|_| Error)?;
+            assert!(wire.contains("research.explanation.profile.v2"));
+            assert_eq!(Profile::decode(&bytes)?, profile);
+            assert_ne!(profile.id()?, old_id);
+            assert!(Profile::decode(wire.replace("profile.v2", "profile.v1").as_bytes()).is_err());
+        }
+        assert_eq!(Profile::decode(&old_bytes)?.id()?, old_id);
+        let extended = String::from_utf8(profile.canonical_bytes()?).map_err(|_| Error)?;
+        assert!(
+            Profile::decode(
+                extended
+                    .replace("\"timeout_ms\":600000", "\"timeout_ms\":600001")
+                    .as_bytes()
+            )
+            .is_err()
+        );
+        profile.settings.timeout_ms = 0;
+        assert!(profile.canonical_bytes().is_err());
         Ok(())
     }
 

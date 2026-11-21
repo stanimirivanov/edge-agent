@@ -191,7 +191,9 @@ async fn execute(mode: &str) -> Result {
             use std::io::Write as _;
             let id=std::env::var("EDGEAGENT_RESEARCH_EXPLANATION_JOB").ok();
             if let Some(id)=&id {crate::loader::digest(id)?;}
-            let budget = if mode=="offline-explanation-worker-owned" { 240 } else { 40 };
+            let budget = if mode=="offline-explanation-worker-owned" {
+                210 + u64::from(edgeagent_contracts::explanation_profile::MAX_TIMEOUT_MS).div_ceil(1000)
+            } else { 40 };
             if let Some(receipt)=tokio::time::timeout(Duration::from_secs(budget),async { if mode=="offline-explanation-worker-owned" { crate::explanation_guarded::execute(&store,&scope,id.as_deref()).await } else { crate::explanation_worker::execute(&store,&scope,id.as_deref()).await } }).await?? {
                 std::io::stdout().write_all(receipt.bytes())?;
             }
