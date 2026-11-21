@@ -1,4 +1,6 @@
 //! Sealed, independently reconciled policy preview. Owner authentication stays with callers.
+#[cfg(feature = "performance-probe")]
+mod reader_first;
 #[cfg(test)]
 mod tests;
 use crate::{
@@ -21,6 +23,8 @@ pub const REVISION: &str = "research-explanation-policy.v1";
 pub struct PolicyPreview<'a> {
     base: Preview<'a>,
     measurements: String,
+    #[cfg(feature = "performance-probe")]
+    reader_first: Option<reader_first::ReaderFirst>,
 }
 fn hex(bytes: &[u8; 32]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -117,6 +121,8 @@ impl<'a> PolicyPreview<'a> {
             p.revision
         );
         writeln!(text,"direction=long_only horizon_maximum_inclusive_sessions={} base_age_maximum_inclusive_ms={} context_age_maximum_inclusive_ms={context_max_age_ms}",p.max_horizon_sessions,p.max_age_ms).map_err(|_|Error)?;
+        #[cfg(feature = "performance-probe")]
+        let mut reader_first = reader_first::ReaderFirst::for_development(record)?;
         for series in eligible.series() {
             let frozen = series.frozen();
             let id = frozen.selected.instrument;
@@ -183,6 +189,16 @@ impl<'a> PolicyPreview<'a> {
                 writeln!(text,"evidence={source} event_source={} calendar_event_at_ms={event} within_closed_window={}",hex(event_source),(*event>=window_start && *event<=window_end)).map_err(|_|Error)?;
             }
             let last = series.closes().last().ok_or(Error)?;
+            #[cfg(feature = "performance-probe")]
+            if let Some(summary) = &mut reader_first {
+                summary.observe(
+                    id.get(),
+                    &source,
+                    liquidity.cents(),
+                    p.min_daily_turnover_cents,
+                    last,
+                )?;
+            }
             writeln!(text,"evidence={source} event_source={} revision={} market_age_ms={} context_age_ms={} maximum_inclusive_ms={context_max_age_ms}",hex(event_source),context::QUALITY_REVISION,decision.request.decision_at_ms-last.event_at_ms,decision.request.decision_at_ms-known_at_ms).map_err(|_|Error)?;
             for (index, close) in series.closes().iter().enumerate() {
                 writeln!(text,"evidence={source} selected_session_index={index} event_at_ms={} observed_at_ms={} available_at_ms={}",close.event_at_ms,close.observed_at_ms,close.available_at_ms).map_err(|_|Error)?;
@@ -191,6 +207,8 @@ impl<'a> PolicyPreview<'a> {
         Ok(Self {
             base,
             measurements: text,
+            #[cfg(feature = "performance-probe")]
+            reader_first,
         })
     }
     /// Complete deterministic standard presentation with all required disclosures.
@@ -205,6 +223,12 @@ impl<'a> PolicyPreview<'a> {
     pub fn validate(&self, proposal: &[u8]) -> Result<String, Error> {
         Ok(self.compose(&self.base.validate(proposal)?))
     }
+    /// Opening summary for the isolated development comparison.
+    #[cfg(feature = "performance-probe")]
+    pub(crate) fn reader_first_summary(&self) -> Result<String, Error> {
+        self.reader_first.as_ref().ok_or(Error)?.summary()
+    }
+
     fn compose(&self, base: &str) -> String {
         let mut text = self.measurements.clone();
         // v2 is immutable: replace its header and unavailable source-summary rows

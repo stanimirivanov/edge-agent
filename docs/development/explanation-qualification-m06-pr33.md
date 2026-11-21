@@ -191,3 +191,27 @@ preferences and provides no estimate of the frozen 21-of-30 pass rate. Keep the
 frozen census and rubric for qualification; development work on policy or
 source findability needs a presentation choice that actually changes those
 parts of the render.
+
+### Reader-first policy and source layout
+
+Issue #550 adds `reader_first` to the same offline export. The opening
+`research-explanation-reader-first.v1` layout places the liquidity finding and
+the leading instrument's latest selected source ahead of the complete standard
+presentation. It uses the policy renderer's reconciled measurements and source
+observations directly. The bounded summary describes the liquidity floor and
+the latest selected close. The full details retain the other policy checks,
+the remaining sources, the rankings, chronology, and required disclosures.
+
+On D02, the observed turnover of 10,025 USD cents, the inclusive minimum of
+500,000 USD cents, and the source digest appear together on lines 4–5. The
+standard presentation first shows the below-floor measurement on line 16.
+On D03, the leading instrument and source digest are followed by explicitly
+labeled event, observation and availability times on line 9. The corresponding
+chronology row first appears on line 14 in the standard presentation. The
+opening adds 11 lines on D01 and D03 and 12 on D02. This trades a longer
+total document for earlier access to the two answers. The complete standard
+render is byte-identical after the detail divider.
+
+This layout is scoped to the invented development cases. The export is a
+structural comparison. Reader preference, the frozen census, and qualification
+remain separate from this experiment.

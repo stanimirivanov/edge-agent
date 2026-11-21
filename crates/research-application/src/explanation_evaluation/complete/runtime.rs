@@ -269,9 +269,18 @@ pub(crate) fn development_comparison() -> Result<serde_json::Value, EvaluationEr
                 changed_other_lines += 1;
             }
         }
+        let policy = PolicyPreview::from_verified(
+            &fixture.record,
+            &fixture.decision,
+            &fixture.configuration,
+            &fixture.input,
+        )
+        .map_err(|_| INVALID)?;
+        let summary = policy.reader_first_summary().map_err(|_| INVALID)?;
+        let reader_first = format!("{summary}\nFull validated presentation\n{standard}");
         rows.push(
             json!({"id":id,"scope":fixture.decision.request.scope,"task":task,
-            "standard":standard,"plain_language":plain,"changed_rank_lines":changed_rank_lines,
+            "standard":standard,"plain_language":plain,"reader_first":reader_first,"changed_rank_lines":changed_rank_lines,
             "changed_other_lines":changed_other_lines}),
         );
     }
