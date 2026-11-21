@@ -10,6 +10,15 @@ use edgeagent_contracts::{
 };
 use std::{collections::BTreeMap, fmt};
 
+/// Candidate-controlled layout options for the offline development comparison.
+#[cfg(feature = "performance-probe")]
+pub enum DevelopmentLayout {
+    /// Render the validated standard presentation.
+    Standard,
+    /// Place the reader-first summary before the validated standard presentation.
+    ReaderFirst,
+}
+
 const PAIRS: usize = 30;
 const MINIMUM_PREFERENCES: usize = 21;
 
@@ -317,7 +326,21 @@ impl Suite {
     /// Refuses a fixture or proposal rejected by the production renderer.
     #[cfg(feature = "performance-probe")]
     pub fn development_presentation_comparison() -> Result<serde_json::Value, EvaluationError> {
-        complete::runtime::development_comparison()
+        complete::runtime::development::development_comparison()
+    }
+
+    /// Validate a fixture-bound candidate response and render its selected development layout.
+    ///
+    /// # Errors
+    /// Refuses foreign case or input bindings and unrenderable fixtures.
+    #[cfg(feature = "performance-probe")]
+    pub fn render_development_choice(
+        expected_case: &str,
+        case: &str,
+        input: &str,
+        layout: DevelopmentLayout,
+    ) -> Result<serde_json::Value, EvaluationError> {
+        complete::runtime::development::render_choice(expected_case, case, input, layout)
     }
 
     /// Load the frozen synthetic fixtures and verify the baseline pins.
