@@ -218,13 +218,29 @@ mod tests {
             let render = |value: &serde_json::Value| -> Result<serde_json::Value> {
                 select_development(case, &serde_json::to_vec(value)?)
             };
-            let selected: serde_json::Value = render(&response)?;
-            assert_eq!(selected["presentation"], row["reader_first"]);
-            assert_eq!(selected["layout"], "reader_first");
+            if case == "D01" {
+                assert!(render(&response).is_err());
+                assert_eq!(row["eligible_layouts"], json!(["standard"]));
+            } else {
+                let selected = render(&response)?;
+                assert_eq!(selected["presentation"], row["reader_first"]);
+                assert_eq!(selected["layout"], "reader_first");
+                assert_eq!(row["eligible_layouts"], json!(["standard", "reader_first"]));
+            }
+            let (_, model_input) = Suite::development_model_case(case)?;
+            assert_eq!(model_input["eligible_layouts"], row["eligible_layouts"]);
+            assert_eq!(model_input.get("reader_first").is_some(), case != "D01");
             response["layout"] = "standard".into();
             let selected: serde_json::Value = render(&response)?;
             assert_eq!(selected["presentation"], row["standard"]);
             assert_eq!(selected["input"], row["choice_binding"]);
+
+            if case == "D01" {
+                let mut historical = response.clone();
+                historical["input"] =
+                    json!("dce7c2971fa280e6191c7ba8289e8b4c828f9de3203429a227c93a07d06f761f");
+                assert!(render(&historical).is_err());
+            }
 
             for (field, value) in [
                 ("layout", json!("plain_language")),

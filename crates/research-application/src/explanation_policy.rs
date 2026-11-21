@@ -223,9 +223,9 @@ impl<'a> PolicyPreview<'a> {
     pub fn validate(&self, proposal: &[u8]) -> Result<String, Error> {
         Ok(self.compose(&self.base.validate(proposal)?))
     }
-    /// Opening summary for the isolated development comparison.
+    /// Development opening with verified leader chronology and a liquidity finding indicator.
     #[cfg(feature = "performance-probe")]
-    pub(crate) fn reader_first_summary(&self) -> Result<String, Error> {
+    pub(crate) fn reader_first_summary(&self) -> Result<(String, bool), Error> {
         self.reader_first.as_ref().ok_or(Error)?.summary()
     }
 
