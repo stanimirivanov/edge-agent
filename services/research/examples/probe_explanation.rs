@@ -6,12 +6,12 @@ use edgeagent_research::{
 };
 use edgeagent_research_application::{
     explanation::Allowlist,
-    explanation_evaluation::Suite,
+    explanation_evaluation::{DevelopmentLayout, Suite},
     explanation_model::Request,
     explanation_runtime::{RENDERER_REVISION, VALIDATOR_REVISION},
 };
 use std::{
-    io::Write as _,
+    io::{Read as _, Write as _},
     net::{Ipv4Addr, SocketAddrV4},
     time::{Duration, Instant},
 };
@@ -35,14 +35,66 @@ fn p03_tokenizer_reference() -> Result<Vec<u8>> {
     Ok(bytes.to_vec())
 }
 
+const MAX_DEVELOPMENT_CHOICE_BYTES: usize = 1024;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Layout {
+    Standard,
+    ReaderFirst,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum Choice {
+    #[serde(rename = "research.explanation-development-choice.v1")]
+    V1 {
+        case: String,
+        input: String,
+        layout: Layout,
+    },
+}
+
+fn select_development(expected_case: &str, response: &[u8]) -> Result<serde_json::Value> {
+    if response.len() > MAX_DEVELOPMENT_CHOICE_BYTES {
+        return Err("development choice exceeds byte limit".into());
+    }
+    let Choice::V1 {
+        case,
+        input,
+        layout,
+    } = serde_json::from_slice(response)?;
+    let layout = match layout {
+        Layout::Standard => DevelopmentLayout::Standard,
+        Layout::ReaderFirst => DevelopmentLayout::ReaderFirst,
+    };
+    Ok(Suite::render_development_choice(
+        expected_case,
+        &case,
+        &input,
+        layout,
+    )?)
+}
+
 async fn run() -> Result<()> {
     let mode = std::env::args().nth(1).ok_or("case required")?;
     if mode == "export-p03-tokenizer-reference" {
         std::io::stdout().write_all(&p03_tokenizer_reference()?)?;
         return Ok(());
     }
-    if mode == "compare-development-presentations" {
-        let report = Suite::development_presentation_comparison()?;
+    let selection = match mode.as_str() {
+        "compare-development-presentations" => Some(Suite::development_presentation_comparison()?),
+        "select-development-presentation" => {
+            let case = std::env::args().nth(2).ok_or("development case required")?;
+            let mut response = Vec::new();
+            std::io::stdin()
+                .take((MAX_DEVELOPMENT_CHOICE_BYTES + 1) as u64)
+                .read_to_end(&mut response)?;
+            Some(select_development(&case, &response)?)
+        }
+        _ => None,
+    };
+    if let Some(report) = selection {
         let mut bytes = edgeagent_contracts::canonical_json_bytes(&report)?;
         bytes.push(b'\n');
         std::io::stdout().write_all(&bytes)?;
@@ -90,6 +142,56 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn development_candidate_selects_only_a_layout_bound_to_the_requested_fixture() -> Result<()> {
+        use serde_json::json;
+
+        let report = Suite::development_presentation_comparison()?;
+        let cases = report["cases"].as_array().ok_or("cases")?;
+        for row in cases {
+            let case = row["id"].as_str().ok_or("id")?;
+            let mut response = json!({
+                "kind": "research.explanation-development-choice.v1",
+                "case": case,
+                "input": row["choice_binding"],
+                "layout": "reader_first"
+            });
+            let render = |value: &serde_json::Value| -> Result<serde_json::Value> {
+                select_development(case, &serde_json::to_vec(value)?)
+            };
+            let selected: serde_json::Value = render(&response)?;
+            assert_eq!(selected["presentation"], row["reader_first"]);
+            assert_eq!(selected["layout"], "reader_first");
+            response["layout"] = "standard".into();
+            let selected: serde_json::Value = render(&response)?;
+            assert_eq!(selected["presentation"], row["standard"]);
+            assert_eq!(selected["input"], row["choice_binding"]);
+
+            for (field, value) in [
+                ("layout", json!("plain_language")),
+                ("case", json!("U01")),
+                (
+                    "input",
+                    cases[if case == "D01" { 1 } else { 0 }]["choice_binding"].clone(),
+                ),
+                ("claims", json!([])),
+                ("kind", json!("research.explanation-development-choice.v2")),
+            ] {
+                let mut foreign = response.clone();
+                foreign[field] = value;
+                assert!(render(&foreign).is_err(), "{field}");
+            }
+
+            let mut oversized = serde_json::to_vec(&response)?;
+            oversized.resize(1025, b' ');
+            assert!(select_development(case, &oversized).is_err());
+            let duplicate = serde_json::to_string(&response)?
+                .replace("\"layout\":", "\"layout\":\"reader_first\",\"layout\":");
+            assert!(select_development(case, duplicate.as_bytes()).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn reader_first_places_verified_policy_and_sources_before_unchanged_details() -> Result<()> {

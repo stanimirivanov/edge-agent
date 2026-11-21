@@ -215,3 +215,32 @@ render is byte-identical after the detail divider.
 This layout is scoped to the invented development cases. The export is a
 structural comparison. Reader preference, the frozen census, and qualification
 remain separate from this experiment.
+
+### Selecting the development layout
+
+Issue #552 adds a bounded candidate response to the offline development path.
+Use the comparison command above to get each case ID and its `choice_binding`.
+Pass a candidate response on stdin, using the requested case as a separate
+argument:
+
+```text
+cargo run --locked -p edgeagent-research --features performance-probe --example probe_explanation -- select-development-presentation D02 < choice.json
+```
+
+```json
+{"kind":"research.explanation-development-choice.v1","case":"D02","input":"CHOICE_BINDING_FROM_EXPORT","layout":"reader_first"}
+```
+
+The selector accepts up to 1,024 bytes. The choice must match the requested
+development case and the digest of its prepared input, reader task and both
+eligible renderings. Supported selections are `standard` and `reader_first`.
+Duplicate or extra fields, unsupported values and cross-case bindings refuse
+without returning a presentation. The candidate supplies a layout choice only.
+The existing renderer supplies the facts, citations, timestamps and disclosures.
+
+Both choices were exercised on D01–D03 using synthetic responses. All six
+selected texts matched their comparison exports, and three responses bound to
+different cases were refused. The existing comparison outputs matched their
+previous values apart from the new binding field. This command exercises
+candidate selection in the development harness. Model transport, reviewer
+preferences and frozen qualification remain separate.
