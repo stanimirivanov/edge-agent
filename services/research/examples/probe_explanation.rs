@@ -41,6 +41,13 @@ async fn run() -> Result<()> {
         std::io::stdout().write_all(&p03_tokenizer_reference()?)?;
         return Ok(());
     }
+    if mode == "compare-development-presentations" {
+        let report = Suite::development_presentation_comparison()?;
+        let mut bytes = edgeagent_contracts::canonical_json_bytes(&report)?;
+        bytes.push(b'\n');
+        std::io::stdout().write_all(&bytes)?;
+        return Ok(());
+    }
     let (index, id, observation_limit) = calibration(&mode)?;
     let (manifest, _) = Manifest::environment()?;
     let profile = manifest.profile()?;
@@ -83,6 +90,51 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn development_comparison_is_separate_and_exposes_the_actual_render_delta() -> Result<()> {
+        let report = Suite::development_presentation_comparison()?;
+        assert_eq!(
+            report["kind"],
+            "research.explanation-development-comparison.v1"
+        );
+        let rows = report["cases"].as_array().ok_or("cases")?;
+        assert_eq!(rows.len(), 3);
+        for (row, id) in rows.iter().zip(["D01", "D02", "D03"]) {
+            assert_eq!(row["id"], id);
+            assert_eq!(row["scope"], "presentation-development");
+            assert_eq!(row["changed_rank_lines"], 2);
+            assert_eq!(row["changed_other_lines"], 0);
+            let standard = row["standard"].as_str().ok_or("standard")?;
+            let plain = row["plain_language"].as_str().ok_or("plain language")?;
+            assert!(plain.contains("parts per million"));
+            assert_ne!(standard, plain);
+            for (before, after) in standard.lines().zip(plain.lines()) {
+                if let Some(rank) = before.strip_prefix("rank=") {
+                    let (ordinal, rest) = rank.split_once(" instrument=").ok_or("instrument")?;
+                    let (instrument, rest) = rest.split_once(" score_ppm=").ok_or("score")?;
+                    let (score, citations) = rest.split_once(" evidence=").ok_or("evidence")?;
+                    assert_eq!(
+                        after,
+                        format!(
+                            "Rank {ordinal}: {instrument} scored {score} parts per million. evidence={citations}"
+                        )
+                    );
+                } else {
+                    assert_eq!(before, after);
+                }
+            }
+            assert!(
+                plain.contains("Research only. This explanation confers no trading authority.")
+            );
+        }
+        let exclusion = rows[1]["plain_language"].as_str().ok_or("exclusion")?;
+        assert!(exclusion.contains("policy_reason=liquidity_below_minimum"));
+        assert!(exclusion.contains("minimum_inclusive=500000 below_minimum=true"));
+        let chronology = rows[2]["plain_language"].as_str().ok_or("chronology")?;
+        assert!(chronology.contains("event_at_ms=91 observed_at_ms=95 available_at_ms=100"));
+        Ok(())
+    }
 
     #[test]
     fn tokenizer_reference_is_the_validated_p03_proposal() -> Result<()> {
