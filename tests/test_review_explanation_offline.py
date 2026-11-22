@@ -10,7 +10,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from review_explanation_offline import JUDGES, calibration, execute, preflight, prepare
 from review_explanation_heldout import digest, make_plan
-from review_explanation_offline_runtime import Judge, command, verify_libraries
+from review_explanation_offline_runtime import Judge, command, runtime_argv, verify_libraries
 from qualify_explanation_model import HarnessError
 from test_review_explanation_heldout import fixture
 
@@ -112,6 +112,57 @@ class OfflineTest(unittest.TestCase):
         self.assertNotIn("/input/spent.json", args)
         self.assertNotIn("_isolated", args)
 
+    def test_smaller_context_is_pinned_and_matches_the_native_launch(self):
+        heldout, packets = trial()
+        config = artifacts()
+        original_pin = digest(prepare(heldout, packets, config))
+        config["context_tokens"] = {"phi4": 9216}
+        self.assertNotEqual(original_pin, digest(prepare(heldout, packets, config)))
+        for name, size in (("ministral", "16384"), ("phi4", "9216")):
+            args = runtime_argv(config, name, 8123)
+            self.assertEqual(args[args.index("--ctx-size") + 1], size)
+        for bad in (9217, 16640, True):
+            config["context_tokens"] = {"phi4": bad}
+            with self.assertRaises(HarnessError):
+                prepare(heldout, packets, config)
+
+    def test_single_judge_checks_the_smaller_context_including_output_reserve(self):
+        config = artifacts()
+        config["context_tokens"] = {"phi4": 9216}
+        heldout, packets = trial()
+        plan = prepare(heldout, packets, config)
+        visited = []
+        testcase = self
+
+        @contextlib.contextmanager
+        def session(settings, name):
+            visited.append(name)
+
+            class Stub:
+                def tokenize(self, packet):
+                    return [1] * (9216 - 512 + 1)
+
+                def warm(self, ids):
+                    testcase.fail("oversized prompt reached prefill")
+            yield Stub()
+
+        with tempfile.TemporaryDirectory() as directory:
+            audit = Path(directory) / "fit"
+            with self.assertRaises(HarnessError):
+                preflight(plan, audit, session, judge_name="phi4")
+            report = json.loads((audit / "outcome.json").read_text())
+            self.assertEqual(visited, ["phi4"])
+            self.assertEqual(report["judges"], {"phi4": "refused"})
+            self.assertEqual(report["scope"], "selected_judge")
+
+    def test_targeted_launch_does_not_mount_the_other_judge(self):
+        args = command(artifacts(), Path("/local/plan.json"), "a" * 64,
+                       Path("/local/output"), preflight_only=True, judge_name="phi4")
+        self.assertEqual(args[args.index("--judge") + 1], "phi4")
+        self.assertIn("/models/phi4.weights", args)
+        self.assertNotIn("/models/ministral.weights", args)
+        self.assertNotIn("/input/spent.json", args)
+
     def test_deadline_retains_bounded_memory_measurements_as_a_refusal(self):
         child = type("Child", (), {"pid": 42})()
         judge = Judge(child, 1, artifacts())
@@ -129,6 +180,8 @@ class OfflineTest(unittest.TestCase):
     def test_swapped_process_refuses_before_prompt_evaluation(self):
         child = type("Child", (), {"pid": 42})()
         judge = Judge(child, 1, artifacts())
+        judge.startup = {"host_before": {"host_swapout_pages": 5},
+                         "ready": {"host_swapout_pages": 12, "process_swap_kib": 16}}
         sample = dict(available_kib=3 * 1024**2, host_swapout_pages=12,
                       peak_rss_kib=6 * 1024**2, process_swap_kib=16)
         with patch.object(judge, "complete") as complete:
@@ -137,6 +190,7 @@ class OfflineTest(unittest.TestCase):
             complete.assert_not_called()
         self.assertFalse(result["fits"])
         self.assertEqual(result["probe"], "memory_admission")
+        self.assertEqual(result["startup"], judge.startup)
 
     def exercise(self, fault=None):
         heldout, packets = trial()

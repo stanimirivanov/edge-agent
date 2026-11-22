@@ -456,7 +456,10 @@ libraries mapped by the server), and a `judges` object with `ministral` and
 Each file pin contains an absolute `path` and its `sha256`. Use the
 publisher's exact weight files and keep the corresponding chat templates
 and license notices with the private packages. Also specify integer
-`threads`, `timeout_seconds` and `memory_headroom_mib`.
+`threads`, `timeout_seconds` and `memory_headroom_mib`. An optional
+`context_tokens` map pins a context per judge. Judges omitted from the map
+use 16,384 tokens. The runner uses each judge's context for both native
+startup and admission of the full prompt plus the response reservation.
 
 ```text
 python3 scripts/review_explanation_offline.py prepare --config PRIVATE_CONFIG --heldout PRIVATE_HELDOUT_PLAN --heldout-sha256 HELDOUT_PLAN_SHA256 --packets PRIVATE_PACKETS --plan PRIVATE_OFFLINE_PLAN
@@ -477,8 +480,11 @@ blinded view. The runner forces a single dummy token after evaluating the
 input, and it checks that the context can reserve the full configured
 response budget. Its private fit report records the selected view,
 per-view token counts and hashes, time to readiness, and memory and swap
-measurements. It leaves the judging reservation available. Use a separate
-exclusive output for every fit attempt.
+measurements. Its startup samples distinguish host swap-out during model
+loading from swap-out during prefill. It leaves the judging reservation
+available. Use a separate exclusive output for every fit attempt. Add
+`--judge phi4` to diagnose only Phi-4. The outcome records that limited
+scope, and the judging command still checks both models.
 
 Both preflights and all twelve calibration judgments must pass before any
 scored view. The final assessment uses the existing held-out pass criteria.
@@ -522,3 +528,39 @@ and `937650d6e38c8acbdca49055d64178b3cf6a0b46012fc7eba5c7eb4e2b527fa6`.
 Phi-4 fit under the required zero-swap rule remains unverified, so the
 held-out review is blocked. Both isolated processes exited. No calibration,
 judge requests or review reservations were used.
+
+### Phi-4 reduced-context CPU preflight
+
+Issue #568 tested one change to the #566 Phi-4 profile. Its context
+decreased from 16,384 to 9,216 tokens. The publisher weights, runtime,
+template, six CPU threads, 512-token response reservation, 900-second
+deadline and memory gate remained pinned. Ministral retains its default
+context. The twelve Phi-4 input token hashes and the largest view identity
+match #566 exactly. The largest prompt still has 8,136 tokens, leaving
+568 tokens after the response reservation.
+
+Phi-4's pinned GGUF specifies 40 layers, ten KV heads and a 128-element
+head width. With the runtime's default FP16 keys and values, the context
+change removes about 1.37 GiB of calculated KV payload before allocator
+overhead. The rejected #566 run already had 15.72 MiB of Phi-4 process
+swap at admission, before prefill. The smaller profile recorded no process
+swap at model readiness, prefill admission or the deadline. Its observed
+peak RSS was 15.66 GiB, compared with 16.87 GiB at #566's admission.
+The two measurements were taken under separate host conditions.
+
+The host's cumulative swap-out counter rose by nine pages from prelaunch
+to model readiness and by 15,935 pages during prefill. That counter covers
+the whole host, so it cannot identify which process contributed the
+pages. The largest view did not complete within 900 seconds. Both the
+deadline and the host swap-out change prevent a fit verdict under the
+existing rule.
+
+The Phi-4-only plan SHA-256 is
+`871ec9c6df22dc9d3fcdffb8128f6ce6b72f3dd3a3072ef1bcac689d9d88bc93`.
+The numeric preflight report SHA-256 is
+`f04c7b6c62f6b23a05f2527e652d2115e307bd70b6b988378b177776da589c80`
+and the incomplete outcome SHA-256 is
+`6aadcd3b709dbdfb5d57493af4c73e9484f63ae4ba99d0ae0d66b0a51ae09759`.
+The model process exited and the judging reservation remains available.
+The held-out review remains blocked. The frozen baseline, census and
+rubric are unchanged.

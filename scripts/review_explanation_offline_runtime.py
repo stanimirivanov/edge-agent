@@ -29,6 +29,10 @@ def file_hash(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def context_size(config, name):
+    return config.get("context_tokens", {}).get(name, CONTEXT)
+
+
 def runtime_files(config):
     yield config["runtime"], "/runtime/llama-server", 256 * 1024**2
     for item in config["libraries"]:
@@ -40,7 +44,8 @@ def judge_files(config, name):
         yield config["judges"][name][role], f"/models/{name}.{role}", limit
 
 
-def command(config, plan, pin, output, *, preflight_only=False):
+def command(config, plan, pin, output, *, preflight_only=False, judge_name=None):
+    require(judge_name is None or (preflight_only and judge_name in config["judges"]))
     args = ["/usr/bin/bwrap", "--unshare-net", "--unshare-pid", "--die-with-parent",
             "--new-session", "--clearenv", "--cap-drop", "ALL", "--ro-bind", "/usr", "/usr",
             "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
@@ -50,11 +55,15 @@ def command(config, plan, pin, output, *, preflight_only=False):
             "--bind", str(output.resolve()), "/audit"]
     if not preflight_only:
         args.extend(("--ro-bind", str(plan.resolve().with_name(f"{pin}.spent")), "/input/spent.json"))
-    for item, target, _ in (*runtime_files(config), *(pin for name in config["judges"] for pin in judge_files(config, name))):
+    names = (judge_name,) if judge_name else config["judges"]
+    for item, target, _ in (*runtime_files(config), *(pin for name in names for pin in judge_files(config, name))):
         args.extend(("--ro-bind", item["path"], target))
     action = "_fit" if preflight_only else "_isolated"
-    return args + ["/usr/bin/python3", "-B", "/app/review_explanation_offline.py", action,
-                   "--plan", "/input/plan.json", "--plan-sha256", pin, "--output", "/audit/run"]
+    args.extend(("/usr/bin/python3", "-B", "/app/review_explanation_offline.py", action,
+                 "--plan", "/input/plan.json", "--plan-sha256", pin, "--output", "/audit/run"))
+    if judge_name:
+        args.extend(("--judge", judge_name))
+    return args
 
 
 @contextmanager
@@ -93,20 +102,26 @@ def verify_libraries(config, pid):
         check_file({"path": path, "sha256": pins[Path(path).name]}, 256 * 1024**2)
 
 
-def resource_status(pid):
+def host_memory():
     mem = re.search(r"^MemAvailable:\s+(\d+) kB$", Path("/proc/meminfo").read_text(), re.M)
     swap = re.search(r"^pswpout (\d+)$", Path("/proc/vmstat").read_text(), re.M)
+    require(mem and swap)
+    return dict(available_kib=int(mem[1]), host_swapout_pages=int(swap[1]))
+
+
+def resource_status(pid):
+    host = host_memory()
     proc = Path(f"/proc/{pid}/status").read_text()
     peak = re.search(r"^VmHWM:\s+(\d+) kB$", proc, re.M)
     process_swap = re.search(r"^VmSwap:\s+(\d+) kB$", proc, re.M)
-    require(all((mem, swap, peak, process_swap)))
-    return dict(available_kib=int(mem[1]), host_swapout_pages=int(swap[1]),
-                peak_rss_kib=int(peak[1]), process_swap_kib=int(process_swap[1]))
+    require(peak and process_swap)
+    return dict(host, peak_rss_kib=int(peak[1]), process_swap_kib=int(process_swap[1]))
 
 
 class Judge:
     def __init__(self, child, port, config):
         self.child, self.port, self.config = child, port, config
+        self.startup = None
 
     def request(self, endpoint, body=None, timeout=None):
         seconds = timeout or self.config["timeout_seconds"]
@@ -160,13 +175,21 @@ class Judge:
             after = resource_status(self.child.pid)
         fits = (probe == "complete" and admitted(after)
                 and after["host_swapout_pages"] == before["host_swapout_pages"])
-        return {"before": before, "after": after, "largest_input_tokens": len(tokens), "fits": fits,
+        return {"startup": self.startup, "before": before, "after": after,
+                "largest_input_tokens": len(tokens), "fits": fits,
                 "probe": probe, "elapsed_ms": round((time.monotonic() - started) * 1000)}
 
     def judge(self, packet, tokens):
         value = self.complete(tokens, OUTPUT_LIMIT, grammar(packet))
         require(value["stop_type"] == "eos" and len(value["content"]) <= 8192)
         return value["content"]
+
+
+def runtime_argv(config, name, port):
+    return ["/runtime/llama-server", "--offline", "--host", "127.0.0.1", "--port", str(port), "--parallel", "1",
+            "--no-webui", "--n-gpu-layers", "0", "--ctx-size", str(context_size(config, name)), "--no-context-shift",
+            "--threads", str(config["threads"]), "--model", f"/models/{name}.weights",
+            "--jinja", "--chat-template-file", f"/models/{name}.template"]
 
 
 @contextmanager
@@ -180,10 +203,8 @@ def session(config, name, diagnostic):
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    argv = [executable, "--offline", "--host", "127.0.0.1", "--port", str(port), "--parallel", "1",
-            "--no-webui", "--n-gpu-layers", "0", "--ctx-size", str(CONTEXT), "--no-context-shift",
-            "--threads", str(config["threads"]), "--model", f"/models/{name}.weights",
-            "--jinja", "--chat-template-file", f"/models/{name}.template"]
+    argv = runtime_argv(config, name, port)
+    host_before = host_memory()
     with subprocess.Popen(argv, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as child:
         try:
             judge = Judge(child, port, dict(config, diagnostic=diagnostic))
@@ -198,6 +219,7 @@ def session(config, name, diagnostic):
             else:
                 raise HarnessError("offline_runtime_startup")
             verify_libraries(config, child.pid)
+            judge.startup = {"host_before": host_before, "ready": resource_status(child.pid)}
             yield judge
         finally:
             if child.poll() is None:

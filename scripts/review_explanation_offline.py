@@ -11,7 +11,7 @@ import time
 from qualify_explanation_model import HarnessError, check_file, load
 from review_explanation_heldout import CASES, KIND as HELDOUT_KIND, score
 from review_explanation_hosted import PROMPT, canonical, decode, digest, integer, pin, private, rating
-from review_explanation_offline_runtime import CONTEXT, INPUT_LIMIT, OUTPUT_LIMIT, command, file_hash, session
+from review_explanation_offline_runtime import CONTEXT, INPUT_LIMIT, OUTPUT_LIMIT, command, context_size, file_hash, session
 
 KIND = "research.explanation-offline-heldout.v1"
 JUDGES = {
@@ -50,11 +50,14 @@ def file_pins(config):
 
 
 def prepare(heldout, packets, config):
-    require(set(config) == {"runtime", "libraries", "judges", "threads", "timeout_seconds", "memory_headroom_mib"}
-            and set(config["judges"]) == set(JUDGES)
+    fields = {"runtime", "libraries", "judges", "threads", "timeout_seconds", "memory_headroom_mib"}
+    require(set(config) - {"context_tokens"} == fields and set(config["judges"]) == set(JUDGES)
             and isinstance(config["libraries"], list) and 0 < len(config["libraries"]) <= 64
             and integer(config["threads"], 1, 32) and integer(config["timeout_seconds"], 1, 900)
             and integer(config["memory_headroom_mib"], 1024, 16384))
+    contexts = config.get("context_tokens", {})
+    require(isinstance(contexts, dict) and set(contexts) <= set(JUDGES)
+            and all(integer(size, 1024, CONTEXT) and size % 256 == 0 for size in contexts.values()))
     for name, sha in JUDGES.items():
         judge = config["judges"][name]
         require(set(judge) == {"weights", "license", "template"} and judge["weights"]["sha256"] == sha)
@@ -104,22 +107,24 @@ def measure(config, name, packets, output, open_judge):
     with open_judge(config, name) as judge:
         ready_ms = round((time.monotonic() - started) * 1000)
         token_lists = [judge.tokenize(packet) for packet in packets]
-        require(all(0 < len(t) <= INPUT_LIMIT and len(t) + OUTPUT_LIMIT <= CONTEXT for t in token_lists))
+        context = context_size(config, name)
+        require(all(0 < len(t) <= INPUT_LIMIT and len(t) + OUTPUT_LIMIT <= context for t in token_lists))
         largest = max(range(len(token_lists)), key=lambda i: len(token_lists[i]))
         counts = {p["view"]: digest(t) for p, t in zip(packets, token_lists, strict=True)}
         measurement = judge.warm(token_lists[largest])
         private(output / f"{name}.preflight.json", dict(
-            measurement, largest_view=packets[largest]["view"], ready_ms=ready_ms,
+            measurement, context_tokens=context, largest_view=packets[largest]["view"], ready_ms=ready_ms,
             inputs={p["view"]: {"tokens": len(t), "sha256": counts[p["view"]]}
                     for p, t in zip(packets, token_lists, strict=True)}))
         require(measurement["fits"] is True)
         return counts
 
 
-def preflight(plan, output, open_judge):
+def preflight(plan, output, open_judge, *, judge_name=None):
+    require(judge_name is None or judge_name in JUDGES)
     output.mkdir(mode=0o700)
     results = {}
-    for name in JUDGES:
+    for name in (judge_name,) if judge_name else JUDGES:
         try:
             measure(plan["config"], name, plan["packets"], output, open_judge)
             results[name] = "fit"
@@ -127,7 +132,9 @@ def preflight(plan, output, open_judge):
             results[name] = "refused"
     fit = all(result == "fit" for result in results.values())
     private(output / "outcome.json", {"kind": "research.explanation-offline-fit.v1", "plan": digest(plan),
-                                      "status": "fit" if fit else "incomplete", "judges": results})
+                                      "status": "fit" if fit else "incomplete",
+                                      "scope": "selected_judge" if judge_name else "all_judges",
+                                      "judges": results})
     require(fit)
 
 
@@ -183,6 +190,8 @@ def main(argv=None):
         run.add_argument("--plan", required=True, type=Path)
         run.add_argument("--plan-sha256", required=True)
         run.add_argument("--output", required=True, type=Path)
+        if action in ("preflight", "_fit"):
+            run.add_argument("--judge", choices=JUDGES)
     args = parser.parse_args(argv)
     os.umask(0o077)
     try:
@@ -204,7 +213,7 @@ def main(argv=None):
             def open_judge(config, name):
                 return session(config, name, REGRESSION)
             if args.action == "_fit":
-                preflight(plan, args.output, open_judge)
+                preflight(plan, args.output, open_judge, judge_name=args.judge)
             else:
                 require(load(Path("/input/spent.json"), 4096) == {"plan": args.plan_sha256})
                 execute(plan, args.output, open_judge)
@@ -217,7 +226,7 @@ def main(argv=None):
                 private(spent, {"plan": args.plan_sha256})
             try:
                 subprocess.run(command(plan["config"], args.plan, args.plan_sha256, args.output,
-                                       preflight_only=fit_only),
+                                       preflight_only=fit_only, judge_name=args.judge if fit_only else None),
                                env={"PATH": "/usr/bin", "LANG": "C"}, check=True)
             except (OSError, subprocess.SubprocessError):
                 if not (args.output / "run/outcome.json").exists():
