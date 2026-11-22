@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 #[derive(Clone, Copy)]
 enum TaskRequirement {
     ScoreComparison,
+    Horizon,
     LiquidityFinding,
     SourceChronology,
 }
@@ -31,6 +32,58 @@ const CASES: [(usize, &str, &str, TaskRequirement); 3] = [
         TaskRequirement::SourceChronology,
     ),
 ];
+
+const HELDOUT: [(usize, &str, &str, TaskRequirement); 6] = [
+    (
+        211,
+        "H01",
+        "Which instrument fell below the liquidity floor, and by how much? Locate the observed turnover, floor and supporting evidence.",
+        TaskRequirement::LiquidityFinding,
+    ),
+    (
+        212,
+        "H02",
+        "Which two instruments failed the turnover check? Find each observation, the common minimum and the evidence for each.",
+        TaskRequirement::LiquidityFinding,
+    ),
+    (
+        213,
+        "H03",
+        "Find the leading instrument's latest selected close citation. Which timestamp marks the event, which marks observation, and which marks availability?",
+        TaskRequirement::SourceChronology,
+    ),
+    (
+        214,
+        "H04",
+        "Which source supports the leader's latest close? Use the labeled times to tell how many milliseconds elapsed from the observation to availability.",
+        TaskRequirement::SourceChronology,
+    ),
+    (
+        215,
+        "H05",
+        "Which scored instrument had a negative score, and how does its score compare with the leader's? Give the unit.",
+        TaskRequirement::ScoreComparison,
+    ),
+    (
+        216,
+        "H06",
+        "How many sessions does the strategy horizon cover? Distinguish it from the lookback window.",
+        TaskRequirement::Horizon,
+    ),
+];
+
+pub(crate) fn heldout_comparison() -> Result<Value, EvaluationError> {
+    let mut cases = Vec::with_capacity(HELDOUT.len());
+    for (n, id, task, requirement) in HELDOUT {
+        let prepared = DevelopmentCase::load(n, id, task, requirement)?;
+        cases.push(json!({
+            "id":id,"task":task,"choice_binding":prepared.binding,
+            "eligible_layouts":prepared.eligible_layouts,
+            "standard":prepared.standard,"reader_first":prepared.reader_first
+        }));
+    }
+    Ok(json!({"kind":"research.explanation-heldout-comparison.v1","cases":cases}))
+}
 
 struct DevelopmentCase {
     fixture: recipe::Fixture,
@@ -59,8 +112,8 @@ impl DevelopmentCase {
         let (summary, has_liquidity_finding) =
             policy.reader_first_summary().map_err(|_| INVALID)?;
         let reader_first_eligible = match requirement {
-            // The opening names the leader but omits scores and their unit.
-            TaskRequirement::ScoreComparison => false,
+            // The opening omits scores, their unit and the strategy horizon.
+            TaskRequirement::ScoreComparison | TaskRequirement::Horizon => false,
             TaskRequirement::LiquidityFinding => has_liquidity_finding,
             // A successfully built opening includes the leader's source and all three times.
             TaskRequirement::SourceChronology => true,
@@ -98,6 +151,7 @@ pub(crate) fn model_case(
 ) -> Result<(edgeagent_contracts::explanation::Anchor, Value), EvaluationError> {
     let &(n, id, task, requirement) = CASES
         .iter()
+        .chain(&HELDOUT)
         .find(|row| row.1 == case)
         .ok_or(EvaluationError::Census)?;
     let prepared = DevelopmentCase::load(n, id, task, requirement)?;
@@ -131,6 +185,7 @@ pub(crate) fn render_choice(
     }
     let &(n, id, task, requirement) = CASES
         .iter()
+        .chain(&HELDOUT)
         .find(|row| row.1 == expected_case)
         .ok_or(EvaluationError::Census)?;
     let prepared = DevelopmentCase::load(n, id, task, requirement)?;
