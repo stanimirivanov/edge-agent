@@ -460,6 +460,7 @@ and license notices with the private packages. Also specify integer
 
 ```text
 python3 scripts/review_explanation_offline.py prepare --config PRIVATE_CONFIG --heldout PRIVATE_HELDOUT_PLAN --heldout-sha256 HELDOUT_PLAN_SHA256 --packets PRIVATE_PACKETS --plan PRIVATE_OFFLINE_PLAN
+python3 scripts/review_explanation_offline.py preflight --plan PRIVATE_OFFLINE_PLAN --plan-sha256 OFFLINE_PLAN_SHA256 --output NEW_PRIVATE_FIT_OUTPUT
 python3 scripts/review_explanation_offline.py run --plan PRIVATE_OFFLINE_PLAN --plan-sha256 OFFLINE_PLAN_SHA256 --output NEW_PRIVATE_OUTPUT
 ```
 
@@ -471,6 +472,14 @@ It uses one CPU model at a time. Each preflight counts every full templated
 input and measures the longest input while reserving room for the
 response. Swap activity or insufficient available memory blocks judgments.
 
+The `preflight` command measures each judge on its own longest tokenized
+blinded view. The runner forces a single dummy token after evaluating the
+input, and it checks that the context can reserve the full configured
+response budget. Its private fit report records the selected view,
+per-view token counts and hashes, time to readiness, and memory and swap
+measurements. It leaves the judging reservation available. Use a separate
+exclusive output for every fit attempt.
+
 Both preflights and all twelve calibration judgments must pass before any
 scored view. The final assessment uses the existing held-out pass criteria.
 The runner reserves the trial by plan digest next to the plan and writes
@@ -478,3 +487,38 @@ each spent slot before inference. It retains input counts, bounded numeric
 preflight evidence, accepted judgments and the closing result in the
 exclusive private output. If execution refuses or stops, preserve the audit
 and review a fresh plan before starting another trial.
+
+### Local judge package and CPU fit
+
+Issue #566 provisioned the two publisher GGUFs listed in ADR-0130. Both
+downloads matched the published SHA-256 values. The private package retains
+their embedded chat templates and license notices, Mistral's license
+declaration, the b12375 CPU executable and 30 shared-library pins. The
+package provenance SHA-256 is
+`65bd06220320f7fb6333f2137b21a18fbcda02bab59abbab45154b96b658e0ad`.
+
+The first plan, with a 600-second deadline per request, closed incomplete
+for both judges and retained no completed fit measurements. Its outcome
+SHA-256 is `49c9e9666379242b8b87334a2f9ce5fdf9a18b2552bfe4125d5d1965aa16c6e3`.
+The runner now retains numeric evidence on deadline and refuses before
+prefill if the initial memory sample already fails its admission criteria.
+
+A fresh preflight used the same model artifacts, six CPU threads, a
+16,384-token context, a 512-token response reservation and 2 GiB minimum
+available memory. Its deadline was 900 seconds per request. The plan
+SHA-256 is `ab4f880ed8aa4735c6498f551f2addc831e19ceada2845e2e0c599a518903609`.
+Each model tokenized all twelve blinded views independently.
+
+| Judge | Largest input | Peak process RSS | Lower sampled available RAM | Process swap | Disposition |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Ministral 3 8B | 11,007 tokens | 10.49 GiB | 19.70 GiB | 0 MiB | Fit. Prefill and the forced token completed in 757.606 s with no new host swap-out. |
+| Phi-4 14B | 8,136 tokens | 16.87 GiB at admission | 18.11 GiB at admission | 15.72 MiB at admission | Refused before prefill. |
+
+The outcome SHA-256 is
+`eb87fc3ec7cf74e9b71212212d55e43a2f442f7cc4a6c48b67ecf999dc4e04ba`.
+The separate Ministral and Phi-4 reports have SHA-256 digests
+`df4b12836b29ff2fd1a3bfcc42d9a307cc63216af4d82cd1d0d169b8582d51de`
+and `937650d6e38c8acbdca49055d64178b3cf6a0b46012fc7eba5c7eb4e2b527fa6`.
+Phi-4 fit under the required zero-swap rule remains unverified, so the
+held-out review is blocked. Both isolated processes exited. No calibration,
+judge requests or review reservations were used.
