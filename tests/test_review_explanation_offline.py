@@ -8,9 +8,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from review_explanation_offline import JUDGES, calibration, execute, prepare
+from review_explanation_offline import JUDGES, calibration, execute, preflight, prepare
 from review_explanation_heldout import digest, make_plan
-from review_explanation_offline_runtime import command, verify_libraries
+from review_explanation_offline_runtime import Judge, command, verify_libraries
 from qualify_explanation_model import HarnessError
 from test_review_explanation_heldout import fixture
 
@@ -74,6 +74,69 @@ class OfflineTest(unittest.TestCase):
                    return_value=maps.replace("libllama.so", "libunknown.so")):
             with self.assertRaises(HarnessError):
                 verify_libraries(config, 42)
+
+    def test_preflight_only_measures_each_judges_largest_blinded_view(self):
+        heldout, packets = trial()
+        plan = prepare(heldout, packets, artifacts())
+        ordered = plan["packets"]
+        measured = []
+
+        @contextlib.contextmanager
+        def session(config, name):
+            class Judge:
+                def tokenize(self, packet):
+                    count = ordered.index(packet) + 1
+                    return [count] * (count if name == "ministral" else 13 - count)
+
+                def warm(self, ids):
+                    measured.append((name, ids[0]))
+                    return {"fits": True, "largest_input_tokens": len(ids)}
+            yield Judge()
+
+        with tempfile.TemporaryDirectory() as directory:
+            audit = Path(directory) / "fit"
+            preflight(plan, audit, session)
+            self.assertEqual(measured, [("ministral", 12), ("phi4", 1)])
+            self.assertEqual(json.loads((audit / "outcome.json").read_text())["status"], "fit")
+            self.assertEqual(json.loads((audit / "phi4.preflight.json").read_text())["largest_view"],
+                             ordered[0]["view"])
+            self.assertEqual({f.name for f in audit.iterdir()},
+                             {"ministral.preflight.json", "phi4.preflight.json", "outcome.json"})
+            with self.assertRaises(FileExistsError):
+                preflight(plan, audit, session)
+
+    def test_preflight_launch_never_mounts_or_spends_a_trial_reservation(self):
+        args = command(artifacts(), Path("/local/plan.json"), "a" * 64,
+                       Path("/local/output"), preflight_only=True)
+        self.assertIn("_fit", args)
+        self.assertNotIn("/input/spent.json", args)
+        self.assertNotIn("_isolated", args)
+
+    def test_deadline_retains_bounded_memory_measurements_as_a_refusal(self):
+        child = type("Child", (), {"pid": 42})()
+        judge = Judge(child, 1, artifacts())
+        sample = dict(available_kib=3 * 1024**2, host_swapout_pages=12,
+                      peak_rss_kib=6 * 1024**2, process_swap_kib=0)
+        with patch.object(judge, "complete", side_effect=TimeoutError):
+            with patch("review_explanation_offline_runtime.resource_status", return_value=sample):
+                result = judge.warm([1, 2, 3])
+        self.assertFalse(result["fits"])
+        self.assertEqual(result["probe"], "deadline")
+        self.assertEqual(result["largest_input_tokens"], 3)
+        self.assertEqual(result["before"], sample)
+        self.assertEqual(result["after"], sample)
+
+    def test_swapped_process_refuses_before_prompt_evaluation(self):
+        child = type("Child", (), {"pid": 42})()
+        judge = Judge(child, 1, artifacts())
+        sample = dict(available_kib=3 * 1024**2, host_swapout_pages=12,
+                      peak_rss_kib=6 * 1024**2, process_swap_kib=16)
+        with patch.object(judge, "complete") as complete:
+            with patch("review_explanation_offline_runtime.resource_status", return_value=sample):
+                result = judge.warm([1, 2, 3])
+            complete.assert_not_called()
+        self.assertFalse(result["fits"])
+        self.assertEqual(result["probe"], "memory_admission")
 
     def exercise(self, fault=None):
         heldout, packets = trial()

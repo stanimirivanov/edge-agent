@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 from qualify_explanation_model import HarnessError, check_file, load
 from review_explanation_heldout import CASES, KIND as HELDOUT_KIND, score
@@ -98,6 +99,38 @@ def validate_rating(raw, packet):
     return value
 
 
+def measure(config, name, packets, output, open_judge):
+    started = time.monotonic()
+    with open_judge(config, name) as judge:
+        ready_ms = round((time.monotonic() - started) * 1000)
+        token_lists = [judge.tokenize(packet) for packet in packets]
+        require(all(0 < len(t) <= INPUT_LIMIT and len(t) + OUTPUT_LIMIT <= CONTEXT for t in token_lists))
+        largest = max(range(len(token_lists)), key=lambda i: len(token_lists[i]))
+        counts = {p["view"]: digest(t) for p, t in zip(packets, token_lists, strict=True)}
+        measurement = judge.warm(token_lists[largest])
+        private(output / f"{name}.preflight.json", dict(
+            measurement, largest_view=packets[largest]["view"], ready_ms=ready_ms,
+            inputs={p["view"]: {"tokens": len(t), "sha256": counts[p["view"]]}
+                    for p, t in zip(packets, token_lists, strict=True)}))
+        require(measurement["fits"] is True)
+        return counts
+
+
+def preflight(plan, output, open_judge):
+    output.mkdir(mode=0o700)
+    results = {}
+    for name in JUDGES:
+        try:
+            measure(plan["config"], name, plan["packets"], output, open_judge)
+            results[name] = "fit"
+        except (HarnessError, OSError, subprocess.SubprocessError, KeyError, ValueError, TypeError):
+            results[name] = "refused"
+    fit = all(result == "fit" for result in results.values())
+    private(output / "outcome.json", {"kind": "research.explanation-offline-fit.v1", "plan": digest(plan),
+                                      "status": "fit" if fit else "incomplete", "judges": results})
+    require(fit)
+
+
 def execute(plan, output, open_judge):
     output.mkdir(mode=0o700)
     plan_pin = digest(plan)
@@ -110,15 +143,7 @@ def execute(plan, output, open_judge):
     try:
         all_packets = [p for p, _ in plan["calibration"]] + plan["packets"]
         for name in JUDGES:
-            with open_judge(plan["config"], name) as judge:
-                token_lists = [judge.tokenize(packet) for packet in all_packets]
-                require(all(0 < len(t) <= INPUT_LIMIT and len(t) + OUTPUT_LIMIT <= CONTEXT for t in token_lists))
-                counts[name] = {p["view"]: digest(t) for p, t in zip(all_packets, token_lists, strict=True)}
-                measurement = judge.warm(max(token_lists, key=len))
-                private(output / f"{name}.preflight.json", dict(measurement, inputs={
-                    packet["view"]: {"tokens": len(tokens), "sha256": counts[name][packet["view"]]}
-                    for packet, tokens in zip(all_packets, token_lists, strict=True)}))
-                require(measurement["fits"] is True)
+            counts[name] = measure(plan["config"], name, all_packets, output, open_judge)
         for graded in (False, True):
             stage = "graded" if graded else "calibration"
             views = [(p, None) for p in plan["packets"]] if graded else plan["calibration"]
@@ -153,7 +178,7 @@ def main(argv=None):
     for name in ("config", "heldout", "packets", "plan"):
         make.add_argument(f"--{name}", required=True, type=Path)
     make.add_argument("--heldout-sha256", required=True)
-    for action in ("run", "_isolated"):
+    for action in ("run", "preflight", "_isolated", "_fit"):
         run = sub.add_parser(action)
         run.add_argument("--plan", required=True, type=Path)
         run.add_argument("--plan-sha256", required=True)
@@ -174,17 +199,25 @@ def main(argv=None):
         check_file({"path": str(args.plan), "sha256": args.plan_sha256}, 2 * 1024**2)
         plan = load(args.plan)
         require(plan == prepare(plan["heldout"], plan["packets"], plan["config"]))
-        if args.action == "_isolated":
-            require(args.plan == Path("/input/plan.json") and args.output == Path("/audit/run")
-                    and load(Path("/input/spent.json"), 4096) == {"plan": args.plan_sha256})
-            execute(plan, args.output, lambda config, name: session(config, name, REGRESSION))
+        if args.action in ("_isolated", "_fit"):
+            require(args.plan == Path("/input/plan.json") and args.output == Path("/audit/run"))
+            def open_judge(config, name):
+                return session(config, name, REGRESSION)
+            if args.action == "_fit":
+                preflight(plan, args.output, open_judge)
+            else:
+                require(load(Path("/input/spent.json"), 4096) == {"plan": args.plan_sha256})
+                execute(plan, args.output, open_judge)
         else:
+            fit_only = args.action == "preflight"
             spent = args.plan.resolve().with_name(f"{args.plan_sha256}.spent")
-            require(not spent.exists())
+            require(fit_only or not spent.exists())
             args.output.mkdir(mode=0o700)
-            private(spent, {"plan": args.plan_sha256})
+            if not fit_only:
+                private(spent, {"plan": args.plan_sha256})
             try:
-                subprocess.run(command(plan["config"], args.plan, args.plan_sha256, args.output),
+                subprocess.run(command(plan["config"], args.plan, args.plan_sha256, args.output,
+                                       preflight_only=fit_only),
                                env={"PATH": "/usr/bin", "LANG": "C"}, check=True)
             except (OSError, subprocess.SubprocessError):
                 if not (args.output / "run/outcome.json").exists():

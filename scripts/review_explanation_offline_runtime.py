@@ -40,18 +40,20 @@ def judge_files(config, name):
         yield config["judges"][name][role], f"/models/{name}.{role}", limit
 
 
-def command(config, plan, pin, output):
+def command(config, plan, pin, output, *, preflight_only=False):
     args = ["/usr/bin/bwrap", "--unshare-net", "--unshare-pid", "--die-with-parent",
             "--new-session", "--clearenv", "--cap-drop", "ALL", "--ro-bind", "/usr", "/usr",
             "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
             "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
             "--ro-bind", str(Path(__file__).resolve().parent), "/app",
             "--ro-bind", str(plan.resolve()), "/input/plan.json",
-            "--ro-bind", str(plan.resolve().with_name(f"{pin}.spent")), "/input/spent.json",
             "--bind", str(output.resolve()), "/audit"]
+    if not preflight_only:
+        args.extend(("--ro-bind", str(plan.resolve().with_name(f"{pin}.spent")), "/input/spent.json"))
     for item, target, _ in (*runtime_files(config), *(pin for name in config["judges"] for pin in judge_files(config, name))):
         args.extend(("--ro-bind", item["path"], target))
-    return args + ["/usr/bin/python3", "-B", "/app/review_explanation_offline.py", "_isolated",
+    action = "_fit" if preflight_only else "_isolated"
+    return args + ["/usr/bin/python3", "-B", "/app/review_explanation_offline.py", action,
                    "--plan", "/input/plan.json", "--plan-sha256", pin, "--output", "/audit/run"]
 
 
@@ -141,15 +143,25 @@ class Judge:
         return value
 
     def warm(self, tokens):
+        def admitted(sample):
+            return (sample["process_swap_kib"] == 0
+                    and sample["available_kib"] >= self.config["memory_headroom_mib"] * 1024)
+
         before = resource_status(self.child.pid)
         started = time.monotonic()
-        result = self.complete(tokens, 1, 'root ::= "0"')
-        after = resource_status(self.child.pid)
-        fits = (result["content"] == "0" and after["host_swapout_pages"] == before["host_swapout_pages"]
-                and all(x["process_swap_kib"] == 0 and x["available_kib"] >= self.config["memory_headroom_mib"] * 1024
-                        for x in (before, after)))
+        after = before
+        probe = "memory_admission"
+        if admitted(before):
+            try:
+                result = self.complete(tokens, 1, 'root ::= "0"')
+                probe = "complete" if result["content"] == "0" else "unexpected_output"
+            except TimeoutError:
+                probe = "deadline"
+            after = resource_status(self.child.pid)
+        fits = (probe == "complete" and admitted(after)
+                and after["host_swapout_pages"] == before["host_swapout_pages"])
         return {"before": before, "after": after, "largest_input_tokens": len(tokens), "fits": fits,
-                "elapsed_ms": round((time.monotonic() - started) * 1000)}
+                "probe": probe, "elapsed_ms": round((time.monotonic() - started) * 1000)}
 
     def judge(self, packet, tokens):
         value = self.complete(tokens, OUTPUT_LIMIT, grammar(packet))
