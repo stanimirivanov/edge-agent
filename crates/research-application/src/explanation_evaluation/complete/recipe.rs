@@ -24,12 +24,13 @@ pub(super) struct Fixture {
 }
 pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let calibration = (101..=103).contains(&n);
-    let development = (201..=203).contains(&n);
+    let heldout = (211..=216).contains(&n);
+    let development = (201..=203).contains(&n) || heldout;
     let count = match n {
         101 => 1,
         102 => 4,
         103 => 12,
-        202 => 3,
+        202 | 211 | 212 => 3,
         1 | 9 | 13..=15 | 17 | 20 | 22 | 23 | 25 | 27..=30 => 1,
         3 | 6 | 26 => 3,
         _ => 2,
@@ -119,6 +120,19 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
             volumes[1] = 1;
             policy.min_daily_turnover_cents = 500_000;
         }
+        211 => {
+            volumes[2] = 2;
+            policy.min_daily_turnover_cents = 31_000;
+        }
+        212 => {
+            volumes[0] = 0;
+            volumes[2] = 1;
+            policy.min_daily_turnover_cents = 19_000;
+        }
+        213 => prices.swap(0, 1),
+        214 => prices[0] = [1_000_000, 1_007_000, 1_014_000],
+        215 => prices[1] = [1_000_000, 993_000, 986_000],
+        216 => strategy.horizon_sessions = 3,
         _ => {}
     }
     let mut opens: Vec<_> = prices.iter().map(|p| [p[0], p[0], p[1]]).collect();
@@ -151,7 +165,7 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
         10
     };
     let dates = (1..=u32::from(lookback) + 1)
-        .map(|d| SessionDate::new(2026, month, d))
+        .map(|d| SessionDate::new(2026, month, if heldout { d + 12 } else { d }))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| INVALID)?;
     let universe = (1..=count)
@@ -182,7 +196,7 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
         .map(|(i, selected)| {
             Ok(FrozenSeries {
                 selected,
-                evidence: [5 + i as u8; 32],
+                evidence: [if heldout { n as u8 } else { 5 } + i as u8; 32],
                 implementation: [2; 32],
                 configuration,
                 calendar: [4; 32],
@@ -206,8 +220,16 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
                                 + i64::from(
                                     matches!(n, 21 | 203) && i == 0 && j == usize::from(lookback),
                                 ),
-                            observed_at_ms: 95,
-                            available_at_ms: 100,
+                            observed_at_ms: match n {
+                                213 => 93,
+                                214 => 96,
+                                _ => 95,
+                            },
+                            available_at_ms: match n {
+                                213 => 98,
+                                214 => 99,
+                                _ => 100,
+                            },
                         })
                     })
                     .collect::<Result<Vec<_>, EvaluationError>>()?,
@@ -285,6 +307,8 @@ pub(super) fn build(n: usize) -> Result<Fixture, EvaluationError> {
     let request = ResearchRequest {
         request_id: if calibration {
             format!("performance-P{:02}", n - 100)
+        } else if heldout {
+            format!("presentation-H{:02}", n - 210)
         } else if development {
             format!("presentation-D{:02}", n - 200)
         } else {

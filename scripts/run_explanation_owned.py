@@ -121,7 +121,7 @@ def diagnostic_source(source, source_pin, source_manifest, manifest):
     return source_pin
 
 
-DEVELOPMENT_CASES = ("D01", "D02", "D03")
+DEVELOPMENT_CASES = ("D01", "D02", "D03", "H01", "H02", "H03", "H04", "H05", "H06")
 DEVELOPMENT_PREFIX = "development-layout-"
 EXTENDED_P03 = "performance-P03-extended"
 DEFAULT_OBSERVATION_SECONDS = 180

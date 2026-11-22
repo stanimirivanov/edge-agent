@@ -375,3 +375,68 @@ exports. The private report digests in case order are
 `9c9a9fceb7a50e98cd98bf77231b332ef8494684762276ff153aed9c28528cdb`.
 This verifies layout eligibility and selection on the three development
 tasks. Reader preference and frozen-suite qualification remain open on #508.
+
+### Held-out usefulness comparison
+
+Issue #560 compares `standard` with the layout actually returned by the
+pinned selector. The six invented H01–H06 tasks have their own bindings.
+H01 and H02 cover liquidity exclusions, H03 and H04 cover source and
+chronology, and H05 and H06 control for score and horizon questions. The
+development fixtures D01–D03 and all frozen qualification inputs stay intact.
+
+Collect one report per case with the owned supervisor, using the same
+`--development-layout-case` command as above and a fresh private report path.
+With the exact manifest digest, prepare blinded packets and score the returned
+judgments locally:
+
+```text
+python3 scripts/review_explanation_heldout.py packetize MANIFEST MANIFEST_SHA256 ATTEMPT_DIR PRIVATE_REVIEW_DIR
+python3 scripts/review_explanation_heldout.py score PRIVATE_PLAN PLAN_SHA256 PRIVATE_RESULT JUDGE_1_JSON JUDGE_2_JSON
+```
+
+Share only individual packet files with each authorized reviewer, in isolated
+sessions, one packet per judgment. Use the existing `PROMPT` preference rubric
+in [review_explanation_hosted.py](../../scripts/review_explanation_hosted.py).
+Add a separate check for factual or evidence regressions on either presentation.
+Each reviewer returns a private object with their distinct authenticated
+reviewer ID in `reviewer` and a `ratings` array. Each rating contains the
+packet's `id` and `view`, a `preference` of `first`, `second` or `tie`,
+a short `rationale` and a Boolean `regression`. The operator verifies reviewer
+identity and independence before importing ratings. Retain the plan and
+ratings privately. Hosted review of these new packets requires authorization
+for this development material.
+
+Before packetization the tool verifies the exact attempt and presentation
+bindings. Packets omit the machine-only layout headers and role metadata.
+Their view digests bind the exact original presentation digests and ordered
+reader-visible text. Both orientations must favor the same side to earn a
+preference. Identical target choices earn zero credit. To advance, each
+reviewer must prefer the gated layout on at least three of four target tasks,
+explicitly tie both identical controls in both orders, and report no factual
+or evidence regressions. A missing reviewer leaves the experiment incomplete.
+These results have no qualification or activation authority.
+
+The local collection used the same weights, CUDA runtime, device, context,
+task-aware prompt and inference settings as #558, with a rebuilt helper and
+the supervisor's expanded development allowlist re-pinned. The old D01–D03
+export matched byte for byte. The new manifest and preparation SHA-256
+digests are
+`dda7d228d0d36eb39e588f28978e4d3410ef9e10dab839bf11a718ac0c423aef` and
+`9be776a62fdcebd187b13ea586c444a7e5b723c597ee475206bfd97123c37aa4`.
+The H01–H06 export was pinned before collection as
+`fc44fe64b34526fe917deb9167e2d2660476f450e0f903aa89f7bca2f4f2e715`.
+
+| Cases | Task | Validated choices |
+| --- | --- | --- |
+| H01, H02 | Liquidity | `reader_first`, `reader_first` |
+| H03, H04 | Source and chronology | `reader_first`, `reader_first` |
+| H05, H06 | Score and horizon controls | `standard`, `standard` |
+
+Each case ran once. Packet preparation verified all six selected presentation
+digests against the pinned helper. The 12 blinded views and private mapping
+were retained under plan SHA-256
+`eefeae5033126494fbba0d6a927f5fc33e62c6a9ca562eaf397c7c9688bcd7a6`.
+The four target pairs have different layouts and both controls have equal
+text. The scorer returned `incomplete` with no independent judgments
+submitted. This run verifies the candidate selections and comparison
+preparation. Reader usefulness remains open on #508.

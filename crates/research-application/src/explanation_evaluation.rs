@@ -329,6 +329,15 @@ impl Suite {
         complete::runtime::development::development_comparison()
     }
 
+    /// Export the separate, invented held-out development presentations.
+    ///
+    /// # Errors
+    /// Refuses fixtures that cannot be independently prepared and rendered.
+    #[cfg(feature = "performance-probe")]
+    pub fn heldout_presentation_comparison() -> Result<serde_json::Value, EvaluationError> {
+        complete::runtime::development::heldout_comparison()
+    }
+
     /// Prepare the exact input and anchor for one invented development layout choice.
     ///
     /// # Errors

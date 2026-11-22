@@ -142,6 +142,7 @@ async fn run() -> Result<()> {
     }
     let selection = match mode.as_str() {
         "compare-development-presentations" => Some(Suite::development_presentation_comparison()?),
+        "compare-heldout-presentations" => Some(Suite::heldout_presentation_comparison()?),
         "select-development-presentation" => {
             let case = std::env::args().nth(2).ok_or("development case required")?;
             let mut response = Vec::new();
@@ -200,6 +201,46 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heldout_tasks_use_new_bindings_and_the_same_validated_selector() -> Result<()> {
+        let heldout = Suite::heldout_presentation_comparison()?;
+        let rows = heldout["cases"].as_array().ok_or("held-out cases")?;
+        let development = Suite::development_presentation_comparison()?;
+        assert_eq!(rows.len(), 6);
+        assert_eq!(
+            development["cases"]
+                .as_array()
+                .ok_or("development cases")?
+                .len(),
+            3
+        );
+        for (index, row) in rows.iter().enumerate() {
+            let case = format!("H{:02}", index + 1);
+            assert_eq!(row["id"], case);
+            let (_, input) = Suite::development_model_case(&case)?;
+            assert_eq!(input["input"], row["choice_binding"]);
+            assert_eq!(input["eligible_layouts"], row["eligible_layouts"]);
+            let mut choice = serde_json::json!({
+                "kind":"research.explanation-development-choice.v1", "case":case,
+                "input":row["choice_binding"], "layout":"standard"
+            });
+            let standard = select_development(&case, &serde_json::to_vec(&choice)?)?;
+            assert_eq!(standard["presentation"], row["standard"]);
+            choice["layout"] = "reader_first".into();
+            let reader_first = select_development(&case, &serde_json::to_vec(&choice)?);
+            if index < 4 {
+                assert_eq!(reader_first?["presentation"], row["reader_first"]);
+            } else {
+                assert!(reader_first.is_err());
+            }
+            choice["input"] = development["cases"][0]["choice_binding"].clone();
+            choice["layout"] = "standard".into();
+            assert!(select_development(&case, &serde_json::to_vec(&choice)?).is_err());
+        }
+        assert!(Suite::development_model_case("U01").is_err());
+        Ok(())
+    }
 
     #[test]
     fn development_candidate_selects_only_a_layout_bound_to_the_requested_fixture() -> Result<()> {
