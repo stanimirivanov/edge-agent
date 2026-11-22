@@ -440,3 +440,41 @@ The four target pairs have different layouts and both controls have equal
 text. The scorer returned `incomplete` with no independent judgments
 submitted. This run verifies the candidate selections and comparison
 preparation. Reader usefulness remains open on #508.
+
+### Offline held-out judge runner
+
+[ADR-0130](../decisions/0130-use-offline-models-for-explanation-review.md)
+selects the two licensed local judges. The runner consumes the private
+held-out plan and its twelve packet files. It uses the existing rubric
+and scorer and adds the held-out factual/evidence regression flag to the
+closed response grammar.
+
+Prepare a private JSON configuration with `runtime` (the pinned b12375
+`llama-server`), `libraries` (pinned shared libraries including the system
+libraries mapped by the server), and a `judges` object with `ministral` and
+`phi4`. Each judge has `weights`, `license` and `template` file pins.
+Each file pin contains an absolute `path` and its `sha256`. Use the
+publisher's exact weight files and keep the corresponding chat templates
+and license notices with the private packages. Also specify integer
+`threads`, `timeout_seconds` and `memory_headroom_mib`.
+
+```text
+python3 scripts/review_explanation_offline.py prepare --config PRIVATE_CONFIG --heldout PRIVATE_HELDOUT_PLAN --heldout-sha256 HELDOUT_PLAN_SHA256 --packets PRIVATE_PACKETS --plan PRIVATE_OFFLINE_PLAN
+python3 scripts/review_explanation_offline.py run --plan PRIVATE_OFFLINE_PLAN --plan-sha256 OFFLINE_PLAN_SHA256 --output NEW_PRIVATE_OUTPUT
+```
+
+Review the printed plan digest and configuration before execution. On Linux
+the runner uses Bubblewrap to put the driver and judge in a network namespace
+with only loopback. It clears the environment and mounts only the code,
+pinned artifacts, standard runtime paths and a private audit directory.
+It uses one CPU model at a time. Each preflight counts every full templated
+input and measures the longest input while reserving room for the
+response. Swap activity or insufficient available memory blocks judgments.
+
+Both preflights and all twelve calibration judgments must pass before any
+scored view. The final assessment uses the existing held-out pass criteria.
+The runner reserves the trial by plan digest next to the plan and writes
+each spent slot before inference. It retains input counts, bounded numeric
+preflight evidence, accepted judgments and the closing result in the
+exclusive private output. If execution refuses or stops, preserve the audit
+and review a fresh plan before starting another trial.
