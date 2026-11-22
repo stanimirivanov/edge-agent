@@ -232,7 +232,7 @@ How will the assumptions and consequences be verified?
 | [ADR-0118](0118-retain-reviewed-explanation-qualification.md) | Accepted | Retain reviewed explanation qualification. |
 | [ADR-0119](0119-share-runtime-explanation-preparation.md) | Accepted | Share runtime explanation preparation. |
 | [ADR-0120](0120-compose-guarded-owned-explanations.md) | Accepted | Compose guarded owned explanations. |
-| [ADR-0121](0121-define-hosted-ai-explanation-review.md) | Accepted | Define hosted AI explanation review. |
+| [ADR-0121](0121-define-hosted-ai-explanation-review.md) | Accepted | Define hosted AI explanation review. Offline review supersedes hosted execution for future #508 trials in ADR-0130. |
 | [ADR-0122](0122-retain-payload-free-explanation-diagnostic-replays.md) | Accepted | Retain payload-free explanation diagnostic replays. |
 | [ADR-0123](0123-bound-the-chrono-maintenance-exception.md) | Accepted | Bound the Chrono maintenance exception. |
 | [ADR-0124](0124-measure-bounded-explanation-performance.md) | Accepted | Measure bounded explanation performance. |
@@ -241,3 +241,4 @@ How will the assumptions and consequences be verified?
 | [ADR-0127](0127-pin-owned-cuda-explanation-runtime.md) | Accepted | Pin an owned CUDA explanation runtime. |
 | [ADR-0128](0128-require-gpu-admission-for-performance-probes.md) | Accepted | Require GPU admission for performance probes. |
 | [ADR-0129](0129-configure-qualified-explanation-deadlines.md) | Accepted | Configure qualified explanation deadlines. |
+| [ADR-0130](0130-use-offline-models-for-explanation-review.md) | Accepted | Use offline models for explanation review. |
