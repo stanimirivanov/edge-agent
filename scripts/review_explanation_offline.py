@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 
+from benchmark_explanation_cpu import sample, wait_idle
 from qualify_explanation_model import HarnessError, check_file, load
 from review_explanation_heldout import CASES, KIND as HELDOUT_KIND, score
 from review_explanation_hosted import PROMPT, canonical, decode, digest, integer, pin, private, rating
@@ -51,13 +52,19 @@ def file_pins(config):
 
 def prepare(heldout, packets, config):
     fields = {"runtime", "libraries", "judges", "threads", "timeout_seconds", "memory_headroom_mib"}
-    require(set(config) - {"context_tokens"} == fields and set(config["judges"]) == set(JUDGES)
+    require(set(config) - {"context_tokens", "fit"} == fields and set(config["judges"]) == set(JUDGES)
             and isinstance(config["libraries"], list) and 0 < len(config["libraries"]) <= 64
             and integer(config["threads"], 1, 32) and integer(config["timeout_seconds"], 1, 900)
             and integer(config["memory_headroom_mib"], 1024, 16384))
     contexts = config.get("context_tokens", {})
     require(isinstance(contexts, dict) and set(contexts) <= set(JUDGES)
             and all(integer(size, 1024, CONTEXT) and size % 256 == 0 for size in contexts.values()))
+    if "fit" in config:
+        fit = config["fit"]
+        require(isinstance(fit, dict) and set(fit) == {"idle_window_seconds", "idle_wait_seconds", "timeout_seconds"}
+                and integer(fit["idle_window_seconds"], 1, 900)
+                and integer(fit["idle_wait_seconds"], fit["idle_window_seconds"] + 1, 3600)
+                and integer(fit["timeout_seconds"], 1, 1800))
     for name, sha in JUDGES.items():
         judge = config["judges"][name]
         require(set(judge) == {"weights", "license", "template"} and judge["weights"]["sha256"] == sha)
@@ -89,7 +96,7 @@ def prepare(heldout, packets, config):
                 and (a["first"] == a["second"]) == (case in heldout["identical"]))
     sources = ("review_explanation_offline.py", "review_explanation_offline_runtime.py",
                "review_explanation_heldout.py", "review_explanation_hosted.py",
-               "qualify_explanation_model.py", "qualify_daily.py")
+               "qualify_explanation_model.py", "qualify_daily.py", "benchmark_explanation_cpu.py")
     return dict(kind=KIND, config=config, heldout=heldout, packets=sorted(packets, key=lambda p: p["id"]),
                 calibration=[list(row) for row in calibration()], rubric=PROMPT, diagnostic=REGRESSION,
                 tools={name: file_hash(Path(__file__).with_name(name)) for name in sources})
@@ -120,13 +127,41 @@ def measure(config, name, packets, output, open_judge):
         return counts
 
 
+def admit_fit(plan, output):
+    config = plan["config"]
+    if "fit" not in config:
+        return
+    fit = config["fit"]
+    started = time.monotonic()
+    totals = {"samples": 0, "idle_samples": 0}
+
+    def count(event):
+        totals["samples"] += 1
+        totals["idle_samples"] += int(event["idle"])
+
+    try:
+        admitted = wait_idle(sample, time.monotonic, time.sleep, count,
+                             started + fit["idle_wait_seconds"], config["memory_headroom_mib"] * 1024**2,
+                             window=fit["idle_window_seconds"])
+        reason = "quiet_window" if admitted else "wait_expired"
+    except (OSError, KeyError, ValueError, IndexError, HarnessError):
+        admitted, reason = False, "sampling_unavailable"
+    private(output / "idle-admission.json", dict(totals, plan=digest(plan), reason=reason,
+            status="admitted" if admitted else "not_started",
+            elapsed_ms=round((time.monotonic() - started) * 1000)))
+    require(admitted)
+
+
 def preflight(plan, output, open_judge, *, judge_name=None):
     require(judge_name is None or judge_name in JUDGES)
     output.mkdir(mode=0o700)
     results = {}
+    config = plan["config"]
+    if "fit" in config:
+        config = dict(config, timeout_seconds=config["fit"]["timeout_seconds"])
     for name in (judge_name,) if judge_name else JUDGES:
         try:
-            measure(plan["config"], name, plan["packets"], output, open_judge)
+            measure(config, name, plan["packets"], output, open_judge)
             results[name] = "fit"
         except (HarnessError, OSError, subprocess.SubprocessError, KeyError, ValueError, TypeError):
             results[name] = "refused"
@@ -222,7 +257,9 @@ def main(argv=None):
             spent = args.plan.resolve().with_name(f"{args.plan_sha256}.spent")
             require(fit_only or not spent.exists())
             args.output.mkdir(mode=0o700)
-            if not fit_only:
+            if fit_only:
+                admit_fit(plan, args.output)
+            else:
                 private(spent, {"plan": args.plan_sha256})
             try:
                 subprocess.run(command(plan["config"], args.plan, args.plan_sha256, args.output,

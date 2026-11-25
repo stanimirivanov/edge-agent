@@ -486,6 +486,16 @@ available. Use a separate exclusive output for every fit attempt. Add
 `--judge phi4` to diagnose only Phi-4. The outcome records that limited
 scope, and the judging command still checks both models.
 
+For an idle-gated measurement, add a `fit` object to the private
+configuration. It pins `idle_window_seconds`, `idle_wait_seconds` and a
+preflight-only `timeout_seconds`. The runner uses the CPU benchmark's
+one-second host checks for aggregate and per-CPU activity, swap-in and
+swap-out, pressure, AC power and minimum available memory. A noisy sample
+resets the quiet window. The bounded wait records admission or a no-start
+outcome in `idle-admission.json`. Only an admitted preflight launches the
+isolated runtime. The existing judging deadlines and fit predicates keep
+their normal scope.
+
 Both preflights and all twelve calibration judgments must pass before any
 scored view. The final assessment uses the existing held-out pass criteria.
 The runner reserves the trial by plan digest next to the plan and writes
@@ -564,3 +574,24 @@ and the incomplete outcome SHA-256 is
 The model process exited and the judging reservation remains available.
 The held-out review remains blocked. The frozen baseline, census and
 rubric are unchanged.
+
+### Phi-4 idle-gated retry
+
+Issue #578 prepared an exact retry of the 9,216-token Phi-4 profile.
+The weights, template, runtime, six threads, response reservation and
+blinded packets match #568. The plan allows 30 minutes to find five
+continuous quiet minutes and gives preflight requests up to 1,800
+seconds. The judging deadline and zero-swap fit rule are unchanged.
+
+The admission wait expired after 1,800.006 seconds. Of 1,795 samples,
+514 met the idle criteria, but they never formed the required window.
+The host swap-in and swap-out counters were zero at the final check.
+The runner recorded `not_started` and produced no runtime fit report
+or judging reservation. The longer preflight deadline remains untested
+on the real model.
+
+The private plan SHA-256 is
+`6f007a0d1bd058df4a22b18c5db54f7cb320fdc89edce97ee049978cbf727287`.
+The admission report SHA-256 is
+`49fac9c7991edd1b76764e9e98b6968f0d110e02c24255c762acc6d3996cd135`.
+The held-out review remains blocked.

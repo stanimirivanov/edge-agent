@@ -8,8 +8,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from review_explanation_offline import JUDGES, calibration, execute, preflight, prepare
+from review_explanation_offline import JUDGES, calibration, execute, main, preflight, prepare
 from review_explanation_heldout import digest, make_plan
+from review_explanation_hosted import private
 from review_explanation_offline_runtime import Judge, command, runtime_argv, verify_libraries
 from qualify_explanation_model import HarnessError
 from test_review_explanation_heldout import fixture
@@ -162,6 +163,52 @@ class OfflineTest(unittest.TestCase):
         self.assertIn("/models/phi4.weights", args)
         self.assertNotIn("/models/ministral.weights", args)
         self.assertNotIn("/input/spent.json", args)
+
+    def test_idle_timeout_records_no_start_and_never_launches_a_model(self):
+        config = artifacts()
+        config["fit"] = {"idle_window_seconds": 300, "idle_wait_seconds": 900, "timeout_seconds": 1800}
+        heldout, packets = trial()
+        plan = prepare(heldout, packets, config)
+        with tempfile.TemporaryDirectory() as directory:
+            plan_path = Path(directory) / "plan.json"
+            private(plan_path, plan)
+            output = Path(directory) / "fit"
+            with patch("review_explanation_offline.wait_idle", return_value=False) as wait:
+                with patch("review_explanation_offline.subprocess.run") as launch:
+                    result = main(["preflight", "--judge", "phi4", "--plan", str(plan_path),
+                                   "--plan-sha256", digest(plan), "--output", str(output)])
+                launch.assert_not_called()
+            self.assertEqual(result, 1)
+            self.assertEqual(wait.call_args.kwargs["window"], 300)
+            report = json.loads((output / "idle-admission.json").read_text())
+            self.assertEqual(report["status"], "not_started")
+            self.assertEqual(report["plan"], digest(plan))
+
+    def test_fit_deadline_is_opt_in_bounded_and_used_only_for_preflight(self):
+        config = artifacts()
+        config["fit"] = {"idle_window_seconds": 300, "idle_wait_seconds": 900, "timeout_seconds": 1800}
+        heldout, packets = trial()
+        plan = prepare(heldout, packets, config)
+        seen = []
+
+        @contextlib.contextmanager
+        def session(settings, name):
+            seen.append(settings["timeout_seconds"])
+            class Stub:
+                def tokenize(self, packet):
+                    return [1]
+
+                def warm(self, ids):
+                    return {"fits": True}
+            yield Stub()
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight(plan, Path(directory) / "fit", session, judge_name="phi4")
+        self.assertEqual(seen, [1800])
+        self.assertEqual(plan["config"]["timeout_seconds"], 600)
+        config["fit"]["timeout_seconds"] = 1801
+        with self.assertRaises(HarnessError):
+            prepare(heldout, packets, config)
 
     def test_deadline_retains_bounded_memory_measurements_as_a_refusal(self):
         child = type("Child", (), {"pid": 42})()
